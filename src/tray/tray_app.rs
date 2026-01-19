@@ -113,7 +113,9 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 
             match clipboard.get_text() {
                 Ok(text) => {
-                    if text != last_text && !text.is_empty() {
+                    if text.is_empty() {
+                        continue; // 空のテキストは無視
+                    } else if text != last_text {
                         let current_mode = *thread_mode.lock().unwrap();
 
                         let result = match current_mode {
@@ -131,7 +133,6 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                             if processed != text {
                                 // 無限ループを回避するため、書き込み前にlast_textを更新
                                 // これにより次のループで読み込んだ時に processed == last_text となり処理されない
-
                                 last_text = processed.clone();
                                 if let Err(e) = clipboard.set_text(processed) {
                                     eprintln!("クリップボードへの書き込みに失敗: {}", e);
@@ -142,7 +143,10 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     last_text = text;
                 }
-                Err(e) => eprintln!("Error reading clipboard: {}", e),
+                Err(e) => {
+                    // テキスト以外の場合には無視
+                    eprintln!("Error reading clipboard: {}", e);
+                }
             }
         }
     });
