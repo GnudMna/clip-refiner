@@ -23,6 +23,7 @@ enum CodecMode {
     Decode,
 }
 
+/// トレイアイコンアプリケーションのメインループ
 pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     // イベントループの作成（Windows専用）
     #[cfg(windows)]
@@ -212,6 +213,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+/// トレイアイコンの作成
 fn create_icon() -> Icon {
     let icon_bytes = include_bytes!("../../assets/icon.png");
     let img = image::load_from_memory(icon_bytes).expect("Failed to load icon image");
