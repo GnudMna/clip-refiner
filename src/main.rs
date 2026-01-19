@@ -1,11 +1,12 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod coder;
+mod tray;
 
 use std::error::Error;
 
-use coder::decoder;
-use coder::encoder;
+use crate::coder::{decoder, encoder};
+use crate::tray::tray_app;
 
 use arboard::Clipboard;
 use clap::{Parser, ValueEnum};
@@ -13,7 +14,7 @@ use clap::{Parser, ValueEnum};
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq)]
 enum Codec {
     Encode,
     Decode,
@@ -23,15 +24,22 @@ enum Codec {
 #[command(
     author,
     version,
-    about = "クリップボードのテキストをパーセントエンコード/デコードするツール"
+    about = "クリップボードのテキストをパーセントエンコード/デコードするツール",
+    long_about = "
+クリップボードのテキストをパーセントエンコード/デコードするツール
+
+使用方法:
+  引数なし: システムトレイに常駐し、クリップボードを監視して自動変換
+  --codec指定: クリップボードの内容を一度だけ変換"
 )]
 struct Args {
     /// コーデックの指定
     #[arg(short = 'c', long = "codec", value_enum)]
-    codec: Codec,
+    codec: Option<Codec>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Windowsの場合、親プロセスのコンソールをアタッチする
     #[cfg(windows)]
     unsafe {
         AttachConsole(ATTACH_PARENT_PROCESS);
@@ -39,10 +47,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args = Args::parse();
 
+    // コーデックの指定がない場合は常時監視モード
+    if args.codec.is_none() {
+        return tray_app::run_loop();
+    }
+
+    // コーデックの指定がある場合は一度だけ実行
     let mut clipboard = Clipboard::new()?;
     let text = clipboard.get_text()?;
 
-    let result = match args.codec {
+    let result = match args.codec.unwrap() {
         Codec::Encode => encoder::percent_encode_text(&text),
         Codec::Decode => decoder::percent_decode_text(&text)?,
     };
