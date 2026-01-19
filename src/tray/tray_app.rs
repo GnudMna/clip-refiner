@@ -8,6 +8,7 @@ use std::time::Duration;
 use crate::coder::{decoder, encoder};
 
 use arboard::Clipboard;
+use image;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 #[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
@@ -69,7 +70,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     ])?;
 
     // アイコン設定
-    let icon = create_icon(255, 0, 0, 255);
+    let icon = create_icon();
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("ClipCoder")
@@ -207,15 +208,12 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
-fn create_icon(r: u8, g: u8, b: u8, a: u8) -> Icon {
-    let width = 64;
-    let height = 64;
-    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    for _ in 0..(width * height) {
-        rgba.push(r);
-        rgba.push(g);
-        rgba.push(b);
-        rgba.push(a);
-    }
-    Icon::from_rgba(rgba, width, height).expect("Failed to create icon")
+fn create_icon() -> Icon {
+    let icon_bytes = include_bytes!("../../assets/icon.png");
+    let img = image::load_from_memory(icon_bytes).expect("Failed to load icon image");
+    let rgba = img.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let rgba_raw = rgba.into_raw();
+
+    Icon::from_rgba(rgba_raw, width, height).expect("Failed to create icon")
 }
