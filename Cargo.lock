@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "ClipCoder"
+version = "0.0.1"
+dependencies = [
+ "arboard",
+ "clap",
+ "image",
+ "notify-rust",
+ "percent-encoding",
+ "single-instance",
+ "tao",
+ "tray-icon",
+ "windows-sys 0.61.2",
+ "winres",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -523,22 +539,6 @@ name = "clap_lex"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e64b0cc0439b12df2fa678eae89a1c56a529fd067a9115f7827f1fffd22b32"
-
-[[package]]
-name = "clip-coder"
-version = "0.0.1"
-dependencies = [
- "arboard",
- "clap",
- "image",
- "notify-rust",
- "percent-encoding",
- "single-instance",
- "tao",
- "tray-icon",
- "windows-sys 0.61.2",
- "winres",
-]
 
 [[package]]
 name = "clipboard-win"
