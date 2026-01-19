@@ -8,4 +8,12 @@ authors = ["y_hirata"]
 arboard = "3.6.1"
 clap = { version = "4.5.54", features = ["derive"] }
 percent-encoding = "2.3.2"
+tao = "0.34.5"
+tray-icon = "0.21.3"
+image = "0.25.1"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+notify-rust = "4.11.3"
+single-instance = "0.3.3"
+
+[build-dependencies]
+winres = "0.1"
