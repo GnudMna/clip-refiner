@@ -1,6 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod coder;
+mod notification;
 mod tray;
 
 use std::error::Error;

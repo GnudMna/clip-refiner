@@ -6,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::coder::{decoder, encoder};
+use crate::notification;
 
 use arboard::Clipboard;
 use image;
@@ -71,7 +72,15 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     ])?;
 
     // アイコン設定
-    let icon = create_icon();
+    let icon = match create_icon() {
+        Ok(i) => i,
+        Err(e) => {
+            let msg = format!("アイコンの読み込みに失敗しました: {}", e);
+            eprintln!("{}", msg);
+            notification::error::show_error_notification("起動エラー", &msg);
+            return Err(e);
+        }
+    };
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("ClipCoder")
@@ -93,7 +102,9 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
         let mut clipboard = match Clipboard::new() {
             Ok(cb) => cb,
             Err(e) => {
-                eprintln!("Failed to init clipboard: {}", e);
+                let msg = format!("クリップボードの初期化に失敗しました: {}", e);
+                eprintln!("{}", msg);
+                notification::error::show_error_notification("初期化エラー", &msg);
                 return;
             }
         };
@@ -145,7 +156,9 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                     last_text = text;
                 }
                 Err(e) => {
-                    // テキスト以外の場合には無視
+                    // クリップボードへのアクセス自体が失敗した場合は、一時的なエラーの可能性もあるが
+                    // 回復不能なエラー（初期化ミスなど）はすでに上で処理している。
+                    // ここではデバッグ用にログを出す程度に止める（スレッドは継続）
                     eprintln!("Error reading clipboard: {}", e);
                 }
             }
@@ -214,12 +227,12 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// トレイアイコンの作成
-fn create_icon() -> Icon {
+fn create_icon() -> Result<Icon, Box<dyn std::error::Error>> {
     let icon_bytes = include_bytes!("../../assets/icon.png");
-    let img = image::load_from_memory(icon_bytes).expect("Failed to load icon image");
+    let img = image::load_from_memory(icon_bytes)?;
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
     let rgba_raw = rgba.into_raw();
 
-    Icon::from_rgba(rgba_raw, width, height).expect("Failed to create icon")
+    Icon::from_rgba(rgba_raw, width, height).map_err(|e| e.into())
 }

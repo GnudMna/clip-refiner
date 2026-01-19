@@ -12,6 +12,7 @@ tao = "0.34.5"
 tray-icon = "0.21.3"
 image = "0.25.1"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+notify-rust = "4.11.3"
 
 [build-dependencies]
 winres = "0.1"
