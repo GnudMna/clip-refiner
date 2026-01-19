@@ -1,12 +1,17 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod coder;
 
 use std::error::Error;
 
-use coder::encoder;
 use coder::decoder;
+use coder::encoder;
 
 use arboard::Clipboard;
 use clap::{Parser, ValueEnum};
+
+#[cfg(windows)]
+use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum Codec {
@@ -15,7 +20,11 @@ enum Codec {
 }
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "クリップボードのテキストをパーセントエンコード/デコードするツール")]
+#[command(
+    author,
+    version,
+    about = "クリップボードのテキストをパーセントエンコード/デコードするツール"
+)]
 struct Args {
     /// コーデックの指定
     #[arg(short = 'c', long = "codec", value_enum)]
@@ -23,6 +32,11 @@ struct Args {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    #[cfg(windows)]
+    unsafe {
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+
     let args = Args::parse();
 
     let mut clipboard = Clipboard::new()?;
