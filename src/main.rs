@@ -11,6 +11,7 @@ use crate::tray::tray_app;
 
 use arboard::Clipboard;
 use clap::{Parser, ValueEnum};
+use single_instance::SingleInstance;
 
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
@@ -47,6 +48,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let args = Args::parse();
+
+    // 多重起動防止
+    let instance = SingleInstance::new("com.y_hirata.clip-coder")?;
+    if !instance.is_single() {
+        let msg = "ClipCoderは既に実行されています。";
+        notification::error::show_error_notification("多重起動", msg);
+        return Ok(());
+    }
 
     // コーデックの指定がない場合は常時監視モード
     if args.codec.is_none() {
