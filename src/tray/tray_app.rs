@@ -95,14 +95,9 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 
     // クリップボード監視スレッド
     thread::spawn(move || {
-        let mut clipboard = match Clipboard::new() {
+        let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
-            Err(e) => {
-                let msg = format!("クリップボードの初期化に失敗しました: {}", e);
-                eprintln!("{}", msg);
-                notification::error::show_error_notification("初期化エラー", &msg);
-                return;
-            }
+            Err(_) => return,
         };
 
         let mut last_text = String::new();
@@ -125,7 +120,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                         continue; // 空のテキストは無視
                     } else if text != last_text {
                         let current_mode = *thread_mode.lock().unwrap();
-                        if let Some(processed) = process_clipboard(current_mode) {
+                        if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
                             // processed はすでに clipboard に書き込まれている
                             last_text = processed;
                             continue;
@@ -142,6 +137,9 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     });
+
+    // イベントループ用のクリップボード初期化
+    let mut main_clipboard = init_clipboard()?;
 
     let menu_channel = MenuEvent::receiver();
 
@@ -182,7 +180,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                         item.set_checked(true);
 
                         // クリップボードの内容を変換
-                        process_clipboard(*app_mode);
+                        process_clipboard(&mut main_clipboard, *app_mode);
 
                         codec_handled = true;
                         break;
@@ -208,9 +206,18 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
+/// クリップボードの初期化
+fn init_clipboard() -> Result<Clipboard, Box<dyn std::error::Error>> {
+    Clipboard::new().map_err(|e| {
+        let msg = format!("クリップボードの初期化に失敗しました: {}", e);
+        eprintln!("{}", msg);
+        notification::error::show_error_notification("初期化エラー", &msg);
+        e.into()
+    })
+}
+
 /// クリップボードの内容を変換
-fn process_clipboard(mode: CodecMode) -> Option<String> {
-    let mut clipboard = Clipboard::new().ok()?;
+fn process_clipboard(clipboard: &mut Clipboard, mode: CodecMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
 
     if text.is_empty() {
