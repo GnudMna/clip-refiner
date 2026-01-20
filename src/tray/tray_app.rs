@@ -5,8 +5,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::coder::CodecMode;
-use crate::coder::{decoder, encoder};
+use crate::coder::{CodecMode, process_clipboard};
 use crate::notification;
 
 use anyhow::{Context, Result};
@@ -223,26 +222,6 @@ fn update_codec(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mo
 /// クリップボードの初期化
 fn init_clipboard() -> Result<Clipboard> {
     Clipboard::new().context("クリップボードのアクセスに失敗しました")
-}
-
-/// クリップボードの内容を変換
-fn process_clipboard(clipboard: &mut Clipboard, mode: CodecMode) -> Option<String> {
-    let text = clipboard.get_text().ok()?;
-    if text.is_empty() {
-        return None;
-    }
-
-    let processed = match mode {
-        CodecMode::Encode => encoder::percent_encode_text(&text),
-        CodecMode::Decode => decoder::percent_decode_text(&text).unwrap_or_else(|_| text.clone()),
-    };
-
-    if processed != text {
-        let _ = clipboard.set_text(processed.clone());
-        Some(processed)
-    } else {
-        None
-    }
 }
 
 /// トレイアイコンの作成

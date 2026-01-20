@@ -4,7 +4,6 @@ mod coder;
 mod notification;
 mod tray;
 
-use crate::coder::{decoder, encoder};
 use crate::tray::tray_app;
 
 use anyhow::{Context, Result};
@@ -58,17 +57,6 @@ fn main() -> Result<()> {
 
     // コーデックの指定がある場合は一度だけ実行
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
-    let text = clipboard
-        .get_text()
-        .context("クリップボードの読み取りに失敗しました")?;
-
-    let result = match args.codec.unwrap() {
-        coder::CodecMode::Encode => encoder::percent_encode_text(&text),
-        coder::CodecMode::Decode => decoder::percent_decode_text(&text)?,
-    };
-
-    clipboard
-        .set_text(result)
-        .context("クリップボードへの書き込みに失敗しました")?;
+    coder::process_clipboard(&mut clipboard, args.codec.unwrap());
     Ok(())
 }
