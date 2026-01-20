@@ -6,7 +6,7 @@ fn main() {
         
         // アプリ情報
         res.set("ProductName", env!("CARGO_PKG_NAME"));
-        res.set("FileDescription", "パーセントエンコード/デコードを実行");
+        res.set("FileDescription", env!("CARGO_PKG_NAME"));
 
         // バージョン情報
         res.set("FileVersion", env!("CARGO_PKG_VERSION"));
