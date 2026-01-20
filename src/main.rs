@@ -4,11 +4,10 @@ mod coder;
 mod notification;
 mod tray;
 
-use std::error::Error;
-
 use crate::coder::{decoder, encoder};
 use crate::tray::tray_app;
 
+use anyhow::{Context, Result};
 use arboard::Clipboard;
 use clap::Parser;
 use single_instance::SingleInstance;
@@ -34,17 +33,18 @@ struct Args {
     codec: Option<coder::CodecMode>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     // Windowsの場合、親プロセスのコンソールをアタッチする
     #[cfg(windows)]
     unsafe {
-        AttachConsole(ATTACH_PARENT_PROCESS);
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
     }
 
     let args = Args::parse();
 
     // 多重起動防止
-    let instance = SingleInstance::new("com.y_hirata.clip-coder")?;
+    let instance = SingleInstance::new("com.y_hirata.clip-coder")
+        .context("多重起動防止のインスタンス作成に失敗しました")?;
     if !instance.is_single() {
         let msg = "ClipCoderは既に実行されています。";
         notification::error::show_error_notification("多重起動", msg);
@@ -57,14 +57,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // コーデックの指定がある場合は一度だけ実行
-    let mut clipboard = Clipboard::new()?;
-    let text = clipboard.get_text()?;
+    let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
+    let text = clipboard
+        .get_text()
+        .context("クリップボードの読み取りに失敗しました")?;
 
     let result = match args.codec.unwrap() {
         coder::CodecMode::Encode => encoder::percent_encode_text(&text),
         coder::CodecMode::Decode => decoder::percent_decode_text(&text)?,
     };
 
-    clipboard.set_text(result)?;
+    clipboard
+        .set_text(result)
+        .context("クリップボードへの書き込みに失敗しました")?;
     Ok(())
 }

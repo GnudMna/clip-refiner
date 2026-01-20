@@ -6,6 +6,7 @@ version = 4
 name = "ClipCoder"
 version = "0.0.2"
 dependencies = [
+ "anyhow",
  "arboard",
  "clap",
  "image",

@@ -5,9 +5,11 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
+use crate::coder::CodecMode;
 use crate::coder::{decoder, encoder};
 use crate::notification;
 
+use anyhow::{Context, Result};
 use arboard::Clipboard;
 use image;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
@@ -18,10 +20,8 @@ use tray_icon::{
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
-use crate::coder::CodecMode;
-
 /// トレイアイコンアプリケーションのメインループ
-pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_loop() -> Result<()> {
     // イベントループの作成（Windows専用）
     #[cfg(windows)]
     let event_loop = EventLoopBuilder::new().with_any_thread(true).build();
@@ -37,7 +37,8 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
     let encode_item = CheckMenuItem::new("エンコード", true, false, None);
     let decode_item = CheckMenuItem::new("デコード", true, true, None);
     let codec_menu_item =
-        tray_icon::menu::Submenu::with_items("コーデック", true, &[&encode_item, &decode_item])?;
+        tray_icon::menu::Submenu::with_items("コーデック", true, &[&encode_item, &decode_item])
+            .context("コーデックメニューの作成に失敗しました")?;
 
     // 監視周期メニュー
     let interval_500ms = CheckMenuItem::new("0.5秒", true, false, None);
@@ -48,7 +49,8 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
         "監視周期",
         true,
         &[&interval_500ms, &interval_1s, &interval_2s, &interval_5s],
-    )?;
+    )
+    .context("監視周期メニューの作成に失敗しました")?;
 
     // 一時停止メニュー
     let pause_item = CheckMenuItem::new("一時停止", true, false, None);
@@ -58,30 +60,25 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 
     // メニューのセットアップ
     let tray_menu = Menu::new();
-    tray_menu.append_items(&[
-        &codec_menu_item,
-        &interval_menu_item,
-        &PredefinedMenuItem::separator(),
-        &pause_item,
-        &PredefinedMenuItem::separator(),
-        &quit_item,
-    ])?;
+    tray_menu
+        .append_items(&[
+            &codec_menu_item,
+            &interval_menu_item,
+            &PredefinedMenuItem::separator(),
+            &pause_item,
+            &PredefinedMenuItem::separator(),
+            &quit_item,
+        ])
+        .context("メニューの追加に失敗しました")?;
 
     // アイコン設定
-    let icon = match create_icon() {
-        Ok(i) => i,
-        Err(e) => {
-            let msg = format!("アイコンの読み込みに失敗しました: {}", e);
-            eprintln!("{}", msg);
-            notification::error::show_error_notification("起動エラー", &msg);
-            return Err(e);
-        }
-    };
+    let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
     let _tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("ClipCoder")
         .with_icon(icon)
-        .build()?;
+        .build()
+        .context("トレイアイコンのビルドに失敗しました")?;
 
     // 共有状態
     let mode = Arc::new(std::sync::Mutex::new(CodecMode::Decode));
@@ -95,9 +92,14 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 
     // クリップボード監視スレッド
     thread::spawn(move || {
-        let mut clipboard = match init_clipboard() {
+        let mut clipboard = match init_clipboard()
+            .context("クリップボード監視スレッドの初期化に失敗しました")
+        {
             Ok(cb) => cb,
-            Err(_) => return,
+            Err(e) => {
+                notification::error::show_anyhow_error("監視スレッドエラー", &e);
+                return;
+            }
         };
 
         let mut last_text = String::new();
@@ -119,7 +121,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                     if text.is_empty() {
                         continue; // 空のテキストは無視
                     } else if text != last_text {
-                        let current_mode = *thread_mode.lock().unwrap();
+                        let current_mode = *thread_mode.lock().unwrap_or_else(|e| e.into_inner());
                         if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
                             // processed はすでに clipboard に書き込まれている
                             last_text = processed;
@@ -129,9 +131,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                     last_text = text;
                 }
                 Err(e) => {
-                    // クリップボードへのアクセス自体が失敗した場合は、一時的なエラーの可能性もあるが
-                    // 回復不能なエラー（初期化ミスなど）はすでに上で処理している。
-                    // ここではデバッグ用にログを出す程度に止める（スレッドは継続）
+                    // クリップボードへのアクセス自体が失敗した場合は、一時的なエラーの可能性もある
                     eprintln!("Error reading clipboard: {}", e);
                 }
             }
@@ -172,7 +172,7 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                 let mut codec_handled = false;
                 for (item, app_mode) in &codecs {
                     if event.id == item.id() {
-                        *mode.lock().unwrap() = *app_mode;
+                        *mode.lock().unwrap_or_else(|e| e.into_inner()) = *app_mode;
                         // すべてのチェックを外してから選択されたものだけチェック
                         for (check_item, _) in &codecs {
                             check_item.set_checked(false);
@@ -207,13 +207,8 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// クリップボードの初期化
-fn init_clipboard() -> Result<Clipboard, Box<dyn std::error::Error>> {
-    Clipboard::new().map_err(|e| {
-        let msg = format!("クリップボードの初期化に失敗しました: {}", e);
-        eprintln!("{}", msg);
-        notification::error::show_error_notification("初期化エラー", &msg);
-        e.into()
-    })
+fn init_clipboard() -> Result<Clipboard> {
+    Clipboard::new().context("クリップボードのアクセスに失敗しました")
 }
 
 /// クリップボードの内容を変換
@@ -226,7 +221,7 @@ fn process_clipboard(clipboard: &mut Clipboard, mode: CodecMode) -> Option<Strin
 
     let processed = match mode {
         CodecMode::Encode => encoder::percent_encode_text(&text),
-        CodecMode::Decode => decoder::percent_decode_text(&text).unwrap_or(text.clone()),
+        CodecMode::Decode => decoder::percent_decode_text(&text).unwrap_or_else(|_| text.clone()),
     };
 
     if processed != text {
@@ -238,12 +233,13 @@ fn process_clipboard(clipboard: &mut Clipboard, mode: CodecMode) -> Option<Strin
 }
 
 /// トレイアイコンの作成
-fn create_icon() -> Result<Icon, Box<dyn std::error::Error>> {
+fn create_icon() -> Result<Icon> {
     let icon_bytes = include_bytes!("../../assets/icon.png");
-    let img = image::load_from_memory(icon_bytes)?;
+    let img =
+        image::load_from_memory(icon_bytes).context("アイコン画像のデコードに失敗しました")?;
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
     let rgba_raw = rgba.into_raw();
 
-    Icon::from_rgba(rgba_raw, width, height).map_err(|e| e.into())
+    Icon::from_rgba(rgba_raw, width, height).context("アイコンデータの作成に失敗しました")
 }
