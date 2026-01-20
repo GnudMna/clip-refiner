@@ -10,17 +10,11 @@ use crate::coder::{decoder, encoder};
 use crate::tray::tray_app;
 
 use arboard::Clipboard;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use single_instance::SingleInstance;
 
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-#[derive(Copy, Clone, Debug, ValueEnum, PartialEq)]
-enum Codec {
-    Encode,
-    Decode,
-}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -37,7 +31,7 @@ enum Codec {
 struct Args {
     /// コーデックの指定
     #[arg(short = 'c', long = "codec", value_enum)]
-    codec: Option<Codec>,
+    codec: Option<coder::CodecMode>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -67,8 +61,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let text = clipboard.get_text()?;
 
     let result = match args.codec.unwrap() {
-        Codec::Encode => encoder::percent_encode_text(&text),
-        Codec::Decode => decoder::percent_decode_text(&text)?,
+        coder::CodecMode::Encode => encoder::percent_encode_text(&text),
+        coder::CodecMode::Decode => decoder::percent_decode_text(&text)?,
     };
 
     clipboard.set_text(result)?;

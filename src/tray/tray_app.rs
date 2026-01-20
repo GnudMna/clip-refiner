@@ -18,11 +18,7 @@ use tray_icon::{
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum CodecMode {
-    Encode,
-    Decode,
-}
+use crate::coder::CodecMode;
 
 /// トレイアイコンアプリケーションのメインループ
 pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
