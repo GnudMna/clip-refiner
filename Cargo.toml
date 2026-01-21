@@ -1,5 +1,5 @@
 [package]
-name = "ClipCoder"
+name = "ClipRefiner"
 version = "0.0.3"
 edition = "2024"
 authors = ["y_hirata"]
