@@ -95,7 +95,7 @@ impl TrayMenu {
         let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
         let _tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(tray_menu))
-            .with_tooltip("ClipCoder")
+            .with_tooltip("ClipRefiner")
             .with_icon(icon)
             .build()
             .context("トレイアイコンのビルドに失敗しました")?;

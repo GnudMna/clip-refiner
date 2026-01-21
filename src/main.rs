@@ -58,11 +58,11 @@ fn setup_console() {
 
 /// 多重起動を防止し、インスタンスを保持する
 fn ensure_single_instance() -> Result<SingleInstance> {
-    let instance = SingleInstance::new("com.y_hirata.clip-coder")
+    let instance = SingleInstance::new("com.y_hirata.clip-refiner")
         .context("多重起動防止のインスタンス作成に失敗しました")?;
 
     if !instance.is_single() {
-        let msg = "ClipCoderは既に実行されています。";
+        let msg = "ClipRefinerは既に実行されています。";
         notification::error::show_error_notification("多重起動", msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
