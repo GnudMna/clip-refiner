@@ -1,5 +1,6 @@
 pub mod json;
 pub mod number;
+pub mod sort;
 pub mod trim;
 pub mod url;
 
@@ -15,6 +16,7 @@ pub enum RefineMode {
     JsonFormat,
     AddComma,
     RemoveComma,
+    SortLines,
 }
 
 /// クリップボードの内容を変換
@@ -32,6 +34,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
+        RefineMode::SortLines => sort::sort_lines(&text),
     };
 
     if processed != text {
