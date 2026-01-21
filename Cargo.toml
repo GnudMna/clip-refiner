@@ -3,7 +3,7 @@ name = "ClipRefiner"
 version = "0.0.3"
 edition = "2024"
 authors = ["y_hirata"]
-description = "クリップボードのテキストを加工（URLエンコード/URLデコード/トリム/JSON整形）するツール"
+description = "クリップボードのテキストを加工（URLエンコード/URLデコード/トリム/JSON整形/数値のカンマ付与/数値のカンマ除去）するツール"
 
 [dependencies]
 anyhow = "1.0"

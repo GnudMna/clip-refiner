@@ -41,31 +41,38 @@ struct TrayMenu {
     _tray_icon: TrayIcon,
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
-    url_encode_item: CheckMenuItem,
-    url_decode_item: CheckMenuItem,
-    trim_item: CheckMenuItem,
-    json_format_item: CheckMenuItem,
+    mode_items: Vec<(CheckMenuItem, RefineMode)>,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
 
 impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
-        // 加工モードメニュー
-        let url_encode_item = CheckMenuItem::new("URLエンコード", true, false, None);
-        let url_decode_item = CheckMenuItem::new("URLデコード", true, true, None);
-        let trim_item = CheckMenuItem::new("トリム", true, false, None);
-        let json_format_item = CheckMenuItem::new("JSON整形", true, false, None);
-        let refine_submenu = Submenu::with_items(
-            "変換モード",
-            true,
-            &[
-                &url_encode_item,
-                &url_decode_item,
-                &trim_item,
-                &json_format_item,
-            ],
-        )
-        .context("変換モードメニューの作成に失敗しました")?;
+        let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+
+        // 加工モード定義
+        let mode_defs = [
+            ("URLエンコード", RefineMode::UrlEncode),
+            ("URLデコード", RefineMode::UrlDecode),
+            ("トリム", RefineMode::Trim),
+            ("JSON整形", RefineMode::JsonFormat),
+            ("カンマ追加", RefineMode::AddComma),
+            ("カンマ除去", RefineMode::RemoveComma),
+        ];
+
+        let mut mode_items = Vec::new();
+        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+
+        for (label, mode) in mode_defs {
+            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
+            mode_items.push((item, mode));
+        }
+
+        for (item, _) in &mode_items {
+            mode_menu_items.push(item);
+        }
+
+        let refine_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
+            .context("変換モードメニューの作成に失敗しました")?;
 
         // 監視周期メニュー
         let interval_500ms = CheckMenuItem::new("0.5秒", true, false, None);
@@ -117,10 +124,7 @@ impl TrayMenu {
             _tray_icon,
             quit_item,
             pause_item,
-            url_encode_item,
-            url_decode_item,
-            trim_item,
-            json_format_item,
+            mode_items,
             interval_items,
         })
     }
@@ -206,14 +210,12 @@ fn handle_menu_event(
         state
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
-    } else if event.id == menu.url_encode_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::UrlEncode);
-    } else if event.id == menu.url_decode_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::UrlDecode);
-    } else if event.id == menu.trim_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::Trim);
-    } else if event.id == menu.json_format_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::JsonFormat);
+    } else if let Some((_, mode)) = menu
+        .mode_items
+        .iter()
+        .find(|(item, _)| event.id == item.id())
+    {
+        update_refine(state, menu, clipboard, *mode);
     } else {
         for (item, ms) in &menu.interval_items {
             if event.id == item.id() {
@@ -232,13 +234,9 @@ fn handle_menu_event(
 fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: RefineMode) {
     *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
 
-    menu.url_encode_item
-        .set_checked(mode == RefineMode::UrlEncode);
-    menu.url_decode_item
-        .set_checked(mode == RefineMode::UrlDecode);
-    menu.trim_item.set_checked(mode == RefineMode::Trim);
-    menu.json_format_item
-        .set_checked(mode == RefineMode::JsonFormat);
+    for (item, m) in &menu.mode_items {
+        item.set_checked(*m == mode);
+    }
 
     process_clipboard(clipboard, mode);
 }
