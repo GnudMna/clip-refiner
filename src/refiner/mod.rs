@@ -1,25 +1,27 @@
-pub mod decoder;
-pub mod encoder;
+pub mod trim;
+pub mod url;
 
 use arboard::Clipboard;
 use clap::ValueEnum;
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
-pub enum CodecMode {
+pub enum RefineMode {
     Encode,
     Decode,
+    Trim,
 }
 
 /// クリップボードの内容を変換
-pub fn process_clipboard(clipboard: &mut Clipboard, mode: CodecMode) -> Option<String> {
+pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
     if text.is_empty() {
         return None;
     }
 
     let processed = match mode {
-        CodecMode::Encode => encoder::percent_encode_text(&text),
-        CodecMode::Decode => decoder::percent_decode_text(&text).unwrap_or_else(|_| text.clone()),
+        RefineMode::Encode => url::encode(&text),
+        RefineMode::Decode => url::decode(&text).unwrap_or_else(|_| text.clone()),
+        RefineMode::Trim => trim::trim_text(&text),
     };
 
     if processed != text {

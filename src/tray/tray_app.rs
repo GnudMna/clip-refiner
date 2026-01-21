@@ -5,8 +5,8 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::coder::{CodecMode, process_clipboard};
 use crate::notification;
+use crate::refiner::{RefineMode, process_clipboard};
 
 use anyhow::{Context, Result};
 use arboard::Clipboard;
@@ -21,7 +21,7 @@ use tray_icon::{
 
 /// アプリケーションの共有状態
 struct AppState {
-    mode: Mutex<CodecMode>,
+    mode: Mutex<RefineMode>,
     paused: AtomicBool,
     interval_ms: AtomicU64,
 }
@@ -29,7 +29,7 @@ struct AppState {
 impl AppState {
     fn new() -> Self {
         Self {
-            mode: Mutex::new(CodecMode::Decode),
+            mode: Mutex::new(RefineMode::Decode),
             paused: AtomicBool::new(false),
             interval_ms: AtomicU64::new(1000), // デフォルト1秒
         }
@@ -43,16 +43,22 @@ struct TrayMenu {
     pause_item: CheckMenuItem,
     encode_item: CheckMenuItem,
     decode_item: CheckMenuItem,
+    trim_item: CheckMenuItem,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
 
 impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
-        // コーデックメニュー
+        // 加工モードメニュー
         let encode_item = CheckMenuItem::new("エンコード", true, false, None);
         let decode_item = CheckMenuItem::new("デコード", true, true, None);
-        let codec_submenu = Submenu::with_items("コーデック", true, &[&encode_item, &decode_item])
-            .context("コーデックメニューの作成に失敗しました")?;
+        let trim_item = CheckMenuItem::new("トリム", true, false, None);
+        let refine_submenu = Submenu::with_items(
+            "変換モード",
+            true,
+            &[&encode_item, &decode_item, &trim_item],
+        )
+        .context("変換モードメニューの作成に失敗しました")?;
 
         // 監視周期メニュー
         let interval_500ms = CheckMenuItem::new("0.5秒", true, false, None);
@@ -82,7 +88,7 @@ impl TrayMenu {
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
-                &codec_submenu,
+                &refine_submenu,
                 &interval_submenu,
                 &PredefinedMenuItem::separator(),
                 &pause_item,
@@ -106,6 +112,7 @@ impl TrayMenu {
             pause_item,
             encode_item,
             decode_item,
+            trim_item,
             interval_items,
         })
     }
@@ -192,9 +199,11 @@ fn handle_menu_event(
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
     } else if event.id == menu.encode_item.id() {
-        update_codec(state, menu, clipboard, CodecMode::Encode);
+        update_refine(state, menu, clipboard, RefineMode::Encode);
     } else if event.id == menu.decode_item.id() {
-        update_codec(state, menu, clipboard, CodecMode::Decode);
+        update_refine(state, menu, clipboard, RefineMode::Decode);
+    } else if event.id == menu.trim_item.id() {
+        update_refine(state, menu, clipboard, RefineMode::Trim);
     } else {
         for (item, ms) in &menu.interval_items {
             if event.id == item.id() {
@@ -209,12 +218,13 @@ fn handle_menu_event(
     }
 }
 
-/// コーデックの更新
-fn update_codec(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: CodecMode) {
+/// 加工モードの更新
+fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: RefineMode) {
     *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
 
-    menu.encode_item.set_checked(mode == CodecMode::Encode);
-    menu.decode_item.set_checked(mode == CodecMode::Decode);
+    menu.encode_item.set_checked(mode == RefineMode::Encode);
+    menu.decode_item.set_checked(mode == RefineMode::Decode);
+    menu.trim_item.set_checked(mode == RefineMode::Trim);
 
     process_clipboard(clipboard, mode);
 }
