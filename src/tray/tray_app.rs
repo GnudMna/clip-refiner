@@ -29,7 +29,7 @@ struct AppState {
 impl AppState {
     fn new() -> Self {
         Self {
-            mode: Mutex::new(RefineMode::Decode),
+            mode: Mutex::new(RefineMode::UrlDecode),
             paused: AtomicBool::new(false),
             interval_ms: AtomicU64::new(1000), // デフォルト1秒
         }
@@ -41,8 +41,8 @@ struct TrayMenu {
     _tray_icon: TrayIcon,
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
-    encode_item: CheckMenuItem,
-    decode_item: CheckMenuItem,
+    url_encode_item: CheckMenuItem,
+    url_decode_item: CheckMenuItem,
     trim_item: CheckMenuItem,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
@@ -50,13 +50,13 @@ struct TrayMenu {
 impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
         // 加工モードメニュー
-        let encode_item = CheckMenuItem::new("エンコード", true, false, None);
-        let decode_item = CheckMenuItem::new("デコード", true, true, None);
+        let url_encode_item = CheckMenuItem::new("URLエンコード", true, false, None);
+        let url_decode_item = CheckMenuItem::new("URLデコード", true, true, None);
         let trim_item = CheckMenuItem::new("トリム", true, false, None);
         let refine_submenu = Submenu::with_items(
             "変換モード",
             true,
-            &[&encode_item, &decode_item, &trim_item],
+            &[&url_encode_item, &url_decode_item, &trim_item],
         )
         .context("変換モードメニューの作成に失敗しました")?;
 
@@ -110,8 +110,8 @@ impl TrayMenu {
             _tray_icon,
             quit_item,
             pause_item,
-            encode_item,
-            decode_item,
+            url_encode_item,
+            url_decode_item,
             trim_item,
             interval_items,
         })
@@ -198,10 +198,10 @@ fn handle_menu_event(
         state
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
-    } else if event.id == menu.encode_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::Encode);
-    } else if event.id == menu.decode_item.id() {
-        update_refine(state, menu, clipboard, RefineMode::Decode);
+    } else if event.id == menu.url_encode_item.id() {
+        update_refine(state, menu, clipboard, RefineMode::UrlEncode);
+    } else if event.id == menu.url_decode_item.id() {
+        update_refine(state, menu, clipboard, RefineMode::UrlDecode);
     } else if event.id == menu.trim_item.id() {
         update_refine(state, menu, clipboard, RefineMode::Trim);
     } else {
@@ -222,8 +222,10 @@ fn handle_menu_event(
 fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: RefineMode) {
     *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
 
-    menu.encode_item.set_checked(mode == RefineMode::Encode);
-    menu.decode_item.set_checked(mode == RefineMode::Decode);
+    menu.url_encode_item
+        .set_checked(mode == RefineMode::UrlEncode);
+    menu.url_decode_item
+        .set_checked(mode == RefineMode::UrlDecode);
     menu.trim_item.set_checked(mode == RefineMode::Trim);
 
     process_clipboard(clipboard, mode);
