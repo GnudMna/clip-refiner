@@ -19,12 +19,14 @@ use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
     author,
     version,
     about = "クリップボードのテキストを加工するツール",
-    long_about = "
-クリップボードのテキストを加工するツール
-
+    help_template = "\
+{about-with-newline}
 使用方法:
-   引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
-   --mode指定: クリップボードの内容を一度だけ加工"
+    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
+    --mode指定: クリップボードの内容を一度だけ加工
+
+{all-args}
+"
 )]
 struct Args {
     /// 実行モードの指定
