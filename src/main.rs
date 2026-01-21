@@ -1,7 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-mod coder;
 mod notification;
+mod refiner;
 mod tray;
 
 use crate::tray::tray_app;
@@ -18,18 +18,20 @@ use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 #[command(
     author,
     version,
-    about = "クリップボードのテキストをパーセントエンコード/デコードするツール",
-    long_about = "
-クリップボードのテキストをパーセントエンコード/デコードするツール
-
+    about = "クリップボードのテキストを加工するツール",
+    help_template = "\
+{about-with-newline}
 使用方法:
-  引数なし: システムトレイに常駐し、クリップボードを監視して自動変換
-  --codec指定: クリップボードの内容を一度だけ変換"
+    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
+    --mode指定: クリップボードの内容を一度だけ加工
+
+{all-args}
+"
 )]
 struct Args {
-    /// コーデックの指定
-    #[arg(short = 'c', long = "codec", value_enum)]
-    codec: Option<coder::CodecMode>,
+    /// 実行モードの指定
+    #[arg(short = 'm', long = "mode", value_enum)]
+    mode: Option<refiner::RefineMode>,
 }
 
 fn main() -> Result<()> {
@@ -39,8 +41,8 @@ fn main() -> Result<()> {
 
     let _instance = ensure_single_instance()?;
 
-    if let Some(codec) = args.codec {
-        run_once(codec)?;
+    if let Some(mode) = args.mode {
+        run_once(mode)?;
     } else {
         tray_app::run_loop()?;
     }
@@ -58,11 +60,11 @@ fn setup_console() {
 
 /// 多重起動を防止し、インスタンスを保持する
 fn ensure_single_instance() -> Result<SingleInstance> {
-    let instance = SingleInstance::new("com.y_hirata.clip-coder")
+    let instance = SingleInstance::new("com.y_hirata.clip-refiner")
         .context("多重起動防止のインスタンス作成に失敗しました")?;
 
     if !instance.is_single() {
-        let msg = "ClipCoderは既に実行されています。";
+        let msg = "ClipRefinerは既に実行されています。";
         notification::error::show_error_notification("多重起動", msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
@@ -71,9 +73,9 @@ fn ensure_single_instance() -> Result<SingleInstance> {
     Ok(instance)
 }
 
-/// クリップボードの内容を一度だけ変換して終了する
-fn run_once(codec: coder::CodecMode) -> Result<()> {
+/// クリップボードの内容を一度だけ加工して終了する
+fn run_once(mode: refiner::RefineMode) -> Result<()> {
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
-    coder::process_clipboard(&mut clipboard, codec);
+    refiner::process_clipboard(&mut clipboard, mode);
     Ok(())
 }
