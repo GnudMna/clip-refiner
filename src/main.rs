@@ -4,23 +4,15 @@ mod coder;
 mod notification;
 mod tray;
 
-use std::error::Error;
-
-use crate::coder::{decoder, encoder};
 use crate::tray::tray_app;
 
+use anyhow::{Context, Result};
 use arboard::Clipboard;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use single_instance::SingleInstance;
 
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-#[derive(Copy, Clone, Debug, ValueEnum, PartialEq)]
-enum Codec {
-    Encode,
-    Decode,
-}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -37,40 +29,51 @@ enum Codec {
 struct Args {
     /// コーデックの指定
     #[arg(short = 'c', long = "codec", value_enum)]
-    codec: Option<Codec>,
+    codec: Option<coder::CodecMode>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Windowsの場合、親プロセスのコンソールをアタッチする
-    #[cfg(windows)]
-    unsafe {
-        AttachConsole(ATTACH_PARENT_PROCESS);
-    }
+fn main() -> Result<()> {
+    setup_console();
 
     let args = Args::parse();
 
-    // 多重起動防止
-    let instance = SingleInstance::new("com.y_hirata.clip-coder")?;
+    let _instance = ensure_single_instance()?;
+
+    if let Some(codec) = args.codec {
+        run_once(codec)?;
+    } else {
+        tray_app::run_loop()?;
+    }
+
+    Ok(())
+}
+
+/// Windowsの場合、親プロセスのコンソールをアタッチする
+fn setup_console() {
+    #[cfg(windows)]
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+/// 多重起動を防止し、インスタンスを保持する
+fn ensure_single_instance() -> Result<SingleInstance> {
+    let instance = SingleInstance::new("com.y_hirata.clip-coder")
+        .context("多重起動防止のインスタンス作成に失敗しました")?;
+
     if !instance.is_single() {
         let msg = "ClipCoderは既に実行されています。";
         notification::error::show_error_notification("多重起動", msg);
-        return Ok(());
+        // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
+        std::process::exit(0);
     }
 
-    // コーデックの指定がない場合は常時監視モード
-    if args.codec.is_none() {
-        return tray_app::run_loop();
-    }
+    Ok(instance)
+}
 
-    // コーデックの指定がある場合は一度だけ実行
-    let mut clipboard = Clipboard::new()?;
-    let text = clipboard.get_text()?;
-
-    let result = match args.codec.unwrap() {
-        Codec::Encode => encoder::percent_encode_text(&text),
-        Codec::Decode => decoder::percent_decode_text(&text)?,
-    };
-
-    clipboard.set_text(result)?;
+/// クリップボードの内容を一度だけ変換して終了する
+fn run_once(codec: coder::CodecMode) -> Result<()> {
+    let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
+    coder::process_clipboard(&mut clipboard, codec);
     Ok(())
 }
