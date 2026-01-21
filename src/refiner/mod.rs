@@ -9,13 +9,21 @@ use clap::ValueEnum;
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 pub enum RefineMode {
+    #[value(help = "URLエンコード")]
     UrlEncode,
+    #[value(help = "URLデコード")]
     UrlDecode,
+    #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
+    #[value(help = "改行や空白を整形する")]
     Trim,
+    #[value(help = "JSON形式を整形する")]
     JsonFormat,
+    #[value(help = "数値をカンマ区切りにする")]
     AddComma,
+    #[value(help = "カンマ区切りを数値にする")]
     RemoveComma,
+    #[value(help = "行単位で並び替える")]
     SortLines,
 }
 
