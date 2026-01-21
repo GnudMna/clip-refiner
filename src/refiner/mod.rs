@@ -10,6 +10,7 @@ use clap::ValueEnum;
 pub enum RefineMode {
     UrlEncode,
     UrlDecode,
+    RemoveUtm,
     Trim,
     JsonFormat,
     AddComma,
@@ -26,6 +27,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
     let processed = match mode {
         RefineMode::UrlEncode => url::url_encode(&text),
         RefineMode::UrlDecode => url::url_decode(&text).unwrap_or_else(|_| text.clone()),
+        RefineMode::RemoveUtm => url::remove_utm_params(&text),
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::AddComma => number::add_commas(&text),

@@ -53,6 +53,7 @@ impl TrayMenu {
         let mode_defs = [
             ("URLエンコード", RefineMode::UrlEncode),
             ("URLデコード", RefineMode::UrlDecode),
+            ("UTM除去", RefineMode::RemoveUtm),
             ("トリム", RefineMode::Trim),
             ("JSON整形", RefineMode::JsonFormat),
             ("カンマ追加", RefineMode::AddComma),
