@@ -44,6 +44,7 @@ struct TrayMenu {
     url_encode_item: CheckMenuItem,
     url_decode_item: CheckMenuItem,
     trim_item: CheckMenuItem,
+    json_format_item: CheckMenuItem,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
 
@@ -53,10 +54,16 @@ impl TrayMenu {
         let url_encode_item = CheckMenuItem::new("URLエンコード", true, false, None);
         let url_decode_item = CheckMenuItem::new("URLデコード", true, true, None);
         let trim_item = CheckMenuItem::new("トリム", true, false, None);
+        let json_format_item = CheckMenuItem::new("JSON整形", true, false, None);
         let refine_submenu = Submenu::with_items(
             "変換モード",
             true,
-            &[&url_encode_item, &url_decode_item, &trim_item],
+            &[
+                &url_encode_item,
+                &url_decode_item,
+                &trim_item,
+                &json_format_item,
+            ],
         )
         .context("変換モードメニューの作成に失敗しました")?;
 
@@ -113,6 +120,7 @@ impl TrayMenu {
             url_encode_item,
             url_decode_item,
             trim_item,
+            json_format_item,
             interval_items,
         })
     }
@@ -204,6 +212,8 @@ fn handle_menu_event(
         update_refine(state, menu, clipboard, RefineMode::UrlDecode);
     } else if event.id == menu.trim_item.id() {
         update_refine(state, menu, clipboard, RefineMode::Trim);
+    } else if event.id == menu.json_format_item.id() {
+        update_refine(state, menu, clipboard, RefineMode::JsonFormat);
     } else {
         for (item, ms) in &menu.interval_items {
             if event.id == item.id() {
@@ -227,6 +237,8 @@ fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, m
     menu.url_decode_item
         .set_checked(mode == RefineMode::UrlDecode);
     menu.trim_item.set_checked(mode == RefineMode::Trim);
+    menu.json_format_item
+        .set_checked(mode == RefineMode::JsonFormat);
 
     process_clipboard(clipboard, mode);
 }
