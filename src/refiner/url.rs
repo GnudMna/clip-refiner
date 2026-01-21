@@ -14,13 +14,13 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-/// 文字列をパーセントエンコードする
-pub fn encode(input: &str) -> String {
+/// 文字列をURLエンコードする
+pub fn url_encode(input: &str) -> String {
     utf8_percent_encode(input, ENCODE_SET).to_string()
 }
 
-/// 文字列をパーセントデコードする
-pub fn decode(input: &str) -> Result<String> {
+/// 文字列をURLデコードする
+pub fn url_decode(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
@@ -30,33 +30,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_encode_alphanumeric() {
-        assert_eq!(encode("abc123"), "abc123");
+    fn test_url_encode_alphanumeric() {
+        assert_eq!(url_encode("abc123"), "abc123");
     }
 
     #[test]
-    fn test_encode_symbols() {
-        assert_eq!(encode(" "), "%20");
-        assert_eq!(encode("\""), "%22");
+    fn test_url_encode_symbols() {
+        assert_eq!(url_encode(" "), "%20");
+        assert_eq!(url_encode("\""), "%22");
     }
 
     #[test]
-    fn test_decode_alphanumeric() {
-        assert_eq!(decode("abc123").unwrap(), "abc123");
+    fn test_url_decode_alphanumeric() {
+        assert_eq!(url_decode("abc123").unwrap(), "abc123");
     }
 
     #[test]
-    fn test_decode_symbols() {
-        assert_eq!(decode("%20").unwrap(), " ");
+    fn test_url_decode_symbols() {
+        assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
     #[test]
-    fn test_decode_multibyte() {
-        assert_eq!(decode("%E3%81%82%E3%81%84%E3%81%86").unwrap(), "あいう");
+    fn test_url_decode_multibyte() {
+        assert_eq!(url_decode("%E3%81%82%E3%81%84%E3%81%86").unwrap(), "あいう");
     }
 
     #[test]
-    fn test_decode_bad_utf8() {
-        assert!(decode("%FF").is_err());
+    fn test_url_decode_bad_utf8() {
+        assert!(url_decode("%FF").is_err());
     }
 }
