@@ -20,7 +20,7 @@ use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
     version,
     about = "クリップボードのテキストを加工するツール",
     long_about = "
-クリップボードのテキストを加工（URLエンコード/URLデコード/トリム）するツール
+クリップボードのテキストを加工（URLエンコード/URLデコード/トリム/JSON整形）するツール
 
 使用方法:
    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
