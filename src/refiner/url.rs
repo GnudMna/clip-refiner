@@ -25,6 +25,30 @@ pub fn url_decode(input: &str) -> Result<String> {
     Ok(decoded.into_owned())
 }
 
+/// URLからUTMパラメータを除去する
+pub fn remove_utm_params(input: &str) -> String {
+    let mut parts = input.splitn(2, '?');
+    let base = parts.next().unwrap_or("");
+    let query = match parts.next() {
+        Some(q) => q,
+        None => return input.to_string(),
+    };
+
+    let filtered_query: Vec<&str> = query
+        .split('&')
+        .filter(|param| {
+            let key = param.split('=').next().unwrap_or("");
+            !key.starts_with("utm_")
+        })
+        .collect();
+
+    if filtered_query.is_empty() {
+        base.to_string()
+    } else {
+        format!("{}?{}", base, filtered_query.join("&"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -58,5 +82,25 @@ mod tests {
     #[test]
     fn test_url_decode_bad_utf8() {
         assert!(url_decode("%FF").is_err());
+    }
+
+    #[test]
+    fn test_remove_utm_params() {
+        assert_eq!(
+            remove_utm_params("https://example.com/?utm_source=google&utm_medium=cpc&id=123"),
+            "https://example.com/?id=123"
+        );
+        assert_eq!(
+            remove_utm_params("https://example.com/?utm_source=google"),
+            "https://example.com/"
+        );
+        assert_eq!(
+            remove_utm_params("https://example.com/path?a=b&utm_campaign=xyz&c=d"),
+            "https://example.com/path?a=b&c=d"
+        );
+        assert_eq!(
+            remove_utm_params("https://example.com/"),
+            "https://example.com/"
+        );
     }
 }

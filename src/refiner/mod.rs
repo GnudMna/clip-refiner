@@ -14,6 +14,7 @@ pub enum RefineMode {
     JsonFormat,
     AddComma,
     RemoveComma,
+    RemoveUtm,
 }
 
 /// クリップボードの内容を変換
@@ -30,6 +31,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
+        RefineMode::RemoveUtm => url::remove_utm_params(&text),
     };
 
     if processed != text {

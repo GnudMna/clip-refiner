@@ -57,6 +57,7 @@ impl TrayMenu {
             ("JSON整形", RefineMode::JsonFormat),
             ("カンマ追加", RefineMode::AddComma),
             ("カンマ除去", RefineMode::RemoveComma),
+            ("UTM除去", RefineMode::RemoveUtm),
         ];
 
         let mut mode_items = Vec::new();
