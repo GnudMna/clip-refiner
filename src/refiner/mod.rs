@@ -6,8 +6,9 @@ pub mod url;
 
 use arboard::Clipboard;
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RefineMode {
     #[value(help = "URLエンコード")]
     UrlEncode,

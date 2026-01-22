@@ -1,5 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod config;
 mod notification;
 mod refiner;
 mod tray;
