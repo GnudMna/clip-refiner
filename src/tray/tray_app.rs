@@ -5,6 +5,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
+use crate::config::AppConfig;
 use crate::notification;
 use crate::refiner::{RefineMode, process_clipboard};
 
@@ -28,10 +29,22 @@ struct AppState {
 
 impl AppState {
     fn new() -> Self {
+        let config = AppConfig::load();
         Self {
-            mode: Mutex::new(RefineMode::UrlDecode),
+            mode: Mutex::new(config.mode),
             paused: AtomicBool::new(false),
-            interval_ms: AtomicU64::new(1000), // デフォルト1秒
+            interval_ms: AtomicU64::new(config.interval_ms),
+        }
+    }
+
+    /// 設定を保存する
+    fn save_config(&self) {
+        let config = AppConfig {
+            mode: *self.mode.lock().unwrap_or_else(|e| e.into_inner()),
+            interval_ms: self.interval_ms.load(Ordering::Relaxed),
+        };
+        if let Err(e) = config.save() {
+            eprintln!("設定の保存に失敗: {}", e);
         }
     }
 }
@@ -48,6 +61,7 @@ struct TrayMenu {
 impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
         let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+        let current_interval = state.interval_ms.load(Ordering::Relaxed);
 
         // 加工モード定義
         let mode_defs = [
@@ -77,10 +91,10 @@ impl TrayMenu {
             .context("変換モードメニューの作成に失敗しました")?;
 
         // 監視周期メニュー
-        let interval_500ms = CheckMenuItem::new("0.5秒", true, false, None);
-        let interval_1s = CheckMenuItem::new("1秒", true, true, None);
-        let interval_2s = CheckMenuItem::new("2秒", true, false, None);
-        let interval_5s = CheckMenuItem::new("5秒", true, false, None);
+        let interval_500ms = CheckMenuItem::new("0.5秒", true, current_interval == 500, None);
+        let interval_1s = CheckMenuItem::new("1秒", true, current_interval == 1000, None);
+        let interval_2s = CheckMenuItem::new("2秒", true, current_interval == 2000, None);
+        let interval_5s = CheckMenuItem::new("5秒", true, current_interval == 5000, None);
         let interval_items = vec![
             (interval_500ms, 500u64),
             (interval_1s, 1000u64),
@@ -226,6 +240,7 @@ fn handle_menu_event(
                     it.set_checked(false);
                 }
                 item.set_checked(true);
+                state.save_config();
                 break;
             }
         }
@@ -240,6 +255,7 @@ fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, m
         item.set_checked(*m == mode);
     }
 
+    state.save_config();
     process_clipboard(clipboard, mode);
 }
 
