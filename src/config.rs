@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
+use crate::notification::error::show_error_notification;
+use crate::refiner::RefineMode;
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-
-use crate::refiner::RefineMode;
 
 /// アプリケーション設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,44 +33,59 @@ impl AppConfig {
         Ok(config_dir.join("config.json"))
     }
 
-    /// 設定をファイルから読み込む
     pub fn load() -> Self {
+        // 設定ファイルパス取得
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                eprintln!("設定ファイルパスの取得に失敗: {}", e);
+                show_error_notification(
+                    "設定ファイルパスの取得に失敗",
+                    &format!("{:?}", e),
+                );
                 return Self::default();
             }
         };
 
+        // 設定ファイルが存在しない → デフォルトで継続
         if !config_path.exists() {
             return Self::default();
         }
 
-        match std::fs::read_to_string(&config_path) {
-            Ok(content) => {
-                match serde_json::from_str::<AppConfig>(&content) {
-                    Ok(config) => config,
-                    Err(e) => {
-                        eprintln!("設定ファイルの解析に失敗: {}", e);
-                        Self::default()
-                    }
-                }
-            }
+        // ファイル読み込み
+        let content = match std::fs::read_to_string(&config_path) {
+            Ok(c) => c,
             Err(e) => {
-                eprintln!("設定ファイルの読み込みに失敗: {}", e);
+                show_error_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
+                return Self::default();
+            }
+        };
+
+        // JSON パース
+        match serde_json::from_str::<AppConfig>(&content) {
+            Ok(config) => config,
+            Err(e) => {
+                show_error_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
                 Self::default()
             }
         }
     }
 
-    /// 設定をファイルに保存する
     pub fn save(&self) -> Result<()> {
-        let config_path = Self::config_path()?;
-        let content = serde_json::to_string_pretty(self)
-            .context("設定のシリアライズに失敗しました")?;
-        std::fs::write(&config_path, content)
-            .context("設定ファイルの書き込みに失敗しました")?;
+        let config_path = Self::config_path().map_err(|e| {
+            show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+            e
+        })?;
+
+        let content = serde_json::to_string_pretty(self).map_err(|e| {
+            show_error_notification("設定のシリアライズに失敗", &format!("{:?}", e));
+            e
+        })?;
+
+        std::fs::write(&config_path, content).map_err(|e| {
+            show_error_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
+            e
+        })?;
+
         Ok(())
     }
 }
@@ -78,15 +94,13 @@ impl AppConfig {
 fn get_config_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {
-        let appdata = std::env::var("APPDATA")
-            .context("APPDATA環境変数の取得に失敗しました")?;
+        let appdata = std::env::var("APPDATA").context("APPDATA環境変数の取得に失敗しました")?;
         Ok(PathBuf::from(appdata).join("ClipRefiner"))
     }
 
     #[cfg(not(windows))]
     {
-        let home = std::env::var("HOME")
-            .context("HOME環境変数の取得に失敗しました")?;
+        let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
         Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
     }
 }
