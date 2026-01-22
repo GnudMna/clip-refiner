@@ -69,6 +69,7 @@ impl TrayMenu {
             ("URLデコード", RefineMode::UrlDecode),
             ("UTM除去", RefineMode::RemoveUtm),
             ("トリム", RefineMode::Trim),
+            ("トリム(行単位)", RefineMode::TrimLines),
             ("JSON整形", RefineMode::JsonFormat),
             ("カンマ追加", RefineMode::AddComma),
             ("カンマ除去", RefineMode::RemoveComma),
