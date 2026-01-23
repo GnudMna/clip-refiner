@@ -3,7 +3,7 @@ use crate::refiner::OrderedValue;
 use serde_json;
 use serde_yaml::Value;
 
-/// YAML文字列をJSON文字列へ変換する(キー順序ソート)
+/// YAML文字列をJSON文字列へ変換する(キー順序不同)
 /// 整形に失敗した(有効なYAMLではない)場合は元の文字列を返す
 pub fn yaml_to_json(text: &str) -> String {
     // YAML文字列をserde_yaml::Valueへパース

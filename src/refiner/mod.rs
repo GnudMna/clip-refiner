@@ -22,15 +22,15 @@ pub enum RefineMode {
     Trim,
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
-    #[value(help = "JSON形式を整形(キー順序ソート)")]
+    #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
     #[value(help = "JSON形式を整形(キー順序保持)")]
     JsonFormatPreserveOrder,
-    #[value(help = "JSON形式をYAML形式へ変換(キー順序ソート)")]
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
     JsonToYaml,
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     JsonToYamlPreserveOrder,
-    #[value(help = "YAML形式をJSON形式へ変換(キー順序ソート)")]
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     YamlToJsonPreserveOrder,
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJson,
