@@ -31,9 +31,9 @@ pub enum RefineMode {
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     JsonToYamlPreserveOrder,
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
-    YamlToJsonPreserveOrder,
-    #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJson,
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
+    YamlToJsonPreserveOrder,
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
