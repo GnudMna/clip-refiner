@@ -34,3 +34,56 @@ pub fn yaml_to_json_preserve_order(text: &str) -> String {
         Err(_) => text.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_yaml::Value;
+
+    // ---------------------------
+    // yaml_to_json
+    // ---------------------------
+    #[test]
+    fn test_yaml_to_json_valid() {
+        let input = "b: 1\na: 2\n";
+        let output = yaml_to_json(input);
+
+        // serde_yaml::Value はキー順序を保持しないため、JSON のキー順序は保証されない
+        let v: Value = serde_yaml::from_str(input).unwrap();
+        let expected = serde_json::to_string_pretty(&v).unwrap();
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_yaml_to_json_invalid() {
+        let input = "a: 1\n  b: 2"; // インデント不正
+        let output = yaml_to_json(input);
+        assert_eq!(output, input);
+    }
+
+    // ---------------------------
+    // yaml_to_json_preserve_order
+    // ---------------------------
+    #[test]
+    fn test_yaml_to_json_preserve_order_valid() {
+        let input = "z: 1\na: 2\nm: 3\n";
+        let output = yaml_to_json_preserve_order(input);
+
+        // OrderedValue によりキー順序保持されることを期待
+        let expected = r#"{
+  "z": 1,
+  "a": 2,
+  "m": 3
+}"#;
+
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_yaml_to_json_preserve_order_invalid() {
+        let input = "x: 1\n  y: 2"; // インデント不正
+        let output = yaml_to_json_preserve_order(input);
+        assert_eq!(output, input);
+    }
+}
