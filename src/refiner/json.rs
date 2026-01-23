@@ -19,6 +19,22 @@ pub fn format_json(text: &str) -> String {
     }
 }
 
+/// JSON文字列を整形(Pretty Print)する(キー順序保持)
+/// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
+pub fn format_json_preserve_order(text: &str) -> String {
+    // JSON文字列をrefiner::OrderedValueへパース
+    let v: OrderedValue = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(_) => return text.to_string(),
+    };
+
+    // 整形
+    match serde_json::to_string_pretty(&v) {
+        Ok(pretty) => pretty,
+        Err(_) => text.to_string(),
+    }
+}
+
 /// JSON文字列をYAML文字列へ変換する(キー順序ソート)
 /// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
 pub fn json_to_yaml(text: &str) -> String {
