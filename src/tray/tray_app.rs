@@ -55,6 +55,7 @@ struct TrayMenu {
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
     mode_items: Vec<(CheckMenuItem, RefineMode)>,
+    json_format_items: Vec<(CheckMenuItem, RefineMode)>,
     json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
     yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
     interval_items: Vec<(CheckMenuItem, u64)>,
@@ -64,6 +65,12 @@ impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
         let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
+
+        // JSON整形のサブ加工モード定義
+        let json_format_defs = [
+            ("キー順序ソート", RefineMode::JsonFormat),
+            ("キー順序保持", RefineMode::JsonFormatPreserveOrder),
+        ];
 
         // JSON→YAMLのサブ加工モード定義
         let json_to_yaml_defs = [
@@ -84,13 +91,28 @@ impl TrayMenu {
             ("UTM除去", RefineMode::RemoveUtm),
             ("トリム", RefineMode::Trim),
             ("トリム(行単位)", RefineMode::TrimLines),
-            ("JSON整形", RefineMode::JsonFormat),
+            // ここにJSON整形のサブメニュー
             // ここにJSON→YAMLのサブメニュー
             // ここにYAML→JSONのサブメニュー
             ("カンマ追加", RefineMode::AddComma),
             ("カンマ除去", RefineMode::RemoveComma),
             ("行並び替え", RefineMode::SortLines),
         ];
+
+        // JSON整形 サブメニュー作成
+        let mut json_format_items = Vec::new();
+        let mut json_foramt_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        for (label, mode) in json_format_defs {
+            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
+            json_format_items.push((item, mode));
+        }
+
+        for (json_format_item, _) in &json_format_items {
+            json_foramt_menu_items.push(json_format_item);
+        }
+
+        let json_format_submenu =
+            Submenu::with_items("JSON整形", true, &json_foramt_menu_items)?;
 
         // JSON→YAML サブメニュー作成
         let mut json_to_yaml_items = Vec::new();
@@ -134,8 +156,9 @@ impl TrayMenu {
             mode_menu_items.push(item);
 
             match mode {
-                RefineMode::JsonFormat => {
+                RefineMode::TrimLines => {
                     // サブメニューを追加
+                    mode_menu_items.push(&json_format_submenu);
                     mode_menu_items.push(&json_to_yaml_submenu);
                     mode_menu_items.push(&yaml_to_json_submenu);
                 }
@@ -197,6 +220,7 @@ impl TrayMenu {
             quit_item,
             pause_item,
             mode_items,
+            json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
             interval_items,
@@ -287,6 +311,7 @@ fn handle_menu_event(
     } else if let Some((_, mode)) = menu
         .mode_items
         .iter()
+        .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
         .chain(menu.yaml_to_json_items.iter())
         .find(|(item, _)| event.id == item.id())
@@ -313,6 +338,10 @@ fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, m
 
     // 通常項目
     for (item, m) in &menu.mode_items {
+        item.set_checked(*m == mode);
+    }
+    // JSON整形
+    for (item, m) in &menu.json_format_items {
         item.set_checked(*m == mode);
     }
     // JSON→YAML

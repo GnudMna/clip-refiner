@@ -22,8 +22,10 @@ pub enum RefineMode {
     Trim,
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
-    #[value(help = "JSON形式を整形")]
+    #[value(help = "JSON形式を整形(キー順序ソート)")]
     JsonFormat,
+    #[value(help = "JSON形式を整形(キー順序保持)")]
+    JsonFormatPreserveOrder,
     #[value(help = "JSON形式をYAML形式へ変換(キー順序ソート)")]
     JsonToYaml,
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
@@ -66,6 +68,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
         RefineMode::JsonFormat => json::format_json(&text),
+        RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
         RefineMode::JsonToYaml => json::json_to_yaml(&text),
         RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
