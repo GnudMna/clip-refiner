@@ -55,6 +55,8 @@ struct TrayMenu {
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
     mode_items: Vec<(CheckMenuItem, RefineMode)>,
+    json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
+    yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
 
@@ -63,7 +65,19 @@ impl TrayMenu {
         let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
 
-        // 加工モード定義
+        // JSON→YAMLのサブ加工モード定義
+        let json_to_yaml_defs = [
+            ("キー順序ソート", RefineMode::JsonToYaml),
+            ("キー順序保持", RefineMode::JsonToYamlPreserveOrder),
+        ];
+
+        // YAML→JSONのサブ加工モード定義
+        let yaml_to_json_defs = [
+            ("キー順序ソート", RefineMode::YamlToJson),
+            ("キー順序保持", RefineMode::YamlToJsonPreserveOrder),
+        ];
+
+        // 通常の加工モード定義
         let mode_defs = [
             ("URLエンコード", RefineMode::UrlEncode),
             ("URLデコード", RefineMode::UrlDecode),
@@ -71,25 +85,62 @@ impl TrayMenu {
             ("トリム", RefineMode::Trim),
             ("トリム(行単位)", RefineMode::TrimLines),
             ("JSON整形", RefineMode::JsonFormat),
-            ("JSON→YAML(キー順序ソート)", RefineMode::JsonToYaml),
-            ("JSON→YAML(キー順序保持)", RefineMode::JsonToYamlPreserveOrder),
-            ("YAML→JSON(キー順序ソート)", RefineMode::YamlToJson),
-            ("YAML→JSON(キー順序保持)", RefineMode::YamlToJsonPreserveOrder),
+            // ここにJSON→YAMLのサブメニュー
+            // ここにYAML→JSONのサブメニュー
             ("カンマ追加", RefineMode::AddComma),
             ("カンマ除去", RefineMode::RemoveComma),
             ("行並び替え", RefineMode::SortLines),
         ];
 
+        // JSON→YAML サブメニュー作成
+        let mut json_to_yaml_items = Vec::new();
+        let mut json_to_yaml_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        for (label, mode) in json_to_yaml_defs {
+            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
+            json_to_yaml_items.push((item, mode));
+        }
+
+        for (json_to_yaml_item, _) in &json_to_yaml_items {
+            json_to_yaml_menu_items.push(json_to_yaml_item);
+        }
+
+        let json_to_yaml_submenu =
+            Submenu::with_items("JSON→YAML", true, &json_to_yaml_menu_items)?;
+
+        // YAML→JSON サブメニュー作成
+        let mut yaml_to_json_items = Vec::new();
+        let mut yaml_to_json_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        for (label, mode) in yaml_to_json_defs {
+            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
+            yaml_to_json_items.push((item, mode));
+        }
+
+        for (json_to_yaml_item, _) in &yaml_to_json_items {
+            yaml_to_json_menu_items.push(json_to_yaml_item);
+        }
+
+        let yaml_to_json_submenu =
+            Submenu::with_items("YAML→JSON", true, &yaml_to_json_menu_items)?;
+
+        // 通常メニュー作成
         let mut mode_items = Vec::new();
         let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-
         for (label, mode) in mode_defs {
             let item = CheckMenuItem::new(label, true, mode == current_mode, None);
             mode_items.push((item, mode));
         }
 
-        for (item, _) in &mode_items {
+        for (item, mode) in &mode_items {
             mode_menu_items.push(item);
+
+            match mode {
+                RefineMode::JsonFormat => {
+                    // サブメニューを追加
+                    mode_menu_items.push(&json_to_yaml_submenu);
+                    mode_menu_items.push(&yaml_to_json_submenu);
+                }
+                _ => {}
+            }
         }
 
         let refine_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
@@ -146,6 +197,8 @@ impl TrayMenu {
             quit_item,
             pause_item,
             mode_items,
+            json_to_yaml_items,
+            yaml_to_json_items,
             interval_items,
         })
     }
@@ -234,6 +287,8 @@ fn handle_menu_event(
     } else if let Some((_, mode)) = menu
         .mode_items
         .iter()
+        .chain(menu.json_to_yaml_items.iter())
+        .chain(menu.yaml_to_json_items.iter())
         .find(|(item, _)| event.id == item.id())
     {
         update_refine(state, menu, clipboard, *mode);
@@ -256,7 +311,16 @@ fn handle_menu_event(
 fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: RefineMode) {
     *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
 
+    // 通常項目
     for (item, m) in &menu.mode_items {
+        item.set_checked(*m == mode);
+    }
+    // JSON→YAML
+    for (item, m) in &menu.json_to_yaml_items {
+        item.set_checked(*m == mode);
+    }
+    // YAML→JSON
+    for (item, m) in &menu.yaml_to_json_items {
         item.set_checked(*m == mode);
     }
 
