@@ -7,6 +7,7 @@ pub mod yaml;
 
 use arboard::Clipboard;
 use clap::ValueEnum;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,9 +24,13 @@ pub enum RefineMode {
     TrimLines,
     #[value(help = "JSON形式を整形")]
     JsonFormat,
-    #[value(help = "JSON形式をYAML形式へ変換")]
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序ソート)")]
     JsonToYaml,
-    #[value(help = "YAML形式をJSON形式へ変換")]
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
+    JsonToYamlPreserveOrder,
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序ソート)")]
+    YamlToJsonPreserveOrder,
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJson,
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
@@ -33,6 +38,18 @@ pub enum RefineMode {
     RemoveComma,
     #[value(help = "行単位で並び替え")]
     SortLines,
+}
+
+/// JSON, YAMLキー順序保持用
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum OrderedValue {
+    Null,
+    Bool(bool),
+    Number(serde_json::Number),
+    String(String),
+    Array(Vec<OrderedValue>),
+    Object(IndexMap<String, OrderedValue>),
 }
 
 /// クリップボードの内容を変換
@@ -50,7 +67,9 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::TrimLines => trim::trim_lines(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonToYaml => json::json_to_yaml(&text),
+        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
+        RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
         RefineMode::SortLines => sort::sort_lines(&text),

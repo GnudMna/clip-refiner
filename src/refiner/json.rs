@@ -1,3 +1,5 @@
+use crate::refiner::OrderedValue;
+
 use serde_json::Value;
 use serde_yaml;
 
@@ -17,11 +19,27 @@ pub fn format_json(text: &str) -> String {
     }
 }
 
-/// JSON文字列をYAML文字列へ変換する
+/// JSON文字列をYAML文字列へ変換する(キー順序ソート)
 /// 整形に失敗した（有効なJSONではない）場合は元の文字列を返す
 pub fn json_to_yaml(text: &str) -> String {
     // JSON文字列をserde_json::Valueへパース
     let v: Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(_) => return text.to_string(),
+    };
+
+    // serde_yamlでYAML文字列へ変換
+    match serde_yaml::to_string(&v) {
+        Ok(yaml_text) => yaml_text,
+        Err(_) => text.to_string(),
+    }
+}
+
+/// JSON文字列をYAML文字列へ変換する(キー順序保持)
+/// 整形に失敗した（有効なJSONではない）場合は元の文字列を返す
+pub fn json_to_yaml_preserve_order(text: &str) -> String {
+    // JSON文字列をrefiner::OrderedValueへパース
+    let v: OrderedValue = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(_) => return text.to_string(),
     };
