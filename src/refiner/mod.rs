@@ -3,6 +3,7 @@ pub mod number;
 pub mod sort;
 pub mod trim;
 pub mod url;
+pub mod yaml;
 
 use arboard::Clipboard;
 use clap::ValueEnum;
@@ -16,17 +17,21 @@ pub enum RefineMode {
     UrlDecode,
     #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
-    #[value(help = "改行や空白を整形する")]
+    #[value(help = "改行や空白を整形")]
     Trim,
-    #[value(help = "行単位で改行や空白を整形する")]
+    #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
-    #[value(help = "JSON形式を整形する")]
+    #[value(help = "JSON形式を整形")]
     JsonFormat,
-    #[value(help = "数値をカンマ区切りにする")]
+    #[value(help = "JSON形式をYAML形式へ変換")]
+    JsonToYaml,
+    #[value(help = "YAML形式をJSON形式へ変換")]
+    YamlToJson,
+    #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
-    #[value(help = "カンマ区切りを数値にする")]
+    #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     RemoveComma,
-    #[value(help = "行単位で並び替える")]
+    #[value(help = "行単位で並び替え")]
     SortLines,
 }
 
@@ -44,6 +49,8 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
         RefineMode::JsonFormat => json::format_json(&text),
+        RefineMode::JsonToYaml => json::json_to_yaml(&text),
+        RefineMode::YamlToJson => yaml::yaml_to_json(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
         RefineMode::SortLines => sort::sort_lines(&text),

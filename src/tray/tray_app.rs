@@ -71,6 +71,8 @@ impl TrayMenu {
             ("トリム", RefineMode::Trim),
             ("トリム(行単位)", RefineMode::TrimLines),
             ("JSON整形", RefineMode::JsonFormat),
+            ("JSON→YAML", RefineMode::JsonToYaml),
+            ("YAML→JSON", RefineMode::YamlToJson),
             ("カンマ追加", RefineMode::AddComma),
             ("カンマ除去", RefineMode::RemoveComma),
             ("行並び替え", RefineMode::SortLines),
