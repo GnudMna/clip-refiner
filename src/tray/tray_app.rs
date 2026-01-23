@@ -68,20 +68,20 @@ impl TrayMenu {
 
         // JSON整形のサブ加工モード定義
         let json_format_defs = [
-            ("キー順序ソート", RefineMode::JsonFormat),
             ("キー順序保持", RefineMode::JsonFormatPreserveOrder),
+            ("キー順序不同", RefineMode::JsonFormat),
         ];
 
         // JSON→YAMLのサブ加工モード定義
         let json_to_yaml_defs = [
-            ("キー順序ソート", RefineMode::JsonToYaml),
             ("キー順序保持", RefineMode::JsonToYamlPreserveOrder),
+            ("キー順序不同", RefineMode::JsonToYaml),
         ];
 
         // YAML→JSONのサブ加工モード定義
         let yaml_to_json_defs = [
-            ("キー順序ソート", RefineMode::YamlToJson),
             ("キー順序保持", RefineMode::YamlToJsonPreserveOrder),
+            ("キー順序不同", RefineMode::YamlToJson),
         ];
 
         // 通常の加工モード定義
