@@ -17,7 +17,6 @@ pub fn trim_lines(input: &str) -> String {
 
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
