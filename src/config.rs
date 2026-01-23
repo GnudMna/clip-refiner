@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct AppConfig {
     /// 実行モード
     pub mode: RefineMode,
-    /// 監視周期（ミリ秒）
+    /// 監視周期(ミリ秒)
     pub interval_ms: u64,
 }
 
