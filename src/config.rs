@@ -6,13 +6,34 @@ use crate::refiner::RefineMode;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-/// アプリケーション設定
+/// クリップボードの監視方式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MonitorMode {
+    /// ポーリング方式。一定間隔（interval_ms）ごとにクリップボードの内容を確認します。
+    /// すべてのプラットフォームで動作する最も基本的な方式です。
+    Polling,
+    /// イベント方式（Windows専用）。OSからのクリップボード更新通知を受け取り、即座に反応します。
+    /// 低遅延かつCPU負荷が低いのが特徴です。
+    #[cfg(windows)]
+    Event,
+}
+
+impl Default for MonitorMode {
+    fn default() -> Self {
+        Self::Polling
+    }
+}
+
+/// アプリケーションの設定情報。JSONファイルとして保存・読み込みされます。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// 実行モード
+    /// 最後に使用した（または常駐時に使用する）加工モード
     pub mode: RefineMode,
-    /// 監視周期(ミリ秒)
+    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用されます。
     pub interval_ms: u64,
+    /// 使用する監視方式（Polling または Event）
+    #[serde(default)]
+    pub monitor_mode: MonitorMode,
 }
 
 impl Default for AppConfig {
@@ -20,28 +41,32 @@ impl Default for AppConfig {
         Self {
             mode: RefineMode::UrlDecode,
             interval_ms: 1000,
+            monitor_mode: MonitorMode::default(),
         }
     }
 }
 
 impl AppConfig {
-    /// 設定ファイルのパスを取得
+    /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
+    ///
+    /// # Returns
+    /// * `Result<PathBuf>` - 設定ファイルの完全なパス。
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
-        std::fs::create_dir_all(&config_dir)
-            .context("設定ディレクトリの作成に失敗しました")?;
+        std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
         Ok(config_dir.join("config.json"))
     }
 
+    /// 設定ファイルを読み込む。存在しない場合や失敗した場合はデフォルト設定を返す
+    ///
+    /// # Returns
+    /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`。
     pub fn load() -> Self {
         // 設定ファイルパス取得
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_error_notification(
-                    "設定ファイルパスの取得に失敗",
-                    &format!("{:?}", e),
-                );
+                show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
@@ -70,6 +95,13 @@ impl AppConfig {
         }
     }
 
+    /// 現在の設定をファイルへ保存する
+    ///
+    /// # Arguments
+    /// * `&self` - 保存する `AppConfig` インスタンス。
+    ///
+    /// # Returns
+    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
             show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
@@ -91,6 +123,9 @@ impl AppConfig {
 }
 
 /// 設定ディレクトリのパスを取得
+///
+/// # Returns
+/// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
 fn get_config_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {
@@ -102,5 +137,26 @@ fn get_config_dir() -> Result<PathBuf> {
     {
         let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
         Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_config_default() {
+        let config = AppConfig::default();
+        assert_eq!(config.interval_ms, 1000);
+        assert_eq!(config.mode, RefineMode::UrlDecode);
+    }
+
+    #[test]
+    fn test_app_config_serde() {
+        let config = AppConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config.interval_ms, decoded.interval_ms);
+        assert_eq!(config.mode, decoded.mode);
     }
 }
