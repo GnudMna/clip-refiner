@@ -1,4 +1,5 @@
 pub mod json;
+pub mod markdown;
 pub mod number;
 pub mod sort;
 pub mod trim;
@@ -22,6 +23,8 @@ pub enum RefineMode {
     Trim,
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
+    #[value(help = "MarkdownをHTML形式へ変換")]
+    MarkdownToHtml,
     #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
     #[value(help = "JSON形式を整形(キー順序保持)")]
@@ -76,6 +79,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
         RefineMode::SortLines => sort::sort_lines(&text),
+        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
     };
 
     if processed != text {
