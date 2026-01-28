@@ -1,6 +1,12 @@
 use pulldown_cmark::{Options, Parser, html};
 
 /// MarkdownをHTMLへ変換
+///
+/// # Arguments
+/// * `text` - 変換するMarkdown文字列。
+///
+/// # Returns
+/// * `String` - 変換されたHTML文字列。
 pub fn markdown_to_html(text: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);

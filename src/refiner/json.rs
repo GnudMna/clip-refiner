@@ -5,6 +5,12 @@ use serde_yaml;
 
 /// JSON文字列を整形(Pretty Print)する(キー順序不同)
 /// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 整形するJSON文字列。
+///
+/// # Returns
+/// * `String` - 整形されたJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn format_json(text: &str) -> String {
     // JSON文字列をserde_json::Valueへパース
     let v: Value = match serde_json::from_str(text) {
@@ -21,6 +27,12 @@ pub fn format_json(text: &str) -> String {
 
 /// JSON文字列を整形(Pretty Print)する(キー順序保持)
 /// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 整形するJSON文字列。
+///
+/// # Returns
+/// * `String` - キー順序を保持して整形されたJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn format_json_preserve_order(text: &str) -> String {
     // JSON文字列をrefiner::OrderedValueへパース
     let v: OrderedValue = match serde_json::from_str(text) {
@@ -37,6 +49,12 @@ pub fn format_json_preserve_order(text: &str) -> String {
 
 /// JSON文字列をYAML文字列へ変換する(キー順序不同)
 /// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 変換するJSON文字列。
+///
+/// # Returns
+/// * `String` - 変換されたYAML文字列。パースに失敗した場合は元の文字列を返す。
 pub fn json_to_yaml(text: &str) -> String {
     // JSON文字列をserde_json::Valueへパース
     let v: Value = match serde_json::from_str(text) {
@@ -53,6 +71,12 @@ pub fn json_to_yaml(text: &str) -> String {
 
 /// JSON文字列をYAML文字列へ変換する(キー順序保持)
 /// 整形に失敗した(有効なJSONではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 変換するJSON文字列。
+///
+/// # Returns
+/// * `String` - キー順序を保持して変換されたYAML文字列。パースに失敗した場合は元の文字列を返す。
 pub fn json_to_yaml_preserve_order(text: &str) -> String {
     // JSON文字列をrefiner::OrderedValueへパース
     let v: OrderedValue = match serde_json::from_str(text) {

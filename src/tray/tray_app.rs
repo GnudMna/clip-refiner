@@ -41,6 +41,9 @@ struct AppState {
 
 impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
+    ///
+    /// # Returns
+    /// * `Self` - 新しく生成された `AppState` インスタンス。
     fn new() -> Self {
         let config = AppConfig::load();
         Self {
@@ -53,7 +56,7 @@ impl AppState {
         }
     }
 
-    /// 設定を保存する
+    /// 現在の設定をファイルへ保存する。
     fn save_config(&self) {
         let config = AppConfig {
             mode: self.get_mode(),
@@ -65,23 +68,42 @@ impl AppState {
         }
     }
 
+    /// 現在の `RefineMode` をスレッドセーフに取得する。
+    ///
+    /// # Returns
+    /// * `RefineMode` - 現在設定されている `RefineMode`。
     fn get_mode(&self) -> RefineMode {
         *self.mode.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// `RefineMode` をスレッドセーフに設定する。
+    ///
+    /// # Arguments
+    /// * `mode` - 新しく設定する `RefineMode`。
     fn set_mode(&self, mode: RefineMode) {
         *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
     }
 
+    /// 現在の `MonitorMode` をスレッドセーフに取得する。
+    ///
+    /// # Returns
+    /// * `MonitorMode` - 現在設定されている `MonitorMode`。
     fn get_monitor_mode(&self) -> MonitorMode {
         *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// `MonitorMode` をスレッドセーフに設定する。
+    ///
+    /// # Arguments
+    /// * `mode` - 新しく設定する `MonitorMode`。
     fn set_monitor_mode(&self, mode: MonitorMode) {
         *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
     }
 
     /// 加工済みの最新テキストをスレッド安全に取得する
+    ///
+    /// # Returns
+    /// * `String` - 最後に加工されたテキストのクローン。
     fn get_last_processed_text(&self) -> String {
         self.last_processed_text
             .lock()
@@ -90,6 +112,9 @@ impl AppState {
     }
 
     /// 加工済みの最新テキストをスレッド安全に更新する
+    ///
+    /// # Arguments
+    /// * `text` - 新しく設定する、加工済みのテキスト。
     fn set_last_processed_text(&self, text: String) {
         *self
             .last_processed_text
@@ -319,6 +344,9 @@ pub fn run_loop() -> Result<()> {
 }
 
 /// イベントループの作成
+///
+/// # Returns
+/// * `EventLoop<()>` - プラットフォームに応じて設定された新しいイベントループインスタンス。
 fn create_event_loop() -> EventLoop<()> {
     #[cfg(windows)]
     return EventLoopBuilder::new().with_any_thread(true).build();
@@ -555,6 +583,10 @@ fn update_refine(
 }
 
 /// 処理完了通知を表示する
+///
+/// # Arguments
+/// * `mode` - 実行された `RefineMode`。
+/// * `text` - 加工後のテキスト。
 #[cfg(debug_assertions)]
 fn show_process_notification(mode: RefineMode, text: &str) {
     let snippet = if text.chars().count() > 50 {
@@ -564,12 +596,20 @@ fn show_process_notification(mode: RefineMode, text: &str) {
     };
     notification::success::show_success_notification(
         "変換完了",
-        &format!("モード: {}
-内容: {}", mode.label(), snippet),
+        &format!(
+            "モード: {}
+内容: {}",
+            mode.label(),
+            snippet
+        ),
     );
 }
 
 /// 処理完了通知を表示する (リリースビルドでは何もしない)
+///
+/// # Arguments
+/// * `_mode` - 実行された `RefineMode` (未使用)。
+/// * `_text` - 加工後のテキスト (未使用)。
 #[cfg(not(debug_assertions))]
 fn show_process_notification(_mode: RefineMode, _text: &str) {}
 

@@ -4,6 +4,10 @@ use notify_rust::Notification;
 use std::time::Duration;
 
 /// 成功通知を表示する
+///
+/// # Arguments
+/// * `summary` - 通知のタイトル。
+/// * `body` - 通知の本文。
 #[cfg(debug_assertions)]
 pub fn show_success_notification(summary: &str, body: &str) {
     let _ = Notification::new()
