@@ -5,7 +5,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, MonitorMode};
 use crate::notification;
 use crate::refiner::{RefineMode, process_clipboard};
 
@@ -24,7 +24,10 @@ use tray_icon::{
 struct AppState {
     mode: Mutex<RefineMode>,
     paused: AtomicBool,
+    monitor_mode: Mutex<MonitorMode>,
+    monitor_generation: AtomicU64,
     interval_ms: AtomicU64,
+    last_processed_text: Mutex<String>,
 }
 
 impl AppState {
@@ -33,7 +36,10 @@ impl AppState {
         Self {
             mode: Mutex::new(config.mode),
             paused: AtomicBool::new(false),
+            monitor_mode: Mutex::new(config.monitor_mode),
+            monitor_generation: AtomicU64::new(0),
             interval_ms: AtomicU64::new(config.interval_ms),
+            last_processed_text: Mutex::new(String::new()),
         }
     }
 
@@ -42,6 +48,7 @@ impl AppState {
         let config = AppConfig {
             mode: *self.mode.lock().unwrap_or_else(|e| e.into_inner()),
             interval_ms: self.interval_ms.load(Ordering::Relaxed),
+            monitor_mode: *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()),
         };
         if let Err(e) = config.save() {
             eprintln!("設定の保存に失敗: {}", e);
@@ -58,6 +65,8 @@ struct TrayMenu {
     json_format_items: Vec<(CheckMenuItem, RefineMode)>,
     json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
     yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
+    monitor_mode_items: Vec<(CheckMenuItem, MonitorMode)>,
+    interval_submenu: Submenu,
     interval_items: Vec<(CheckMenuItem, u64)>,
 }
 
@@ -111,8 +120,7 @@ impl TrayMenu {
             json_foramt_menu_items.push(json_format_item);
         }
 
-        let json_format_submenu =
-            Submenu::with_items("JSON整形", true, &json_foramt_menu_items)?;
+        let json_format_submenu = Submenu::with_items("JSON整形", true, &json_foramt_menu_items)?;
 
         // JSON→YAML サブメニュー作成
         let mut json_to_yaml_items = Vec::new();
@@ -169,6 +177,39 @@ impl TrayMenu {
         let refine_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
             .context("変換モードメニューの作成に失敗しました")?;
 
+        // 監視モードメニュー
+        let current_monitor_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+        let polling_item = CheckMenuItem::new(
+            "ポーリング",
+            true,
+            current_monitor_mode == MonitorMode::Polling,
+            None,
+        );
+
+        #[cfg(windows)]
+        let event_item = CheckMenuItem::new(
+            "イベント",
+            true,
+            current_monitor_mode == MonitorMode::Event,
+            None,
+        );
+
+        #[cfg(windows)]
+        let monitor_mode_items = vec![
+            (polling_item, MonitorMode::Polling),
+            (event_item, MonitorMode::Event),
+        ];
+
+        #[cfg(not(windows))]
+        let monitor_mode_items = vec![(polling_item, MonitorMode::Polling)];
+
+        let mut monitor_mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        for (item, _) in &monitor_mode_items {
+            monitor_mode_menu_items.push(item);
+        }
+        let monitor_mode_submenu = Submenu::with_items("監視方式", true, &monitor_mode_menu_items)
+            .context("監視方式メニューの作成に失敗しました")?;
+
         // 監視周期メニュー
         let interval_500ms = CheckMenuItem::new("0.5秒", true, current_interval == 500, None);
         let interval_1s = CheckMenuItem::new("1秒", true, current_interval == 1000, None);
@@ -188,6 +229,12 @@ impl TrayMenu {
         let interval_submenu = Submenu::with_items("監視周期", true, &interval_menu_items)
             .context("監視周期メニューの作成に失敗しました")?;
 
+        // イベントモードの場合は監視周期を無効化
+        #[cfg(windows)]
+        if current_monitor_mode == MonitorMode::Event {
+            interval_submenu.set_enabled(false);
+        }
+
         // 一時停止・終了メニュー
         let pause_item =
             CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
@@ -198,6 +245,7 @@ impl TrayMenu {
         tray_menu
             .append_items(&[
                 &refine_submenu,
+                &monitor_mode_submenu,
                 &interval_submenu,
                 &PredefinedMenuItem::separator(),
                 &pause_item,
@@ -223,6 +271,8 @@ impl TrayMenu {
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
+            monitor_mode_items,
+            interval_submenu,
             interval_items,
         })
     }
@@ -235,7 +285,8 @@ pub fn run_loop() -> Result<()> {
     let menu = TrayMenu::build(&state)?;
 
     // クリップボード監視スレッドの開始
-    spawn_monitor_thread(Arc::clone(&state));
+    let state_for_monitor = Arc::clone(&state);
+    spawn_monitor_thread(state_for_monitor);
 
     let menu_channel = MenuEvent::receiver();
     let mut clipboard = init_clipboard()?;
@@ -259,8 +310,20 @@ fn create_event_loop() -> EventLoop<()> {
     return EventLoopBuilder::new().build();
 }
 
-/// クリップボード監視スレッドの開始
+/// クリップボード監視スレッドの開始（モードに応じて適切な方式を選択）
 fn spawn_monitor_thread(state: Arc<AppState>) {
+    let monitor_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+    let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
+    match monitor_mode {
+        MonitorMode::Polling => spawn_polling_monitor_thread(state, generation),
+        #[cfg(windows)]
+        MonitorMode::Event => spawn_event_monitor_thread(state, generation),
+    }
+}
+
+/// ポーリング方式のクリップボード監視スレッド
+fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
     thread::spawn(move || {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
@@ -270,9 +333,21 @@ fn spawn_monitor_thread(state: Arc<AppState>) {
             }
         };
 
-        let mut last_text = clipboard.get_text().unwrap_or_default();
+        {
+            let current_text = clipboard.get_text().unwrap_or_default();
+            let mut shared_last = state
+                .last_processed_text
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *shared_last = current_text;
+        }
 
         loop {
+            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
+            if state.monitor_generation.load(Ordering::SeqCst) != generation {
+                break;
+            }
+
             let interval = state.interval_ms.load(Ordering::Relaxed);
             thread::sleep(Duration::from_millis(interval));
 
@@ -281,15 +356,90 @@ fn spawn_monitor_thread(state: Arc<AppState>) {
             }
 
             if let Ok(text) = clipboard.get_text() {
-                if !text.is_empty() && text != last_text {
+                let mut shared_last = state
+                    .last_processed_text
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+
+                if !text.is_empty() && text != *shared_last {
                     let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
                     if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
-                        last_text = processed;
+                        *shared_last = processed;
                         continue;
                     }
                 }
-                last_text = text;
+                *shared_last = text;
             }
+        }
+    });
+}
+
+/// イベント方式のクリップボード監視スレッド（Windowsのみ）
+#[cfg(windows)]
+fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
+    thread::spawn(move || {
+        use clipboard_win::raw::seq_num;
+
+        let mut clipboard = match init_clipboard() {
+            Ok(cb) => cb,
+            Err(e) => {
+                notification::error::show_anyhow_error("監視スレッドエラー", &e);
+                return;
+            }
+        };
+
+        let current_text = clipboard.get_text().unwrap_or_default();
+        {
+            let mut shared_last = state
+                .last_processed_text
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *shared_last = current_text;
+        }
+        let mut last_seq = seq_num().map(|s| s.get()).unwrap_or(0);
+
+        loop {
+            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
+            if state.monitor_generation.load(Ordering::SeqCst) != generation {
+                break;
+            }
+
+            if state.paused.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+
+            // クリップボードのシーケンス番号をチェック
+            if let Some(seq_nonzero) = seq_num() {
+                let seq = seq_nonzero.get();
+                if seq != last_seq {
+                    last_seq = seq;
+
+                    // テキストを取得して処理
+                    if let Ok(text) = clipboard.get_text() {
+                        let mut shared_last = state
+                            .last_processed_text
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+
+                        if !text.is_empty() && text != *shared_last {
+                            let current_mode =
+                                *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+                            if let Some(processed) = process_clipboard(&mut clipboard, current_mode)
+                            {
+                                *shared_last = processed;
+                                // シーケンス番号を更新（自分が更新したため）
+                                last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
+                                continue;
+                            }
+                        }
+                        *shared_last = text;
+                    }
+                }
+            }
+
+            // イベント待機（短い間隔でポーリング）
+            thread::sleep(Duration::from_millis(50));
         }
     });
 }
@@ -298,7 +448,7 @@ fn spawn_monitor_thread(state: Arc<AppState>) {
 fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
-    state: &AppState,
+    state: &Arc<AppState>,
     clipboard: &mut Clipboard,
     control_flow: &mut ControlFlow,
 ) {
@@ -317,6 +467,12 @@ fn handle_menu_event(
         .find(|(item, _)| event.id == item.id())
     {
         update_refine(state, menu, clipboard, *mode);
+    } else if let Some((_, monitor_mode)) = menu
+        .monitor_mode_items
+        .iter()
+        .find(|(item, _)| event.id == item.id())
+    {
+        update_monitor_mode(state, menu, *monitor_mode);
     } else {
         for (item, ms) in &menu.interval_items {
             if event.id == item.id() {
@@ -333,7 +489,12 @@ fn handle_menu_event(
 }
 
 /// 加工モードの更新
-fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, mode: RefineMode) {
+fn update_refine(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    clipboard: &mut Clipboard,
+    mode: RefineMode,
+) {
     *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
 
     // 通常項目
@@ -354,7 +515,48 @@ fn update_refine(state: &AppState, menu: &TrayMenu, clipboard: &mut Clipboard, m
     }
 
     state.save_config();
-    process_clipboard(clipboard, mode);
+    if let Some(processed) = process_clipboard(clipboard, mode) {
+        let mut shared_last = state
+            .last_processed_text
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *shared_last = processed;
+    }
+}
+
+/// 監視モードの更新
+fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
+    let current_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+
+    // モードが変わっていない場合は何もしない
+    if current_mode == monitor_mode {
+        return;
+    }
+
+    // 監視モードを更新
+    *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = monitor_mode;
+
+    // メニューのチェック状態を更新
+    for (item, m) in &menu.monitor_mode_items {
+        item.set_checked(*m == monitor_mode);
+    }
+
+    // 監視周期メニューの有効/無効を切り替え
+    #[cfg(windows)]
+    match monitor_mode {
+        MonitorMode::Event => menu.interval_submenu.set_enabled(false),
+        MonitorMode::Polling => menu.interval_submenu.set_enabled(true),
+    }
+
+    #[cfg(not(windows))]
+    match monitor_mode {
+        MonitorMode::Polling => menu.interval_submenu.set_enabled(true),
+    }
+
+    state.save_config();
+
+    // 監視スレッドを再起動（世代を更新することで旧スレッドを終了させる）
+    spawn_monitor_thread(Arc::clone(state));
 }
 
 /// クリップボードの初期化

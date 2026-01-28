@@ -9,6 +9,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "clap",
+ "clipboard-win",
  "csv",
  "image",
  "indexmap 2.13.0",
