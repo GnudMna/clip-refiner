@@ -344,7 +344,9 @@ fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 if !text.is_empty() && text != shared_last {
                     let current_mode = state.get_mode();
                     if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
-                        state.set_last_processed_text(processed);
+                        state.set_last_processed_text(processed.clone());
+                        // 通知を表示
+                        show_process_notification(current_mode, &processed);
                         continue;
                     }
                 }
@@ -379,7 +381,7 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
             }
 
             if state.paused.load(Ordering::Relaxed) {
-                thread::sleep(Duration::from_millis(100));
+                thread::sleep(Duration::from_millis(200));
                 continue;
             }
 
@@ -397,7 +399,9 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                             let current_mode = state.get_mode();
                             if let Some(processed) = process_clipboard(&mut clipboard, current_mode)
                             {
-                                state.set_last_processed_text(processed);
+                                state.set_last_processed_text(processed.clone());
+                                // 通知を表示
+                                show_process_notification(current_mode, &processed);
                                 // シーケンス番号を更新（自分が更新したため）
                                 last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
                                 continue;
@@ -408,8 +412,8 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 }
             }
 
-            // イベント待機（短い間隔でポーリング）
-            thread::sleep(Duration::from_millis(50));
+            // 変化がない時のCPU負荷を抑える
+            thread::sleep(Duration::from_millis(100));
         }
     });
 }
@@ -486,9 +490,28 @@ fn update_refine(
 
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
-        state.set_last_processed_text(processed);
+        state.set_last_processed_text(processed.clone());
+        show_process_notification(mode, &processed);
     }
 }
+
+/// 処理完了通知を表示する
+#[cfg(debug_assertions)]
+fn show_process_notification(mode: RefineMode, text: &str) {
+    let snippet = if text.chars().count() > 50 {
+        format!("{}...", text.chars().take(47).collect::<String>())
+    } else {
+        text.to_string()
+    };
+    notification::success::show_success_notification(
+        "変換完了",
+        &format!("モード: {}\n内容: {}", mode.label(), snippet),
+    );
+}
+
+/// 処理完了通知を表示する (リリースビルドでは何もしない)
+#[cfg(not(debug_assertions))]
+fn show_process_notification(_mode: RefineMode, _text: &str) {}
 
 /// 監視モードの更新
 fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
