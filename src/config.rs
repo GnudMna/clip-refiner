@@ -6,6 +6,22 @@ use crate::refiner::RefineMode;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+/// クリップボード監視モード
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MonitorMode {
+    /// ポーリング方式（定期的にチェック）
+    Polling,
+    /// イベント方式（クリップボード変更時に即座に反応）
+    #[cfg(windows)]
+    Event,
+}
+
+impl Default for MonitorMode {
+    fn default() -> Self {
+        Self::Polling
+    }
+}
+
 /// アプリケーション設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -13,6 +29,9 @@ pub struct AppConfig {
     pub mode: RefineMode,
     /// 監視周期(ミリ秒)
     pub interval_ms: u64,
+    /// 監視モード
+    #[serde(default)]
+    pub monitor_mode: MonitorMode,
 }
 
 impl Default for AppConfig {
@@ -20,6 +39,7 @@ impl Default for AppConfig {
         Self {
             mode: RefineMode::UrlDecode,
             interval_ms: 1000,
+            monitor_mode: MonitorMode::default(),
         }
     }
 }
@@ -28,8 +48,7 @@ impl AppConfig {
     /// 設定ファイルのパスを取得
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
-        std::fs::create_dir_all(&config_dir)
-            .context("設定ディレクトリの作成に失敗しました")?;
+        std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
         Ok(config_dir.join("config.json"))
     }
 
@@ -38,10 +57,7 @@ impl AppConfig {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_error_notification(
-                    "設定ファイルパスの取得に失敗",
-                    &format!("{:?}", e),
-                );
+                show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
