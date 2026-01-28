@@ -120,3 +120,24 @@ fn get_config_dir() -> Result<PathBuf> {
         Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_config_default() {
+        let config = AppConfig::default();
+        assert_eq!(config.interval_ms, 1000);
+        assert_eq!(config.mode, RefineMode::UrlDecode);
+    }
+
+    #[test]
+    fn test_app_config_serde() {
+        let config = AppConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config.interval_ms, decoded.interval_ms);
+        assert_eq!(config.mode, decoded.mode);
+    }
+}
