@@ -45,6 +45,71 @@ pub enum RefineMode {
     SortLines,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum RefineCategory {
+    Normal,
+    JsonFormat,
+    JsonToYaml,
+    YamlToJson,
+}
+
+impl RefineMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            RefineMode::UrlEncode => "URLエンコード",
+            RefineMode::UrlDecode => "URLデコード",
+            RefineMode::RemoveUtm => "UTM除去",
+            RefineMode::Trim => "トリム",
+            RefineMode::TrimLines => "トリム(行単位)",
+            RefineMode::MarkdownToHtml => "Markdown→HTML",
+            RefineMode::JsonFormat => "キー順序不同",
+            RefineMode::JsonFormatPreserveOrder => "キー順序保持",
+            RefineMode::JsonToYaml => "キー順序不同",
+            RefineMode::JsonToYamlPreserveOrder => "キー順序保持",
+            RefineMode::YamlToJson => "キー順序不同",
+            RefineMode::YamlToJsonPreserveOrder => "キー順序保持",
+            RefineMode::AddComma => "カンマ追加",
+            RefineMode::RemoveComma => "カンマ除去",
+            RefineMode::SortLines => "行並び替え",
+        }
+    }
+
+    pub fn category(&self) -> RefineCategory {
+        match self {
+            RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
+                RefineCategory::JsonFormat
+            }
+            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => {
+                RefineCategory::JsonToYaml
+            }
+            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => {
+                RefineCategory::YamlToJson
+            }
+            _ => RefineCategory::Normal,
+        }
+    }
+
+    pub fn variants() -> &'static [RefineMode] {
+        &[
+            RefineMode::UrlEncode,
+            RefineMode::UrlDecode,
+            RefineMode::RemoveUtm,
+            RefineMode::Trim,
+            RefineMode::TrimLines,
+            RefineMode::MarkdownToHtml,
+            RefineMode::JsonFormat,
+            RefineMode::JsonFormatPreserveOrder,
+            RefineMode::JsonToYaml,
+            RefineMode::JsonToYamlPreserveOrder,
+            RefineMode::YamlToJson,
+            RefineMode::YamlToJsonPreserveOrder,
+            RefineMode::AddComma,
+            RefineMode::RemoveComma,
+            RefineMode::SortLines,
+        ]
+    }
+}
+
 /// JSON, YAMLキー順序保持用
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]

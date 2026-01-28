@@ -46,13 +46,43 @@ impl AppState {
     /// 設定を保存する
     fn save_config(&self) {
         let config = AppConfig {
-            mode: *self.mode.lock().unwrap_or_else(|e| e.into_inner()),
+            mode: self.get_mode(),
             interval_ms: self.interval_ms.load(Ordering::Relaxed),
-            monitor_mode: *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()),
+            monitor_mode: self.get_monitor_mode(),
         };
         if let Err(e) = config.save() {
             eprintln!("設定の保存に失敗: {}", e);
         }
+    }
+
+    fn get_mode(&self) -> RefineMode {
+        *self.mode.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn set_mode(&self, mode: RefineMode) {
+        *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
+    }
+
+    fn get_monitor_mode(&self) -> MonitorMode {
+        *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn set_monitor_mode(&self, mode: MonitorMode) {
+        *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
+    }
+
+    fn get_last_processed_text(&self) -> String {
+        self.last_processed_text
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn set_last_processed_text(&self, text: String) {
+        *self
+            .last_processed_text
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = text;
     }
 }
 
@@ -72,106 +102,62 @@ struct TrayMenu {
 
 impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
-        let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+        let current_mode = state.get_mode();
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
 
-        // JSON整形のサブ加工モード定義
-        let json_format_defs = [
-            ("キー順序保持", RefineMode::JsonFormatPreserveOrder),
-            ("キー順序不同", RefineMode::JsonFormat),
-        ];
-
-        // JSON→YAMLのサブ加工モード定義
-        let json_to_yaml_defs = [
-            ("キー順序保持", RefineMode::JsonToYamlPreserveOrder),
-            ("キー順序不同", RefineMode::JsonToYaml),
-        ];
-
-        // YAML→JSONのサブ加工モード定義
-        let yaml_to_json_defs = [
-            ("キー順序保持", RefineMode::YamlToJsonPreserveOrder),
-            ("キー順序不同", RefineMode::YamlToJson),
-        ];
-
-        // 通常の加工モード定義
-        let mode_defs = [
-            ("URLエンコード", RefineMode::UrlEncode),
-            ("URLデコード", RefineMode::UrlDecode),
-            ("UTM除去", RefineMode::RemoveUtm),
-            ("トリム", RefineMode::Trim),
-            ("トリム(行単位)", RefineMode::TrimLines),
-            ("Markdown→HTML", RefineMode::MarkdownToHtml),
-            // ここにJSON整形のサブメニュー
-            // ここにJSON→YAMLのサブメニュー
-            // ここにYAML→JSONのサブメニュー
-            ("カンマ追加", RefineMode::AddComma),
-            ("カンマ除去", RefineMode::RemoveComma),
-            ("行並び替え", RefineMode::SortLines),
-        ];
-
-        // JSON整形 サブメニュー作成
+        // JSON整形 / JSON→YAML / YAML→JSON のサブメニュー用アイテム
         let mut json_format_items = Vec::new();
-        let mut json_foramt_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-        for (label, mode) in json_format_defs {
-            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
-            json_format_items.push((item, mode));
-        }
-
-        for (json_format_item, _) in &json_format_items {
-            json_foramt_menu_items.push(json_format_item);
-        }
-
-        let json_format_submenu = Submenu::with_items("JSON整形", true, &json_foramt_menu_items)?;
-
-        // JSON→YAML サブメニュー作成
         let mut json_to_yaml_items = Vec::new();
-        let mut json_to_yaml_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-        for (label, mode) in json_to_yaml_defs {
-            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
-            json_to_yaml_items.push((item, mode));
-        }
-
-        for (json_to_yaml_item, _) in &json_to_yaml_items {
-            json_to_yaml_menu_items.push(json_to_yaml_item);
-        }
-
-        let json_to_yaml_submenu =
-            Submenu::with_items("JSON→YAML", true, &json_to_yaml_menu_items)?;
-
-        // YAML→JSON サブメニュー作成
         let mut yaml_to_json_items = Vec::new();
-        let mut yaml_to_json_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-        for (label, mode) in yaml_to_json_defs {
-            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
-            yaml_to_json_items.push((item, mode));
-        }
 
-        for (json_to_yaml_item, _) in &yaml_to_json_items {
-            yaml_to_json_menu_items.push(json_to_yaml_item);
-        }
-
-        let yaml_to_json_submenu =
-            Submenu::with_items("YAML→JSON", true, &yaml_to_json_menu_items)?;
-
-        // 通常メニュー作成
+        // 変換モードアイテム
         let mut mode_items = Vec::new();
-        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-        for (label, mode) in mode_defs {
-            let item = CheckMenuItem::new(label, true, mode == current_mode, None);
-            mode_items.push((item, mode));
+
+        for &mode in RefineMode::variants() {
+            let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
+            match mode.category() {
+                crate::refiner::RefineCategory::Normal => mode_items.push((item, mode)),
+                crate::refiner::RefineCategory::JsonFormat => json_format_items.push((item, mode)),
+                crate::refiner::RefineCategory::JsonToYaml => json_to_yaml_items.push((item, mode)),
+                crate::refiner::RefineCategory::YamlToJson => yaml_to_json_items.push((item, mode)),
+            }
         }
 
+        // サブメニューの作成
+        let json_format_submenu = Submenu::with_items(
+            "JSON整形",
+            true,
+            &json_format_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
+        let json_to_yaml_submenu = Submenu::with_items(
+            "JSON→YAML",
+            true,
+            &json_to_yaml_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
+        let yaml_to_json_submenu = Submenu::with_items(
+            "YAML→JSON",
+            true,
+            &yaml_to_json_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
+
+        // メインの変換モードメニュー組み立て
+        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
         for (item, mode) in &mode_items {
             mode_menu_items.push(item);
-
-            match mode {
-                RefineMode::TrimLines => {
-                    // サブメニューを追加
-                    mode_menu_items.push(&json_format_submenu);
-                    mode_menu_items.push(&json_to_yaml_submenu);
-                    mode_menu_items.push(&yaml_to_json_submenu);
-                }
-                _ => {}
+            // 特定の項目の後にサブメニューを配置
+            if *mode == RefineMode::TrimLines {
+                mode_menu_items.push(&json_format_submenu);
+                mode_menu_items.push(&json_to_yaml_submenu);
+                mode_menu_items.push(&yaml_to_json_submenu);
             }
         }
 
@@ -313,7 +299,7 @@ fn create_event_loop() -> EventLoop<()> {
 
 /// クリップボード監視スレッドの開始（モードに応じて適切な方式を選択）
 fn spawn_monitor_thread(state: Arc<AppState>) {
-    let monitor_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+    let monitor_mode = state.get_monitor_mode();
     let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
     match monitor_mode {
@@ -336,11 +322,7 @@ fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
 
         {
             let current_text = clipboard.get_text().unwrap_or_default();
-            let mut shared_last = state
-                .last_processed_text
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            *shared_last = current_text;
+            state.set_last_processed_text(current_text);
         }
 
         loop {
@@ -357,19 +339,16 @@ fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
             }
 
             if let Ok(text) = clipboard.get_text() {
-                let mut shared_last = state
-                    .last_processed_text
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
+                let shared_last = state.get_last_processed_text();
 
-                if !text.is_empty() && text != *shared_last {
-                    let current_mode = *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+                if !text.is_empty() && text != shared_last {
+                    let current_mode = state.get_mode();
                     if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
-                        *shared_last = processed;
+                        state.set_last_processed_text(processed);
                         continue;
                     }
                 }
-                *shared_last = text;
+                state.set_last_processed_text(text);
             }
         }
     });
@@ -390,13 +369,7 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
         };
 
         let current_text = clipboard.get_text().unwrap_or_default();
-        {
-            let mut shared_last = state
-                .last_processed_text
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            *shared_last = current_text;
-        }
+        state.set_last_processed_text(current_text);
         let mut last_seq = seq_num().map(|s| s.get()).unwrap_or(0);
 
         loop {
@@ -418,23 +391,19 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
 
                     // テキストを取得して処理
                     if let Ok(text) = clipboard.get_text() {
-                        let mut shared_last = state
-                            .last_processed_text
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
+                        let shared_last = state.get_last_processed_text();
 
-                        if !text.is_empty() && text != *shared_last {
-                            let current_mode =
-                                *state.mode.lock().unwrap_or_else(|e| e.into_inner());
+                        if !text.is_empty() && text != shared_last {
+                            let current_mode = state.get_mode();
                             if let Some(processed) = process_clipboard(&mut clipboard, current_mode)
                             {
-                                *shared_last = processed;
+                                state.set_last_processed_text(processed);
                                 // シーケンス番号を更新（自分が更新したため）
                                 last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
                                 continue;
                             }
                         }
-                        *shared_last = text;
+                        state.set_last_processed_text(text);
                     }
                 }
             }
@@ -496,7 +465,7 @@ fn update_refine(
     clipboard: &mut Clipboard,
     mode: RefineMode,
 ) {
-    *state.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
+    state.set_mode(mode);
 
     // 通常項目
     for (item, m) in &menu.mode_items {
@@ -517,17 +486,13 @@ fn update_refine(
 
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
-        let mut shared_last = state
-            .last_processed_text
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        *shared_last = processed;
+        state.set_last_processed_text(processed);
     }
 }
 
 /// 監視モードの更新
 fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
-    let current_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+    let current_mode = state.get_monitor_mode();
 
     // モードが変わっていない場合は何もしない
     if current_mode == monitor_mode {
@@ -535,7 +500,7 @@ fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: Mon
     }
 
     // 監視モードを更新
-    *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = monitor_mode;
+    state.set_monitor_mode(monitor_mode);
 
     // メニューのチェック状態を更新
     for (item, m) in &menu.monitor_mode_items {
