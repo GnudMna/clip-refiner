@@ -100,6 +100,7 @@ impl TrayMenu {
             ("UTM除去", RefineMode::RemoveUtm),
             ("トリム", RefineMode::Trim),
             ("トリム(行単位)", RefineMode::TrimLines),
+            ("Markdown→HTML", RefineMode::MarkdownToHtml),
             // ここにJSON整形のサブメニュー
             // ここにJSON→YAMLのサブメニュー
             // ここにYAML→JSONのサブメニュー
