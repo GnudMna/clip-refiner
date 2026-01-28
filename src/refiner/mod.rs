@@ -11,49 +11,71 @@ use clap::ValueEnum;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+/// クリップボードのテキストを加工する各モードの定義
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RefineMode {
+    /// URLエンコードを行う
     #[value(help = "URLエンコード")]
     UrlEncode,
+    /// URLデコードを行う。失敗した場合は元のテキストを維持する
     #[value(help = "URLデコード")]
     UrlDecode,
+    /// URLから utm_ で始まる計測用パラメータを削除する
     #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
+    /// テキスト全体の前後にある空白および改行を削除する
     #[value(help = "改行や空白を整形")]
     Trim,
+    /// 行ごとに前後の空白を削除する
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
+    /// Markdown形式のテキストをHTML形式へ変換する
     #[value(help = "MarkdownをHTML形式へ変換")]
     MarkdownToHtml,
+    /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
     #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
+    /// JSON形式をインデント整形する（元のキー順序を維持する）
     #[value(help = "JSON形式を整形(キー順序保持)")]
     JsonFormatPreserveOrder,
+    /// JSON形式をYAML形式へ変換する
     #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
     JsonToYaml,
+    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     JsonToYamlPreserveOrder,
+    /// YAML形式をJSON形式へ変換する
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     YamlToJson,
+    /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJsonPreserveOrder,
+    /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
+    /// 数値からカンマを削除する（例: 1,000 -> 1000）
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     RemoveComma,
+    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
     #[value(help = "行単位で並び替え")]
     SortLines,
 }
 
+/// メニューの階層化に使用するカテゴリ
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum RefineCategory {
+    /// 通常の単独メニュー
     Normal,
+    /// JSON整形サブメニュー内
     JsonFormat,
+    /// JSON to YAMLサブメニュー内
     JsonToYaml,
+    /// YAML to JSONサブメニュー内
     YamlToJson,
 }
 
 impl RefineMode {
+    /// UIに表示する名前を取得する
     pub fn label(&self) -> &'static str {
         match self {
             RefineMode::UrlEncode => "URLエンコード",
@@ -74,6 +96,7 @@ impl RefineMode {
         }
     }
 
+    /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
     pub fn category(&self) -> RefineCategory {
         match self {
             RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
@@ -89,6 +112,7 @@ impl RefineMode {
         }
     }
 
+    /// 定義されているすべてのモードを順番に取得する
     pub fn variants() -> &'static [RefineMode] {
         &[
             RefineMode::UrlEncode,
@@ -135,6 +159,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::RemoveUtm => url::remove_utm_params(&text),
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
+        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
         RefineMode::JsonToYaml => json::json_to_yaml(&text),
@@ -144,7 +169,6 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
         RefineMode::SortLines => sort::sort_lines(&text),
-        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
     };
 
     if processed != text {

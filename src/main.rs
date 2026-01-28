@@ -15,6 +15,7 @@ use single_instance::SingleInstance;
 #[cfg(windows)]
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
+/// コマンドライン引数
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -30,11 +31,12 @@ use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 "
 )]
 struct Args {
-    /// 実行モードの指定
+    /// 実行モードの指定（ワンショット実行用）
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<refiner::RefineMode>,
 }
 
+/// エントリポイント
 fn main() -> Result<()> {
     setup_console();
 

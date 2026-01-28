@@ -20,17 +20,24 @@ use tray_icon::{
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
 
-/// アプリケーションの共有状態
+/// アプリケーション内で共有されるミュータブルな状態
 struct AppState {
+    /// 現在選択されている加工モード
     mode: Mutex<RefineMode>,
+    /// 監視が一時停止されているかどうか
     paused: AtomicBool,
+    /// 監視方式（Polling または Event）
     monitor_mode: Mutex<MonitorMode>,
+    /// 監視スレッドの世代管理用カウンタ。設定変更時に古いスレッドを破棄するために使用
     monitor_generation: AtomicU64,
+    /// ポーリング時の監視間隔（ミリ秒）
     interval_ms: AtomicU64,
+    /// 二重加工を防止するために保持される、最後に加工されたテキスト
     last_processed_text: Mutex<String>,
 }
 
 impl AppState {
+    /// デフォルトの設定を読み込んで新しい状態を生成する
     fn new() -> Self {
         let config = AppConfig::load();
         Self {
@@ -71,6 +78,7 @@ impl AppState {
         *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
     }
 
+    /// 加工済みの最新テキストをスレッド安全に取得する
     fn get_last_processed_text(&self) -> String {
         self.last_processed_text
             .lock()
@@ -78,6 +86,7 @@ impl AppState {
             .clone()
     }
 
+    /// 加工済みの最新テキストをスレッド安全に更新する
     fn set_last_processed_text(&self, text: String) {
         *self
             .last_processed_text
