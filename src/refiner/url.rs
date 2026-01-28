@@ -15,17 +15,35 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'}');
 
 /// 文字列をURLエンコードする
+///
+/// # Arguments
+/// * `input` - エンコードする文字列。
+///
+/// # Returns
+/// * `String` - URLエンコードされた文字列。
 pub fn url_encode(input: &str) -> String {
     utf8_percent_encode(input, ENCODE_SET).to_string()
 }
 
 /// 文字列をURLデコードする
+///
+/// # Arguments
+/// * `input` - デコードする文字列。
+///
+/// # Returns
+/// * `Result<String>` - デコードされた文字列。デコードに失敗した場合は `Err` を返す。
 pub fn url_decode(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
 
 /// URLからUTMパラメータを除去する
+///
+/// # Arguments
+/// * `input` - 対象のURL文字列。
+///
+/// # Returns
+/// * `String` - UTMパラメータが除去されたURL文字列。
 pub fn remove_utm_params(input: &str) -> String {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");

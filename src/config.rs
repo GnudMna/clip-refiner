@@ -48,6 +48,9 @@ impl Default for AppConfig {
 
 impl AppConfig {
     /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
+    ///
+    /// # Returns
+    /// * `Result<PathBuf>` - 設定ファイルの完全なパス。
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
         std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
@@ -55,6 +58,9 @@ impl AppConfig {
     }
 
     /// 設定ファイルを読み込む。存在しない場合や失敗した場合はデフォルト設定を返す
+    ///
+    /// # Returns
+    /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`。
     pub fn load() -> Self {
         // 設定ファイルパス取得
         let config_path = match Self::config_path() {
@@ -90,6 +96,12 @@ impl AppConfig {
     }
 
     /// 現在の設定をファイルへ保存する
+    ///
+    /// # Arguments
+    /// * `&self` - 保存する `AppConfig` インスタンス。
+    ///
+    /// # Returns
+    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
             show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
@@ -111,6 +123,9 @@ impl AppConfig {
 }
 
 /// 設定ディレクトリのパスを取得
+///
+/// # Returns
+/// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
 fn get_config_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {

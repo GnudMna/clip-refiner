@@ -21,6 +21,9 @@ use tray_icon::{
 };
 
 /// アプリケーション内で共有されるミュータブルな状態
+///
+/// Mutexのロックに失敗した場合（ポイズニング）、パニックせずに以前の値を返して
+/// アプリケーションの実行を継続する方針をとる。
 struct AppState {
     /// 現在選択されている加工モード
     mode: Mutex<RefineMode>,
@@ -38,6 +41,9 @@ struct AppState {
 
 impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
+    ///
+    /// # Returns
+    /// * `Self` - 新しく生成された `AppState` インスタンス。
     fn new() -> Self {
         let config = AppConfig::load();
         Self {
@@ -50,7 +56,7 @@ impl AppState {
         }
     }
 
-    /// 設定を保存する
+    /// 現在の設定をファイルへ保存する。
     fn save_config(&self) {
         let config = AppConfig {
             mode: self.get_mode(),
@@ -62,23 +68,42 @@ impl AppState {
         }
     }
 
+    /// 現在の `RefineMode` をスレッドセーフに取得する。
+    ///
+    /// # Returns
+    /// * `RefineMode` - 現在設定されている `RefineMode`。
     fn get_mode(&self) -> RefineMode {
         *self.mode.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// `RefineMode` をスレッドセーフに設定する。
+    ///
+    /// # Arguments
+    /// * `mode` - 新しく設定する `RefineMode`。
     fn set_mode(&self, mode: RefineMode) {
         *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
     }
 
+    /// 現在の `MonitorMode` をスレッドセーフに取得する。
+    ///
+    /// # Returns
+    /// * `MonitorMode` - 現在設定されている `MonitorMode`。
     fn get_monitor_mode(&self) -> MonitorMode {
         *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// `MonitorMode` をスレッドセーフに設定する。
+    ///
+    /// # Arguments
+    /// * `mode` - 新しく設定する `MonitorMode`。
     fn set_monitor_mode(&self, mode: MonitorMode) {
         *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
     }
 
     /// 加工済みの最新テキストをスレッド安全に取得する
+    ///
+    /// # Returns
+    /// * `String` - 最後に加工されたテキストのクローン。
     fn get_last_processed_text(&self) -> String {
         self.last_processed_text
             .lock()
@@ -87,6 +112,9 @@ impl AppState {
     }
 
     /// 加工済みの最新テキストをスレッド安全に更新する
+    ///
+    /// # Arguments
+    /// * `text` - 新しく設定する、加工済みのテキスト。
     fn set_last_processed_text(&self, text: String) {
         *self
             .last_processed_text
@@ -97,6 +125,7 @@ impl AppState {
 
 /// トレイメニューの管理
 struct TrayMenu {
+    /// トレイアイコンのインスタンス。Dropされるとアイコンが消えるため、所有権を維持する必要がある。
     _tray_icon: TrayIcon,
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
@@ -110,6 +139,16 @@ struct TrayMenu {
 }
 
 impl TrayMenu {
+    /// トレイアイコンのメニューを構築する。
+    ///
+    /// 現在のアプリケーション状態に基づいて、各種メニュー項目（変換モード、監視方式、監視周期など）を作成し、
+    /// トレイアイコンに設定する。
+    ///
+    /// # Arguments
+    /// * `state` - 現在のアプリケーション状態。メニューの初期状態の決定に使用される。
+    ///
+    /// # Returns
+    /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す。
     fn build(state: &AppState) -> Result<Self> {
         let current_mode = state.get_mode();
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
@@ -274,7 +313,14 @@ impl TrayMenu {
     }
 }
 
-/// トレイアイコンアプリケーションのメインループ
+/// アプリケーションのメインループを開始する。
+///
+/// この関数はイベントループを初期化し、トレイアイコンとメニューを設定する。
+/// クリップボード監視用の別スレッドを起動し、メニューからのイベントを待ち受ける。
+/// イベントループはアプリケーションが終了するまでブロックされる。
+///
+/// # Returns
+/// イベントループの開始に失敗した場合などに`Err`を返す。
 pub fn run_loop() -> Result<()> {
     let event_loop = create_event_loop();
     let state = Arc::new(AppState::new());
@@ -298,6 +344,9 @@ pub fn run_loop() -> Result<()> {
 }
 
 /// イベントループの作成
+///
+/// # Returns
+/// * `EventLoop<()>` - プラットフォームに応じて設定された新しいイベントループインスタンス。
 fn create_event_loop() -> EventLoop<()> {
     #[cfg(windows)]
     return EventLoopBuilder::new().with_any_thread(true).build();
@@ -306,7 +355,13 @@ fn create_event_loop() -> EventLoop<()> {
     return EventLoopBuilder::new().build();
 }
 
-/// クリップボード監視スレッドの開始（モードに応じて適切な方式を選択）
+/// クリップボード監視スレッドを開始する。
+///
+/// 現在の監視モード設定（ポーリングまたはイベント）に応じて、適切な監視スレッドを起動する。
+/// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するようにする。
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態。
 fn spawn_monitor_thread(state: Arc<AppState>) {
     let monitor_mode = state.get_monitor_mode();
     let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -318,7 +373,39 @@ fn spawn_monitor_thread(state: Arc<AppState>) {
     }
 }
 
-/// ポーリング方式のクリップボード監視スレッド
+/// クリップボードの更新を検知し、必要であれば加工処理を行う
+///
+/// # Arguments
+/// * `clipboard` - クリップボードのインスタンス
+/// * `state` - アプリケーションの状態
+///
+/// # Returns
+/// 加工が実行された場合は `true`、されなかった場合は `false` を返す。
+fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>) -> bool {
+    if let Ok(text) = clipboard.get_text() {
+        let shared_last = state.get_last_processed_text();
+
+        if !text.is_empty() && text != shared_last {
+            let current_mode = state.get_mode();
+            if let Some(processed) = process_clipboard(clipboard, current_mode) {
+                state.set_last_processed_text(processed.clone());
+                show_process_notification(current_mode, &processed);
+                return true; // 加工された
+            }
+        }
+        state.set_last_processed_text(text);
+    }
+    false // 加工されなかった
+}
+
+/// ポーリング方式でクリップボードを監視するスレッドを開始する。
+///
+/// 一定間隔でクリップボードの内容を確認し、変更があった場合に加工処理を呼び出す。
+/// スレッドは、監視方式が変更される（世代が古くなる）か、アプリケーションが終了するまで実行を続ける。
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態。
+/// * `generation` - このスレッドの世代番号。
 fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
     thread::spawn(move || {
         let mut clipboard = match init_clipboard() {
@@ -347,25 +434,20 @@ fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 continue;
             }
 
-            if let Ok(text) = clipboard.get_text() {
-                let shared_last = state.get_last_processed_text();
-
-                if !text.is_empty() && text != shared_last {
-                    let current_mode = state.get_mode();
-                    if let Some(processed) = process_clipboard(&mut clipboard, current_mode) {
-                        state.set_last_processed_text(processed.clone());
-                        // 通知を表示
-                        show_process_notification(current_mode, &processed);
-                        continue;
-                    }
-                }
-                state.set_last_processed_text(text);
-            }
+            handle_clipboard_update(&mut clipboard, &state);
         }
     });
 }
 
-/// イベント方式のクリップボード監視スレッド（Windowsのみ）
+/// イベント方式でクリップボードを監視するスレッドを開始する（Windows限定）。
+///
+/// OSのクリップボード更新イベントをリッスンし、変更があった場合に加工処理を呼び出す。
+/// ポーリング方式に比べてCPU負荷が低い。
+/// スレッドは、監視方式が変更される（世代が古くなる）か、アプリケーションが終了するまで実行を続ける。
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態。
+/// * `generation` - このスレッドの世代番号。
 #[cfg(windows)]
 fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
     thread::spawn(move || {
@@ -400,23 +482,10 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 if seq != last_seq {
                     last_seq = seq;
 
-                    // テキストを取得して処理
-                    if let Ok(text) = clipboard.get_text() {
-                        let shared_last = state.get_last_processed_text();
-
-                        if !text.is_empty() && text != shared_last {
-                            let current_mode = state.get_mode();
-                            if let Some(processed) = process_clipboard(&mut clipboard, current_mode)
-                            {
-                                state.set_last_processed_text(processed.clone());
-                                // 通知を表示
-                                show_process_notification(current_mode, &processed);
-                                // シーケンス番号を更新（自分が更新したため）
-                                last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
-                                continue;
-                            }
-                        }
-                        state.set_last_processed_text(text);
+                    // クリップボードの更新を処理し、加工が行われたかチェック
+                    if handle_clipboard_update(&mut clipboard, &state) {
+                        // 加工が実行された場合、クリップボードが変更されたのでシーケンス番号を再取得して更新
+                        last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
                     }
                 }
             }
@@ -427,7 +496,16 @@ fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
     });
 }
 
-/// メニューイベントのハンドリング
+/// トレイアイコンメニューから受信したイベントを処理する。
+///
+/// 各メニュー項目（終了、一時停止、モード変更など）に対応するアクションを実行する。
+///
+/// # Arguments
+/// * `event` - 受信したメニューイベント。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+/// * `clipboard` - クリップボードのインスタンス。
+/// * `control_flow` - イベントループの制御フラグ。
 fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
@@ -442,7 +520,7 @@ fn handle_menu_event(
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
     } else if let Some((_, mode)) = menu
-        .mode_items
+        .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
         .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
@@ -471,7 +549,16 @@ fn handle_menu_event(
     }
 }
 
-/// 加工モードの更新
+/// 選択された加工モードをアプリケーションの状態に反映し、UIを更新する。
+///
+/// 新しいモードを状態に保存し、すべてのモード選択メニューのチェック状態を更新する。
+/// 設定を永続化し、即座に現在のクリップボード内容に対して新しい加工モードを試す。
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `clipboard` - クリップボードのインスタンス。
+/// * `mode` - 新しく選択された加工モード。
 fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
@@ -480,22 +567,13 @@ fn update_refine(
 ) {
     state.set_mode(mode);
 
-    // 通常項目
-    for (item, m) in &menu.mode_items {
-        item.set_checked(*m == mode);
-    }
-    // JSON整形
-    for (item, m) in &menu.json_format_items {
-        item.set_checked(*m == mode);
-    }
-    // JSON→YAML
-    for (item, m) in &menu.json_to_yaml_items {
-        item.set_checked(*m == mode);
-    }
-    // YAML→JSON
-    for (item, m) in &menu.yaml_to_json_items {
-        item.set_checked(*m == mode);
-    }
+    // すべてのモードアイテムをイテレートして、選択されたモードのチェック状態を更新
+    menu.mode_items
+        .iter()
+        .chain(menu.json_format_items.iter())
+        .chain(menu.json_to_yaml_items.iter())
+        .chain(menu.yaml_to_json_items.iter())
+        .for_each(|(item, m)| item.set_checked(*m == mode));
 
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
@@ -505,6 +583,10 @@ fn update_refine(
 }
 
 /// 処理完了通知を表示する
+///
+/// # Arguments
+/// * `mode` - 実行された `RefineMode`。
+/// * `text` - 加工後のテキスト。
 #[cfg(debug_assertions)]
 fn show_process_notification(mode: RefineMode, text: &str) {
     let snippet = if text.chars().count() > 50 {
@@ -514,15 +596,33 @@ fn show_process_notification(mode: RefineMode, text: &str) {
     };
     notification::success::show_success_notification(
         "変換完了",
-        &format!("モード: {}\n内容: {}", mode.label(), snippet),
+        &format!(
+            "モード: {}
+内容: {}",
+            mode.label(),
+            snippet
+        ),
     );
 }
 
 /// 処理完了通知を表示する (リリースビルドでは何もしない)
+///
+/// # Arguments
+/// * `_mode` - 実行された `RefineMode` (未使用)。
+/// * `_text` - 加工後のテキスト (未使用)。
 #[cfg(not(debug_assertions))]
 fn show_process_notification(_mode: RefineMode, _text: &str) {}
 
-/// 監視モードの更新
+/// 監視方式（ポーリング/イベント）を切り替える。
+///
+/// 新しい監視方式を状態に保存し、メニューのチェック状態を更新する。
+/// 方式の変更に応じて、監視周期メニューの有効/無効を切り替える。
+/// 最後に、新しい方式で動作する監視スレッドを再起動する。
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `monitor_mode` - 新しく選択された監視方式。
 fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
     let current_mode = state.get_monitor_mode();
 
@@ -557,12 +657,20 @@ fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: Mon
     spawn_monitor_thread(Arc::clone(state));
 }
 
-/// クリップボードの初期化
+/// クリップボード機能へのアクセスを初期化する。
+///
+/// # Returns
+/// 初期化に成功した場合は`Ok(Clipboard)`、失敗した場合は`Err`を返す。
 fn init_clipboard() -> Result<Clipboard> {
     Clipboard::new().context("クリップボードのアクセスに失敗しました")
 }
 
-/// トレイアイコンの作成
+/// トレイに表示するアイコンデータを読み込んで作成する。
+///
+/// アセットファイルからアイコン画像を読み込み、OSのトレイアイコン形式に変換する。
+///
+/// # Returns
+/// アイコンの作成に成功した場合は`Ok(Icon)`、失敗した場合は`Err`を返す。
 fn create_icon() -> Result<Icon> {
     let icon_bytes = include_bytes!("../../assets/icon.png");
     let img =

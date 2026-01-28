@@ -37,6 +37,9 @@ struct Args {
 }
 
 /// エントリポイント
+///
+/// # Returns
+/// * `Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す。
 fn main() -> Result<()> {
     setup_console();
 
@@ -54,6 +57,8 @@ fn main() -> Result<()> {
 }
 
 /// Windowsの場合、親プロセスのコンソールをアタッチする
+///
+/// これにより、`cargo run`などで起動した場合にコンソール出力が表示されるようになる。
 fn setup_console() {
     #[cfg(windows)]
     unsafe {
@@ -62,6 +67,10 @@ fn setup_console() {
 }
 
 /// 多重起動を防止し、インスタンスを保持する
+///
+/// # Returns
+/// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す。
+///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを終了する。
 fn ensure_single_instance() -> Result<SingleInstance> {
     let instance = SingleInstance::new("com.y_hirata.clip-refiner")
         .context("多重起動防止のインスタンス作成に失敗しました")?;
@@ -77,6 +86,12 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 }
 
 /// クリップボードの内容を一度だけ加工して終了する
+///
+/// # Arguments
+/// * `mode` - 適用する `refiner::RefineMode`。
+///
+/// # Returns
+/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返す。
 fn run_once(mode: refiner::RefineMode) -> Result<()> {
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
     refiner::process_clipboard(&mut clipboard, mode);

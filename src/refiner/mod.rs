@@ -76,6 +76,9 @@ pub enum RefineCategory {
 
 impl RefineMode {
     /// UIに表示する名前を取得する
+    ///
+    /// # Returns
+    /// * `&'static str` - モードに対応する静的な文字列ラベル。
     pub fn label(&self) -> &'static str {
         match self {
             RefineMode::UrlEncode => "URLエンコード",
@@ -97,6 +100,9 @@ impl RefineMode {
     }
 
     /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
+    ///
+    /// # Returns
+    /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
         match self {
             RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
@@ -113,6 +119,9 @@ impl RefineMode {
     }
 
     /// 定義されているすべてのモードを順番に取得する
+    ///
+    /// # Returns
+    /// * `&'static [RefineMode]` - 全ての `RefineMode` バリアントを含む静的スライス。
     pub fn variants() -> &'static [RefineMode] {
         &[
             RefineMode::UrlEncode,
@@ -147,6 +156,13 @@ pub enum OrderedValue {
 }
 
 /// クリップボードの内容を変換
+///
+/// # Arguments
+/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス。
+/// * `mode` - 適用する `RefineMode`。
+///
+/// # Returns
+/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を、加工されなかった場合（変更なし、またはエラー）は `None` を返す。
 pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
     if text.is_empty() {

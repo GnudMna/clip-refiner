@@ -5,6 +5,12 @@ use serde_yaml::Value;
 
 /// YAML文字列をJSON文字列へ変換する(キー順序不同)
 /// 整形に失敗した(有効なYAMLではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 変換するYAML文字列。
+///
+/// # Returns
+/// * `String` - 変換されたJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn yaml_to_json(text: &str) -> String {
     // YAML文字列をserde_yaml::Valueへパース
     let v: Value = match serde_yaml::from_str(text) {
@@ -21,6 +27,12 @@ pub fn yaml_to_json(text: &str) -> String {
 
 /// YAML文字列をJSON文字列へ変換する(キー順序保持)
 /// 整形に失敗した(有効なYAMLではない)場合は元の文字列を返す
+///
+/// # Arguments
+/// * `text` - 変換するYAML文字列。
+///
+/// # Returns
+/// * `String` - キー順序を保持して変換されたJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn yaml_to_json_preserve_order(text: &str) -> String {
     // YAML文字列をrefiner::OrderedValueへパース
     let v: OrderedValue = match serde_yaml::from_str(text) {

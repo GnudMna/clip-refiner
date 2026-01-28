@@ -1,4 +1,10 @@
 /// 数値にカンマを付与する
+///
+/// # Arguments
+/// * `text` - カンマを付与する対象の文字列型数値。
+///
+/// # Returns
+/// * `String` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す。
 pub fn add_commas(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -53,6 +59,12 @@ pub fn add_commas(text: &str) -> String {
 }
 
 /// 数値からカンマを除去する
+///
+/// # Arguments
+/// * `text` - カンマを除去する対象の文字列。
+///
+/// # Returns
+/// * `String` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す。
 pub fn remove_commas(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -67,6 +79,12 @@ pub fn remove_commas(text: &str) -> String {
 }
 
 /// 入力が数値(およびカンマ、小数点、マイナス記号)のみで構成されているか判定
+///
+/// # Arguments
+/// * `text` - 判定対象の文字列。
+///
+/// # Returns
+/// * `bool` - 数値入力として妥当な場合は `true`、そうでない場合は `false`。
 fn is_numeric_input(text: &str) -> bool {
     let mut has_decimal = false;
     let mut chars = text.chars().peekable();
