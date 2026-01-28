@@ -102,5 +102,10 @@ mod tests {
             remove_utm_params("https://example.com/"),
             "https://example.com/"
         );
+        assert_eq!(
+            remove_utm_params("https://example.com/?utm_content=test&foo=bar"),
+            "https://example.com/?foo=bar"
+        );
+        assert_eq!(remove_utm_params("?utm_source=a"), "");
     }
 }

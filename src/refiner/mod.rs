@@ -154,3 +154,72 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arboard::Clipboard;
+
+    #[test]
+    fn test_refine_mode_metadata() {
+        assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
+        assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::Normal);
+
+        assert_eq!(RefineMode::JsonFormat.label(), "キー順序不同");
+        assert_eq!(
+            RefineMode::JsonFormat.category(),
+            RefineCategory::JsonFormat
+        );
+    }
+
+    #[test]
+    fn test_refine_mode_variants() {
+        let variants = RefineMode::variants();
+        assert!(variants.contains(&RefineMode::UrlEncode));
+        assert!(variants.contains(&RefineMode::SortLines));
+        assert_eq!(variants.len(), 15);
+    }
+
+    #[test]
+    fn test_process_clipboard_integration() {
+        // 並列実行による干渉を避けるため、1つのテストケースにまとめる
+        if let Ok(mut cb) = Clipboard::new() {
+            // Case 1: 変化あり
+            let unique_str_1 = "  clip_refiner_test_1  ";
+            let _ = cb.set_text(unique_str_1.to_string());
+            // システムのクリップボードへの反映を待つ必要がある場合があるが、まずはそのまま
+            if let Ok(current) = cb.get_text() {
+                if current == unique_str_1 {
+                    let result = process_clipboard(&mut cb, RefineMode::Trim);
+                    assert_eq!(result, Some("clip_refiner_test_1".to_string()));
+                } else {
+                    eprintln!(
+                        "Clipboard content mismatch for unique_str_1. Expected: '{}', Got: '{}'",
+                        unique_str_1, current
+                    );
+                }
+            } else {
+                eprintln!("Failed to get clipboard text for unique_str_1.");
+            }
+
+            // Case 2: 変化なし
+            let unique_str_2 = "clip_refiner_test_2";
+            let _ = cb.set_text(unique_str_2.to_string());
+            if let Ok(current) = cb.get_text() {
+                if current == unique_str_2 {
+                    let result = process_clipboard(&mut cb, RefineMode::Trim);
+                    assert!(result.is_none());
+                } else {
+                    eprintln!(
+                        "Clipboard content mismatch for unique_str_2. Expected: '{}', Got: '{}'",
+                        unique_str_2, current
+                    );
+                }
+            } else {
+                eprintln!("Failed to get clipboard text for unique_str_2.");
+            }
+        } else {
+            eprintln!("Failed to initialize clipboard. Skipping clipboard integration tests.");
+        }
+    }
+}

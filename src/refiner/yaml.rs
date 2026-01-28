@@ -86,4 +86,11 @@ mod tests {
         let output = yaml_to_json_preserve_order(input);
         assert_eq!(output, input);
     }
+
+    #[test]
+    fn test_yaml_to_json_nested() {
+        let input = "nested:\n  val: 1";
+        let output = yaml_to_json(input);
+        assert!(output.contains("\"nested\": {"));
+    }
 }

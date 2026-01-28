@@ -564,3 +564,36 @@ fn create_icon() -> Result<Icon> {
 
     Icon::from_rgba(rgba_raw, width, height).context("アイコンデータの作成に失敗しました")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_state_helpers() {
+        let state = AppState {
+            mode: Mutex::new(RefineMode::Trim),
+            paused: AtomicBool::new(false),
+            monitor_mode: Mutex::new(MonitorMode::Polling),
+            monitor_generation: AtomicU64::new(0),
+            interval_ms: AtomicU64::new(1000),
+            last_processed_text: Mutex::new(String::new()),
+        };
+
+        assert_eq!(state.get_mode(), RefineMode::Trim);
+        state.set_mode(RefineMode::UrlEncode);
+        assert_eq!(state.get_mode(), RefineMode::UrlEncode);
+
+        assert_eq!(state.get_last_processed_text(), "");
+        state.set_last_processed_text("hello".to_string());
+        assert_eq!(state.get_last_processed_text(), "hello");
+
+        assert_eq!(state.get_monitor_mode(), MonitorMode::Polling);
+        state.set_monitor_mode(MonitorMode::Polling); // 実際はモニタモード定数
+
+        state.interval_ms.store(2000, Ordering::Relaxed);
+        assert_eq!(state.interval_ms.load(Ordering::Relaxed), 2000);
+
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
+    }
+}
