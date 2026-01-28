@@ -6,12 +6,14 @@ use crate::refiner::RefineMode;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-/// クリップボード監視モード
+/// クリップボードの監視方式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
-    /// ポーリング方式（定期的にチェック）
+    /// ポーリング方式。一定間隔（interval_ms）ごとにクリップボードの内容を確認します。
+    /// すべてのプラットフォームで動作する最も基本的な方式です。
     Polling,
-    /// イベント方式（クリップボード変更時に即座に反応）
+    /// イベント方式（Windows専用）。OSからのクリップボード更新通知を受け取り、即座に反応します。
+    /// 低遅延かつCPU負荷が低いのが特徴です。
     #[cfg(windows)]
     Event,
 }
@@ -22,14 +24,14 @@ impl Default for MonitorMode {
     }
 }
 
-/// アプリケーション設定
+/// アプリケーションの設定情報。JSONファイルとして保存・読み込みされます。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    /// 実行モード
+    /// 最後に使用した（または常駐時に使用する）加工モード
     pub mode: RefineMode,
-    /// 監視周期(ミリ秒)
+    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用されます。
     pub interval_ms: u64,
-    /// 監視モード
+    /// 使用する監視方式（Polling または Event）
     #[serde(default)]
     pub monitor_mode: MonitorMode,
 }
@@ -45,13 +47,14 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    /// 設定ファイルのパスを取得
+    /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
         std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
         Ok(config_dir.join("config.json"))
     }
 
+    /// 設定ファイルを読み込む。存在しない場合や失敗した場合はデフォルト設定を返す
     pub fn load() -> Self {
         // 設定ファイルパス取得
         let config_path = match Self::config_path() {
@@ -86,6 +89,7 @@ impl AppConfig {
         }
     }
 
+    /// 現在の設定をファイルへ保存する
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
             show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
