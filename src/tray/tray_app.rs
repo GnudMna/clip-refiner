@@ -12,13 +12,19 @@ use crate::refiner::{RefineMode, process_clipboard};
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use image;
-use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
+use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy};
 #[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
+
+/// アプリケーション内でのカスタムイベント
+enum AppEvent {
+    /// 履歴メニューの更新要求
+    RefreshHistory,
+}
 
 /// アプリケーション内で共有されるミュータブルな状態
 ///
@@ -37,6 +43,12 @@ struct AppState {
     interval_ms: AtomicU64,
     /// 二重加工を防止するために保持される、最後に加工されたテキスト
     last_processed_text: Mutex<String>,
+    /// 履歴機能が有効かどうか
+    history_enabled: AtomicBool,
+    /// クリップボード履歴（最大10件）
+    history: Mutex<Vec<String>>,
+    /// イベントループへのプロキシ。別スレッドからUIイベント（例: 履歴更新）を送信するために使用される。
+    proxy: EventLoopProxy<AppEvent>,
 }
 
 impl AppState {
@@ -44,7 +56,7 @@ impl AppState {
     ///
     /// # Returns
     /// * `Self` - 新しく生成された `AppState` インスタンス。
-    fn new() -> Self {
+    fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
         let config = AppConfig::load();
         Self {
             mode: Mutex::new(config.mode),
@@ -53,6 +65,9 @@ impl AppState {
             monitor_generation: AtomicU64::new(0),
             interval_ms: AtomicU64::new(config.interval_ms),
             last_processed_text: Mutex::new(String::new()),
+            history_enabled: AtomicBool::new(config.history_enabled),
+            history: Mutex::new(Vec::new()),
+            proxy,
         }
     }
 
@@ -62,6 +77,7 @@ impl AppState {
             mode: self.get_mode(),
             interval_ms: self.interval_ms.load(Ordering::Relaxed),
             monitor_mode: self.get_monitor_mode(),
+            history_enabled: self.history_enabled.load(Ordering::Relaxed),
         };
         if let Err(e) = config.save() {
             eprintln!("設定の保存に失敗: {}", e);
@@ -121,11 +137,52 @@ impl AppState {
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = text;
     }
+
+    /// 履歴を取得する
+    fn get_history(&self) -> Vec<String> {
+        self.history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 履歴をクリアする
+    fn clear_history(&self) {
+        self.history
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    /// 履歴にテキストを追加する。
+    /// すでに存在する場合は最上位に移動させ、最大10件を保持する。
+    fn add_to_history(&self, text: String) {
+        if text.trim().is_empty() {
+            return;
+        }
+
+        let mut history = self.history.lock().unwrap_or_else(|e| e.into_inner());
+
+        // 二重登録防止: すでに存在すれば削除して最上位へ
+        if let Some(pos) = history.iter().position(|x| x == &text) {
+            history.remove(pos);
+        }
+
+        history.insert(0, text);
+
+        // 最大10件
+        if history.len() > 10 {
+            history.truncate(10);
+        }
+
+        let _ = self.proxy.send_event(AppEvent::RefreshHistory);
+    }
 }
 
 /// トレイメニューの管理
 struct TrayMenu {
     /// トレイアイコンのインスタンス。Dropされるとアイコンが消えるため、所有権を維持する必要がある。
+    /// フィールド名の`_`プレフィックスは、変数が直接使用されなくても所有権を保持するために意図的に付けられていることを示す。
     _tray_icon: TrayIcon,
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
@@ -136,6 +193,10 @@ struct TrayMenu {
     monitor_mode_items: Vec<(CheckMenuItem, MonitorMode)>,
     interval_submenu: Submenu,
     interval_items: Vec<(CheckMenuItem, u64)>,
+    history_submenu: Submenu,
+    history_enabled_item: CheckMenuItem,
+    clear_history_item: MenuItem,
+    history_records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
 }
 
 impl TrayMenu {
@@ -213,7 +274,7 @@ impl TrayMenu {
             .context("変換モードメニューの作成に失敗しました")?;
 
         // 監視モードメニュー
-        let current_monitor_mode = *state.monitor_mode.lock().unwrap_or_else(|e| e.into_inner());
+        let current_monitor_mode = state.get_monitor_mode();
         let polling_item = CheckMenuItem::new(
             "ポーリング",
             true,
@@ -246,15 +307,23 @@ impl TrayMenu {
             .context("監視方式メニューの作成に失敗しました")?;
 
         // 監視周期メニュー
-        let interval_500ms = CheckMenuItem::new("0.5秒", true, current_interval == 500, None);
-        let interval_1s = CheckMenuItem::new("1秒", true, current_interval == 1000, None);
-        let interval_2s = CheckMenuItem::new("2秒", true, current_interval == 2000, None);
-        let interval_5s = CheckMenuItem::new("5秒", true, current_interval == 5000, None);
         let interval_items = vec![
-            (interval_500ms, 500u64),
-            (interval_1s, 1000u64),
-            (interval_2s, 2000u64),
-            (interval_5s, 5000u64),
+            (
+                CheckMenuItem::new("0.5秒", true, current_interval == 500, None),
+                500u64,
+            ),
+            (
+                CheckMenuItem::new("1秒", true, current_interval == 1000, None),
+                1000u64,
+            ),
+            (
+                CheckMenuItem::new("2秒", true, current_interval == 2000, None),
+                2000u64,
+            ),
+            (
+                CheckMenuItem::new("5秒", true, current_interval == 5000, None),
+                5000u64,
+            ),
         ];
 
         let mut interval_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
@@ -270,6 +339,24 @@ impl TrayMenu {
             interval_submenu.set_enabled(false);
         }
 
+        // 履歴メニュー
+        let history_enabled_item = CheckMenuItem::new(
+            "履歴機能を有効にする",
+            true,
+            state.history_enabled.load(Ordering::Relaxed),
+            None,
+        );
+        let clear_history_item = MenuItem::new("履歴をクリア", true, None);
+        let history_submenu = Submenu::new("履歴", true);
+        let history_records = Mutex::new(Vec::new());
+
+        // 初期の履歴メニュー構築
+        history_submenu.append_items(&[
+            &history_enabled_item as &dyn tray_icon::menu::IsMenuItem,
+            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+            &clear_history_item as &dyn tray_icon::menu::IsMenuItem,
+        ])?;
+
         // 一時停止・終了メニュー
         let pause_item =
             CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
@@ -279,13 +366,14 @@ impl TrayMenu {
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
-                &refine_submenu,
-                &monitor_mode_submenu,
-                &interval_submenu,
-                &PredefinedMenuItem::separator(),
-                &pause_item,
-                &PredefinedMenuItem::separator(),
-                &quit_item,
+                &refine_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &monitor_mode_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &interval_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &history_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &pause_item as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &quit_item as &dyn tray_icon::menu::IsMenuItem,
             ])
             .context("メニューの組み立てに失敗しました")?;
 
@@ -309,7 +397,54 @@ impl TrayMenu {
             monitor_mode_items,
             interval_submenu,
             interval_items,
+            history_submenu,
+            history_enabled_item,
+            clear_history_item,
+            history_records,
         })
+    }
+
+    /// 履歴メニューの内容を最新の状態に更新する
+    fn refresh_history(&self, state: &AppState) -> Result<()> {
+        let history = state.get_history();
+        let mut records = self
+            .history_records
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        records.clear();
+
+        // 既存の履歴アイテムをクリア（有効化スイッチと区切り線以外）
+        for _ in 0..self.history_submenu.items().len() {
+            self.history_submenu.remove_at(0);
+        }
+
+        // 基本部分を再構築
+        self.history_submenu.append_items(&[
+            &self.history_enabled_item as &dyn tray_icon::menu::IsMenuItem,
+            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+        ])?;
+
+        if !history.is_empty() {
+            for text in history {
+                let label = if text.chars().count() > 30 {
+                    format!("{}...", text.chars().take(27).collect::<String>())
+                } else {
+                    text.clone()
+                };
+                let item = MenuItem::new(label, true, None);
+                records.push((item.id().clone(), text));
+                self.history_submenu
+                    .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;
+            }
+            self.history_submenu.append_items(&[
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem
+            ])?;
+        }
+
+        self.history_submenu
+            .append_items(&[&self.clear_history_item as &dyn tray_icon::menu::IsMenuItem])?;
+
+        Ok(())
     }
 }
 
@@ -323,8 +458,12 @@ impl TrayMenu {
 /// イベントループの開始に失敗した場合などに`Err`を返す。
 pub fn run_loop() -> Result<()> {
     let event_loop = create_event_loop();
-    let state = Arc::new(AppState::new());
+    let proxy = event_loop.create_proxy();
+    let state = Arc::new(AppState::new(proxy.clone()));
     let menu = TrayMenu::build(&state)?;
+
+    // 初期状態で履歴メニューを更新
+    menu.refresh_history(&state)?;
 
     // クリップボード監視スレッドの開始
     let state_for_monitor = Arc::clone(&state);
@@ -334,8 +473,15 @@ pub fn run_loop() -> Result<()> {
     let mut clipboard = init_clipboard()?;
 
     // イベントループの実行
-    event_loop.run(move |_event, _, control_flow| {
+    event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
+
+        match event {
+            tao::event::Event::UserEvent(AppEvent::RefreshHistory) => {
+                let _ = menu.refresh_history(&state);
+            }
+            _ => {}
+        }
 
         if let Ok(event) = menu_channel.try_recv() {
             handle_menu_event(event, &menu, &state, &mut clipboard, control_flow);
@@ -343,16 +489,13 @@ pub fn run_loop() -> Result<()> {
     })
 }
 
-/// イベントループの作成
-///
-/// # Returns
-/// * `EventLoop<()>` - プラットフォームに応じて設定された新しいイベントループインスタンス。
-fn create_event_loop() -> EventLoop<()> {
+fn create_event_loop() -> EventLoop<AppEvent> {
     #[cfg(windows)]
-    return EventLoopBuilder::new().with_any_thread(true).build();
-
+    return EventLoopBuilder::<AppEvent>::with_user_event()
+        .with_any_thread(true)
+        .build();
     #[cfg(not(windows))]
-    return EventLoopBuilder::new().build();
+    return EventLoopBuilder::<AppEvent>::with_user_event().build();
 }
 
 /// クリップボード監視スレッドを開始する。
@@ -380,7 +523,7 @@ fn spawn_monitor_thread(state: Arc<AppState>) {
 /// * `state` - アプリケーションの状態
 ///
 /// # Returns
-/// 加工が実行された場合は `true`、されなかった場合は `false` を返す。
+/// 加工が実行され、クリップボードへの書き込みも行われた場合は `true`、それ以外の場合は `false` を返す。
 fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>) -> bool {
     if let Ok(text) = clipboard.get_text() {
         let shared_last = state.get_last_processed_text();
@@ -390,7 +533,17 @@ fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>) -> 
             if let Some(processed) = process_clipboard(clipboard, current_mode) {
                 state.set_last_processed_text(processed.clone());
                 show_process_notification(current_mode, &processed);
-                return true; // 加工された
+
+                if state.history_enabled.load(Ordering::Relaxed) {
+                    state.add_to_history(processed);
+                    let _ = state.proxy.send_event(AppEvent::RefreshHistory);
+                }
+                return true;
+            }
+
+            if state.history_enabled.load(Ordering::Relaxed) {
+                state.add_to_history(text.clone());
+                let _ = state.proxy.send_event(AppEvent::RefreshHistory);
             }
         }
         state.set_last_processed_text(text);
@@ -519,6 +672,29 @@ fn handle_menu_event(
         state
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
+    } else if event.id == menu.history_enabled_item.id() {
+        let enabled = menu.history_enabled_item.is_checked();
+        state.history_enabled.store(enabled, Ordering::Relaxed);
+        state.save_config();
+        let _ = menu.refresh_history(state);
+    } else if event.id == menu.clear_history_item.id() {
+        state.clear_history();
+        state.save_config();
+        let _ = menu.refresh_history(state);
+    } else if let Some((_, text)) = menu
+        .history_records
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(id, _)| event.id == *id)
+    {
+        let mut cb = Clipboard::new().unwrap();
+        let _ = cb.set_text(text.clone());
+        state.set_last_processed_text(text.clone());
+        notification::success::show_success_notification(
+            "履歴から復元",
+            "クリップボードにコピーしました",
+        );
     } else if let Some((_, mode)) = menu
         .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
@@ -596,12 +772,7 @@ fn show_process_notification(mode: RefineMode, text: &str) {
     };
     notification::success::show_success_notification(
         "変換完了",
-        &format!(
-            "モード: {}
-内容: {}",
-            mode.label(),
-            snippet
-        ),
+        &format!("モード: {}\n内容: {}", mode.label(), snippet),
     );
 }
 
@@ -624,10 +795,8 @@ fn show_process_notification(_mode: RefineMode, _text: &str) {}
 /// * `menu` - トレイメニューのインスタンス。
 /// * `monitor_mode` - 新しく選択された監視方式。
 fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
-    let current_mode = state.get_monitor_mode();
-
     // モードが変わっていない場合は何もしない
-    if current_mode == monitor_mode {
+    if state.get_monitor_mode() == monitor_mode {
         return;
     }
 
@@ -677,9 +846,7 @@ fn create_icon() -> Result<Icon> {
         image::load_from_memory(icon_bytes).context("アイコン画像のデコードに失敗しました")?;
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
-    let rgba_raw = rgba.into_raw();
-
-    Icon::from_rgba(rgba_raw, width, height).context("アイコンデータの作成に失敗しました")
+    Icon::from_rgba(rgba.into_raw(), width, height).context("アイコンデータの作成に失敗しました")
 }
 
 #[cfg(test)]
@@ -695,6 +862,9 @@ mod tests {
             monitor_generation: AtomicU64::new(0),
             interval_ms: AtomicU64::new(1000),
             last_processed_text: Mutex::new(String::new()),
+            history_enabled: AtomicBool::new(false),
+            history: Mutex::new(Vec::new()),
+            proxy: create_event_loop().create_proxy(),
         };
 
         assert_eq!(state.get_mode(), RefineMode::Trim);
@@ -706,7 +876,6 @@ mod tests {
         assert_eq!(state.get_last_processed_text(), "hello");
 
         assert_eq!(state.get_monitor_mode(), MonitorMode::Polling);
-        state.set_monitor_mode(MonitorMode::Polling); // 実際はモニタモード定数
 
         state.interval_ms.store(2000, Ordering::Relaxed);
         assert_eq!(state.interval_ms.load(Ordering::Relaxed), 2000);
