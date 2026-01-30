@@ -1,3 +1,4 @@
+pub mod datetime;
 pub mod json;
 pub mod markdown;
 pub mod number;
@@ -29,9 +30,9 @@ pub enum RefineMode {
     /// 行ごとに前後の空白を削除する
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
-    /// Markdown形式のテキストをHTML形式へ変換する
-    #[value(help = "MarkdownをHTML形式へ変換")]
-    MarkdownToHtml,
+    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "行単位で並び替え")]
+    SortLines,
     /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
     #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
@@ -50,15 +51,21 @@ pub enum RefineMode {
     /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJsonPreserveOrder,
+    /// Markdown形式のテキストをHTML形式へ変換する
+    #[value(help = "MarkdownをHTML形式へ変換")]
+    MarkdownToHtml,
+    /// Unixタイムスタンプを日時文字列に変換する
+    #[value(help = "Unixタイムスタンプ→日時文字列")]
+    TimestampToDatetime,
+    /// 日時文字列をUnixタイムスタンプに変換する
+    #[value(help = "日時文字列→Unixタイムスタンプ")]
+    DatetimeToTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
     /// 数値からカンマを削除する（例: 1,000 -> 1000）
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     RemoveComma,
-    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[value(help = "行単位で並び替え")]
-    SortLines,
 }
 
 /// メニューの階層化に使用するカテゴリ
@@ -72,6 +79,8 @@ pub enum RefineCategory {
     JsonToYaml,
     /// YAML to JSONサブメニュー内
     YamlToJson,
+    /// 日時変換サブメニュー内
+    Datetime,
 }
 
 impl RefineMode {
@@ -86,16 +95,18 @@ impl RefineMode {
             RefineMode::RemoveUtm => "UTM除去",
             RefineMode::Trim => "トリム",
             RefineMode::TrimLines => "トリム(行単位)",
-            RefineMode::MarkdownToHtml => "Markdown→HTML",
+            RefineMode::SortLines => "行並び替え",
             RefineMode::JsonFormat => "キー順序不同",
             RefineMode::JsonFormatPreserveOrder => "キー順序保持",
             RefineMode::JsonToYaml => "キー順序不同",
             RefineMode::JsonToYamlPreserveOrder => "キー順序保持",
             RefineMode::YamlToJson => "キー順序不同",
             RefineMode::YamlToJsonPreserveOrder => "キー順序保持",
+            RefineMode::MarkdownToHtml => "Markdown→HTML",
+            RefineMode::TimestampToDatetime => "Unixタイムスタンプ→日時文字列",
+            RefineMode::DatetimeToTimestamp => "日時文字列→Unixタイムスタンプ",
             RefineMode::AddComma => "カンマ追加",
             RefineMode::RemoveComma => "カンマ除去",
-            RefineMode::SortLines => "行並び替え",
         }
     }
 
@@ -114,6 +125,9 @@ impl RefineMode {
             RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => {
                 RefineCategory::YamlToJson
             }
+            RefineMode::TimestampToDatetime | RefineMode::DatetimeToTimestamp => {
+                RefineCategory::Datetime
+            }
             _ => RefineCategory::Normal,
         }
     }
@@ -129,16 +143,18 @@ impl RefineMode {
             RefineMode::RemoveUtm,
             RefineMode::Trim,
             RefineMode::TrimLines,
-            RefineMode::MarkdownToHtml,
+            RefineMode::SortLines,
             RefineMode::JsonFormat,
             RefineMode::JsonFormatPreserveOrder,
             RefineMode::JsonToYaml,
             RefineMode::JsonToYamlPreserveOrder,
             RefineMode::YamlToJson,
             RefineMode::YamlToJsonPreserveOrder,
+            RefineMode::MarkdownToHtml,
+            RefineMode::TimestampToDatetime,
+            RefineMode::DatetimeToTimestamp,
             RefineMode::AddComma,
             RefineMode::RemoveComma,
-            RefineMode::SortLines,
         ]
     }
 }
@@ -175,16 +191,18 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::RemoveUtm => url::remove_utm_params(&text),
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
-        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
+        RefineMode::SortLines => sort::sort_lines(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
         RefineMode::JsonToYaml => json::json_to_yaml(&text),
         RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
         RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
+        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
+        RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(&text),
+        RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
-        RefineMode::SortLines => sort::sort_lines(&text),
     };
 
     if processed != text {
@@ -210,6 +228,12 @@ mod tests {
             RefineMode::JsonFormat.category(),
             RefineCategory::JsonFormat
         );
+
+        assert_eq!(
+            RefineMode::TimestampToDatetime.label(),
+            "Unixタイムスタンプ→日時文字列"
+        );
+        assert_eq!(RefineMode::TimestampToDatetime.category(), RefineCategory::Datetime);
     }
 
     #[test]
@@ -217,7 +241,8 @@ mod tests {
         let variants = RefineMode::variants();
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLines));
-        assert_eq!(variants.len(), 15);
+        assert!(variants.contains(&RefineMode::TimestampToDatetime));
+        assert_eq!(variants.len(), 17);
     }
 
     #[test]
