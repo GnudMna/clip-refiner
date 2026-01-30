@@ -54,11 +54,11 @@ pub enum RefineMode {
     /// Markdown形式のテキストをHTML形式へ変換する
     #[value(help = "MarkdownをHTML形式へ変換")]
     MarkdownToHtml,
-    /// Unixタイムスタンプを日時文字列に変換する
-    #[value(help = "Unixタイムスタンプ→日時文字列")]
+    /// Unixタイムスタンプを日時文字列へ変換する
+    #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
     TimestampToDatetime,
-    /// 日時文字列をUnixタイムスタンプに変換する
-    #[value(help = "日時文字列→Unixタイムスタンプ")]
+    /// 日時文字列をUnixタイムスタンプへ変換する
+    #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
     DatetimeToTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
