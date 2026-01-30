@@ -192,6 +192,7 @@ struct TrayMenu {
     json_format_items: Vec<(CheckMenuItem, RefineMode)>,
     json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
     yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
+    datetime_items: Vec<(CheckMenuItem, RefineMode)>,
     monitor_mode_items: Vec<(CheckMenuItem, MonitorMode)>,
     interval_submenu: Submenu,
     interval_items: Vec<(CheckMenuItem, u64)>,
@@ -218,7 +219,7 @@ impl TrayMenu {
         let current_monitor_mode = state.get_monitor_mode();
         let history_enabled = state.history_enabled.load(Ordering::Relaxed);
 
-        let (refine_submenu, mode_items, json_format_items, json_to_yaml_items, yaml_to_json_items) =
+        let (refine_submenu, mode_items, json_format_items, json_to_yaml_items, yaml_to_json_items, datetime_items) =
             Self::build_refine_menu(current_mode)?;
 
         let (monitor_mode_submenu, monitor_mode_items) =
@@ -267,6 +268,7 @@ impl TrayMenu {
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
+            datetime_items,
             monitor_mode_items,
             interval_submenu,
             interval_items,
@@ -288,6 +290,7 @@ impl TrayMenu {
     /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON整形カテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON→YAMLカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - YAML→JSONカテゴリのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - Datetimeカテゴリのアイテムリスト
     fn build_refine_menu(
         current_mode: RefineMode,
     ) -> Result<(
@@ -296,10 +299,12 @@ impl TrayMenu {
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
     )> {
         let mut json_format_items = Vec::new();
         let mut json_to_yaml_items = Vec::new();
         let mut yaml_to_json_items = Vec::new();
+        let mut datetime_items = Vec::new();
         let mut mode_items = Vec::new();
 
         for &mode in RefineMode::variants() {
@@ -309,6 +314,7 @@ impl TrayMenu {
                 crate::refiner::RefineCategory::JsonFormat => json_format_items.push((item, mode)),
                 crate::refiner::RefineCategory::JsonToYaml => json_to_yaml_items.push((item, mode)),
                 crate::refiner::RefineCategory::YamlToJson => yaml_to_json_items.push((item, mode)),
+                crate::refiner::RefineCategory::Datetime => datetime_items.push((item, mode)),
             }
         }
 
@@ -337,16 +343,27 @@ impl TrayMenu {
                 .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
                 .collect::<Vec<_>>(),
         )?;
+        let datetime_submenu = Submenu::with_items(
+            "日時変換",
+            true,
+            &datetime_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
 
         // メインの変換モードメニュー組み立て
         let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
         for (item, mode) in &mode_items {
             mode_menu_items.push(item);
             // 特定の項目の後にサブメニューを配置
-            if *mode == RefineMode::TrimLines {
+            if *mode == RefineMode::SortLines {
                 mode_menu_items.push(&json_format_submenu);
                 mode_menu_items.push(&json_to_yaml_submenu);
                 mode_menu_items.push(&yaml_to_json_submenu);
+            }
+            else if *mode == RefineMode::MarkdownToHtml {
+                mode_menu_items.push(&datetime_submenu);
             }
         }
 
@@ -359,6 +376,7 @@ impl TrayMenu {
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
+            datetime_items,
         ))
     }
 
@@ -804,6 +822,7 @@ fn handle_menu_event(
         .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
         .chain(menu.yaml_to_json_items.iter())
+        .chain(menu.datetime_items.iter())
         .find(|(item, _)| event.id == item.id())
     {
         update_refine(state, menu, clipboard, *mode);
@@ -852,6 +871,7 @@ fn update_refine(
         .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
         .chain(menu.yaml_to_json_items.iter())
+        .chain(menu.datetime_items.iter())
         .for_each(|(item, m)| item.set_checked(*m == mode));
 
     state.save_config();
