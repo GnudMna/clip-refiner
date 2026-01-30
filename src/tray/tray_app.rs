@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc, Mutex,
+    Arc, Mutex, MutexGuard,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::thread;
@@ -24,6 +24,20 @@ use tray_icon::{
 enum AppEvent {
     /// 履歴メニューの更新要求
     RefreshHistory,
+}
+
+/// 履歴の最大保持数
+const HISTORY_LIMIT: usize = 10;
+
+/// Mutexのポイズニングを無視してロックを取得するための拡張トレイト
+trait LockExt<T> {
+    fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T> LockExt<T> for Mutex<T> {
+    fn lock_ignore_poison(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 /// アプリケーション内で共有されるミュータブルな状態
@@ -89,7 +103,7 @@ impl AppState {
     /// # Returns
     /// * `RefineMode` - 現在設定されている `RefineMode`。
     fn get_mode(&self) -> RefineMode {
-        *self.mode.lock().unwrap_or_else(|e| e.into_inner())
+        *self.mode.lock_ignore_poison()
     }
 
     /// `RefineMode` をスレッドセーフに設定する。
@@ -97,7 +111,7 @@ impl AppState {
     /// # Arguments
     /// * `mode` - 新しく設定する `RefineMode`。
     fn set_mode(&self, mode: RefineMode) {
-        *self.mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
+        *self.mode.lock_ignore_poison() = mode;
     }
 
     /// 現在の `MonitorMode` をスレッドセーフに取得する。
@@ -105,7 +119,7 @@ impl AppState {
     /// # Returns
     /// * `MonitorMode` - 現在設定されている `MonitorMode`。
     fn get_monitor_mode(&self) -> MonitorMode {
-        *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner())
+        *self.monitor_mode.lock_ignore_poison()
     }
 
     /// `MonitorMode` をスレッドセーフに設定する。
@@ -113,7 +127,7 @@ impl AppState {
     /// # Arguments
     /// * `mode` - 新しく設定する `MonitorMode`。
     fn set_monitor_mode(&self, mode: MonitorMode) {
-        *self.monitor_mode.lock().unwrap_or_else(|e| e.into_inner()) = mode;
+        *self.monitor_mode.lock_ignore_poison() = mode;
     }
 
     /// 加工済みの最新テキストをスレッド安全に取得する
@@ -121,10 +135,7 @@ impl AppState {
     /// # Returns
     /// * `String` - 最後に加工されたテキストのクローン。
     fn get_last_processed_text(&self) -> String {
-        self.last_processed_text
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.last_processed_text.lock_ignore_poison().clone()
     }
 
     /// 加工済みの最新テキストをスレッド安全に更新する
@@ -132,26 +143,17 @@ impl AppState {
     /// # Arguments
     /// * `text` - 新しく設定する、加工済みのテキスト。
     fn set_last_processed_text(&self, text: String) {
-        *self
-            .last_processed_text
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = text;
+        *self.last_processed_text.lock_ignore_poison() = text;
     }
 
     /// 履歴を取得する
     fn get_history(&self) -> Vec<String> {
-        self.history
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.history.lock_ignore_poison().clone()
     }
 
     /// 履歴をクリアする
     fn clear_history(&self) {
-        self.history
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
+        self.history.lock_ignore_poison().clear();
     }
 
     /// 履歴にテキストを追加する。
@@ -161,7 +163,7 @@ impl AppState {
             return;
         }
 
-        let mut history = self.history.lock().unwrap_or_else(|e| e.into_inner());
+        let mut history = self.history.lock_ignore_poison();
 
         // 二重登録防止: すでに存在すれば削除して最上位へ
         if let Some(pos) = history.iter().position(|x| x == &text) {
@@ -171,8 +173,8 @@ impl AppState {
         history.insert(0, text);
 
         // 最大10件
-        if history.len() > 10 {
-            history.truncate(10);
+        if history.len() > HISTORY_LIMIT {
+            history.truncate(HISTORY_LIMIT);
         }
 
         let _ = self.proxy.send_event(AppEvent::RefreshHistory);
@@ -213,13 +215,91 @@ impl TrayMenu {
     fn build(state: &AppState) -> Result<Self> {
         let current_mode = state.get_mode();
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
+        let current_monitor_mode = state.get_monitor_mode();
+        let history_enabled = state.history_enabled.load(Ordering::Relaxed);
 
-        // JSON整形 / JSON→YAML / YAML→JSON のサブメニュー用アイテム
+        let (refine_submenu, mode_items, json_format_items, json_to_yaml_items, yaml_to_json_items) =
+            Self::build_refine_menu(current_mode)?;
+
+        let (monitor_mode_submenu, monitor_mode_items) =
+            Self::build_monitor_menu(current_monitor_mode)?;
+
+        let (interval_submenu, interval_items) =
+            Self::build_interval_menu(current_interval, current_monitor_mode)?;
+
+        let (history_submenu, history_enabled_item, clear_history_item, history_records) =
+            Self::build_history_menu(history_enabled)?;
+
+        // 一時停止・終了メニュー
+        let pause_item =
+            CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
+        let quit_item = MenuItem::new("終了", true, None);
+
+        // メインメニューの組み立て
+        let tray_menu = Menu::new();
+        tray_menu
+            .append_items(&[
+                &refine_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &monitor_mode_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &interval_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &history_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &pause_item as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &quit_item as &dyn tray_icon::menu::IsMenuItem,
+            ])
+            .context("メニューの組み立てに失敗しました")?;
+
+        // アイコン設定
+        let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
+        let _tray_icon = TrayIconBuilder::new()
+            .with_menu(Box::new(tray_menu))
+            .with_tooltip("ClipRefiner")
+            .with_icon(icon)
+            .build()
+            .context("トレイアイコンのビルドに失敗しました")?;
+
+        Ok(Self {
+            _tray_icon,
+            quit_item,
+            pause_item,
+            mode_items,
+            json_format_items,
+            json_to_yaml_items,
+            yaml_to_json_items,
+            monitor_mode_items,
+            interval_submenu,
+            interval_items,
+            history_submenu,
+            history_enabled_item,
+            clear_history_item,
+            history_records,
+        })
+    }
+
+    /// 変換モードメニューを構築する
+    ///
+    /// # Arguments
+    /// * `current_mode` - 現在選択されている変換モード
+    ///
+    /// # Returns
+    /// * `Submenu` - 変換モードのサブメニュー
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - 全モードのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON整形カテゴリのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON→YAMLカテゴリのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - YAML→JSONカテゴリのアイテムリスト
+    fn build_refine_menu(
+        current_mode: RefineMode,
+    ) -> Result<(
+        Submenu,
+        Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
+    )> {
         let mut json_format_items = Vec::new();
         let mut json_to_yaml_items = Vec::new();
         let mut yaml_to_json_items = Vec::new();
-
-        // 変換モードアイテム
         let mut mode_items = Vec::new();
 
         for &mode in RefineMode::variants() {
@@ -273,8 +353,26 @@ impl TrayMenu {
         let refine_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
             .context("変換モードメニューの作成に失敗しました")?;
 
-        // 監視モードメニュー
-        let current_monitor_mode = state.get_monitor_mode();
+        Ok((
+            refine_submenu,
+            mode_items,
+            json_format_items,
+            json_to_yaml_items,
+            yaml_to_json_items,
+        ))
+    }
+
+    /// 監視方式メニューを構築する
+    ///
+    /// # Arguments
+    /// * `current_monitor_mode` - 現在選択されている監視方式
+    ///
+    /// # Returns
+    /// * `Submenu` - 監視方式のサブメニュー
+    /// * `Vec<(CheckMenuItem, MonitorMode)>` - 監視方式のアイテムリスト
+    fn build_monitor_menu(
+        current_monitor_mode: MonitorMode,
+    ) -> Result<(Submenu, Vec<(CheckMenuItem, MonitorMode)>)> {
         let polling_item = CheckMenuItem::new(
             "ポーリング",
             true,
@@ -306,7 +404,22 @@ impl TrayMenu {
         let monitor_mode_submenu = Submenu::with_items("監視方式", true, &monitor_mode_menu_items)
             .context("監視方式メニューの作成に失敗しました")?;
 
-        // 監視周期メニュー
+        Ok((monitor_mode_submenu, monitor_mode_items))
+    }
+
+    /// 監視周期メニューを構築する
+    ///
+    /// # Arguments
+    /// * `current_interval` - 現在設定されている監視間隔（ミリ秒）
+    /// * `monitor_mode` - 現在の監視方式（イベントモード時はメニューを無効化するため）
+    ///
+    /// # Returns
+    /// * `Submenu` - 監視周期のサブメニュー
+    /// * `Vec<(CheckMenuItem, u64)>` - 監視周期のアイテムリスト
+    fn build_interval_menu(
+        current_interval: u64,
+        monitor_mode: MonitorMode,
+    ) -> Result<(Submenu, Vec<(CheckMenuItem, u64)>)> {
         let interval_items = vec![
             (
                 CheckMenuItem::new("0.5秒", true, current_interval == 500, None),
@@ -335,17 +448,33 @@ impl TrayMenu {
 
         // イベントモードの場合は監視周期を無効化
         #[cfg(windows)]
-        if current_monitor_mode == MonitorMode::Event {
+        if monitor_mode == MonitorMode::Event {
             interval_submenu.set_enabled(false);
         }
 
-        // 履歴メニュー
-        let history_enabled_item = CheckMenuItem::new(
-            "履歴機能を有効にする",
-            true,
-            state.history_enabled.load(Ordering::Relaxed),
-            None,
-        );
+        Ok((interval_submenu, interval_items))
+    }
+
+    /// 履歴メニューの基本構造を構築する
+    ///
+    /// # Arguments
+    /// * `history_enabled` - 履歴機能が有効かどうか
+    ///
+    /// # Returns
+    /// * `Submenu` - 履歴のサブメニュー
+    /// * `CheckMenuItem` - 履歴有効化のチェック項目
+    /// * `MenuItem` - 履歴クリア項目
+    /// * `Mutex<Vec<(MenuId, String)>>` - 動的に更新される履歴レコードのコンテナ
+    fn build_history_menu(
+        history_enabled: bool,
+    ) -> Result<(
+        Submenu,
+        CheckMenuItem,
+        MenuItem,
+        Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
+    )> {
+        let history_enabled_item =
+            CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
         let clear_history_item = MenuItem::new("履歴をクリア", true, None);
         let history_submenu = Submenu::new("履歴", true);
         let history_records = Mutex::new(Vec::new());
@@ -357,60 +486,18 @@ impl TrayMenu {
             &clear_history_item as &dyn tray_icon::menu::IsMenuItem,
         ])?;
 
-        // 一時停止・終了メニュー
-        let pause_item =
-            CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
-        let quit_item = MenuItem::new("終了", true, None);
-
-        // メインメニューの組み立て
-        let tray_menu = Menu::new();
-        tray_menu
-            .append_items(&[
-                &refine_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &monitor_mode_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &interval_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &history_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-                &pause_item as &dyn tray_icon::menu::IsMenuItem,
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-                &quit_item as &dyn tray_icon::menu::IsMenuItem,
-            ])
-            .context("メニューの組み立てに失敗しました")?;
-
-        // アイコン設定
-        let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
-        let _tray_icon = TrayIconBuilder::new()
-            .with_menu(Box::new(tray_menu))
-            .with_tooltip("ClipRefiner")
-            .with_icon(icon)
-            .build()
-            .context("トレイアイコンのビルドに失敗しました")?;
-
-        Ok(Self {
-            _tray_icon,
-            quit_item,
-            pause_item,
-            mode_items,
-            json_format_items,
-            json_to_yaml_items,
-            yaml_to_json_items,
-            monitor_mode_items,
-            interval_submenu,
-            interval_items,
+        Ok((
             history_submenu,
             history_enabled_item,
             clear_history_item,
             history_records,
-        })
+        ))
     }
 
     /// 履歴メニューの内容を最新の状態に更新する
     fn refresh_history(&self, state: &AppState) -> Result<()> {
         let history = state.get_history();
-        let mut records = self
-            .history_records
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut records = self.history_records.lock_ignore_poison();
         records.clear();
 
         // 既存の履歴アイテムをクリア（有効化スイッチと区切り線以外）
@@ -489,6 +576,10 @@ pub fn run_loop() -> Result<()> {
     })
 }
 
+/// プラットフォームに応じたイベントループを作成する
+///
+/// Windows環境では `with_any_thread(true)` を設定し、
+/// メインスレッド以外でもイベントループに関連する操作を行えるようにする。
 fn create_event_loop() -> EventLoop<AppEvent> {
     #[cfg(windows)]
     return EventLoopBuilder::<AppEvent>::with_user_event()
@@ -683,18 +774,30 @@ fn handle_menu_event(
         let _ = menu.refresh_history(state);
     } else if let Some((_, text)) = menu
         .history_records
-        .lock()
-        .unwrap()
+        .lock_ignore_poison()
         .iter()
         .find(|(id, _)| event.id == *id)
     {
-        let mut cb = Clipboard::new().unwrap();
-        let _ = cb.set_text(text.clone());
-        state.set_last_processed_text(text.clone());
-        notification::success::show_success_notification(
-            "履歴から復元",
-            "クリップボードにコピーしました",
-        );
+        match Clipboard::new() {
+            Ok(mut cb) => {
+                if let Err(e) = cb.set_text(text.clone()) {
+                    notification::error::show_anyhow_error(
+                        "クリップボード設定エラー",
+                        &anyhow::anyhow!(e),
+                    );
+                } else {
+                    state.set_last_processed_text(text.clone());
+                    notification::success::show_success_debug_notification(
+                        "履歴から復元",
+                        "クリップボードにコピーしました",
+                    );
+                }
+            }
+            Err(e) => notification::error::show_anyhow_error(
+                "クリップボード初期化エラー",
+                &anyhow::anyhow!(e),
+            ),
+        }
     } else if let Some((_, mode)) = menu
         .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
@@ -770,7 +873,7 @@ fn show_process_notification(mode: RefineMode, text: &str) {
     } else {
         text.to_string()
     };
-    notification::success::show_success_notification(
+    notification::success::show_success_debug_notification(
         "変換完了",
         &format!("モード: {}\n内容: {}", mode.label(), snippet),
     );
