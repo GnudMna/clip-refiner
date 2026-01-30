@@ -73,6 +73,8 @@ pub enum RefineMode {
 pub enum RefineCategory {
     /// 通常の単独メニュー
     Normal,
+    /// トリムサブメニュー内
+    Trim,
     /// JSON整形サブメニュー内
     JsonFormat,
     /// JSON to YAMLサブメニュー内
@@ -81,6 +83,8 @@ pub enum RefineCategory {
     YamlToJson,
     /// 日時変換サブメニュー内
     Datetime,
+    /// 数値変換サブメニュー内
+    Number,
 }
 
 impl RefineMode {
@@ -93,8 +97,8 @@ impl RefineMode {
             RefineMode::UrlEncode => "URLエンコード",
             RefineMode::UrlDecode => "URLデコード",
             RefineMode::RemoveUtm => "UTM除去",
-            RefineMode::Trim => "トリム",
-            RefineMode::TrimLines => "トリム(行単位)",
+            RefineMode::Trim => "全体",
+            RefineMode::TrimLines => "行単位",
             RefineMode::SortLines => "行並び替え",
             RefineMode::JsonFormat => "キー順序不同",
             RefineMode::JsonFormatPreserveOrder => "キー順序保持",
@@ -116,6 +120,7 @@ impl RefineMode {
     /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
         match self {
+            RefineMode::Trim | RefineMode::TrimLines => RefineCategory::Trim,
             RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
                 RefineCategory::JsonFormat
             }
@@ -128,6 +133,7 @@ impl RefineMode {
             RefineMode::TimestampToDatetime | RefineMode::DatetimeToTimestamp => {
                 RefineCategory::Datetime
             }
+            RefineMode::AddComma | RefineMode::RemoveComma => RefineCategory::Number,
             _ => RefineCategory::Normal,
         }
     }
@@ -233,7 +239,11 @@ mod tests {
             RefineMode::TimestampToDatetime.label(),
             "Unixタイムスタンプ→日時文字列"
         );
-        assert_eq!(RefineMode::TimestampToDatetime.category(), RefineCategory::Datetime);
+
+        assert_eq!(
+            RefineMode::TimestampToDatetime.category(),
+            RefineCategory::Datetime
+        );
     }
 
     #[test]
