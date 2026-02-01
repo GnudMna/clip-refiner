@@ -43,7 +43,9 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
             let current_mode = state.get_mode();
             if let Some(processed) = process_clipboard(clipboard, current_mode) {
                 state.set_last_processed_text(processed.clone());
-                show_process_notification(current_mode, &processed);
+                if state.show_success_notification.load(Ordering::Relaxed) {
+                    show_process_notification(current_mode, &processed);
+                }
 
                 if state.history_enabled.load(Ordering::Relaxed) {
                     state.add_to_history(processed);
@@ -162,26 +164,20 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
 /// # Arguments
 /// * `mode` - 実行された `RefineMode`。
 /// * `text` - 加工後のテキスト。
-#[cfg(debug_assertions)]
 pub fn show_process_notification(mode: RefineMode, text: &str) {
+    use notify_rust::Notification;
+    use std::time::Duration;
     let snippet = if text.chars().count() > 50 {
         format!("{}...", text.chars().take(47).collect::<String>())
     } else {
         text.to_string()
     };
-    notification::success::show_success_debug_notification(
-        "変換完了",
-        &format!("モード: {}\n内容: {}", mode.label(), snippet),
-    );
+    let _ = Notification::new()
+        .summary("変換完了")
+        .body(&format!("モード: {}\n内容: {}", mode.label(), snippet))
+        .timeout(Duration::from_secs(3))
+        .show();
 }
-
-/// 処理完了通知を表示する (リリースビルドでは何もしない)
-///
-/// # Arguments
-/// * `_mode` - 実行された `RefineMode` (未使用)。
-/// * `_text` - 加工後のテキスト (未使用)。
-#[cfg(not(debug_assertions))]
-pub fn show_process_notification(_mode: RefineMode, _text: &str) {}
 
 /// クリップボード機能へのアクセスを初期化する。
 ///

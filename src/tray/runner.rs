@@ -100,6 +100,12 @@ fn handle_menu_event(
         state.clear_history();
         state.save_config();
         let _ = menu.refresh_history(state);
+    } else if event.id == menu.show_success_notification_item.id() {
+        let enabled = menu.show_success_notification_item.is_checked();
+        state
+            .show_success_notification
+            .store(enabled, Ordering::Relaxed);
+        state.save_config();
     } else if let Some((_, text)) = menu
         .history
         .records
