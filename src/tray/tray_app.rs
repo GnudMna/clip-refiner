@@ -189,6 +189,7 @@ struct TrayMenu {
     quit_item: MenuItem,
     pause_item: CheckMenuItem,
     mode_items: Vec<(CheckMenuItem, RefineMode)>,
+    line_actions_items: Vec<(CheckMenuItem, RefineMode)>,
     trim_items: Vec<(CheckMenuItem, RefineMode)>,
     escape_items: Vec<(CheckMenuItem, RefineMode)>,
     json_format_items: Vec<(CheckMenuItem, RefineMode)>,
@@ -225,6 +226,7 @@ impl TrayMenu {
         let (
             refine_submenu,
             mode_items,
+            line_actions_items,
             trim_items,
             escape_items,
             json_format_items,
@@ -277,6 +279,7 @@ impl TrayMenu {
             quit_item,
             pause_item,
             mode_items,
+            line_actions_items,
             trim_items,
             escape_items,
             json_format_items,
@@ -302,6 +305,7 @@ impl TrayMenu {
     /// # Returns
     /// * `Submenu` - 変換モードのサブメニュー
     /// * `Vec<(CheckMenuItem, RefineMode)>` - 全モードのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - LineActionsカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - Trimカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - Escapeカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON整形カテゴリのアイテムリスト
@@ -321,7 +325,9 @@ impl TrayMenu {
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
     )> {
+        let mut line_actions_items = Vec::new();
         let mut trim_items = Vec::new();
         let mut escape_items = Vec::new();
         let mut json_format_items = Vec::new();
@@ -335,6 +341,9 @@ impl TrayMenu {
             let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
             match mode.category() {
                 crate::refiner::RefineCategory::Normal => mode_items.push((item, mode)),
+                crate::refiner::RefineCategory::LineActions => {
+                    line_actions_items.push((item, mode))
+                }
                 crate::refiner::RefineCategory::Trim => trim_items.push((item, mode)),
                 crate::refiner::RefineCategory::Escape => escape_items.push((item, mode)),
                 crate::refiner::RefineCategory::JsonFormat => json_format_items.push((item, mode)),
@@ -346,6 +355,14 @@ impl TrayMenu {
         }
 
         // サブメニューの作成
+        let line_actions_submenu = Submenu::with_items(
+            "行操作",
+            true,
+            &line_actions_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
         let trim_submenu = Submenu::with_items(
             "トリム",
             true,
@@ -408,7 +425,8 @@ impl TrayMenu {
         for (item, mode) in &mode_items {
             mode_menu_items.push(item);
             // 特定の項目の後にサブメニューを配置
-            if *mode == RefineMode::SortLines {
+            if *mode == RefineMode::RemoveUtm {
+                mode_menu_items.push(&line_actions_submenu);
                 mode_menu_items.push(&trim_submenu);
                 mode_menu_items.push(&escape_submenu);
                 mode_menu_items.push(&json_format_submenu);
@@ -426,6 +444,7 @@ impl TrayMenu {
         Ok((
             refine_submenu,
             mode_items,
+            line_actions_items,
             trim_items,
             escape_items,
             json_format_items,
@@ -875,6 +894,7 @@ fn handle_menu_event(
     } else if let Some((_, mode)) = menu
         .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
+        .chain(menu.line_actions_items.iter())
         .chain(menu.trim_items.iter())
         .chain(menu.escape_items.iter())
         .chain(menu.json_format_items.iter())
@@ -927,6 +947,7 @@ fn update_refine(
     // すべてのモードアイテムをイテレートして、選択されたモードのチェック状態を更新
     menu.mode_items
         .iter()
+        .chain(menu.line_actions_items.iter())
         .chain(menu.trim_items.iter())
         .chain(menu.escape_items.iter())
         .chain(menu.json_format_items.iter())

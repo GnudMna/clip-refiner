@@ -1,9 +1,9 @@
 pub mod datetime;
 pub mod escape;
 pub mod json;
+pub mod line_actions;
 pub mod markdown;
 pub mod number;
-pub mod sort;
 pub mod trim;
 pub mod url;
 pub mod yaml;
@@ -25,6 +25,15 @@ pub enum RefineMode {
     /// URLから utm_ で始まる計測用パラメータを削除する
     #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
+    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "並び替え")]
+    SortLines,
+    /// 空行を削除する
+    #[value(help = "空行を削除")]
+    RemoveEmptyLines,
+    /// 重複行を削除する
+    #[value(help = "重複行を削除")]
+    RemoveDuplicateLines,
     /// テキスト全体の前後にある空白および改行を削除する
     #[value(help = "改行や空白を整形")]
     Trim,
@@ -43,9 +52,6 @@ pub enum RefineMode {
     /// 正規表現のエスケープを解除する
     #[value(help = "正規表現のアンエスケープ")]
     RegexUnescape,
-    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[value(help = "行単位で並び替え")]
-    SortLines,
     /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
     #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
@@ -86,6 +92,8 @@ pub enum RefineMode {
 pub enum RefineCategory {
     /// 通常の単独メニュー
     Normal,
+    /// 行操作サブメニュー内
+    LineActions,
     /// トリムサブメニュー内
     Trim,
     /// エスケープサブメニュー内
@@ -112,13 +120,15 @@ impl RefineMode {
             RefineMode::UrlEncode => "URLエンコード",
             RefineMode::UrlDecode => "URLデコード",
             RefineMode::RemoveUtm => "UTM除去",
+            RefineMode::SortLines => "並び替え",
+            RefineMode::RemoveEmptyLines => "空行削除",
+            RefineMode::RemoveDuplicateLines => "重複行削除",
             RefineMode::Trim => "全体",
             RefineMode::TrimLines => "行単位",
             RefineMode::Escape => "エスケープ",
             RefineMode::Unescape => "アンエスケープ",
             RefineMode::RegexEscape => "正規表現エスケープ",
             RefineMode::RegexUnescape => "正規表現アンエスケープ",
-            RefineMode::SortLines => "行並び替え",
             RefineMode::JsonFormat => "キー順序不同",
             RefineMode::JsonFormatPreserveOrder => "キー順序保持",
             RefineMode::JsonToYaml => "キー順序不同",
@@ -139,6 +149,9 @@ impl RefineMode {
     /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
         match self {
+            RefineMode::SortLines
+            | RefineMode::RemoveEmptyLines
+            | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
             RefineMode::Trim | RefineMode::TrimLines => RefineCategory::Trim,
             RefineMode::Escape
             | RefineMode::Unescape
@@ -170,13 +183,15 @@ impl RefineMode {
             RefineMode::UrlEncode,
             RefineMode::UrlDecode,
             RefineMode::RemoveUtm,
+            RefineMode::SortLines,
+            RefineMode::RemoveEmptyLines,
+            RefineMode::RemoveDuplicateLines,
             RefineMode::Trim,
             RefineMode::TrimLines,
             RefineMode::Escape,
             RefineMode::Unescape,
             RefineMode::RegexEscape,
             RefineMode::RegexUnescape,
-            RefineMode::SortLines,
             RefineMode::JsonFormat,
             RefineMode::JsonFormatPreserveOrder,
             RefineMode::JsonToYaml,
@@ -222,13 +237,15 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::UrlEncode => url::url_encode(&text),
         RefineMode::UrlDecode => url::url_decode(&text).unwrap_or_else(|_| text.clone()),
         RefineMode::RemoveUtm => url::remove_utm_params(&text),
+        RefineMode::SortLines => line_actions::sort_lines(&text),
+        RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(&text),
+        RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(&text),
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
         RefineMode::Escape => escape::escape_string(&text),
         RefineMode::Unescape => escape::unescape_string(&text),
         RefineMode::RegexEscape => escape::regex_escape(&text),
         RefineMode::RegexUnescape => escape::regex_unescape(&text),
-        RefineMode::SortLines => sort::sort_lines(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
         RefineMode::JsonToYaml => json::json_to_yaml(&text),
@@ -283,7 +300,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLines));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 21);
+        assert_eq!(variants.len(), 23);
     }
 
     #[test]
