@@ -190,6 +190,7 @@ struct TrayMenu {
     pause_item: CheckMenuItem,
     mode_items: Vec<(CheckMenuItem, RefineMode)>,
     trim_items: Vec<(CheckMenuItem, RefineMode)>,
+    escape_items: Vec<(CheckMenuItem, RefineMode)>,
     json_format_items: Vec<(CheckMenuItem, RefineMode)>,
     json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
     yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
@@ -225,6 +226,7 @@ impl TrayMenu {
             refine_submenu,
             mode_items,
             trim_items,
+            escape_items,
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
@@ -276,6 +278,7 @@ impl TrayMenu {
             pause_item,
             mode_items,
             trim_items,
+            escape_items,
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
@@ -300,6 +303,7 @@ impl TrayMenu {
     /// * `Submenu` - 変換モードのサブメニュー
     /// * `Vec<(CheckMenuItem, RefineMode)>` - 全モードのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - Trimカテゴリのアイテムリスト
+    /// * `Vec<(CheckMenuItem, RefineMode)>` - Escapeカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON整形カテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - JSON→YAMLカテゴリのアイテムリスト
     /// * `Vec<(CheckMenuItem, RefineMode)>` - YAML→JSONカテゴリのアイテムリスト
@@ -316,8 +320,10 @@ impl TrayMenu {
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
     )> {
         let mut trim_items = Vec::new();
+        let mut escape_items = Vec::new();
         let mut json_format_items = Vec::new();
         let mut json_to_yaml_items = Vec::new();
         let mut yaml_to_json_items = Vec::new();
@@ -330,6 +336,7 @@ impl TrayMenu {
             match mode.category() {
                 crate::refiner::RefineCategory::Normal => mode_items.push((item, mode)),
                 crate::refiner::RefineCategory::Trim => trim_items.push((item, mode)),
+                crate::refiner::RefineCategory::Escape => escape_items.push((item, mode)),
                 crate::refiner::RefineCategory::JsonFormat => json_format_items.push((item, mode)),
                 crate::refiner::RefineCategory::JsonToYaml => json_to_yaml_items.push((item, mode)),
                 crate::refiner::RefineCategory::YamlToJson => yaml_to_json_items.push((item, mode)),
@@ -343,6 +350,14 @@ impl TrayMenu {
             "トリム",
             true,
             &trim_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
+        let escape_submenu = Submenu::with_items(
+            "エスケープ",
+            true,
+            &escape_items
                 .iter()
                 .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
                 .collect::<Vec<_>>(),
@@ -395,6 +410,7 @@ impl TrayMenu {
             // 特定の項目の後にサブメニューを配置
             if *mode == RefineMode::SortLines {
                 mode_menu_items.push(&trim_submenu);
+                mode_menu_items.push(&escape_submenu);
                 mode_menu_items.push(&json_format_submenu);
                 mode_menu_items.push(&json_to_yaml_submenu);
                 mode_menu_items.push(&yaml_to_json_submenu);
@@ -411,6 +427,7 @@ impl TrayMenu {
             refine_submenu,
             mode_items,
             trim_items,
+            escape_items,
             json_format_items,
             json_to_yaml_items,
             yaml_to_json_items,
@@ -859,6 +876,7 @@ fn handle_menu_event(
         .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
         .chain(menu.trim_items.iter())
+        .chain(menu.escape_items.iter())
         .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
         .chain(menu.yaml_to_json_items.iter())
@@ -910,6 +928,7 @@ fn update_refine(
     menu.mode_items
         .iter()
         .chain(menu.trim_items.iter())
+        .chain(menu.escape_items.iter())
         .chain(menu.json_format_items.iter())
         .chain(menu.json_to_yaml_items.iter())
         .chain(menu.yaml_to_json_items.iter())
