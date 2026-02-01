@@ -17,6 +17,7 @@ pub struct TrayMenu {
     pub quit_item: MenuItem,
     pub pause_item: CheckMenuItem,
     pub mode_items: Vec<(CheckMenuItem, RefineMode)>,
+    pub url_actions_items: Vec<(CheckMenuItem, RefineMode)>,
     pub line_actions_items: Vec<(CheckMenuItem, RefineMode)>,
     pub trim_items: Vec<(CheckMenuItem, RefineMode)>,
     pub escape_items: Vec<(CheckMenuItem, RefineMode)>,
@@ -55,6 +56,7 @@ impl TrayMenu {
         let (
             refine_submenu,
             mode_items,
+            url_actions_items,
             line_actions_items,
             trim_items,
             escape_items,
@@ -108,6 +110,7 @@ impl TrayMenu {
             quit_item,
             pause_item,
             mode_items,
+            url_actions_items,
             line_actions_items,
             trim_items,
             escape_items,
@@ -133,7 +136,6 @@ impl TrayMenu {
     ///
     /// # Returns
     /// * `Submenu` - 変換モードのサブメニュー
-    /// [略] (元のコメントを維持)
     #[allow(clippy::type_complexity)]
     fn build_refine_menu(
         current_mode: RefineMode,
@@ -148,9 +150,11 @@ impl TrayMenu {
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
         Vec<(CheckMenuItem, RefineMode)>,
+        Vec<(CheckMenuItem, RefineMode)>,
     )> {
         let mut line_actions_items = Vec::new();
         let mut trim_items = Vec::new();
+        let mut url_actions_items = Vec::new();
         let mut escape_items = Vec::new();
         let mut json_format_items = Vec::new();
         let mut json_to_yaml_items = Vec::new();
@@ -163,6 +167,7 @@ impl TrayMenu {
             let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
             match mode.category() {
                 RefineCategory::Normal => mode_items.push((item, mode)),
+                RefineCategory::UrlActions => url_actions_items.push((item, mode)),
                 RefineCategory::LineActions => line_actions_items.push((item, mode)),
                 RefineCategory::Trim => trim_items.push((item, mode)),
                 RefineCategory::Escape => escape_items.push((item, mode)),
@@ -175,6 +180,14 @@ impl TrayMenu {
         }
 
         // サブメニューの作成
+        let url_actions_submenu = Submenu::with_items(
+            "URL操作",
+            true,
+            &url_actions_items
+                .iter()
+                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                .collect::<Vec<_>>(),
+        )?;
         let line_actions_submenu = Submenu::with_items(
             "行操作",
             true,
@@ -242,17 +255,17 @@ impl TrayMenu {
 
         // メインの変換モードメニュー組み立て
         let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        mode_menu_items.push(&url_actions_submenu);
+        mode_menu_items.push(&line_actions_submenu);
+        mode_menu_items.push(&trim_submenu);
+        mode_menu_items.push(&escape_submenu);
+        mode_menu_items.push(&json_format_submenu);
+        mode_menu_items.push(&json_to_yaml_submenu);
+        mode_menu_items.push(&yaml_to_json_submenu);
         for (item, mode) in &mode_items {
             mode_menu_items.push(item);
-            // 特定の項目の後にサブメニューを配置
-            if *mode == RefineMode::RemoveUtm {
-                mode_menu_items.push(&line_actions_submenu);
-                mode_menu_items.push(&trim_submenu);
-                mode_menu_items.push(&escape_submenu);
-                mode_menu_items.push(&json_format_submenu);
-                mode_menu_items.push(&json_to_yaml_submenu);
-                mode_menu_items.push(&yaml_to_json_submenu);
-            } else if *mode == RefineMode::MarkdownToHtml {
+            // 特定の通常項目の後にサブメニューを配置
+            if *mode == RefineMode::MarkdownToHtml {
                 mode_menu_items.push(&datetime_submenu);
                 mode_menu_items.push(&number_submenu);
             }
@@ -264,6 +277,7 @@ impl TrayMenu {
         Ok((
             refine_submenu,
             mode_items,
+            url_actions_items,
             line_actions_items,
             trim_items,
             escape_items,
