@@ -14,18 +14,27 @@ URLのデコード、UTMパラメータの削除、JSONやYAMLの整形・変換
   | `url-encode` | URLエンコードを行う |
   | `url-decode` | URLデコードを行う |
   | `remove-utm` | URLからUTMパラメータ（`utm_*`）を削除する |
+  | `sort-lines` | 行単位で並び替える（CSVの場合はレコード単位でソート） |
+  | `remove-empty-lines` | 空行を削除する |
+  | `remove-duplicate-lines` | 重複行を削除する |
   | `trim` | テキスト全体の前後にある空白および改行を削除する |
   | `trim-lines` | 各行の前後にある空白を削除する |
-  | `markdown-to-html` | Markdown形式をHTML形式へ変換する |
+  | `escape` | 文字列をエスケープする |
+  | `unescape` | 文字列のエスケープを削除する |
+  | `regex-escape` | 正規表現をエスケープする |
+  | `regex-unescape` | 正規表現のエスケープを削除する |
   | `json-format` | JSON形式を整形する（キー順序は不定） |
   | `json-format-preserve-order` | JSON形式を整形する（元のキー順序を保持） |
   | `json-to-yaml` | JSONをYAML形式へ変換する（キー順序は不定） |
   | `json-to-yaml-preserve-order` | JSONをYAML形式へ変換する（元のキー順序を保持） |
   | `yaml-to-json` | YAMLをJSON形式へ変換する（キー順序は不定） |
   | `yaml-to-json-preserve-order` | YAMLをJSON形式へ変換する（元のキー順序を保持） |
+  | `markdown-to-html` | Markdown形式をHTML形式へ変換する |
+  | `excel-to-markdown` | Excel(TSV)をMarkdown形式へ変換する |
+  | `timestamp-to-datetime` | Unixタイムスタンプを日時文字列へ変換する |
+  | `datetime-to-timestamp` | 日時文字列をUnixタイムスタンプへ変換する |
   | `add-comma` | 数値に3桁区切りのカンマを付与する |
   | `remove-comma` | 数値からカンマを除去する |
-  | `sort-lines` | 行単位で並び替える（CSVの場合はレコード単位でソート） |
 
 ## 使用方法
 
