@@ -71,6 +71,7 @@ pub struct TrayMenu {
     pub monitor: MonitorMenu,
     pub interval: IntervalMenu,
     pub history: HistoryMenu,
+    pub show_success_notification_item: CheckMenuItem,
 }
 
 impl TrayMenu {
@@ -90,11 +91,16 @@ impl TrayMenu {
         let current_interval = state.interval_ms.load(Ordering::Relaxed);
         let current_monitor_mode = state.get_monitor_mode();
         let history_enabled = state.history_enabled.load(Ordering::Relaxed);
+        let show_success_notification = state.show_success_notification.load(Ordering::Relaxed);
 
         let refine = Self::build_refine_menu(current_mode)?;
         let monitor = Self::build_monitor_menu(current_monitor_mode)?;
         let interval = Self::build_interval_menu(current_interval, current_monitor_mode)?;
         let history = Self::build_history_menu(history_enabled)?;
+
+        // 通知メニュー
+        let show_success_notification_item =
+            CheckMenuItem::new("成功通知を表示", true, show_success_notification, None);
 
         // 一時停止・終了メニュー
         let pause_item =
@@ -109,6 +115,8 @@ impl TrayMenu {
                 &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &show_success_notification_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -133,6 +141,7 @@ impl TrayMenu {
             monitor,
             interval,
             history,
+            show_success_notification_item,
         };
 
         // カテゴリラベルの初期更新

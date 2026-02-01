@@ -47,6 +47,8 @@ pub struct AppState {
     pub last_processed_text: Mutex<String>,
     /// 履歴機能が有効かどうか
     pub history_enabled: AtomicBool,
+    /// 成功時に通知を表示するかどうか
+    pub show_success_notification: AtomicBool,
     /// クリップボード履歴（最大10件）
     pub history: Mutex<Vec<String>>,
     /// イベントループへのプロキシ。別スレッドからUIイベント（例: 履歴更新）を送信するために使用される。
@@ -68,6 +70,7 @@ impl AppState {
             interval_ms: AtomicU64::new(config.interval_ms),
             last_processed_text: Mutex::new(String::new()),
             history_enabled: AtomicBool::new(config.history_enabled),
+            show_success_notification: AtomicBool::new(config.show_success_notification),
             history: Mutex::new(Vec::new()),
             proxy,
         }
@@ -80,6 +83,7 @@ impl AppState {
             interval_ms: self.interval_ms.load(Ordering::Relaxed),
             monitor_mode: self.get_monitor_mode(),
             history_enabled: self.history_enabled.load(Ordering::Relaxed),
+            show_success_notification: self.show_success_notification.load(Ordering::Relaxed),
         };
         if let Err(e) = config.save() {
             eprintln!("設定の保存に失敗: {}", e);
@@ -185,6 +189,7 @@ mod tests {
             interval_ms: AtomicU64::new(1000),
             last_processed_text: Mutex::new(String::new()),
             history_enabled: AtomicBool::new(false),
+            show_success_notification: AtomicBool::new(false),
             history: Mutex::new(Vec::new()),
             proxy: event_loop.create_proxy(),
         };

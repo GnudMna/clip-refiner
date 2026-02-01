@@ -37,6 +37,9 @@ pub struct AppConfig {
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
+    /// 成功時に通知を表示するかどうか
+    #[serde(default)]
+    pub show_success_notification: bool,
 }
 
 impl Default for AppConfig {
@@ -46,6 +49,7 @@ impl Default for AppConfig {
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
+            show_success_notification: false,
         }
     }
 }
