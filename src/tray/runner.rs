@@ -91,17 +91,18 @@ fn handle_menu_event(
         state
             .paused
             .store(menu.pause_item.is_checked(), Ordering::Relaxed);
-    } else if event.id == menu.history_enabled_item.id() {
-        let enabled = menu.history_enabled_item.is_checked();
+    } else if event.id == menu.history.enabled_item.id() {
+        let enabled = menu.history.enabled_item.is_checked();
         state.history_enabled.store(enabled, Ordering::Relaxed);
         state.save_config();
         let _ = menu.refresh_history(state);
-    } else if event.id == menu.clear_history_item.id() {
+    } else if event.id == menu.history.clear_item.id() {
         state.clear_history();
         state.save_config();
         let _ = menu.refresh_history(state);
     } else if let Some((_, text)) = menu
-        .history_records
+        .history
+        .records
         .lock_ignore_poison()
         .iter()
         .find(|(id, _)| event.id == *id)
@@ -127,31 +128,24 @@ fn handle_menu_event(
             ),
         }
     } else if let Some((_, mode)) = menu
-        .mode_items // 全てのモード関連アイテムをチェーンして検索
-        .iter()
-        .chain(menu.url_actions_items.iter())
-        .chain(menu.line_actions_items.iter())
-        .chain(menu.trim_items.iter())
-        .chain(menu.escape_items.iter())
-        .chain(menu.json_format_items.iter())
-        .chain(menu.json_to_yaml_items.iter())
-        .chain(menu.yaml_to_json_items.iter())
-        .chain(menu.datetime_items.iter())
-        .chain(menu.number_items.iter())
+        .refine
+        .all_items() // すべての変換モードアイテムから該当するものを検索
         .find(|(item, _)| event.id == item.id())
     {
         update_refine(state, menu, clipboard, *mode);
     } else if let Some((_, monitor_mode)) = menu
-        .monitor_mode_items
-        .iter()
+        .monitor
+        .items
+        .iter() // 監視方式アイテムから該当するものを検索
         .find(|(item, _)| event.id == item.id())
     {
         update_monitor_mode(state, menu, *monitor_mode);
     } else {
-        for (item, ms) in &menu.interval_items {
+        // 監視周期アイテム（ミリ秒）から該当するものを検索
+        for (item, ms) in &menu.interval.items {
             if event.id == item.id() {
                 state.interval_ms.store(*ms, Ordering::Relaxed);
-                for (it, _) in &menu.interval_items {
+                for (it, _) in &menu.interval.items {
                     it.set_checked(false);
                 }
                 item.set_checked(true);
@@ -180,18 +174,10 @@ fn update_refine(
     state.set_mode(mode);
 
     // すべてのモードアイテムをイテレートして、選択されたモードのチェック状態を更新
-    menu.mode_items
-        .iter()
-        .chain(menu.url_actions_items.iter())
-        .chain(menu.line_actions_items.iter())
-        .chain(menu.trim_items.iter())
-        .chain(menu.escape_items.iter())
-        .chain(menu.json_format_items.iter())
-        .chain(menu.json_to_yaml_items.iter())
-        .chain(menu.yaml_to_json_items.iter())
-        .chain(menu.datetime_items.iter())
-        .chain(menu.number_items.iter())
+    menu.refine
+        .all_items()
         .for_each(|(item, m)| item.set_checked(*m == mode));
+    menu.refresh_category_labels(mode);
 
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
@@ -220,7 +206,7 @@ fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: Mon
     state.set_monitor_mode(monitor_mode);
 
     // メニューのチェック状態を更新
-    for (item, m) in &menu.monitor_mode_items {
+    for (item, m) in &menu.monitor.items {
         item.set_checked(*m == monitor_mode);
     }
 

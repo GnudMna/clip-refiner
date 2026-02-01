@@ -88,7 +88,7 @@ pub enum RefineMode {
 }
 
 /// メニューの階層化に使用するカテゴリ
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum RefineCategory {
     /// 通常の単独メニュー
     Normal,
@@ -110,6 +110,24 @@ pub enum RefineCategory {
     Datetime,
     /// 数値変換サブメニュー内
     Number,
+}
+
+impl RefineCategory {
+    /// カテゴリの表示名を取得する
+    pub fn label(&self) -> &'static str {
+        match self {
+            RefineCategory::Normal => "",
+            RefineCategory::UrlActions => "URL操作",
+            RefineCategory::LineActions => "行操作",
+            RefineCategory::Trim => "トリム",
+            RefineCategory::Escape => "エスケープ",
+            RefineCategory::JsonFormat => "JSON整形",
+            RefineCategory::JsonToYaml => "JSON→YAML",
+            RefineCategory::YamlToJson => "YAML→JSON",
+            RefineCategory::Datetime => "日時変換",
+            RefineCategory::Number => "数値変換",
+        }
+    }
 }
 
 impl RefineMode {

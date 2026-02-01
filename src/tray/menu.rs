@@ -9,30 +9,68 @@ use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
 
+/// 変換モードのカテゴリごとのグループ
+pub struct CategoryGroup {
+    /// カテゴリ用のサブメニュー
+    pub submenu: Submenu,
+    /// サブメニュー内に配置されるモードアイテムのリスト
+    pub items: Vec<(CheckMenuItem, RefineMode)>,
+    /// 所属するカテゴリ
+    pub category: RefineCategory,
+}
+
+/// 変換モードメニューの構成要素
+pub struct RefineMenu {
+    /// 「変換モード」メインサブメニュー
+    pub main_submenu: Submenu,
+    /// サブメニューに属さない直下配下のモードアイテム
+    pub normal_items: Vec<(CheckMenuItem, RefineMode)>,
+    /// カテゴリ別のサブメニューグループ
+    pub groups: Vec<CategoryGroup>,
+}
+
+impl RefineMenu {
+    /// すべてのモードアイテム（CheckMenuItem と RefineMode のペア）を平坦化したイテレータとして返す。
+    ///
+    /// # Returns
+    /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ。
+    pub fn all_items(&self) -> impl Iterator<Item = &(CheckMenuItem, RefineMode)> {
+        self.normal_items
+            .iter()
+            .chain(self.groups.iter().flat_map(|g| g.items.iter()))
+    }
+}
+
+/// 監視方式メニューの構成要素
+pub struct MonitorMenu {
+    pub main_submenu: Submenu,
+    pub items: Vec<(CheckMenuItem, MonitorMode)>,
+}
+
+/// 監視周期メニューの構成要素
+pub struct IntervalMenu {
+    pub main_submenu: Submenu,
+    pub items: Vec<(CheckMenuItem, u64)>,
+}
+
+/// 履歴メニューの構成要素
+pub struct HistoryMenu {
+    pub main_submenu: Submenu,
+    pub enabled_item: CheckMenuItem,
+    pub clear_item: MenuItem,
+    pub records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
+}
+
 /// トレイメニューの管理
 pub struct TrayMenu {
     /// トレイアイコンのインスタンス。Dropされるとアイコンが消えるため、所有権を維持する必要がある。
-    /// フィールド名の`_`プレフィックスは、変数が直接使用されなくても所有権を保持するために意図的に付けられていることを示す。
     pub _tray_icon: TrayIcon,
     pub quit_item: MenuItem,
     pub pause_item: CheckMenuItem,
-    pub mode_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub url_actions_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub line_actions_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub trim_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub escape_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub json_format_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub json_to_yaml_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub yaml_to_json_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub datetime_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub number_items: Vec<(CheckMenuItem, RefineMode)>,
-    pub monitor_mode_items: Vec<(CheckMenuItem, MonitorMode)>,
-    pub interval_submenu: Submenu,
-    pub interval_items: Vec<(CheckMenuItem, u64)>,
-    pub history_submenu: Submenu,
-    pub history_enabled_item: CheckMenuItem,
-    pub clear_history_item: MenuItem,
-    pub history_records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
+    pub refine: RefineMenu,
+    pub monitor: MonitorMenu,
+    pub interval: IntervalMenu,
+    pub history: HistoryMenu,
 }
 
 impl TrayMenu {
@@ -53,28 +91,10 @@ impl TrayMenu {
         let current_monitor_mode = state.get_monitor_mode();
         let history_enabled = state.history_enabled.load(Ordering::Relaxed);
 
-        let (
-            refine_submenu,
-            mode_items,
-            url_actions_items,
-            line_actions_items,
-            trim_items,
-            escape_items,
-            json_format_items,
-            json_to_yaml_items,
-            yaml_to_json_items,
-            datetime_items,
-            number_items,
-        ) = Self::build_refine_menu(current_mode)?;
-
-        let (monitor_mode_submenu, monitor_mode_items) =
-            Self::build_monitor_menu(current_monitor_mode)?;
-
-        let (interval_submenu, interval_items) =
-            Self::build_interval_menu(current_interval, current_monitor_mode)?;
-
-        let (history_submenu, history_enabled_item, clear_history_item, history_records) =
-            Self::build_history_menu(history_enabled)?;
+        let refine = Self::build_refine_menu(current_mode)?;
+        let monitor = Self::build_monitor_menu(current_monitor_mode)?;
+        let interval = Self::build_interval_menu(current_interval, current_monitor_mode)?;
+        let history = Self::build_history_menu(history_enabled)?;
 
         // 一時停止・終了メニュー
         let pause_item =
@@ -85,10 +105,10 @@ impl TrayMenu {
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
-                &refine_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &monitor_mode_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &interval_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &history_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &refine.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -105,201 +125,147 @@ impl TrayMenu {
             .build()
             .context("トレイアイコンのビルドに失敗しました")?;
 
-        Ok(Self {
+        let this = Self {
             _tray_icon,
             quit_item,
             pause_item,
-            mode_items,
-            url_actions_items,
-            line_actions_items,
-            trim_items,
-            escape_items,
-            json_format_items,
-            json_to_yaml_items,
-            yaml_to_json_items,
-            datetime_items,
-            number_items,
-            monitor_mode_items,
-            interval_submenu,
-            interval_items,
-            history_submenu,
-            history_enabled_item,
-            clear_history_item,
-            history_records,
-        })
+            refine,
+            monitor,
+            interval,
+            history,
+        };
+
+        // カテゴリラベルの初期更新
+        this.refresh_category_labels(current_mode);
+
+        Ok(this)
     }
 
     /// 変換モードメニューを構築する
     ///
     /// # Arguments
-    /// * `current_mode` - 現在選択されている変換モード
+    /// * `current_mode` - 現在選択されている変換モード。
     ///
     /// # Returns
-    /// * `Submenu` - 変換モードのサブメニュー
-    #[allow(clippy::type_complexity)]
-    fn build_refine_menu(
-        current_mode: RefineMode,
-    ) -> Result<(
-        Submenu,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-        Vec<(CheckMenuItem, RefineMode)>,
-    )> {
-        let mut line_actions_items = Vec::new();
-        let mut trim_items = Vec::new();
-        let mut url_actions_items = Vec::new();
-        let mut escape_items = Vec::new();
-        let mut json_format_items = Vec::new();
-        let mut json_to_yaml_items = Vec::new();
-        let mut yaml_to_json_items = Vec::new();
-        let mut datetime_items = Vec::new();
-        let mut number_items = Vec::new();
-        let mut mode_items = Vec::new();
+    /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    fn build_refine_menu(current_mode: RefineMode) -> Result<RefineMenu> {
+        use std::collections::HashMap;
+
+        let mut items_by_category: HashMap<RefineCategory, Vec<(CheckMenuItem, RefineMode)>> =
+            HashMap::new();
 
         for &mode in RefineMode::variants() {
             let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
-            match mode.category() {
-                RefineCategory::Normal => mode_items.push((item, mode)),
-                RefineCategory::UrlActions => url_actions_items.push((item, mode)),
-                RefineCategory::LineActions => line_actions_items.push((item, mode)),
-                RefineCategory::Trim => trim_items.push((item, mode)),
-                RefineCategory::Escape => escape_items.push((item, mode)),
-                RefineCategory::JsonFormat => json_format_items.push((item, mode)),
-                RefineCategory::JsonToYaml => json_to_yaml_items.push((item, mode)),
-                RefineCategory::YamlToJson => yaml_to_json_items.push((item, mode)),
-                RefineCategory::Datetime => datetime_items.push((item, mode)),
-                RefineCategory::Number => number_items.push((item, mode)),
-            }
+            items_by_category
+                .entry(mode.category())
+                .or_default()
+                .push((item, mode));
         }
 
-        // サブメニューの作成
-        let url_actions_submenu = Submenu::with_items(
-            "URL操作",
-            true,
-            &url_actions_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let line_actions_submenu = Submenu::with_items(
-            "行操作",
-            true,
-            &line_actions_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let trim_submenu = Submenu::with_items(
-            "トリム",
-            true,
-            &trim_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let escape_submenu = Submenu::with_items(
-            "エスケープ",
-            true,
-            &escape_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let json_format_submenu = Submenu::with_items(
-            "JSON整形",
-            true,
-            &json_format_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let json_to_yaml_submenu = Submenu::with_items(
-            "JSON→YAML",
-            true,
-            &json_to_yaml_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let yaml_to_json_submenu = Submenu::with_items(
-            "YAML→JSON",
-            true,
-            &yaml_to_json_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let datetime_submenu = Submenu::with_items(
-            "日時変換",
-            true,
-            &datetime_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
-        let number_submenu = Submenu::with_items(
-            "数値変換",
-            true,
-            &number_items
-                .iter()
-                .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
-                .collect::<Vec<_>>(),
-        )?;
+        let normal_items = items_by_category
+            .remove(&RefineCategory::Normal)
+            .unwrap_or_default();
+
+        // 期待されるサブメニューの順序
+        let category_order = [
+            RefineCategory::UrlActions,
+            RefineCategory::LineActions,
+            RefineCategory::Trim,
+            RefineCategory::Escape,
+            RefineCategory::JsonFormat,
+            RefineCategory::JsonToYaml,
+            RefineCategory::YamlToJson,
+            RefineCategory::Datetime,
+            RefineCategory::Number,
+        ];
+
+        let mut groups = Vec::new();
+        for &category in &category_order {
+            if let Some(items) = items_by_category.remove(&category) {
+                let submenu = Submenu::with_items(
+                    category.label(),
+                    true,
+                    &items
+                        .iter()
+                        .map(|(i, _)| i as &dyn tray_icon::menu::IsMenuItem)
+                        .collect::<Vec<_>>(),
+                )?;
+                groups.push(CategoryGroup {
+                    submenu,
+                    items,
+                    category,
+                });
+            }
+        }
 
         // メインの変換モードメニュー組み立て
         let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
-        mode_menu_items.push(&url_actions_submenu);
-        mode_menu_items.push(&line_actions_submenu);
-        mode_menu_items.push(&trim_submenu);
-        mode_menu_items.push(&escape_submenu);
-        mode_menu_items.push(&json_format_submenu);
-        mode_menu_items.push(&json_to_yaml_submenu);
-        mode_menu_items.push(&yaml_to_json_submenu);
-        for (item, mode) in &mode_items {
-            mode_menu_items.push(item);
-            // 特定の通常項目の後にサブメニューを配置
-            if *mode == RefineMode::MarkdownToHtml {
-                mode_menu_items.push(&datetime_submenu);
-                mode_menu_items.push(&number_submenu);
+
+        // カテゴリグループの追加
+        for group in &groups {
+            // 特定のカテゴリ（Datetime, Number）以外を最初に追加
+            if group.category != RefineCategory::Datetime
+                && group.category != RefineCategory::Number
+            {
+                mode_menu_items.push(&group.submenu);
             }
         }
 
-        let refine_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
+        // 通常アイテムと遅延追加カテゴリの配置
+        for (item, mode) in &normal_items {
+            mode_menu_items.push(item);
+            // 特定の通常項目の後にカテゴリを配置
+            if *mode == RefineMode::MarkdownToHtml {
+                for group in &groups {
+                    if group.category == RefineCategory::Datetime
+                        || group.category == RefineCategory::Number
+                    {
+                        mode_menu_items.push(&group.submenu);
+                    }
+                }
+            }
+        }
+
+        let main_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
             .context("変換モードメニューの作成に失敗しました")?;
 
-        Ok((
-            refine_submenu,
-            mode_items,
-            url_actions_items,
-            line_actions_items,
-            trim_items,
-            escape_items,
-            json_format_items,
-            json_to_yaml_items,
-            yaml_to_json_items,
-            datetime_items,
-            number_items,
-        ))
+        Ok(RefineMenu {
+            main_submenu,
+            normal_items,
+            groups,
+        })
+    }
+
+    /// 所属カテゴリに基づいてサブメニューのラベルを更新する
+    ///
+    /// 選択されているモードが属するカテゴリのサブメニューに「✓」プレフィックスを付与し、
+    /// それ以外のサブメニューからは削除する。
+    ///
+    /// # Arguments
+    /// * `current_mode` - 現在選択されている変換モード。
+    pub fn refresh_category_labels(&self, current_mode: RefineMode) {
+        let current_category = current_mode.category();
+
+        for group in &self.refine.groups {
+            let prefix = if current_category == group.category {
+                "✓"
+            } else {
+                ""
+            };
+            group
+                .submenu
+                .set_text(format!("{}{}", prefix, group.category.label()));
+        }
     }
 
     /// 監視方式メニューを構築する
     ///
     /// # Arguments
-    /// * `current_monitor_mode` - 現在選択されている監視方式
+    /// * `current_monitor_mode` - 現在選択されている監視方式。
     ///
     /// # Returns
-    /// * `Submenu` - 監視方式のサブメニュー
-    /// * `Vec<(CheckMenuItem, MonitorMode)>` - 監視方式のアイテムリスト
-    fn build_monitor_menu(
-        current_monitor_mode: MonitorMode,
-    ) -> Result<(Submenu, Vec<(CheckMenuItem, MonitorMode)>)> {
+    /// 成功した場合は `MonitorMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    fn build_monitor_menu(current_monitor_mode: MonitorMode) -> Result<MonitorMenu> {
         let polling_item = CheckMenuItem::new(
             "ポーリング",
             true,
@@ -328,10 +294,13 @@ impl TrayMenu {
         for (item, _) in &monitor_mode_items {
             monitor_mode_menu_items.push(item);
         }
-        let monitor_mode_submenu = Submenu::with_items("監視方式", true, &monitor_mode_menu_items)
+        let main_submenu = Submenu::with_items("監視方式", true, &monitor_mode_menu_items)
             .context("監視方式メニューの作成に失敗しました")?;
 
-        Ok((monitor_mode_submenu, monitor_mode_items))
+        Ok(MonitorMenu {
+            main_submenu,
+            items: monitor_mode_items,
+        })
     }
 
     /// 監視周期メニューを構築する
@@ -341,12 +310,11 @@ impl TrayMenu {
     /// * `monitor_mode` - 現在の監視方式（イベントモード時はメニューを無効化するため）
     ///
     /// # Returns
-    /// * `Submenu` - 監視周期のサブメニュー
-    /// * `Vec<(CheckMenuItem, u64)>` - 監視周期のアイテムリスト
+    /// 成功した場合は `IntervalMenu` インスタンスを返し、失敗した場合は `Err` を返す。
     fn build_interval_menu(
         current_interval: u64,
         monitor_mode: MonitorMode,
-    ) -> Result<(Submenu, Vec<(CheckMenuItem, u64)>)> {
+    ) -> Result<IntervalMenu> {
         let interval_items = vec![
             (
                 CheckMenuItem::new("0.5秒", true, current_interval == 500, None),
@@ -370,71 +338,66 @@ impl TrayMenu {
         for (item, _) in &interval_items {
             interval_menu_items.push(item);
         }
-        let interval_submenu = Submenu::with_items("監視周期", true, &interval_menu_items)
+        let main_submenu = Submenu::with_items("監視周期", true, &interval_menu_items)
             .context("監視周期メニューの作成に失敗しました")?;
 
         // イベントモードの場合は監視周期を無効化
         #[cfg(windows)]
         if monitor_mode == MonitorMode::Event {
-            interval_submenu.set_enabled(false);
+            main_submenu.set_enabled(false);
         }
 
-        Ok((interval_submenu, interval_items))
+        Ok(IntervalMenu {
+            main_submenu,
+            items: interval_items,
+        })
     }
 
     /// 履歴メニューの基本構造を構築する
     ///
     /// # Arguments
-    /// * `history_enabled` - 履歴機能が有効かどうか
+    /// * `history_enabled` - 履歴機能が有効かどうか。
     ///
     /// # Returns
-    /// * `Submenu` - 履歴のサブメニュー
-    /// * `CheckMenuItem` - 履歴有効化のチェック項目
-    /// * `MenuItem` - 履歴クリア項目
-    /// * `Mutex<Vec<(MenuId, String)>>` - 動的に更新される履歴レコードのコンテナ
-    fn build_history_menu(
-        history_enabled: bool,
-    ) -> Result<(
-        Submenu,
-        CheckMenuItem,
-        MenuItem,
-        Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
-    )> {
-        let history_enabled_item =
-            CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
-        let clear_history_item = MenuItem::new("履歴をクリア", true, None);
-        let history_submenu = Submenu::new("履歴", true);
-        let history_records = Mutex::new(Vec::new());
+    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    fn build_history_menu(history_enabled: bool) -> Result<HistoryMenu> {
+        let enabled_item = CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
+        let clear_item = MenuItem::new("履歴をクリア", true, None);
+        let main_submenu = Submenu::new("履歴", true);
+        let records = Mutex::new(Vec::new());
 
         // 初期の履歴メニュー構築
-        history_submenu.append_items(&[
-            &history_enabled_item as &dyn tray_icon::menu::IsMenuItem,
+        main_submenu.append_items(&[
+            &enabled_item as &dyn tray_icon::menu::IsMenuItem,
             &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-            &clear_history_item as &dyn tray_icon::menu::IsMenuItem,
+            &clear_item as &dyn tray_icon::menu::IsMenuItem,
         ])?;
 
-        Ok((
-            history_submenu,
-            history_enabled_item,
-            clear_history_item,
-            history_records,
-        ))
+        Ok(HistoryMenu {
+            main_submenu,
+            enabled_item,
+            clear_item,
+            records,
+        })
     }
 
     /// 履歴メニューの内容を最新の状態に更新する
+    ///
+    /// # Arguments
+    /// * `state` - 現在のアプリケーション状態。
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
         let history = state.get_history();
-        let mut records = self.history_records.lock_ignore_poison();
+        let mut records = self.history.records.lock_ignore_poison();
         records.clear();
 
         // 既存の履歴アイテムをクリア（有効化スイッチと区切り線以外）
-        for _ in 0..self.history_submenu.items().len() {
-            self.history_submenu.remove_at(0);
+        for _ in 0..self.history.main_submenu.items().len() {
+            self.history.main_submenu.remove_at(0);
         }
 
         // 基本部分を再構築
-        self.history_submenu.append_items(&[
-            &self.history_enabled_item as &dyn tray_icon::menu::IsMenuItem,
+        self.history.main_submenu.append_items(&[
+            &self.history.enabled_item as &dyn tray_icon::menu::IsMenuItem,
             &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
         ])?;
 
@@ -447,16 +410,18 @@ impl TrayMenu {
                 };
                 let item = MenuItem::new(label, true, None);
                 records.push((item.id().clone(), text));
-                self.history_submenu
+                self.history
+                    .main_submenu
                     .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;
             }
-            self.history_submenu.append_items(&[
+            self.history.main_submenu.append_items(&[
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem
             ])?;
         }
 
-        self.history_submenu
-            .append_items(&[&self.clear_history_item as &dyn tray_icon::menu::IsMenuItem])?;
+        self.history
+            .main_submenu
+            .append_items(&[&self.history.clear_item as &dyn tray_icon::menu::IsMenuItem])?;
 
         Ok(())
     }
