@@ -173,8 +173,8 @@ impl TrayMenu {
             RefineCategory::Trim,
             RefineCategory::Escape,
             RefineCategory::JsonFormat,
-            RefineCategory::JsonToYaml,
-            RefineCategory::YamlToJson,
+            RefineCategory::ToJson,
+            RefineCategory::ToYaml,
             RefineCategory::Datetime,
             RefineCategory::Number,
         ];

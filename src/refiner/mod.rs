@@ -58,18 +58,18 @@ pub enum RefineMode {
     /// JSON形式をインデント整形する（元のキー順序を維持する）
     #[value(help = "JSON形式を整形(キー順序保持)")]
     JsonFormatPreserveOrder,
-    /// JSON形式をYAML形式へ変換する
-    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
-    JsonToYaml,
-    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
-    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
-    JsonToYamlPreserveOrder,
     /// YAML形式をJSON形式へ変換する
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     YamlToJson,
     /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJsonPreserveOrder,
+    /// JSON形式をYAML形式へ変換する
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
+    JsonToYaml,
+    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
+    JsonToYamlPreserveOrder,
     /// Markdown形式のテキストをHTML形式へ変換する
     #[value(help = "MarkdownをHTML形式へ変換")]
     MarkdownToHtml,
@@ -106,9 +106,9 @@ pub enum RefineCategory {
     /// JSON整形サブメニュー内
     JsonFormat,
     /// JSON to YAMLサブメニュー内
-    JsonToYaml,
+    ToYaml,
     /// YAML to JSONサブメニュー内
-    YamlToJson,
+    ToJson,
     /// 日時変換サブメニュー内
     Datetime,
     /// 数値変換サブメニュー内
@@ -125,8 +125,8 @@ impl RefineCategory {
             RefineCategory::Trim => "トリム",
             RefineCategory::Escape => "エスケープ",
             RefineCategory::JsonFormat => "JSON整形",
-            RefineCategory::JsonToYaml => "JSON→YAML",
-            RefineCategory::YamlToJson => "YAML→JSON",
+            RefineCategory::ToJson => "JSONへ変換",
+            RefineCategory::ToYaml => "YAMLへ変換",
             RefineCategory::Datetime => "日時変換",
             RefineCategory::Number => "数値変換",
         }
@@ -152,12 +152,12 @@ impl RefineMode {
             RefineMode::Unescape => "アンエスケープ",
             RefineMode::RegexEscape => "正規表現エスケープ",
             RefineMode::RegexUnescape => "正規表現アンエスケープ",
-            RefineMode::JsonFormat => "キー順序不同",
-            RefineMode::JsonFormatPreserveOrder => "キー順序保持",
-            RefineMode::JsonToYaml => "キー順序不同",
-            RefineMode::JsonToYamlPreserveOrder => "キー順序保持",
-            RefineMode::YamlToJson => "キー順序不同",
-            RefineMode::YamlToJsonPreserveOrder => "キー順序保持",
+            RefineMode::JsonFormat => "JSON整形(キー順序不同)",
+            RefineMode::JsonFormatPreserveOrder => "JSON整形(キー順序保持)",
+            RefineMode::YamlToJson => "YAML→JSON(キー順序不同)",
+            RefineMode::YamlToJsonPreserveOrder => "YAML→JSON(キー順序保持)",
+            RefineMode::JsonToYaml => "JSON→YAML(キー順序不同)",
+            RefineMode::JsonToYamlPreserveOrder => "JSON→YAML(キー順序保持)",
             RefineMode::MarkdownToHtml => "Markdown→HTML",
             RefineMode::ExcelToMarkdown => "Excel→Markdown",
             RefineMode::TimestampToDatetime => "Unixタイムスタンプ→日時文字列",
@@ -187,12 +187,8 @@ impl RefineMode {
             RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
                 RefineCategory::JsonFormat
             }
-            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => {
-                RefineCategory::JsonToYaml
-            }
-            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => {
-                RefineCategory::YamlToJson
-            }
+            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => RefineCategory::ToJson,
+            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => RefineCategory::ToYaml,
             RefineMode::TimestampToDatetime | RefineMode::DatetimeToTimestamp => {
                 RefineCategory::Datetime
             }
@@ -221,10 +217,10 @@ impl RefineMode {
             RefineMode::RegexUnescape,
             RefineMode::JsonFormat,
             RefineMode::JsonFormatPreserveOrder,
-            RefineMode::JsonToYaml,
-            RefineMode::JsonToYamlPreserveOrder,
             RefineMode::YamlToJson,
             RefineMode::YamlToJsonPreserveOrder,
+            RefineMode::JsonToYaml,
+            RefineMode::JsonToYamlPreserveOrder,
             RefineMode::MarkdownToHtml,
             RefineMode::ExcelToMarkdown,
             RefineMode::TimestampToDatetime,
@@ -276,10 +272,10 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::RegexUnescape => escape::regex_unescape(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
-        RefineMode::JsonToYaml => json::json_to_yaml(&text),
-        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
         RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
+        RefineMode::JsonToYaml => json::json_to_yaml(&text),
+        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
         RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(&text),
         RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(&text),
