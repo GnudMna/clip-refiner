@@ -73,6 +73,9 @@ pub enum RefineMode {
     /// Markdown形式のテキストをHTML形式へ変換する
     #[value(help = "MarkdownをHTML形式へ変換")]
     MarkdownToHtml,
+    /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
+    #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
+    ExcelToMarkdown,
     /// Unixタイムスタンプを日時文字列へ変換する
     #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
     TimestampToDatetime,
@@ -156,6 +159,7 @@ impl RefineMode {
             RefineMode::YamlToJson => "キー順序不同",
             RefineMode::YamlToJsonPreserveOrder => "キー順序保持",
             RefineMode::MarkdownToHtml => "Markdown→HTML",
+            RefineMode::ExcelToMarkdown => "Excel→Markdown",
             RefineMode::TimestampToDatetime => "Unixタイムスタンプ→日時文字列",
             RefineMode::DatetimeToTimestamp => "日時文字列→Unixタイムスタンプ",
             RefineMode::AddComma => "カンマ追加",
@@ -222,6 +226,7 @@ impl RefineMode {
             RefineMode::YamlToJson,
             RefineMode::YamlToJsonPreserveOrder,
             RefineMode::MarkdownToHtml,
+            RefineMode::ExcelToMarkdown,
             RefineMode::TimestampToDatetime,
             RefineMode::DatetimeToTimestamp,
             RefineMode::AddComma,
@@ -276,6 +281,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
         RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
         RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
+        RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(&text),
         RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(&text),
         RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(&text),
         RefineMode::AddComma => number::add_commas(&text),
@@ -298,7 +304,7 @@ mod tests {
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
-        assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::Normal);
+        assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::UrlActions);
 
         assert_eq!(RefineMode::JsonFormat.label(), "キー順序不同");
         assert_eq!(
@@ -323,7 +329,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLines));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 23);
+        assert_eq!(variants.len(), 24);
     }
 
     #[test]
