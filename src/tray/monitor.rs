@@ -199,12 +199,12 @@ pub fn init_clipboard() -> Result<Clipboard> {
 pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: MonitorMode) {
     #[cfg(windows)]
     match monitor_mode {
-        MonitorMode::Event => menu.interval_submenu.set_enabled(false),
-        MonitorMode::Polling => menu.interval_submenu.set_enabled(true),
+        MonitorMode::Event => menu.interval.main_submenu.set_enabled(false),
+        MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
     }
 
     #[cfg(not(windows))]
     match monitor_mode {
-        MonitorMode::Polling => menu.interval_submenu.set_enabled(true),
+        MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
     }
 }
