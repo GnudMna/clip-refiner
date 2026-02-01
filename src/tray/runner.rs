@@ -129,6 +129,7 @@ fn handle_menu_event(
     } else if let Some((_, mode)) = menu
         .mode_items // 全てのモード関連アイテムをチェーンして検索
         .iter()
+        .chain(menu.url_actions_items.iter())
         .chain(menu.line_actions_items.iter())
         .chain(menu.trim_items.iter())
         .chain(menu.escape_items.iter())
@@ -181,6 +182,7 @@ fn update_refine(
     // すべてのモードアイテムをイテレートして、選択されたモードのチェック状態を更新
     menu.mode_items
         .iter()
+        .chain(menu.url_actions_items.iter())
         .chain(menu.line_actions_items.iter())
         .chain(menu.trim_items.iter())
         .chain(menu.escape_items.iter())

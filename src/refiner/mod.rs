@@ -92,6 +92,8 @@ pub enum RefineMode {
 pub enum RefineCategory {
     /// 通常の単独メニュー
     Normal,
+    /// URL操作サブメニュー内
+    UrlActions,
     /// 行操作サブメニュー内
     LineActions,
     /// トリムサブメニュー内
@@ -149,6 +151,9 @@ impl RefineMode {
     /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
         match self {
+            RefineMode::UrlEncode | RefineMode::UrlDecode | RefineMode::RemoveUtm => {
+                RefineCategory::UrlActions
+            }
             RefineMode::SortLines
             | RefineMode::RemoveEmptyLines
             | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
