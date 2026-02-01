@@ -1,7 +1,9 @@
+pub mod datetime;
+pub mod escape;
 pub mod json;
+pub mod line_actions;
 pub mod markdown;
 pub mod number;
-pub mod sort;
 pub mod trim;
 pub mod url;
 pub mod yaml;
@@ -23,55 +25,112 @@ pub enum RefineMode {
     /// URLから utm_ で始まる計測用パラメータを削除する
     #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
+    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "並び替え")]
+    SortLines,
+    /// 空行を削除する
+    #[value(help = "空行を削除")]
+    RemoveEmptyLines,
+    /// 重複行を削除する
+    #[value(help = "重複行を削除")]
+    RemoveDuplicateLines,
     /// テキスト全体の前後にある空白および改行を削除する
     #[value(help = "改行や空白を整形")]
     Trim,
     /// 行ごとに前後の空白を削除する
     #[value(help = "行単位で改行や空白を整形")]
     TrimLines,
-    /// Markdown形式のテキストをHTML形式へ変換する
-    #[value(help = "MarkdownをHTML形式へ変換")]
-    MarkdownToHtml,
+    /// 文字列をバックスラッシュでエスケープする
+    #[value(help = "文字列をエスケープ")]
+    Escape,
+    /// 文字列のエスケープを解除する
+    #[value(help = "文字列のアンエスケープ")]
+    Unescape,
+    /// 正規表現のメタ文字をエスケープする
+    #[value(help = "正規表現のエスケープ")]
+    RegexEscape,
+    /// 正規表現のエスケープを解除する
+    #[value(help = "正規表現のアンエスケープ")]
+    RegexUnescape,
     /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
     #[value(help = "JSON形式を整形(キー順序不同)")]
     JsonFormat,
     /// JSON形式をインデント整形する（元のキー順序を維持する）
     #[value(help = "JSON形式を整形(キー順序保持)")]
     JsonFormatPreserveOrder,
-    /// JSON形式をYAML形式へ変換する
-    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
-    JsonToYaml,
-    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
-    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
-    JsonToYamlPreserveOrder,
     /// YAML形式をJSON形式へ変換する
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     YamlToJson,
     /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     YamlToJsonPreserveOrder,
+    /// JSON形式をYAML形式へ変換する
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
+    JsonToYaml,
+    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
+    JsonToYamlPreserveOrder,
+    /// Markdown形式のテキストをHTML形式へ変換する
+    #[value(help = "MarkdownをHTML形式へ変換")]
+    MarkdownToHtml,
+    /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
+    #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
+    ExcelToMarkdown,
+    /// Unixタイムスタンプを日時文字列へ変換する
+    #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
+    TimestampToDatetime,
+    /// 日時文字列をUnixタイムスタンプへ変換する
+    #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
+    DatetimeToTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     AddComma,
     /// 数値からカンマを削除する（例: 1,000 -> 1000）
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     RemoveComma,
-    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[value(help = "行単位で並び替え")]
-    SortLines,
 }
 
 /// メニューの階層化に使用するカテゴリ
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum RefineCategory {
     /// 通常の単独メニュー
     Normal,
+    /// URL操作サブメニュー内
+    UrlActions,
+    /// 行操作サブメニュー内
+    LineActions,
+    /// トリムサブメニュー内
+    Trim,
+    /// エスケープサブメニュー内
+    Escape,
     /// JSON整形サブメニュー内
     JsonFormat,
     /// JSON to YAMLサブメニュー内
-    JsonToYaml,
+    ToYaml,
     /// YAML to JSONサブメニュー内
-    YamlToJson,
+    ToJson,
+    /// 日時変換サブメニュー内
+    Datetime,
+    /// 数値変換サブメニュー内
+    Number,
+}
+
+impl RefineCategory {
+    /// カテゴリの表示名を取得する
+    pub fn label(&self) -> &'static str {
+        match self {
+            RefineCategory::Normal => "",
+            RefineCategory::UrlActions => "URL操作",
+            RefineCategory::LineActions => "行操作",
+            RefineCategory::Trim => "トリム",
+            RefineCategory::Escape => "エスケープ",
+            RefineCategory::JsonFormat => "JSON整形",
+            RefineCategory::ToJson => "JSONへ変換",
+            RefineCategory::ToYaml => "YAMLへ変換",
+            RefineCategory::Datetime => "日時変換",
+            RefineCategory::Number => "数値変換",
+        }
+    }
 }
 
 impl RefineMode {
@@ -84,18 +143,27 @@ impl RefineMode {
             RefineMode::UrlEncode => "URLエンコード",
             RefineMode::UrlDecode => "URLデコード",
             RefineMode::RemoveUtm => "UTM除去",
-            RefineMode::Trim => "トリム",
-            RefineMode::TrimLines => "トリム(行単位)",
+            RefineMode::SortLines => "並び替え",
+            RefineMode::RemoveEmptyLines => "空行削除",
+            RefineMode::RemoveDuplicateLines => "重複行削除",
+            RefineMode::Trim => "全体",
+            RefineMode::TrimLines => "行単位",
+            RefineMode::Escape => "エスケープ",
+            RefineMode::Unescape => "アンエスケープ",
+            RefineMode::RegexEscape => "正規表現エスケープ",
+            RefineMode::RegexUnescape => "正規表現アンエスケープ",
+            RefineMode::JsonFormat => "JSON整形(キー順序不同)",
+            RefineMode::JsonFormatPreserveOrder => "JSON整形(キー順序保持)",
+            RefineMode::YamlToJson => "YAML→JSON(キー順序不同)",
+            RefineMode::YamlToJsonPreserveOrder => "YAML→JSON(キー順序保持)",
+            RefineMode::JsonToYaml => "JSON→YAML(キー順序不同)",
+            RefineMode::JsonToYamlPreserveOrder => "JSON→YAML(キー順序保持)",
             RefineMode::MarkdownToHtml => "Markdown→HTML",
-            RefineMode::JsonFormat => "キー順序不同",
-            RefineMode::JsonFormatPreserveOrder => "キー順序保持",
-            RefineMode::JsonToYaml => "キー順序不同",
-            RefineMode::JsonToYamlPreserveOrder => "キー順序保持",
-            RefineMode::YamlToJson => "キー順序不同",
-            RefineMode::YamlToJsonPreserveOrder => "キー順序保持",
+            RefineMode::ExcelToMarkdown => "Excel→Markdown",
+            RefineMode::TimestampToDatetime => "Unixタイムスタンプ→日時文字列",
+            RefineMode::DatetimeToTimestamp => "日時文字列→Unixタイムスタンプ",
             RefineMode::AddComma => "カンマ追加",
             RefineMode::RemoveComma => "カンマ除去",
-            RefineMode::SortLines => "行並び替え",
         }
     }
 
@@ -105,15 +173,26 @@ impl RefineMode {
     /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
         match self {
+            RefineMode::UrlEncode | RefineMode::UrlDecode | RefineMode::RemoveUtm => {
+                RefineCategory::UrlActions
+            }
+            RefineMode::SortLines
+            | RefineMode::RemoveEmptyLines
+            | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
+            RefineMode::Trim | RefineMode::TrimLines => RefineCategory::Trim,
+            RefineMode::Escape
+            | RefineMode::Unescape
+            | RefineMode::RegexEscape
+            | RefineMode::RegexUnescape => RefineCategory::Escape,
             RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
                 RefineCategory::JsonFormat
             }
-            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => {
-                RefineCategory::JsonToYaml
+            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => RefineCategory::ToJson,
+            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => RefineCategory::ToYaml,
+            RefineMode::TimestampToDatetime | RefineMode::DatetimeToTimestamp => {
+                RefineCategory::Datetime
             }
-            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => {
-                RefineCategory::YamlToJson
-            }
+            RefineMode::AddComma | RefineMode::RemoveComma => RefineCategory::Number,
             _ => RefineCategory::Normal,
         }
     }
@@ -127,18 +206,27 @@ impl RefineMode {
             RefineMode::UrlEncode,
             RefineMode::UrlDecode,
             RefineMode::RemoveUtm,
+            RefineMode::SortLines,
+            RefineMode::RemoveEmptyLines,
+            RefineMode::RemoveDuplicateLines,
             RefineMode::Trim,
             RefineMode::TrimLines,
-            RefineMode::MarkdownToHtml,
+            RefineMode::Escape,
+            RefineMode::Unescape,
+            RefineMode::RegexEscape,
+            RefineMode::RegexUnescape,
             RefineMode::JsonFormat,
             RefineMode::JsonFormatPreserveOrder,
-            RefineMode::JsonToYaml,
-            RefineMode::JsonToYamlPreserveOrder,
             RefineMode::YamlToJson,
             RefineMode::YamlToJsonPreserveOrder,
+            RefineMode::JsonToYaml,
+            RefineMode::JsonToYamlPreserveOrder,
+            RefineMode::MarkdownToHtml,
+            RefineMode::ExcelToMarkdown,
+            RefineMode::TimestampToDatetime,
+            RefineMode::DatetimeToTimestamp,
             RefineMode::AddComma,
             RefineMode::RemoveComma,
-            RefineMode::SortLines,
         ]
     }
 }
@@ -173,18 +261,27 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::UrlEncode => url::url_encode(&text),
         RefineMode::UrlDecode => url::url_decode(&text).unwrap_or_else(|_| text.clone()),
         RefineMode::RemoveUtm => url::remove_utm_params(&text),
+        RefineMode::SortLines => line_actions::sort_lines(&text),
+        RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(&text),
+        RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(&text),
         RefineMode::Trim => trim::trim_text(&text),
         RefineMode::TrimLines => trim::trim_lines(&text),
-        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
+        RefineMode::Escape => escape::escape_string(&text),
+        RefineMode::Unescape => escape::unescape_string(&text),
+        RefineMode::RegexEscape => escape::regex_escape(&text),
+        RefineMode::RegexUnescape => escape::regex_unescape(&text),
         RefineMode::JsonFormat => json::format_json(&text),
         RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
-        RefineMode::JsonToYaml => json::json_to_yaml(&text),
-        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
         RefineMode::YamlToJson => yaml::yaml_to_json(&text),
         RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
+        RefineMode::JsonToYaml => json::json_to_yaml(&text),
+        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
+        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
+        RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(&text),
+        RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(&text),
+        RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(&text),
         RefineMode::AddComma => number::add_commas(&text),
         RefineMode::RemoveComma => number::remove_commas(&text),
-        RefineMode::SortLines => sort::sort_lines(&text),
     };
 
     if processed != text {
@@ -203,12 +300,22 @@ mod tests {
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
-        assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::Normal);
+        assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::UrlActions);
 
         assert_eq!(RefineMode::JsonFormat.label(), "キー順序不同");
         assert_eq!(
             RefineMode::JsonFormat.category(),
             RefineCategory::JsonFormat
+        );
+
+        assert_eq!(
+            RefineMode::TimestampToDatetime.label(),
+            "Unixタイムスタンプ→日時文字列"
+        );
+
+        assert_eq!(
+            RefineMode::TimestampToDatetime.category(),
+            RefineCategory::Datetime
         );
     }
 
@@ -217,7 +324,8 @@ mod tests {
         let variants = RefineMode::variants();
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLines));
-        assert_eq!(variants.len(), 15);
+        assert!(variants.contains(&RefineMode::TimestampToDatetime));
+        assert_eq!(variants.len(), 24);
     }
 
     #[test]

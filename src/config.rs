@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 /// クリップボードの監視方式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
-    /// ポーリング方式。一定間隔（interval_ms）ごとにクリップボードの内容を確認します。
-    /// すべてのプラットフォームで動作する最も基本的な方式です。
+    /// 一定間隔でクリップボードの内容を確認するポーリング方式。
+    /// すべてのプラットフォームで動作する基本的な監視モードです。
     Polling,
-    /// イベント方式（Windows専用）。OSからのクリップボード更新通知を受け取り、即座に反応します。
+    /// OSのクリップボード更新イベントを購読する方式（Windows専用）。
     /// 低遅延かつCPU負荷が低いのが特徴です。
     #[cfg(windows)]
     Event,
@@ -34,6 +34,12 @@ pub struct AppConfig {
     /// 使用する監視方式（Polling または Event）
     #[serde(default)]
     pub monitor_mode: MonitorMode,
+    /// 履歴機能が有効かどうか
+    #[serde(default)]
+    pub history_enabled: bool,
+    /// 成功時に通知を表示するかどうか
+    #[serde(default)]
+    pub show_success_notification: bool,
 }
 
 impl Default for AppConfig {
@@ -42,6 +48,8 @@ impl Default for AppConfig {
             mode: RefineMode::UrlDecode,
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
+            history_enabled: false,
+            show_success_notification: false,
         }
     }
 }
@@ -97,9 +105,6 @@ impl AppConfig {
 
     /// 現在の設定をファイルへ保存する
     ///
-    /// # Arguments
-    /// * `&self` - 保存する `AppConfig` インスタンス。
-    ///
     /// # Returns
     /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
@@ -135,6 +140,7 @@ fn get_config_dir() -> Result<PathBuf> {
 
     #[cfg(not(windows))]
     {
+        // XDG Base Directory Specification に従い、~/.config/clip-refiner を使用
         let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
         Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
     }
