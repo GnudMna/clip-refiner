@@ -1,5 +1,3 @@
-use anyhow::{Context, Result};
-use arboard::Clipboard;
 use std::sync::{Arc, atomic::Ordering};
 use std::thread;
 use std::time::Duration;
@@ -8,6 +6,9 @@ use super::state::{AppEvent, AppState};
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::process_clipboard;
+
+use anyhow::{Context, Result};
+use arboard::Clipboard;
 
 /// クリップボード監視スレッドを開始する。
 ///

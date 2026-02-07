@@ -1,13 +1,14 @@
-use anyhow::{Context, Result};
 use std::sync::Mutex;
-use tray_icon::{
-    Icon, TrayIcon, TrayIconBuilder,
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
-};
 
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
+
+use anyhow::{Context, Result};
+use tray_icon::{
+    Icon, TrayIcon, TrayIconBuilder,
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+};
 
 /// 変換モードのカテゴリごとのグループ
 pub struct CategoryGroup {

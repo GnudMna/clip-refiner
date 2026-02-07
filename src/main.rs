@@ -1,4 +1,4 @@
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![cfg_attr(windows, windows_subsystem = "windows")] // Windowsでコンソールを出さないための設定
 
 mod config;
 mod notification;
