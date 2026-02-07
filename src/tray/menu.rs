@@ -178,6 +178,7 @@ impl TrayMenu {
         // 期待されるサブメニューの順序
         let category_order = [
             RefineCategory::UrlActions,
+            RefineCategory::Path,
             RefineCategory::LineActions,
             RefineCategory::Trim,
             RefineCategory::Escape,
