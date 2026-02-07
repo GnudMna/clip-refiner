@@ -4,6 +4,7 @@ pub mod json;
 pub mod line_actions;
 pub mod markdown;
 pub mod number;
+pub mod path;
 pub mod trim;
 pub mod url;
 pub mod yaml;
@@ -25,6 +26,18 @@ pub enum RefineMode {
     /// URLから utm_ で始まる計測用パラメータを削除する
     #[value(help = "UTMパラメータを削除")]
     RemoveUtm,
+    /// パスからベースネームを抽出する
+    #[value(help = "パスからベースネームを抽出")]
+    ExtractBasename,
+    /// パスからベースネームを抽出しダブルクォーテーションで囲む
+    #[value(help = "パスからベースネームを抽出(引用符付き)")]
+    ExtractBasenameQuoted,
+    /// パスの前後にダブルクォーテーションを付与する
+    #[value(help = "パスに引用符を付与")]
+    AddPathQuotes,
+    /// パスの前後にあるダブルクォーテーションを削除する
+    #[value(help = "パスの引用符を削除")]
+    RemovePathQuotes,
     /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
     #[value(help = "並び替え")]
     SortLines,
@@ -97,6 +110,8 @@ pub enum RefineCategory {
     Normal,
     /// URL操作サブメニュー内
     UrlActions,
+    /// パス操作サブメニュー内
+    Path,
     /// 行操作サブメニュー内
     LineActions,
     /// トリムサブメニュー内
@@ -121,6 +136,7 @@ impl RefineCategory {
         match self {
             RefineCategory::Normal => "",
             RefineCategory::UrlActions => "URL操作",
+            RefineCategory::Path => "パス操作",
             RefineCategory::LineActions => "行操作",
             RefineCategory::Trim => "トリム",
             RefineCategory::Escape => "エスケープ",
@@ -143,6 +159,10 @@ impl RefineMode {
             RefineMode::UrlEncode => "URLエンコード",
             RefineMode::UrlDecode => "URLデコード",
             RefineMode::RemoveUtm => "UTM除去",
+            RefineMode::ExtractBasename => "ベースネーム抽出",
+            RefineMode::ExtractBasenameQuoted => "ベースネーム抽出(引用符付)",
+            RefineMode::AddPathQuotes => "引用符を付与",
+            RefineMode::RemovePathQuotes => "引用符を削除",
             RefineMode::SortLines => "並び替え",
             RefineMode::RemoveEmptyLines => "空行削除",
             RefineMode::RemoveDuplicateLines => "重複行削除",
@@ -176,6 +196,10 @@ impl RefineMode {
             RefineMode::UrlEncode | RefineMode::UrlDecode | RefineMode::RemoveUtm => {
                 RefineCategory::UrlActions
             }
+            RefineMode::ExtractBasename
+            | RefineMode::ExtractBasenameQuoted
+            | RefineMode::AddPathQuotes
+            | RefineMode::RemovePathQuotes => RefineCategory::Path,
             RefineMode::SortLines
             | RefineMode::RemoveEmptyLines
             | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
@@ -206,6 +230,10 @@ impl RefineMode {
             RefineMode::UrlEncode,
             RefineMode::UrlDecode,
             RefineMode::RemoveUtm,
+            RefineMode::ExtractBasename,
+            RefineMode::ExtractBasenameQuoted,
+            RefineMode::AddPathQuotes,
+            RefineMode::RemovePathQuotes,
             RefineMode::SortLines,
             RefineMode::RemoveEmptyLines,
             RefineMode::RemoveDuplicateLines,
@@ -261,6 +289,16 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         RefineMode::UrlEncode => url::url_encode(&text),
         RefineMode::UrlDecode => url::url_decode(&text).unwrap_or_else(|_| text.clone()),
         RefineMode::RemoveUtm => url::remove_utm_params(&text),
+        RefineMode::ExtractBasename => {
+            path::extract_basename(&text).unwrap_or_else(|| text.clone())
+        }
+        RefineMode::ExtractBasenameQuoted => {
+            path::extract_basename_quoted(&text).unwrap_or_else(|| text.clone())
+        }
+        RefineMode::AddPathQuotes => path::add_path_quotes(&text).unwrap_or_else(|| text.clone()),
+        RefineMode::RemovePathQuotes => {
+            path::remove_path_quotes(&text).unwrap_or_else(|| text.clone())
+        }
         RefineMode::SortLines => line_actions::sort_lines(&text),
         RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(&text),
         RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(&text),
@@ -302,7 +340,7 @@ mod tests {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
         assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::UrlActions);
 
-        assert_eq!(RefineMode::JsonFormat.label(), "キー順序不同");
+        assert_eq!(RefineMode::JsonFormat.label(), "JSON整形(キー順序不同)");
         assert_eq!(
             RefineMode::JsonFormat.category(),
             RefineCategory::JsonFormat
@@ -325,7 +363,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLines));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 24);
+        assert_eq!(variants.len(), 28);
     }
 
     #[test]
