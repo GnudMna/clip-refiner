@@ -5,9 +5,7 @@ use crate::notification;
 use crate::refiner::{RefineMode, process_clipboard};
 
 use super::menu::TrayMenu;
-use super::monitor::{
-    init_clipboard, show_process_notification, spawn_monitor_thread, update_monitor_mode_impl,
-};
+use super::monitor::{init_clipboard, spawn_monitor_thread, update_monitor_mode_impl};
 use super::state::{AppEvent, AppState, LockExt};
 
 use anyhow::Result;
@@ -116,22 +114,23 @@ fn handle_menu_event(
         match Clipboard::new() {
             Ok(mut cb) => {
                 if let Err(e) = cb.set_text(text.clone()) {
-                    notification::error::show_anyhow_error(
+                    notification::show_anyhow_error(
                         "クリップボード設定エラー",
                         &anyhow::anyhow!(e),
                     );
                 } else {
                     state.set_last_processed_text(text.clone());
-                    notification::success::show_success_debug_notification(
-                        "履歴から復元",
-                        "クリップボードにコピーしました",
-                    );
+                    if state.show_success_notification.load(Ordering::Relaxed) {
+                        notification::show_simple_notification(
+                            "履歴から復元",
+                            "クリップボードにコピーしました",
+                        );
+                    }
                 }
             }
-            Err(e) => notification::error::show_anyhow_error(
-                "クリップボード初期化エラー",
-                &anyhow::anyhow!(e),
-            ),
+            Err(e) => {
+                notification::show_anyhow_error("クリップボード初期化エラー", &anyhow::anyhow!(e))
+            }
         }
     } else if let Some((_, mode)) = menu
         .refine
@@ -188,7 +187,9 @@ fn update_refine(
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
         state.set_last_processed_text(processed.clone());
-        show_process_notification(mode, &processed);
+        if state.show_success_notification.load(Ordering::Relaxed) {
+            notification::show_process_notification(mode, &processed);
+        }
     }
 }
 
