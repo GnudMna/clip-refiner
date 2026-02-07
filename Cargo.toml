@@ -26,6 +26,7 @@ single-instance = "0.3.3"
 tao = "0.34.5"
 tray-icon = "0.21.3"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
+wry = "0.47.0"
 
 [build-dependencies]
 winres = "0.1"

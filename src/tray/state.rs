@@ -11,6 +11,10 @@ use tao::event_loop::EventLoopProxy;
 /// アプリケーション内でのカスタムイベント
 #[derive(Debug, Clone, Copy)]
 pub enum AppEvent {
+    /// モード変更要求
+    RequestModeChange(RefineMode),
+    /// セレクターを閉じる
+    HideSelector,
     /// 履歴メニューの更新要求
     RefreshHistory,
     /// ホットキーイベント

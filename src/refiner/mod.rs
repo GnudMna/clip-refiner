@@ -167,8 +167,8 @@ impl RefineMode {
             RefineMode::SortLines => "並び替え",
             RefineMode::RemoveEmptyLines => "空行削除",
             RefineMode::RemoveDuplicateLines => "重複行削除",
-            RefineMode::Trim => "全体",
-            RefineMode::TrimLines => "行単位",
+            RefineMode::Trim => "全体をトリム",
+            RefineMode::TrimLines => "行単位でトリム",
             RefineMode::Escape => "エスケープ",
             RefineMode::Unescape => "アンエスケープ",
             RefineMode::RegexEscape => "正規表現エスケープ",
@@ -257,6 +257,21 @@ impl RefineMode {
             RefineMode::AddComma,
             RefineMode::RemoveComma,
         ]
+    }
+
+    /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
+    pub fn to_json_list() -> String {
+        let list: Vec<serde_json::Value> = Self::variants()
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m,
+                    "label": m.label(),
+                    "category": m.category().label(),
+                })
+            })
+            .collect();
+        serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
     }
 }
 
