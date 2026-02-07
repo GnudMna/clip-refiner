@@ -272,6 +272,61 @@ pub enum OrderedValue {
     Object(IndexMap<String, OrderedValue>),
 }
 
+/// クリップボードのテキストを加工するトレイト
+pub trait Refiner {
+    /// テキストを加工する
+    ///
+    /// # Arguments
+    /// * `text` - 加工前のテキスト
+    ///
+    /// # Returns
+    /// * `String` - 加工後のテキスト
+    fn refine(&self, text: &str) -> String;
+}
+
+impl Refiner for RefineMode {
+    fn refine(&self, text: &str) -> String {
+        match self {
+            RefineMode::UrlEncode => url::url_encode(text),
+            RefineMode::UrlDecode => url::url_decode(text).unwrap_or_else(|_| text.to_string()),
+            RefineMode::RemoveUtm => url::remove_utm_params(text),
+            RefineMode::ExtractBasename => {
+                path::extract_basename(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::ExtractBasenameQuoted => {
+                path::extract_basename_quoted(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::AddPathQuotes => {
+                path::add_path_quotes(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::RemovePathQuotes => {
+                path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::SortLines => line_actions::sort_lines(text),
+            RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
+            RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(text),
+            RefineMode::Trim => trim::trim_text(text),
+            RefineMode::TrimLines => trim::trim_lines(text),
+            RefineMode::Escape => escape::escape_string(text),
+            RefineMode::Unescape => escape::unescape_string(text),
+            RefineMode::RegexEscape => escape::regex_escape(text),
+            RefineMode::RegexUnescape => escape::regex_unescape(text),
+            RefineMode::JsonFormat => json::format_json(text),
+            RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(text),
+            RefineMode::YamlToJson => yaml::yaml_to_json(text),
+            RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(text),
+            RefineMode::JsonToYaml => json::json_to_yaml(text),
+            RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(text),
+            RefineMode::MarkdownToHtml => markdown::markdown_to_html(text),
+            RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(text),
+            RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(text),
+            RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
+            RefineMode::AddComma => number::add_commas(text),
+            RefineMode::RemoveComma => number::remove_commas(text),
+        }
+    }
+}
+
 /// クリップボードの内容を変換
 ///
 /// # Arguments
@@ -279,49 +334,14 @@ pub enum OrderedValue {
 /// * `mode` - 適用する `RefineMode`。
 ///
 /// # Returns
-/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を、加工されなかった場合（変更なし、またはエラー）は `None` を返す。
+/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返す。加工されなかった場合は `None` を返す。
 pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
     if text.is_empty() {
         return None;
     }
 
-    let processed = match mode {
-        RefineMode::UrlEncode => url::url_encode(&text),
-        RefineMode::UrlDecode => url::url_decode(&text).unwrap_or_else(|_| text.clone()),
-        RefineMode::RemoveUtm => url::remove_utm_params(&text),
-        RefineMode::ExtractBasename => {
-            path::extract_basename(&text).unwrap_or_else(|| text.clone())
-        }
-        RefineMode::ExtractBasenameQuoted => {
-            path::extract_basename_quoted(&text).unwrap_or_else(|| text.clone())
-        }
-        RefineMode::AddPathQuotes => path::add_path_quotes(&text).unwrap_or_else(|| text.clone()),
-        RefineMode::RemovePathQuotes => {
-            path::remove_path_quotes(&text).unwrap_or_else(|| text.clone())
-        }
-        RefineMode::SortLines => line_actions::sort_lines(&text),
-        RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(&text),
-        RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(&text),
-        RefineMode::Trim => trim::trim_text(&text),
-        RefineMode::TrimLines => trim::trim_lines(&text),
-        RefineMode::Escape => escape::escape_string(&text),
-        RefineMode::Unescape => escape::unescape_string(&text),
-        RefineMode::RegexEscape => escape::regex_escape(&text),
-        RefineMode::RegexUnescape => escape::regex_unescape(&text),
-        RefineMode::JsonFormat => json::format_json(&text),
-        RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(&text),
-        RefineMode::YamlToJson => yaml::yaml_to_json(&text),
-        RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(&text),
-        RefineMode::JsonToYaml => json::json_to_yaml(&text),
-        RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(&text),
-        RefineMode::MarkdownToHtml => markdown::markdown_to_html(&text),
-        RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(&text),
-        RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(&text),
-        RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(&text),
-        RefineMode::AddComma => number::add_commas(&text),
-        RefineMode::RemoveComma => number::remove_commas(&text),
-    };
+    let processed = mode.refine(&text);
 
     if processed != text {
         let _ = clipboard.set_text(processed.clone());
