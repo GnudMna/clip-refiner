@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::consts;
 use crate::notification::show_simple_notification;
 use crate::refiner::RefineMode;
 
@@ -135,14 +136,16 @@ fn get_config_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {
         let appdata = std::env::var("APPDATA").context("APPDATA環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(appdata).join("ClipRefiner"))
+        Ok(PathBuf::from(appdata).join(consts::APP_NAME))
     }
 
     #[cfg(not(windows))]
     {
         // XDG Base Directory Specification に従い、~/.config/clip-refiner を使用
         let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
+        Ok(PathBuf::from(home)
+            .join(".config")
+            .join(consts::APP_NAME_KEBAB))
     }
 }
 

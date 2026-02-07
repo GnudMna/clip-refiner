@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::consts;
 use crate::refiner::RefineMode;
 use crate::tray::state::AppEvent;
 
@@ -35,7 +36,7 @@ impl SelectorWindow {
 
         let proxy_clone = proxy.clone();
 
-        let data_dir = std::env::temp_dir().join("ClipRefiner-WebView2");
+        let data_dir = std::env::temp_dir().join(format!("{}-WebView2", consts::APP_NAME));
 
         let mut context = WebContext::new(Some(data_dir));
 
@@ -116,7 +117,7 @@ pub fn init_selector(
     use tao::window::WindowBuilder;
 
     let window = WindowBuilder::new()
-        .with_title("ClipRefiner Quick Selector")
+        .with_title(format!("{} Quick Selector", consts::APP_NAME))
         .with_always_on_top(true)
         .with_decorations(false)
         .with_transparent(true)

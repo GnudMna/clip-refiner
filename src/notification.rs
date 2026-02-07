@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::consts;
 use crate::refiner::RefineMode;
 
 use notify_rust::Notification;
@@ -11,7 +12,7 @@ use notify_rust::Notification;
 /// * `body` - 通知の本文。
 fn show_notification(summary: &str, body: &str) {
     let _ = Notification::new()
-        .summary(&format!("{} - {}", env!("CARGO_PKG_NAME"), summary))
+        .summary(&format!("{} - {}", consts::APP_NAME, summary))
         .body(body)
         .timeout(Duration::from_secs(3))
         .show();
