@@ -9,6 +9,10 @@ use crate::refiner::{RefineMode, process_clipboard};
 
 use anyhow::Result;
 use arboard::Clipboard;
+use global_hotkey::{
+    GlobalHotKeyEvent, GlobalHotKeyManager,
+    hotkey::{Code, HotKey, Modifiers},
+};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 #[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
@@ -24,6 +28,31 @@ pub fn run_loop() -> Result<()> {
     let proxy = event_loop.create_proxy();
     let state = Arc::new(AppState::new(proxy.clone()));
     let menu = TrayMenu::build(&state)?;
+
+    // グローバルショートカットの初期化
+    let hotkey_manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
+    let notification_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN);
+    let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
+    let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
+
+    hotkey_manager
+        .register(notification_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    hotkey_manager
+        .register(pause_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    hotkey_manager
+        .register(quit_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    // ホットキーイベントをイベントループに転送するスレッドを開始
+    let hotkey_proxy = proxy.clone();
+    std::thread::spawn(move || {
+        let receiver = GlobalHotKeyEvent::receiver();
+        while let Ok(event) = receiver.recv() {
+            let _ = hotkey_proxy.send_event(AppEvent::Hotkey(event));
+        }
+    });
 
     // 初期状態で履歴メニューを更新
     menu.refresh_history(&state)?;
@@ -42,6 +71,42 @@ pub fn run_loop() -> Result<()> {
         match event {
             tao::event::Event::UserEvent(AppEvent::RefreshHistory) => {
                 let _ = menu.refresh_history(&state);
+            }
+            tao::event::Event::UserEvent(AppEvent::Hotkey(event)) => {
+                if event.state == global_hotkey::HotKeyState::Pressed {
+                    if event.id == notification_hotkey.id() {
+                        let new_val = !state.show_success_notification.load(Ordering::Relaxed);
+                        state
+                            .show_success_notification
+                            .store(new_val, Ordering::Relaxed);
+                        menu.show_success_notification_item.set_checked(new_val);
+                        state.save_config();
+                        notification::show_simple_notification(
+                            "ショートカット",
+                            if new_val {
+                                "成功通知を有効にしました"
+                            } else {
+                                "成功通知を無効にしました"
+                            },
+                        );
+                    } else if event.id == pause_hotkey.id() {
+                        let new_paused = !state.paused.load(Ordering::Relaxed);
+                        state.paused.store(new_paused, Ordering::Relaxed);
+                        menu.pause_item.set_checked(new_paused);
+                        if state.show_success_notification.load(Ordering::Relaxed) {
+                            notification::show_simple_notification(
+                                "ショートカット",
+                                if new_paused {
+                                    "一時停止しました"
+                                } else {
+                                    "再開しました"
+                                },
+                            );
+                        }
+                    } else if event.id == quit_hotkey.id() {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
             }
             _ => {}
         }
@@ -103,6 +168,11 @@ fn handle_menu_event(
             .show_success_notification
             .store(enabled, Ordering::Relaxed);
         state.save_config();
+    } else if event.id == menu.shortcut_list_item.id() {
+        notification::show_simple_notification(
+            "ショートカット一覧",
+            "Alt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
+        );
     } else if let Some((_, text)) = menu
         .history
         .records
