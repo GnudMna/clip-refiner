@@ -5,12 +5,13 @@ use crate::tray::state::AppEvent;
 
 use tao::event_loop::EventLoopProxy;
 use tao::window::Window;
-use wry::WebViewBuilder;
+use wry::{WebContext, WebViewBuilder};
 
 /// クイックセレクター（コマンドパレット）のウィンドウを管理する構造体。
 pub struct SelectorWindow {
     webview: wry::WebView,
     window: Arc<Window>,
+    _context: wry::WebContext,
 }
 
 impl SelectorWindow {
@@ -34,7 +35,11 @@ impl SelectorWindow {
 
         let proxy_clone = proxy.clone();
 
-        let webview = WebViewBuilder::new()
+        let data_dir = std::env::temp_dir().join("ClipRefiner-WebView2");
+
+        let mut context = WebContext::new(Some(data_dir));
+
+        let webview = WebViewBuilder::with_web_context(&mut context)
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
             .with_html(html)
@@ -54,7 +59,11 @@ impl SelectorWindow {
             })
             .build(&window)?;
 
-        Ok(Self { webview, window })
+        Ok(Self {
+            webview,
+            window,
+            _context: context,
+        })
     }
 
     /// セレクターを表示し、現在のモードを反映させる。
