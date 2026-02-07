@@ -8,7 +8,7 @@ use std::path::Path;
 /// # Returns
 /// * `Option<String>` - 少なくとも1行でベースネームが抽出できた場合は `Some(加工後テキスト)` を返す
 pub fn extract_basename(text: &str) -> Option<String> {
-    process_lines(text, |line| {
+    super::utils::process_lines(text, |line| {
         extract_single_basename(line).map(|basename| (basename, true))
     })
 }
@@ -21,7 +21,7 @@ pub fn extract_basename(text: &str) -> Option<String> {
 /// # Returns
 /// * `Option<String>` - 少なくとも1行でベースネームが抽出できた場合は `Some(加工後テキスト)` を返す
 pub fn extract_basename_quoted(text: &str) -> Option<String> {
-    process_lines(text, |line| {
+    super::utils::process_lines(text, |line| {
         extract_single_basename(line).map(|basename| (format!("\"{}\"", basename), true))
     })
 }
@@ -34,7 +34,7 @@ pub fn extract_basename_quoted(text: &str) -> Option<String> {
 /// # Returns
 /// * `Option<String>` - 少なくとも1行で引用符が削除できた場合は `Some(加工後テキスト)` を返す
 pub fn remove_path_quotes(text: &str) -> Option<String> {
-    process_lines(text, |line| {
+    super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
         if trimmed.starts_with('"') && trimmed.ends_with('"') {
             let path_str = &trimmed[1..trimmed.len() - 1];
@@ -54,7 +54,7 @@ pub fn remove_path_quotes(text: &str) -> Option<String> {
 /// # Returns
 /// * `Option<String>` - 少なくとも1行で引用符が付与できた場合は `Some(加工後テキスト)` を返す
 pub fn add_path_quotes(text: &str) -> Option<String> {
-    process_lines(text, |line| {
+    super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
         if !trimmed.is_empty() && !(trimmed.starts_with('"') && trimmed.ends_with('"')) {
             if is_path_like_raw(trimmed) {
@@ -65,44 +65,8 @@ pub fn add_path_quotes(text: &str) -> Option<String> {
     })
 }
 
-/// 文字列を改行コードで分割し、各行に対して処理を行う
-///
-/// # Arguments
-/// * `text` - 処理対象の文字列
-/// * `f` - 各行に対する処理。処理結果の文字列と、変更があったかどうかのフラグを返す
-///
-/// # Returns
-/// * `Option<String>` - 少なくとも1行で変更があった場合は `Some(結合後のテキスト)` を返す
-fn process_lines<F>(text: &str, f: F) -> Option<String>
-where
-    F: Fn(&str) -> Option<(String, bool)>,
-{
-    if text.is_empty() {
-        return None;
-    }
-
-    let line_ending = if text.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut changed = false;
-
-    let processed_lines: Vec<String> = text
-        .split(line_ending)
-        .map(|line| {
-            if let Some((processed, line_changed)) = f(line) {
-                if line_changed {
-                    changed = true;
-                }
-                processed
-            } else {
-                line.to_string()
-            }
-        })
-        .collect();
-
-    if changed {
-        Some(processed_lines.join(line_ending))
-    } else {
-        None
-    }
+fn is_path_like_raw(text: &str) -> bool {
+    text.contains('/') || text.contains('\\') || text.contains(':')
 }
 
 /// 1つの行からベースネームを抽出する
@@ -129,17 +93,6 @@ fn extract_single_basename(line: &str) -> Option<String> {
     Path::new(path_str)
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
-}
-
-/// 文字列がパスらしい（セパレータやドライブレターを含む）か判定する
-///
-/// # Arguments
-/// * `text` - 判定対象の文字列
-///
-/// # Returns
-/// * `bool` - パスらしい場合は `true`
-fn is_path_like_raw(text: &str) -> bool {
-    text.contains('/') || text.contains('\\') || text.contains(':')
 }
 
 #[cfg(test)]
