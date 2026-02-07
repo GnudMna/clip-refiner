@@ -2,10 +2,11 @@ use std::sync::{
     Mutex, MutexGuard,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
-use tao::event_loop::EventLoopProxy;
 
 use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::RefineMode;
+
+use tao::event_loop::EventLoopProxy;
 
 /// アプリケーション内でのカスタムイベント
 #[derive(Debug, Clone, Copy)]

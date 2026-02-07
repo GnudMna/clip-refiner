@@ -1,12 +1,11 @@
 use std::sync::{Arc, atomic::Ordering};
 
-use crate::config::MonitorMode;
-use crate::notification;
-use crate::refiner::{RefineMode, process_clipboard};
-
 use super::menu::TrayMenu;
 use super::monitor::{init_clipboard, spawn_monitor_thread, update_monitor_mode_impl};
 use super::state::{AppEvent, AppState, LockExt};
+use crate::config::MonitorMode;
+use crate::notification;
+use crate::refiner::{RefineMode, process_clipboard};
 
 use anyhow::Result;
 use arboard::Clipboard;

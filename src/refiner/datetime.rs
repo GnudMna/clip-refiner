@@ -64,7 +64,8 @@ mod tests {
     #[test]
     fn test_datetime_string_to_timestamp_success() {
         // JSTでの`2023-01-01 09:00:00`のタイムスタンプ (例)
-        let naive_dt = NaiveDateTime::parse_from_str("2023-01-01 09:00:00", DATETIME_FORMAT).unwrap();
+        let naive_dt =
+            NaiveDateTime::parse_from_str("2023-01-01 09:00:00", DATETIME_FORMAT).unwrap();
         let local_dt = Local.from_local_datetime(&naive_dt).single().unwrap();
         let expected_timestamp = local_dt.timestamp().to_string();
 

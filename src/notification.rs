@@ -1,6 +1,8 @@
-use crate::refiner::RefineMode;
-use notify_rust::Notification;
 use std::time::Duration;
+
+use crate::refiner::RefineMode;
+
+use notify_rust::Notification;
 
 /// 内部共通の通知表示関数
 ///
