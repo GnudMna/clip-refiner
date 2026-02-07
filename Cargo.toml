@@ -1,5 +1,5 @@
 [package]
-name = "ClipRefiner"
+name = "clip-refiner"
 version = "0.2.1"
 edition = "2024"
 authors = ["y_hirata"]
@@ -30,3 +30,7 @@ wry = "0.47.0"
 
 [build-dependencies]
 winres = "0.1"
+
+[[bin]]
+name = "ClipRefiner"
+path = "src/main.rs"
