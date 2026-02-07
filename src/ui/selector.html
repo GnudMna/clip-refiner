@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        __SELECTOR_CSS__
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="search-box">
+            <input type="text" id="input" placeholder="モードを検索..." autocomplete="off">
+        </div>
+        <div id="results"></div>
+        <div id="footer">
+            <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> 決定</span>
+            <span>閉じる: <kbd>Esc</kbd></span>
+        </div>
+    </div>
+
+    <script>
+        const modes = __MODES_JSON__;
+        const input = document.getElementById('input');
+        const results = document.getElementById('results');
+
+        let currentModeId = null;
+        let filtered = [...modes];
+        let selectedIndex = 0;
+
+        function render() {
+            results.innerHTML = '';
+            filtered.forEach((mode, index) => {
+                const isCurrent = mode.id === currentModeId;
+                const div = document.createElement('div');
+                div.className = 'item' +
+                    (index === selectedIndex ? ' selected' : '') +
+                    (isCurrent ? ' current' : '');
+
+                div.innerHTML = `
+                    <div class="mode-info">
+                        <span class="label">${mode.label}</span>
+                        ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
+                    </div>
+                    <span class="category">${mode.category}</span>
+                `;
+                div.onclick = () => select(mode.id);
+                results.appendChild(div);
+
+                if (index === selectedIndex) {
+                    div.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+
+        function filter() {
+            const query = input.value.toLowerCase();
+            filtered = modes.filter(m =>
+                m.label.toLowerCase().includes(query) ||
+                m.category.toLowerCase().includes(query)
+            );
+            selectedIndex = 0;
+            render();
+        }
+
+        function select(id) {
+            window.ipc.postMessage('select:' + id);
+        }
+
+        function close() {
+            window.ipc.postMessage('close');
+        }
+
+        input.oninput = filter;
+
+        window.onkeydown = (e) => {
+            if (e.key === 'ArrowDown') {
+                selectedIndex = (selectedIndex + 1) % filtered.length;
+                render();
+                e.preventDefault();
+            } else if (e.key === 'ArrowUp') {
+                selectedIndex = (selectedIndex - 1 + filtered.length) % filtered.length;
+                render();
+                e.preventDefault();
+            } else if (e.key === 'Enter') {
+                if (filtered[selectedIndex]) {
+                    select(filtered[selectedIndex].id);
+                }
+            } else if (e.key === 'Escape') {
+                close();
+            }
+        };
+
+        // UI表示時にフォーカスを当てる
+        window.focusInput = (modeId) => {
+            currentModeId = modeId;
+            input.value = '';
+            filter();
+
+            // 現在のモードがリストにあれば、それを初期選択状態にする
+            const index = filtered.findIndex(m => m.id === currentModeId);
+            if (index !== -1) {
+                selectedIndex = index;
+                render();
+            }
+
+            input.focus();
+        };
+
+        render();
+    </script>
+</body>
+
+</html>

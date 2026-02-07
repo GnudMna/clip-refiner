@@ -2,6 +2,7 @@ use std::sync::{Arc, atomic::Ordering};
 
 use super::menu::TrayMenu;
 use super::monitor::{init_clipboard, spawn_monitor_thread, update_monitor_mode_impl};
+use super::selector::init_selector;
 use super::state::{AppEvent, AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::notification;
@@ -31,10 +32,14 @@ pub fn run_loop() -> Result<()> {
 
     // グローバルショートカットの初期化
     let hotkey_manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
+    let selector_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS);
     let notification_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN);
     let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
     let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
 
+    hotkey_manager
+        .register(selector_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
     hotkey_manager
         .register(notification_hotkey)
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -54,6 +59,9 @@ pub fn run_loop() -> Result<()> {
         }
     });
 
+    // クイックセレクターの初期化
+    let selector = init_selector(&event_loop, proxy.clone())?;
+
     // 初期状態で履歴メニューを更新
     menu.refresh_history(&state)?;
 
@@ -63,18 +71,33 @@ pub fn run_loop() -> Result<()> {
 
     let menu_channel = MenuEvent::receiver();
     let mut clipboard = init_clipboard()?;
+    let mut last_selector_show = std::time::Instant::now();
 
     // イベントループの実行
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         match event {
+            tao::event::Event::UserEvent(AppEvent::RequestModeChange(mode)) => {
+                selector.hide();
+                update_refine(&state, &menu, &mut clipboard, mode);
+            }
+            tao::event::Event::UserEvent(AppEvent::HideSelector) => {
+                selector.hide();
+            }
             tao::event::Event::UserEvent(AppEvent::RefreshHistory) => {
                 let _ = menu.refresh_history(&state);
             }
             tao::event::Event::UserEvent(AppEvent::Hotkey(event)) => {
                 if event.state == global_hotkey::HotKeyState::Pressed {
-                    if event.id == notification_hotkey.id() {
+                    if event.id == selector_hotkey.id() {
+                        if selector.is_visible() {
+                            selector.hide();
+                        } else {
+                            last_selector_show = std::time::Instant::now();
+                            selector.show(state.get_mode());
+                        }
+                    } else if event.id == notification_hotkey.id() {
                         let new_val = !state.show_success_notification.load(Ordering::Relaxed);
                         state
                             .show_success_notification
@@ -108,6 +131,19 @@ pub fn run_loop() -> Result<()> {
                     }
                 }
             }
+            tao::event::Event::WindowEvent {
+                window_id, event, ..
+            } => match event {
+                tao::event::WindowEvent::Focused(focused) => {
+                    if !focused && window_id == selector.id() && selector.is_visible() {
+                        // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
+                        if last_selector_show.elapsed().as_millis() > 200 {
+                            selector.hide();
+                        }
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
 
@@ -171,7 +207,7 @@ fn handle_menu_event(
     } else if event.id == menu.shortcut_list_item.id() {
         notification::show_simple_notification(
             "ショートカット一覧",
-            "Alt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
+            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
         );
     } else if let Some((_, text)) = menu
         .history
