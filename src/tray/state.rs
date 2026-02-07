@@ -13,6 +13,8 @@ use tao::event_loop::EventLoopProxy;
 pub enum AppEvent {
     /// 履歴メニューの更新要求
     RefreshHistory,
+    /// ホットキーイベント
+    Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
 
 /// 履歴の最大保持数
