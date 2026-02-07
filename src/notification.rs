@@ -11,7 +11,7 @@ use notify_rust::Notification;
 /// * `body` - 通知の本文。
 fn show_notification(summary: &str, body: &str) {
     let _ = Notification::new()
-        .summary(&format!("ClipRefiner - {}", summary))
+        .summary(&format!("{} - {}", env!("CARGO_PKG_NAME"), summary))
         .body(body)
         .timeout(Duration::from_secs(3))
         .show();
