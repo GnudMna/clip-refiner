@@ -7,6 +7,7 @@ pub mod number;
 pub mod path;
 pub mod trim;
 pub mod url;
+pub mod utils;
 pub mod yaml;
 
 use arboard::Clipboard;

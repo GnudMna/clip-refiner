@@ -12,7 +12,7 @@ pub fn sort_lines(text: &str) -> String {
         return String::new();
     }
 
-    let line_ending = detect_line_ending(text);
+    let line_ending = super::utils::detect_line_ending(text);
 
     if is_likely_csv(text) {
         sort_csv_records(text, line_ending)
@@ -33,7 +33,7 @@ pub fn remove_empty_lines(text: &str) -> String {
         return String::new();
     }
 
-    let line_ending = detect_line_ending(text);
+    let line_ending = super::utils::detect_line_ending(text);
     let lines: Vec<&str> = text
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -53,7 +53,7 @@ pub fn remove_duplicate_lines(text: &str) -> String {
         return String::new();
     }
 
-    let line_ending = detect_line_ending(text);
+    let line_ending = super::utils::detect_line_ending(text);
     let mut seen = std::collections::HashSet::new();
     let mut lines = Vec::new();
 
@@ -64,17 +64,6 @@ pub fn remove_duplicate_lines(text: &str) -> String {
     }
 
     lines.join(line_ending)
-}
-
-/// 改行コードを判定する
-///
-/// # Arguments
-/// * `text` - 判定対象のテキスト。
-///
-/// # Returns
-/// * `&str` - 検出された改行コード（"\r\n" または "\n"）。
-fn detect_line_ending(text: &str) -> &str {
-    if text.contains("\r\n") { "\r\n" } else { "\n" }
 }
 
 /// CSVである可能性が高いか判定する
