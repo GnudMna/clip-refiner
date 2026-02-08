@@ -40,7 +40,7 @@ impl SelectorWindow {
 
         let mut context = WebContext::new(Some(data_dir));
 
-        let webview = WebViewBuilder::with_web_context(&mut context)
+        let webview = WebViewBuilder::new_with_web_context(&mut context)
             .with_transparent(true)
             .with_background_color((0, 0, 0, 0))
             .with_html(html)
