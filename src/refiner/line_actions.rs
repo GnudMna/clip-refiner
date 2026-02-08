@@ -4,10 +4,11 @@ use csv::{ReaderBuilder, WriterBuilder};
 ///
 /// # Arguments
 /// * `text` - 並び替える対象のテキスト。
+/// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
-/// * `String` - 並び替え後ののテキスト。
-pub fn sort_lines(text: &str) -> String {
+/// * `String` - 並び替え後のテキスト。
+pub fn sort_lines(text: &str, descending: bool) -> String {
     if text.is_empty() {
         return String::new();
     }
@@ -15,9 +16,9 @@ pub fn sort_lines(text: &str) -> String {
     let line_ending = super::utils::detect_line_ending(text);
 
     if is_likely_csv(text) {
-        sort_csv_records(text, line_ending)
+        sort_csv_records(text, line_ending, descending)
     } else {
-        sort_plain_lines(text, line_ending)
+        sort_plain_lines(text, line_ending, descending)
     }
 }
 
@@ -97,10 +98,11 @@ fn is_likely_csv(text: &str) -> bool {
 /// # Arguments
 /// * `text` - 並び替える対象のCSVテキスト。
 /// * `line_ending` - 使用する改行コード。
+/// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
 /// * `String` - レコード単位で並び替えられたCSVテキスト。
-fn sort_csv_records(text: &str, line_ending: &str) -> String {
+fn sort_csv_records(text: &str, line_ending: &str, descending: bool) -> String {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
         .from_reader(text.as_bytes());
@@ -115,7 +117,11 @@ fn sort_csv_records(text: &str, line_ending: &str) -> String {
     records.sort_by(|a, b| {
         let sa = a.join(",");
         let sb = b.join(",");
-        sa.to_lowercase().cmp(&sb.to_lowercase())
+        if descending {
+            sb.to_lowercase().cmp(&sa.to_lowercase())
+        } else {
+            sa.to_lowercase().cmp(&sb.to_lowercase())
+        }
     });
 
     let mut wtr = WriterBuilder::new()
@@ -139,12 +145,17 @@ fn sort_csv_records(text: &str, line_ending: &str) -> String {
 /// # Arguments
 /// * `text` - 並び替える対象のテキスト。
 /// * `line_ending` - 使用する改行コード。
+/// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
 /// * `String` - 行単位で並び替えられたテキスト。
-fn sort_plain_lines(text: &str, line_ending: &str) -> String {
+fn sort_plain_lines(text: &str, line_ending: &str, descending: bool) -> String {
     let mut lines: Vec<&str> = text.lines().collect();
-    lines.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    if descending {
+        lines.sort_by(|a, b| b.to_lowercase().cmp(&a.to_lowercase()));
+    } else {
+        lines.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    }
     lines.join(line_ending)
 }
 
@@ -156,14 +167,21 @@ mod tests {
     fn test_sort_plain_lines() {
         let input = "banana\nApple\ncherry";
         let expected = "Apple\nbanana\ncherry";
-        assert_eq!(sort_lines(input), expected);
+        assert_eq!(sort_lines(input, false), expected);
+    }
+
+    #[test]
+    fn test_sort_plain_lines_descending() {
+        let input = "banana\nApple\ncherry";
+        let expected = "cherry\nbanana\nApple";
+        assert_eq!(sort_lines(input, true), expected);
     }
 
     #[test]
     fn test_sort_lines_preserve_crlf() {
         let input = "banana\r\nApple\r\ncherry";
         let expected = "Apple\r\nbanana\r\ncherry";
-        assert_eq!(sort_lines(input), expected);
+        assert_eq!(sort_lines(input, false), expected);
     }
 
     #[test]
@@ -171,7 +189,7 @@ mod tests {
         let input = "z,\"cell\nwith\nnewline\",3\na,\"simple\",1";
         // csv crate handles quotes and escapes.
         // Sorting will put 'a' row first.
-        let output = sort_lines(input);
+        let output = sort_lines(input, false);
         assert!(output.starts_with("a,simple,1"));
         assert!(output.contains("z,\"cell\nwith\nnewline\",3"));
     }

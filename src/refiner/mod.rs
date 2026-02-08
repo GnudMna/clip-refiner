@@ -39,9 +39,12 @@ pub enum RefineMode {
     /// パスの前後にあるダブルクォーテーションを削除する
     #[value(help = "パスの引用符を削除")]
     RemovePathQuotes,
-    /// 行単位でアルファベット順（ケース不問）に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[value(help = "並び替え")]
-    SortLines,
+    /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "昇順で並び替え")]
+    SortLinesAsc,
+    /// 行単位で降順に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "降順で並び替え")]
+    SortLinesDesc,
     /// 空行を削除する
     #[value(help = "空行を削除")]
     RemoveEmptyLines,
@@ -164,7 +167,8 @@ impl RefineMode {
             RefineMode::ExtractBasenameQuoted => "ベースネーム抽出(引用符付)",
             RefineMode::AddPathQuotes => "引用符を付与",
             RefineMode::RemovePathQuotes => "引用符を削除",
-            RefineMode::SortLines => "並び替え",
+            RefineMode::SortLinesAsc => "昇順で並び替え",
+            RefineMode::SortLinesDesc => "降順で並び替え",
             RefineMode::RemoveEmptyLines => "空行削除",
             RefineMode::RemoveDuplicateLines => "重複行削除",
             RefineMode::Trim => "全体をトリム",
@@ -201,7 +205,8 @@ impl RefineMode {
             | RefineMode::ExtractBasenameQuoted
             | RefineMode::AddPathQuotes
             | RefineMode::RemovePathQuotes => RefineCategory::Path,
-            RefineMode::SortLines
+            RefineMode::SortLinesAsc
+            | RefineMode::SortLinesDesc
             | RefineMode::RemoveEmptyLines
             | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
             RefineMode::Trim | RefineMode::TrimLines => RefineCategory::Trim,
@@ -235,7 +240,8 @@ impl RefineMode {
             RefineMode::ExtractBasenameQuoted,
             RefineMode::AddPathQuotes,
             RefineMode::RemovePathQuotes,
-            RefineMode::SortLines,
+            RefineMode::SortLinesAsc,
+            RefineMode::SortLinesDesc,
             RefineMode::RemoveEmptyLines,
             RefineMode::RemoveDuplicateLines,
             RefineMode::Trim,
@@ -317,7 +323,8 @@ impl Refiner for RefineMode {
             RefineMode::RemovePathQuotes => {
                 path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
             }
-            RefineMode::SortLines => line_actions::sort_lines(text),
+            RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
+            RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
             RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
             RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(text),
             RefineMode::Trim => trim::trim_text(text),
@@ -397,9 +404,10 @@ mod tests {
     fn test_refine_mode_variants() {
         let variants = RefineMode::variants();
         assert!(variants.contains(&RefineMode::UrlEncode));
-        assert!(variants.contains(&RefineMode::SortLines));
+        assert!(variants.contains(&RefineMode::SortLinesAsc));
+        assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 28);
+        assert_eq!(variants.len(), 29);
     }
 
     #[test]
