@@ -1,5 +1,3 @@
-use anyhow::{Context, Result};
-use arboard::Clipboard;
 use std::sync::{Arc, atomic::Ordering};
 use std::thread;
 use std::time::Duration;
@@ -7,7 +5,10 @@ use std::time::Duration;
 use super::state::{AppEvent, AppState};
 use crate::config::MonitorMode;
 use crate::notification;
-use crate::refiner::{RefineMode, process_clipboard};
+use crate::refiner::process_clipboard;
+
+use anyhow::{Context, Result};
+use arboard::Clipboard;
 
 /// クリップボード監視スレッドを開始する。
 ///
@@ -44,7 +45,7 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
             if let Some(processed) = process_clipboard(clipboard, current_mode) {
                 state.set_last_processed_text(processed.clone());
                 if state.show_success_notification.load(Ordering::Relaxed) {
-                    show_process_notification(current_mode, &processed);
+                    notification::show_process_notification(current_mode, &processed);
                 }
 
                 if state.history_enabled.load(Ordering::Relaxed) {
@@ -76,7 +77,7 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::error::show_anyhow_error("監視スレッドエラー", &e);
+                notification::show_anyhow_error("監視スレッドエラー", &e);
                 return;
             }
         };
@@ -119,7 +120,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::error::show_anyhow_error("監視スレッドエラー", &e);
+                notification::show_anyhow_error("監視スレッドエラー", &e);
                 return;
             }
         };
@@ -157,26 +158,6 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
             thread::sleep(Duration::from_millis(100));
         }
     });
-}
-
-/// 処理完了通知を表示する
-///
-/// # Arguments
-/// * `mode` - 実行された `RefineMode`。
-/// * `text` - 加工後のテキスト。
-pub fn show_process_notification(mode: RefineMode, text: &str) {
-    use notify_rust::Notification;
-    use std::time::Duration;
-    let snippet = if text.chars().count() > 50 {
-        format!("{}...", text.chars().take(47).collect::<String>())
-    } else {
-        text.to_string()
-    };
-    let _ = Notification::new()
-        .summary("変換完了")
-        .body(&format!("モード: {}\n内容: {}", mode.label(), snippet))
-        .timeout(Duration::from_secs(3))
-        .show();
 }
 
 /// クリップボード機能へのアクセスを初期化する。

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use crate::notification::error::show_error_notification;
+use crate::consts;
+use crate::notification::show_simple_notification;
 use crate::refiner::RefineMode;
 
 use anyhow::{Context, Result};
@@ -74,7 +75,7 @@ impl AppConfig {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+                show_simple_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
@@ -88,7 +89,7 @@ impl AppConfig {
         let content = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
-                show_error_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
+                show_simple_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
@@ -97,7 +98,7 @@ impl AppConfig {
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => config,
             Err(e) => {
-                show_error_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
+                show_simple_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
                 Self::default()
             }
         }
@@ -109,17 +110,17 @@ impl AppConfig {
     /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
-            show_error_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+            show_simple_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
             e
         })?;
 
         let content = serde_json::to_string_pretty(self).map_err(|e| {
-            show_error_notification("設定のシリアライズに失敗", &format!("{:?}", e));
+            show_simple_notification("設定のシリアライズに失敗", &format!("{:?}", e));
             e
         })?;
 
         std::fs::write(&config_path, content).map_err(|e| {
-            show_error_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
+            show_simple_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
             e
         })?;
 
@@ -135,14 +136,16 @@ fn get_config_dir() -> Result<PathBuf> {
     #[cfg(windows)]
     {
         let appdata = std::env::var("APPDATA").context("APPDATA環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(appdata).join("ClipRefiner"))
+        Ok(PathBuf::from(appdata).join(consts::APP_NAME))
     }
 
     #[cfg(not(windows))]
     {
         // XDG Base Directory Specification に従い、~/.config/clip-refiner を使用
         let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(home).join(".config").join("clip-refiner"))
+        Ok(PathBuf::from(home)
+            .join(".config")
+            .join(consts::APP_NAME_KEBAB))
     }
 }
 

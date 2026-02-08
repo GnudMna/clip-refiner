@@ -1,47 +1,65 @@
-# ClipRefiner
+<p align="center">
+  <img src="assets/icon.png" width="128" height="128" alt="ClipRefiner Logo">
+  <h1 align="center">ClipRefiner</h1>
+</p>
 
-ClipRefiner は、クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工するデスクトップツールです。
+**ClipRefiner** は、クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工するデスクトップツールです。
 URLのデコード、UTMパラメータの削除、JSONやYAMLの整形・変換などを、コピーするだけで即座に行うことができます。
 
-## 主な機能
+[![License: All Rights Reserved](https://img.shields.io/badge/License-All%20Rights%20Reserved-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 
-- **監視モード**: システムトレイに常駐し、クリップボードの変更を検知して自動的にテキストを加工します。
-- **ワンショットモード**: コマンドラインから特定のモードを指定して、現在のクリップボード内容を一度だけ加工します。
-- **加工モード**:
+---
 
-  | モード名 (`--mode`) | 説明 |
-  | :--- | :--- |
-  | `url-encode` | URLエンコードを行う |
-  | `url-decode` | URLデコードを行う |
-  | `remove-utm` | URLからUTMパラメータ（`utm_*`）を削除する |
-  | `sort-lines` | 行単位で並び替える（CSVの場合はレコード単位でソート） |
-  | `remove-empty-lines` | 空行を削除する |
-  | `remove-duplicate-lines` | 重複行を削除する |
-  | `trim` | テキスト全体の前後にある空白および改行を削除する |
-  | `trim-lines` | 各行の前後にある空白を削除する |
-  | `escape` | 文字列をエスケープする |
-  | `unescape` | 文字列のエスケープを削除する |
-  | `regex-escape` | 正規表現をエスケープする |
-  | `regex-unescape` | 正規表現のエスケープを削除する |
-  | `json-format` | JSON形式を整形する（キー順序は不定） |
-  | `json-format-preserve-order` | JSON形式を整形する（元のキー順序を保持） |
-  | `json-to-yaml` | JSONをYAML形式へ変換する（キー順序は不定） |
-  | `json-to-yaml-preserve-order` | JSONをYAML形式へ変換する（元のキー順序を保持） |
-  | `yaml-to-json` | YAMLをJSON形式へ変換する（キー順序は不定） |
-  | `yaml-to-json-preserve-order` | YAMLをJSON形式へ変換する（元のキー順序を保持） |
-  | `markdown-to-html` | Markdown形式をHTML形式へ変換する |
-  | `excel-to-markdown` | Excel(TSV)をMarkdown形式へ変換する |
-  | `timestamp-to-datetime` | Unixタイムスタンプを日時文字列へ変換する |
-  | `datetime-to-timestamp` | 日時文字列をUnixタイムスタンプへ変換する |
-  | `add-comma` | 数値に3桁区切りのカンマを付与する |
-  | `remove-comma` | 数値からカンマを除去する |
+## 📌 目次
 
-## 使用方法
+- [主な機能](#主な機能)
+- [使用方法](#使用方法)
+  - [監視モード（常駐）](#監視モード常駐)
+  - [ワンショットモード](#ワンショットモード)
+- [クイック例](#クイック例)
+- [インストール・ビルド](#インストールビルド)
+- [設定](#設定)
+- [ライセンス](#ライセンス)
 
-### システムトレイ常駐（監視モード）
+---
 
-引数なしで実行すると、システムトレイ（Windows: 通知領域、macOS/Linux: ステータスバー/トレイ領域）にアイコンが表示されます。
-アイコンを操作（右クリックまたはクリック）することで、加工モードの切り替え、監視の一時停止、設定の変更が可能です。
+## ✨ 主な機能
+
+ClipRefiner は、用途に合わせて使い分けられる2つのモードを備えています。
+
+- 🔍 **監視モード**: システムトレイに常駐し、クリップボードの変更を検知して自動的にテキストを加工します。
+- ⚡ **ワンショットモード**: コマンドラインから特定のモードを指定して、現在のクリップボード内容を一度だけ加工します。
+
+### 🛠️ 加工モード一覧
+
+| カテゴリ | モード名 (`--mode`) | 説明 |
+| :--- | :--- | :--- |
+| **URL操作** | `url-encode` / `url-decode` | URLのエンコード・デコード |
+| | `remove-utm` | URLから `utm_*` パラメータを削除 |
+| **パス操作** | `extract-basename` / `extract-basename-quoted` | パスからファイル名のみを抽出 |
+| | `add-path-quotes` / `remove-path-quotes` | パスの引用符 (`"`) の付与・削除 |
+| **テキスト整形** | `trim` / `trim-lines` | 全体または行ごとの空白・改行削除 |
+| | `sort-lines-asc` / `sort-lines-desc` | 行単位での昇順・降順ソート |
+| | `remove-empty-lines` / `remove-duplicate-lines` | 空行や重複行の削除 |
+| **データ変換** | `json-format` / `json-format-preserve-order` | JSONの整形（順序保持オプションあり） |
+| | `json-to-yaml` / `json-to-yaml-preserve-order` | JSONをYAMLへ変換（順序保持オプションあり） |
+| | `yaml-to-json` / `yaml-to-json-preserve-order` | YAMLをJSONへ変換（順序保持オプションあり） |
+| | `excel-to-markdown` | Excel(TSV)からMarkdownテーブルへ変換 |
+| | `markdown-to-html` | MarkdownからHTMLへ変換 |
+| **その他** | `timestamp-to-datetime` / `datetime-to-timestamp` | Unixスタンプ ↔ 日時文字列の変換 |
+| | `add-comma` / `remove-comma` | 数値の3桁カンマ区切り付与・削除 |
+| | `escape` / `unescape` | 文字列や正規表現のエスケープ操作 |
+
+---
+
+## 🚀 使用方法
+
+### 監視モード（常駐）
+
+引数なしで実行すると、システムトレイ（通知領域）にアイコンが表示されます。
+右クリックメニューから、加工モードの切り替えや監視の一時停止が可能です。
 
 ```bash
 # Windows
@@ -51,50 +69,71 @@ URLのデコード、UTMパラメータの削除、JSONやYAMLの整形・変換
 ./clip-refiner
 ```
 
-### コマンドライン実行（ワンショットモード）
+### ワンショットモード
 
 特定の加工を一度だけ行いたい場合に便利です。
 
 ```bash
-# クリップボード内のURLをデコード
-# Windows
+# クリップボード内のURLをデコードする
 ./ClipRefiner.exe --mode url-decode
-
-# macOS / Linux
-./clip-refiner --mode url-decode
 ```
 
-## インストール・ビルド
+---
 
-### 動作要件
+## 📝 クリップ例
 
-Linux環境では、GUI操作および通知機能のために以下のパッケージが必要になる場合があります（Ubuntu/Debianの例）:
+よく使われるモードの入力・出力例です。
 
+### UTMパラメータの削除 (`remove-utm`)
+- **Input**: `https://example.com/page?id=123&utm_source=twitter&utm_medium=social`
+- **Output**: `https://example.com/page?id=123`
+
+### ExcelからMarkdownへ (`excel-to-markdown`)
+- **Input (TSV)**:
+  ```text
+  ID	Name	Price
+  1	Apple	150
+  2	Banana	100
+  ```
+- **Output**:
+  ```markdown
+  | ID | Name | Price |
+  | --- | --- | --- |
+  | 1 | Apple | 150 |
+  | 2 | Banana | 100 |
+  ```
+
+---
+
+## 🛠️ インストール・ビルド
+
+### 動作要件 (Linux)
+GUIおよび通知機能のために、以下のパッケージが必要になる場合があります:
 ```bash
 sudo apt-get install libdbus-1-dev pkg-config libatk1.0-dev libgtk-3-dev
 ```
 
-### ソースからビルド
-
-Rust の開発環境が必要です。
+### ビルド方法
+Rustの開発環境（Cargo）が必要です。
 
 ```bash
 git clone <repository_url>
 cd clip-refiner
 cargo build --release
 ```
+バイナリは `target/release/` に生成されます。
 
-ビルドされたバイナリは `target/release/` 内に生成されます。
+---
 
-## 設定
+## ⚙️ 設定
 
-設定ファイルは以下の場所に保存されます。
+設定ファイル（`config.json`）は以下の場所に保存されます。
 
 - **Windows**: `%APPDATA%\ClipRefiner\config.json`
 - **Linux/macOS**: `~/.config/clip-refiner/config.json`
 
-システムトレイメニューから設定を変更すると、自動的にこのファイルに保存されます。
+---
 
-## ライセンス
+## 📄 ライセンス
 
 [All Rights Reserved](LICENSE)
