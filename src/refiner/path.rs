@@ -37,7 +37,10 @@ pub fn remove_path_quotes(text: &str) -> Option<String> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
         if trimmed.starts_with('"') && trimmed.ends_with('"') {
-            let path_str = &trimmed[1..trimmed.len() - 1];
+            let path_str = trimmed
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(trimmed);
             if is_path_like_raw(path_str) {
                 return Some((path_str.to_string(), true));
             }
@@ -120,7 +123,10 @@ fn extract_single_basename(line: &str) -> Option<String> {
     let trimmed = line.trim();
     // 引用符があれば外す
     let path_str = if trimmed.starts_with('"') && trimmed.ends_with('"') {
-        &trimmed[1..trimmed.len() - 1]
+        trimmed
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(trimmed)
     } else {
         trimmed
     };
