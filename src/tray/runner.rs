@@ -38,18 +38,15 @@ pub fn run_loop() -> Result<()> {
     let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
     let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
 
-    hotkey_manager
-        .register(selector_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(notification_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(pause_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(quit_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let register = |hotkey| {
+        hotkey_manager
+            .register(hotkey)
+            .map_err(|e| anyhow::anyhow!(e))
+    };
+    register(selector_hotkey)?;
+    register(notification_hotkey)?;
+    register(pause_hotkey)?;
+    register(quit_hotkey)?;
 
     // ホットキーイベントをイベントループに転送するスレッドを開始
     let hotkey_proxy = proxy.clone();
