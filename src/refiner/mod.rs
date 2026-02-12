@@ -233,7 +233,7 @@ impl RefineMode {
                 RefineCategory::Datetime
             }
             RefineMode::AddComma | RefineMode::RemoveComma => RefineCategory::Number,
-            _ => RefineCategory::Normal,
+            RefineMode::MarkdownToHtml | RefineMode::ExcelToMarkdown => RefineCategory::Normal,
         }
     }
 
