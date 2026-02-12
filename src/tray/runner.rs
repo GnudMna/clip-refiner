@@ -2,6 +2,7 @@ use std::sync::{Arc, atomic::Ordering};
 
 use super::menu::TrayMenu;
 use super::monitor::{init_clipboard, spawn_monitor_thread, update_monitor_mode_impl};
+use super::notifier;
 use super::selector::init_selector;
 use super::state::{AppEvent, AppState, LockExt};
 use crate::config::MonitorMode;
@@ -102,9 +103,10 @@ pub fn run_loop() -> Result<()> {
                         state
                             .show_success_notification
                             .store(new_val, Ordering::Relaxed);
-                        menu.show_success_notification_item.set_checked(new_val);
+                        menu.notification.enabled_item.set_checked(new_val);
+                        menu.notification.content_submenu.set_enabled(new_val);
                         state.save_config();
-                        notification::show_simple_notification(
+                        notification::show_notification(
                             "ショートカット",
                             if new_val {
                                 "成功通知を有効にしました"
@@ -116,16 +118,7 @@ pub fn run_loop() -> Result<()> {
                         let new_paused = !state.paused.load(Ordering::Relaxed);
                         state.paused.store(new_paused, Ordering::Relaxed);
                         menu.pause_item.set_checked(new_paused);
-                        if state.show_success_notification.load(Ordering::Relaxed) {
-                            notification::show_simple_notification(
-                                "ショートカット",
-                                if new_paused {
-                                    "一時停止しました"
-                                } else {
-                                    "再開しました"
-                                },
-                            );
-                        }
+                        notifier::show_pause_notification(&state, new_paused, "ショートカット");
                     } else if event.id == quit_hotkey.id() {
                         *control_flow = ControlFlow::Exit;
                     }
@@ -186,9 +179,9 @@ fn handle_menu_event(
     if event.id == menu.quit_item.id() {
         *control_flow = ControlFlow::Exit;
     } else if event.id == menu.pause_item.id() {
-        state
-            .paused
-            .store(menu.pause_item.is_checked(), Ordering::Relaxed);
+        let paused = menu.pause_item.is_checked();
+        state.paused.store(paused, Ordering::Relaxed);
+        notifier::show_pause_notification(&state, paused, "設定変更");
     } else if event.id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
         state.history_enabled.store(enabled, Ordering::Relaxed);
@@ -198,14 +191,33 @@ fn handle_menu_event(
         state.clear_history();
         state.save_config();
         let _ = menu.refresh_history(state);
-    } else if event.id == menu.show_success_notification_item.id() {
-        let enabled = menu.show_success_notification_item.is_checked();
+    } else if event.id == menu.notification.enabled_item.id() {
+        let enabled = menu.notification.enabled_item.is_checked();
         state
             .show_success_notification
             .store(enabled, Ordering::Relaxed);
+        menu.notification.content_submenu.set_enabled(enabled);
+        state.save_config();
+    } else if event.id == menu.notification.notify_mode_item.id() {
+        let enabled = menu.notification.notify_mode_item.is_checked();
+        state
+            .notification_notify_mode
+            .store(enabled, Ordering::Relaxed);
+        state.save_config();
+    } else if event.id == menu.notification.notify_result_item.id() {
+        let enabled = menu.notification.notify_result_item.is_checked();
+        state
+            .notification_notify_result
+            .store(enabled, Ordering::Relaxed);
+        state.save_config();
+    } else if event.id == menu.notification.notify_pause_item.id() {
+        let enabled = menu.notification.notify_pause_item.is_checked();
+        state
+            .notification_notify_pause
+            .store(enabled, Ordering::Relaxed);
         state.save_config();
     } else if event.id == menu.shortcut_list_item.id() {
-        notification::show_simple_notification(
+        notification::show_notification(
             "ショートカット一覧",
             "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
         );
@@ -226,7 +238,7 @@ fn handle_menu_event(
                 } else {
                     state.set_last_processed_text(text.clone());
                     if state.show_success_notification.load(Ordering::Relaxed) {
-                        notification::show_simple_notification(
+                        notification::show_notification(
                             "履歴から復元",
                             "クリップボードにコピーしました",
                         );
@@ -292,9 +304,7 @@ fn update_refine(
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
         state.set_last_processed_text(processed.clone());
-        if state.show_success_notification.load(Ordering::Relaxed) {
-            notification::show_process_notification(mode, &processed);
-        }
+        notifier::show_process_notification(&state, mode, &processed);
     }
 }
 

@@ -2,6 +2,7 @@ use std::sync::{Arc, atomic::Ordering};
 use std::thread;
 use std::time::Duration;
 
+use super::notifier;
 use super::state::{AppEvent, AppState};
 use crate::config::MonitorMode;
 use crate::notification;
@@ -44,9 +45,7 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
             let current_mode = state.get_mode();
             if let Some(processed) = process_clipboard(clipboard, current_mode) {
                 state.set_last_processed_text(processed.clone());
-                if state.show_success_notification.load(Ordering::Relaxed) {
-                    notification::show_process_notification(current_mode, &processed);
-                }
+                notifier::show_process_notification(&state, current_mode, &processed);
 
                 if state.history_enabled.load(Ordering::Relaxed) {
                     state.add_to_history(processed);
