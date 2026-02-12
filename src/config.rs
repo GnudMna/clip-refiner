@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::consts;
-use crate::notification::show_simple_notification;
+use crate::notification::show_notification;
 use crate::refiner::RefineMode;
 
 use anyhow::{Context, Result};
@@ -25,6 +25,30 @@ impl Default for MonitorMode {
     }
 }
 
+/// 通知の内容に関する設定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationSettings {
+    /// 実行されたモード名を通知するかどうか
+    #[serde(default = "consts::default_true")]
+    pub notify_mode: bool,
+    /// 加工結果を通知するかどうか
+    #[serde(default = "consts::default_true")]
+    pub notify_result: bool,
+    /// 一時停止の切り替えを通知するかどうか
+    #[serde(default = "consts::default_true")]
+    pub notify_pause: bool,
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            notify_mode: true,
+            notify_result: true,
+            notify_pause: true,
+        }
+    }
+}
+
 /// アプリケーションの設定情報。JSONファイルとして保存・読み込みされます。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -41,6 +65,9 @@ pub struct AppConfig {
     /// 成功時に通知を表示するかどうか
     #[serde(default)]
     pub show_success_notification: bool,
+    /// 通知の内容設定
+    #[serde(default)]
+    pub notification_settings: NotificationSettings,
 }
 
 impl Default for AppConfig {
@@ -51,6 +78,7 @@ impl Default for AppConfig {
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
             show_success_notification: false,
+            notification_settings: NotificationSettings::default(),
         }
     }
 }
@@ -75,7 +103,7 @@ impl AppConfig {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_simple_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+                show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
@@ -89,7 +117,7 @@ impl AppConfig {
         let content = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
-                show_simple_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
+                show_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
                 return Self::default();
             }
         };
@@ -98,7 +126,7 @@ impl AppConfig {
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => config,
             Err(e) => {
-                show_simple_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
+                show_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
                 Self::default()
             }
         }
@@ -110,17 +138,17 @@ impl AppConfig {
     /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
-            show_simple_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+            show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
             e
         })?;
 
         let content = serde_json::to_string_pretty(self).map_err(|e| {
-            show_simple_notification("設定のシリアライズに失敗", &format!("{:?}", e));
+            show_notification("設定のシリアライズに失敗", &format!("{:?}", e));
             e
         })?;
 
         std::fs::write(&config_path, content).map_err(|e| {
-            show_simple_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
+            show_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
             e
         })?;
 

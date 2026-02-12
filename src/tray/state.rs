@@ -56,6 +56,12 @@ pub struct AppState {
     pub history_enabled: AtomicBool,
     /// 成功時に通知を表示するかどうか
     pub show_success_notification: AtomicBool,
+    /// 通知にモード名を通知するかどうか
+    pub notification_notify_mode: AtomicBool,
+    /// 通知に加工結果を通知するかどうか
+    pub notification_notify_result: AtomicBool,
+    /// 通知に一時停止の切り替えを通知するかどうか
+    pub notification_notify_pause: AtomicBool,
     /// クリップボード履歴（最大10件）
     pub history: Mutex<Vec<String>>,
     /// イベントループへのプロキシ。別スレッドからUIイベント（例: 履歴更新）を送信するために使用される。
@@ -78,6 +84,9 @@ impl AppState {
             last_processed_text: Mutex::new(String::new()),
             history_enabled: AtomicBool::new(config.history_enabled),
             show_success_notification: AtomicBool::new(config.show_success_notification),
+            notification_notify_mode: AtomicBool::new(config.notification_settings.notify_mode),
+            notification_notify_result: AtomicBool::new(config.notification_settings.notify_result),
+            notification_notify_pause: AtomicBool::new(config.notification_settings.notify_pause),
             history: Mutex::new(Vec::new()),
             proxy,
         }
@@ -91,6 +100,11 @@ impl AppState {
             monitor_mode: self.get_monitor_mode(),
             history_enabled: self.history_enabled.load(Ordering::Relaxed),
             show_success_notification: self.show_success_notification.load(Ordering::Relaxed),
+            notification_settings: crate::config::NotificationSettings {
+                notify_mode: self.notification_notify_mode.load(Ordering::Relaxed),
+                notify_result: self.notification_notify_result.load(Ordering::Relaxed),
+                notify_pause: self.notification_notify_pause.load(Ordering::Relaxed),
+            },
         };
         if let Err(e) = config.save() {
             eprintln!("設定の保存に失敗: {}", e);
@@ -205,6 +219,9 @@ mod tests {
             last_processed_text: Mutex::new(String::new()),
             history_enabled: AtomicBool::new(false),
             show_success_notification: AtomicBool::new(false),
+            notification_notify_mode: AtomicBool::new(true),
+            notification_notify_result: AtomicBool::new(true),
+            notification_notify_pause: AtomicBool::new(true),
             history: Mutex::new(Vec::new()),
             proxy: event_loop.create_proxy(),
         };
