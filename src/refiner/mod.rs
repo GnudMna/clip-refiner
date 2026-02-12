@@ -15,6 +15,104 @@ use clap::ValueEnum;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+/// クリップボードのテキストを加工する各モードの定義
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefineMode {
+    /// URLエンコードを行う
+    #[value(help = "URLエンコード")]
+    UrlEncode,
+    /// URLデコードを行う。失敗した場合は元のテキストを維持する
+    #[value(help = "URLデコード")]
+    UrlDecode,
+    /// URLから utm_ で始まる計測用パラメータを削除する
+    #[value(help = "UTMパラメータを削除")]
+    RemoveUtm,
+    /// パスからベースネームを抽出する
+    #[value(help = "パスからベースネームを抽出")]
+    ExtractBasename,
+    /// パスからベースネームを抽出しダブルクォーテーションで囲む
+    #[value(help = "パスからベースネームを抽出(引用符付き)")]
+    ExtractBasenameQuoted,
+    /// パスの前後にダブルクォーテーションを付与する
+    #[value(help = "パスに引用符を付与")]
+    AddPathQuotes,
+    /// パスの前後にあるダブルクォーテーションを削除する
+    #[value(help = "パスの引用符を削除")]
+    RemovePathQuotes,
+    /// パスのバックスラッシュをスラッシュに変換する
+    #[value(help = "パスをスラッシュ区切りに変換")]
+    PathToSlash,
+    /// パスのスラッシュをバックスラッシュに変換する
+    #[value(help = "パスをバックスラッシュ区切りに変換")]
+    PathToBackslash,
+    /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "昇順で並び替え")]
+    SortLinesAsc,
+    /// 行単位で降順に並び替える。CSVの場合は各行をレコードとして認識してソートする
+    #[value(help = "降順で並び替え")]
+    SortLinesDesc,
+    /// 空行を削除する
+    #[value(help = "空行を削除")]
+    RemoveEmptyLines,
+    /// 重複行を削除する
+    #[value(help = "重複行を削除")]
+    RemoveDuplicateLines,
+    /// テキスト全体の前後にある空白および改行を削除する
+    #[value(help = "改行や空白を整形")]
+    Trim,
+    /// 行ごとに前後の空白を削除する
+    #[value(help = "行単位で改行や空白を整形")]
+    TrimLines,
+    /// 文字列をバックスラッシュでエスケープする
+    #[value(help = "文字列をエスケープ")]
+    Escape,
+    /// 文字列のエスケープを解除する
+    #[value(help = "文字列のアンエスケープ")]
+    Unescape,
+    /// 正規表現のメタ文字をエスケープする
+    #[value(help = "正規表現のエスケープ")]
+    RegexEscape,
+    /// 正規表現のエスケープを解除する
+    #[value(help = "正規表現のアンエスケープ")]
+    RegexUnescape,
+    /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
+    #[value(help = "JSON形式を整形(キー順序不同)")]
+    JsonFormat,
+    /// JSON形式をインデント整形する（元のキー順序を維持する）
+    #[value(help = "JSON形式を整形(キー順序保持)")]
+    JsonFormatPreserveOrder,
+    /// YAML形式をJSON形式へ変換する
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
+    YamlToJson,
+    /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
+    #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
+    YamlToJsonPreserveOrder,
+    /// JSON形式をYAML形式へ変換する
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
+    JsonToYaml,
+    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
+    #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
+    JsonToYamlPreserveOrder,
+    /// Markdown形式のテキストをHTML形式へ変換する
+    #[value(help = "MarkdownをHTML形式へ変換")]
+    MarkdownToHtml,
+    /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
+    #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
+    ExcelToMarkdown,
+    /// Unixタイムスタンプを日時文字列へ変換する
+    #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
+    TimestampToDatetime,
+    /// 日時文字列をUnixタイムスタンプへ変換する
+    #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
+    DatetimeToTimestamp,
+    /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
+    #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
+    AddComma,
+    /// 数値からカンマを削除する（例: 1,000 -> 1000）
+    #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
+    RemoveComma,
+}
+
 /// メニューの階層化に使用するカテゴリ
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum RefineCategory {
@@ -61,271 +159,138 @@ impl RefineCategory {
     }
 }
 
-/// クリップボードのテキストを加工するトレイト
-pub trait Refiner {
-    /// テキストを加工する
-    fn refine(&self, text: &str) -> String;
-}
-
-macro_rules! define_refine_modes {
-    (
-        $(
-            $(#[doc = $doc:expr])*
-            $variant:ident => {
-                label: $label:expr,
-                category: $category:expr,
-                refine: |$text:ident| $body:expr
-            }
-        ),* $(,)?
-    ) => {
-        /// クリップボードのテキストを加工する各モードの定義
-        #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Serialize, Deserialize)]
-        pub enum RefineMode {
-            $(
-                $(#[doc = $doc])*
-                #[value(help = $label)]
-                $variant,
-            )*
+impl RefineMode {
+    /// UIに表示する名前を取得する
+    ///
+    /// # Returns
+    /// * `&'static str` - モードに対応する静的な文字列ラベル。
+    pub fn label(&self) -> &'static str {
+        match self {
+            RefineMode::UrlEncode => "URLエンコード",
+            RefineMode::UrlDecode => "URLデコード",
+            RefineMode::RemoveUtm => "UTM除去",
+            RefineMode::ExtractBasename => "ベースネーム抽出",
+            RefineMode::ExtractBasenameQuoted => "ベースネーム抽出(引用符付)",
+            RefineMode::AddPathQuotes => "引用符を付与",
+            RefineMode::RemovePathQuotes => "引用符を削除",
+            RefineMode::PathToSlash => "スラッシュ区切りに変換",
+            RefineMode::PathToBackslash => "バックスラッシュ区切りに変換",
+            RefineMode::SortLinesAsc => "昇順で並び替え",
+            RefineMode::SortLinesDesc => "降順で並び替え",
+            RefineMode::RemoveEmptyLines => "空行削除",
+            RefineMode::RemoveDuplicateLines => "重複行削除",
+            RefineMode::Trim => "全体をトリム",
+            RefineMode::TrimLines => "行単位でトリム",
+            RefineMode::Escape => "エスケープ",
+            RefineMode::Unescape => "アンエスケープ",
+            RefineMode::RegexEscape => "正規表現エスケープ",
+            RefineMode::RegexUnescape => "正規表現アンエスケープ",
+            RefineMode::JsonFormat => "JSON整形(キー順序不同)",
+            RefineMode::JsonFormatPreserveOrder => "JSON整形(キー順序保持)",
+            RefineMode::YamlToJson => "YAML→JSON(キー順序不同)",
+            RefineMode::YamlToJsonPreserveOrder => "YAML→JSON(キー順序保持)",
+            RefineMode::JsonToYaml => "JSON→YAML(キー順序不同)",
+            RefineMode::JsonToYamlPreserveOrder => "JSON→YAML(キー順序保持)",
+            RefineMode::MarkdownToHtml => "Markdown→HTML",
+            RefineMode::ExcelToMarkdown => "Excel→Markdown",
+            RefineMode::TimestampToDatetime => "Unixタイムスタンプ→日時文字列",
+            RefineMode::DatetimeToTimestamp => "日時文字列→Unixタイムスタンプ",
+            RefineMode::AddComma => "カンマ追加",
+            RefineMode::RemoveComma => "カンマ除去",
         }
+    }
 
-        impl RefineMode {
-            /// UIに表示する名前を取得する
-            pub fn label(&self) -> &'static str {
-                match self {
-                    $(Self::$variant => $label,)*
-                }
+    /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
+    ///
+    /// # Returns
+    /// * `RefineCategory` - モードが属するカテゴリ。
+    pub fn category(&self) -> RefineCategory {
+        match self {
+            RefineMode::UrlEncode | RefineMode::UrlDecode | RefineMode::RemoveUtm => {
+                RefineCategory::UrlActions
             }
-
-            /// 所属するカテゴリを取得する
-            pub fn category(&self) -> RefineCategory {
-                match self {
-                    $(Self::$variant => $category,)*
-                }
+            RefineMode::ExtractBasename
+            | RefineMode::ExtractBasenameQuoted
+            | RefineMode::AddPathQuotes
+            | RefineMode::RemovePathQuotes
+            | RefineMode::PathToSlash
+            | RefineMode::PathToBackslash => RefineCategory::Path,
+            RefineMode::SortLinesAsc
+            | RefineMode::SortLinesDesc
+            | RefineMode::RemoveEmptyLines
+            | RefineMode::RemoveDuplicateLines => RefineCategory::LineActions,
+            RefineMode::Trim | RefineMode::TrimLines => RefineCategory::Trim,
+            RefineMode::Escape
+            | RefineMode::Unescape
+            | RefineMode::RegexEscape
+            | RefineMode::RegexUnescape => RefineCategory::Escape,
+            RefineMode::JsonFormat | RefineMode::JsonFormatPreserveOrder => {
+                RefineCategory::JsonFormat
             }
-
-            /// 定義されているすべてのモードを順番に取得する
-            pub fn variants() -> &'static [RefineMode] {
-                &[
-                    $(Self::$variant,)*
-                ]
+            RefineMode::YamlToJson | RefineMode::YamlToJsonPreserveOrder => RefineCategory::ToJson,
+            RefineMode::JsonToYaml | RefineMode::JsonToYamlPreserveOrder => RefineCategory::ToYaml,
+            RefineMode::TimestampToDatetime | RefineMode::DatetimeToTimestamp => {
+                RefineCategory::Datetime
             }
-
-            /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
-            pub fn to_json_list() -> String {
-                let list: Vec<serde_json::Value> = Self::variants()
-                    .iter()
-                    .map(|m| {
-                        serde_json::json!({
-                            "id": m,
-                            "label": m.label(),
-                            "category": m.category().label(),
-                        })
-                    })
-                    .collect();
-                serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
-            }
+            RefineMode::AddComma | RefineMode::RemoveComma => RefineCategory::Number,
+            RefineMode::MarkdownToHtml | RefineMode::ExcelToMarkdown => RefineCategory::Normal,
         }
+    }
 
-        impl Refiner for RefineMode {
-            fn refine(&self, text: &str) -> String {
-                match self {
-                    $(Self::$variant => {
-                        let $text = text;
-                        $body
-                    },)*
-                }
-            }
-        }
-    };
-}
+    /// 定義されているすべてのモードを順番に取得する
+    ///
+    /// # Returns
+    /// * `&'static [RefineMode]` - 全ての `RefineMode` バリアントを含む静的スライス。
+    pub fn variants() -> &'static [RefineMode] {
+        &[
+            RefineMode::UrlEncode,
+            RefineMode::UrlDecode,
+            RefineMode::RemoveUtm,
+            RefineMode::ExtractBasename,
+            RefineMode::ExtractBasenameQuoted,
+            RefineMode::AddPathQuotes,
+            RefineMode::RemovePathQuotes,
+            RefineMode::PathToSlash,
+            RefineMode::PathToBackslash,
+            RefineMode::SortLinesAsc,
+            RefineMode::SortLinesDesc,
+            RefineMode::RemoveEmptyLines,
+            RefineMode::RemoveDuplicateLines,
+            RefineMode::Trim,
+            RefineMode::TrimLines,
+            RefineMode::Escape,
+            RefineMode::Unescape,
+            RefineMode::RegexEscape,
+            RefineMode::RegexUnescape,
+            RefineMode::JsonFormat,
+            RefineMode::JsonFormatPreserveOrder,
+            RefineMode::YamlToJson,
+            RefineMode::YamlToJsonPreserveOrder,
+            RefineMode::JsonToYaml,
+            RefineMode::JsonToYamlPreserveOrder,
+            RefineMode::MarkdownToHtml,
+            RefineMode::ExcelToMarkdown,
+            RefineMode::TimestampToDatetime,
+            RefineMode::DatetimeToTimestamp,
+            RefineMode::AddComma,
+            RefineMode::RemoveComma,
+        ]
+    }
 
-define_refine_modes! {
-    /// URLエンコードを行う
-    UrlEncode => {
-        label: "URLエンコード",
-        category: RefineCategory::UrlActions,
-        refine: |text| url::url_encode(text)
-    },
-    /// URLデコードを行う。失敗した場合は元のテキストを維持する
-    UrlDecode => {
-        label: "URLデコード",
-        category: RefineCategory::UrlActions,
-        refine: |text| url::url_decode(text).unwrap_or_else(|_| text.to_string())
-    },
-    /// URLから utm_ で始まる計測用パラメータを削除する
-    RemoveUtm => {
-        label: "UTM除去",
-        category: RefineCategory::UrlActions,
-        refine: |text| url::remove_utm_params(text)
-    },
-    /// パスからベースネームを抽出する
-    ExtractBasename => {
-        label: "ベースネーム抽出",
-        category: RefineCategory::Path,
-        refine: |text| path::extract_basename(text).unwrap_or_else(|| text.to_string())
-    },
-    /// パスからベースネームを抽出しダブルクォーテーションで囲む
-    ExtractBasenameQuoted => {
-        label: "ベースネーム抽出(引用符付)",
-        category: RefineCategory::Path,
-        refine: |text| path::extract_basename_quoted(text).unwrap_or_else(|| text.to_string())
-    },
-    /// パスの前後にダブルクォーテーションを付与する
-    AddPathQuotes => {
-        label: "引用符を付与",
-        category: RefineCategory::Path,
-        refine: |text| path::add_path_quotes(text).unwrap_or_else(|| text.to_string())
-    },
-    /// パスの前後にあるダブルクォーテーションを削除する
-    RemovePathQuotes => {
-        label: "引用符を削除",
-        category: RefineCategory::Path,
-        refine: |text| path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
-    },
-    /// パスのバックスラッシュをスラッシュに変換する
-    PathToSlash => {
-        label: "スラッシュ区切りに変換",
-        category: RefineCategory::Path,
-        refine: |text| path::convert_to_forward_slash(text).unwrap_or_else(|| text.to_string())
-    },
-    /// パスのスラッシュをバックスラッシュに変換する
-    PathToBackslash => {
-        label: "バックスラッシュ区切りに変換",
-        category: RefineCategory::Path,
-        refine: |text| path::convert_to_backslash(text).unwrap_or_else(|| text.to_string())
-    },
-    /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    SortLinesAsc => {
-        label: "昇順で並び替え",
-        category: RefineCategory::LineActions,
-        refine: |text| line_actions::sort_lines(text, false)
-    },
-    /// 行単位で降順に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    SortLinesDesc => {
-        label: "降順で並び替え",
-        category: RefineCategory::LineActions,
-        refine: |text| line_actions::sort_lines(text, true)
-    },
-    /// 空行を削除する
-    RemoveEmptyLines => {
-        label: "空行削除",
-        category: RefineCategory::LineActions,
-        refine: |text| line_actions::remove_empty_lines(text)
-    },
-    /// 重複行を削除する
-    RemoveDuplicateLines => {
-        label: "重複行削除",
-        category: RefineCategory::LineActions,
-        refine: |text| line_actions::remove_duplicate_lines(text)
-    },
-    /// テキスト全体の前後にある空白および改行を削除する
-    Trim => {
-        label: "全体をトリム",
-        category: RefineCategory::Trim,
-        refine: |text| trim::trim_text(text)
-    },
-    /// 行ごとに前後の空白を削除する
-    TrimLines => {
-        label: "行単位でトリム",
-        category: RefineCategory::Trim,
-        refine: |text| trim::trim_lines(text)
-    },
-    /// 文字列をバックスラッシュでエスケープする
-    Escape => {
-        label: "エスケープ",
-        category: RefineCategory::Escape,
-        refine: |text| escape::escape_string(text)
-    },
-    /// 文字列のエスケープを解除する
-    Unescape => {
-        label: "アンエスケープ",
-        category: RefineCategory::Escape,
-        refine: |text| escape::unescape_string(text)
-    },
-    /// 正規表現のメタ文字をエスケープする
-    RegexEscape => {
-        label: "正規表現エスケープ",
-        category: RefineCategory::Escape,
-        refine: |text| escape::regex_escape(text)
-    },
-    /// 正規表現のエスケープを解除する
-    RegexUnescape => {
-        label: "正規表現アンエスケープ",
-        category: RefineCategory::Escape,
-        refine: |text| escape::regex_unescape(text)
-    },
-    /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
-    JsonFormat => {
-        label: "JSON整形(キー順序不同)",
-        category: RefineCategory::JsonFormat,
-        refine: |text| json::format_json(text)
-    },
-    /// JSON形式をインデント整形する（元のキー順序を維持する）
-    JsonFormatPreserveOrder => {
-        label: "JSON整形(キー順序保持)",
-        category: RefineCategory::JsonFormat,
-        refine: |text| json::format_json_preserve_order(text)
-    },
-    /// YAML形式をJSON形式へ変換する
-    YamlToJson => {
-        label: "YAML→JSON(キー順序不同)",
-        category: RefineCategory::ToJson,
-        refine: |text| yaml::yaml_to_json(text)
-    },
-    /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
-    YamlToJsonPreserveOrder => {
-        label: "YAML→JSON(キー順序保持)",
-        category: RefineCategory::ToJson,
-        refine: |text| yaml::yaml_to_json_preserve_order(text)
-    },
-    /// JSON形式をYAML形式へ変換する
-    JsonToYaml => {
-        label: "JSON→YAML(キー順序不同)",
-        category: RefineCategory::ToYaml,
-        refine: |text| json::json_to_yaml(text)
-    },
-    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
-    JsonToYamlPreserveOrder => {
-        label: "JSON→YAML(キー順序保持)",
-        category: RefineCategory::ToYaml,
-        refine: |text| json::json_to_yaml_preserve_order(text)
-    },
-    /// Markdown形式のテキストをHTML形式へ変換する
-    MarkdownToHtml => {
-        label: "Markdown→HTML",
-        category: RefineCategory::Normal,
-        refine: |text| markdown::markdown_to_html(text)
-    },
-    /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
-    ExcelToMarkdown => {
-        label: "Excel→Markdown",
-        category: RefineCategory::Normal,
-        refine: |text| markdown::excel_to_markdown_table(text)
-    },
-    /// Unixタイムスタンプを日時文字列へ変換する
-    TimestampToDatetime => {
-        label: "Unixタイムスタンプ→日時文字列",
-        category: RefineCategory::Datetime,
-        refine: |text| datetime::timestamp_to_datetime_string(text)
-    },
-    /// 日時文字列をUnixタイムスタンプへ変換する
-    DatetimeToTimestamp => {
-        label: "日時文字列→Unixタイムスタンプ",
-        category: RefineCategory::Datetime,
-        refine: |text| datetime::datetime_string_to_timestamp(text)
-    },
-    /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
-    AddComma => {
-        label: "カンマ追加",
-        category: RefineCategory::Number,
-        refine: |text| number::add_commas(text)
-    },
-    /// 数値からカンマを削除する（例: 1,000 -> 1000）
-    RemoveComma => {
-        label: "カンマ除去",
-        category: RefineCategory::Number,
-        refine: |text| number::remove_commas(text)
-    },
+    /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
+    pub fn to_json_list() -> String {
+        let list: Vec<serde_json::Value> = Self::variants()
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m,
+                    "label": m.label(),
+                    "category": m.category().label(),
+                })
+            })
+            .collect();
+        serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
+    }
 }
 
 /// JSON, YAMLキー順序保持用
@@ -338,6 +303,68 @@ pub enum OrderedValue {
     String(String),
     Array(Vec<OrderedValue>),
     Object(IndexMap<String, OrderedValue>),
+}
+
+/// クリップボードのテキストを加工するトレイト
+pub trait Refiner {
+    /// テキストを加工する
+    ///
+    /// # Arguments
+    /// * `text` - 加工前のテキスト
+    ///
+    /// # Returns
+    /// * `String` - 加工後のテキスト
+    fn refine(&self, text: &str) -> String;
+}
+
+impl Refiner for RefineMode {
+    fn refine(&self, text: &str) -> String {
+        match self {
+            RefineMode::UrlEncode => url::url_encode(text),
+            RefineMode::UrlDecode => url::url_decode(text).unwrap_or_else(|_| text.to_string()),
+            RefineMode::RemoveUtm => url::remove_utm_params(text),
+            RefineMode::ExtractBasename => {
+                path::extract_basename(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::ExtractBasenameQuoted => {
+                path::extract_basename_quoted(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::AddPathQuotes => {
+                path::add_path_quotes(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::RemovePathQuotes => {
+                path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::PathToSlash => {
+                path::convert_to_forward_slash(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::PathToBackslash => {
+                path::convert_to_backslash(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
+            RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
+            RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
+            RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(text),
+            RefineMode::Trim => trim::trim_text(text),
+            RefineMode::TrimLines => trim::trim_lines(text),
+            RefineMode::Escape => escape::escape_string(text),
+            RefineMode::Unescape => escape::unescape_string(text),
+            RefineMode::RegexEscape => escape::regex_escape(text),
+            RefineMode::RegexUnescape => escape::regex_unescape(text),
+            RefineMode::JsonFormat => json::format_json(text),
+            RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(text),
+            RefineMode::YamlToJson => yaml::yaml_to_json(text),
+            RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(text),
+            RefineMode::JsonToYaml => json::json_to_yaml(text),
+            RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(text),
+            RefineMode::MarkdownToHtml => markdown::markdown_to_html(text),
+            RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(text),
+            RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(text),
+            RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
+            RefineMode::AddComma => number::add_commas(text),
+            RefineMode::RemoveComma => number::remove_commas(text),
+        }
+    }
 }
 
 /// クリップボードの内容を変換
