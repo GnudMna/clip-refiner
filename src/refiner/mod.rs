@@ -39,6 +39,12 @@ pub enum RefineMode {
     /// パスの前後にあるダブルクォーテーションを削除する
     #[value(help = "パスの引用符を削除")]
     RemovePathQuotes,
+    /// パスのバックスラッシュをスラッシュに変換する
+    #[value(help = "パスをスラッシュ区切りに変換")]
+    PathToSlash,
+    /// パスのスラッシュをバックスラッシュに変換する
+    #[value(help = "パスをバックスラッシュ区切りに変換")]
+    PathToBackslash,
     /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
     #[value(help = "昇順で並び替え")]
     SortLinesAsc,
@@ -167,6 +173,8 @@ impl RefineMode {
             RefineMode::ExtractBasenameQuoted => "ベースネーム抽出(引用符付)",
             RefineMode::AddPathQuotes => "引用符を付与",
             RefineMode::RemovePathQuotes => "引用符を削除",
+            RefineMode::PathToSlash => "スラッシュ区切りに変換",
+            RefineMode::PathToBackslash => "バックスラッシュ区切りに変換",
             RefineMode::SortLinesAsc => "昇順で並び替え",
             RefineMode::SortLinesDesc => "降順で並び替え",
             RefineMode::RemoveEmptyLines => "空行削除",
@@ -204,7 +212,9 @@ impl RefineMode {
             RefineMode::ExtractBasename
             | RefineMode::ExtractBasenameQuoted
             | RefineMode::AddPathQuotes
-            | RefineMode::RemovePathQuotes => RefineCategory::Path,
+            | RefineMode::RemovePathQuotes
+            | RefineMode::PathToSlash
+            | RefineMode::PathToBackslash => RefineCategory::Path,
             RefineMode::SortLinesAsc
             | RefineMode::SortLinesDesc
             | RefineMode::RemoveEmptyLines
@@ -240,6 +250,8 @@ impl RefineMode {
             RefineMode::ExtractBasenameQuoted,
             RefineMode::AddPathQuotes,
             RefineMode::RemovePathQuotes,
+            RefineMode::PathToSlash,
+            RefineMode::PathToBackslash,
             RefineMode::SortLinesAsc,
             RefineMode::SortLinesDesc,
             RefineMode::RemoveEmptyLines,
@@ -322,6 +334,12 @@ impl Refiner for RefineMode {
             }
             RefineMode::RemovePathQuotes => {
                 path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::PathToSlash => {
+                path::convert_to_forward_slash(text).unwrap_or_else(|| text.to_string())
+            }
+            RefineMode::PathToBackslash => {
+                path::convert_to_backslash(text).unwrap_or_else(|| text.to_string())
             }
             RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
             RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
@@ -407,7 +425,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 29);
+        assert_eq!(variants.len(), 31);
     }
 
     #[test]
