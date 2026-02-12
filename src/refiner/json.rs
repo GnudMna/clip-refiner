@@ -95,9 +95,7 @@ pub fn json_to_yaml_preserve_order(text: &str) -> String {
 mod tests {
     use super::*;
 
-    // ---------------------------
-    // format_json
-    // ---------------------------
+    /// 有効なJSONの整形テスト
     #[test]
     fn test_format_json_valid() {
         let input = r#"{"b":1,"a":2}"#;
@@ -110,16 +108,16 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なJSONの整形テスト
+    /// 元の文字列がそのまま返ることを確認
     #[test]
     fn test_format_json_invalid() {
-        let input = r#"{"a":1,"b":}"#; // invalid JSON
+        let input = r#"{"a":1,"b":}"#;
         let output = format_json(input);
         assert_eq!(output, input);
     }
 
-    // ---------------------------
-    // format_json_preserve_order
-    // ---------------------------
+    /// 有効なJSONの整形（キー順序保持）テスト
     #[test]
     fn test_format_json_preserve_order_valid() {
         let input = r#"{"z":1,"a":2,"m":3}"#;
@@ -135,6 +133,7 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なJSONの整形（キー順序保持）テスト
     #[test]
     fn test_format_json_preserve_order_invalid() {
         let input = r#"{"x":1,"y":}"#; // invalid JSON
@@ -142,9 +141,7 @@ mod tests {
         assert_eq!(output, input);
     }
 
-    // ---------------------------
-    // json_to_yaml
-    // ---------------------------
+    /// 有効なJSONからYAMLへの変換テスト
     #[test]
     fn test_json_to_yaml_valid() {
         let input = r#"{"b":1,"a":2}"#;
@@ -157,6 +154,7 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なJSONからYAMLへの変換テスト
     #[test]
     fn test_json_to_yaml_invalid() {
         let input = r#"{"a":1,"b":}"#;
@@ -164,9 +162,7 @@ mod tests {
         assert_eq!(output, input);
     }
 
-    // ---------------------------
-    // json_to_yaml_preserve_order
-    // ---------------------------
+    /// 有効なJSONからYAMLへの変換（キー順序保持）テスト
     #[test]
     fn test_json_to_yaml_preserve_order_valid() {
         let input = r#"{"z":1,"a":2}"#;
@@ -178,6 +174,7 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なJSONからYAMLへの変換（キー順序保持）テスト
     #[test]
     fn test_json_to_yaml_preserve_order_invalid() {
         let input = r#"{"x":1,"y":}"#;
@@ -185,12 +182,14 @@ mod tests {
         assert_eq!(output, input);
     }
 
+    /// 空のJSONオブジェクト・配列の整形テスト
     #[test]
     fn test_format_json_empty() {
         assert_eq!(format_json("{}"), "{}");
         assert_eq!(format_json("[]"), "[]");
     }
 
+    /// ネストされたJSONの整形テスト
     #[test]
     fn test_format_json_nested() {
         let input = r#"{"a":{"b":1}}"#;

@@ -428,6 +428,8 @@ mod tests {
         assert_eq!(variants.len(), 31);
     }
 
+    /// クリップボード処理の統合テスト
+    /// 実際のクリップボード操作を伴うため、実行環境によってはスキップされる可能性がある
     #[test]
     fn test_process_clipboard_integration() {
         // 並列実行による干渉を避けるため、1つのテストケースにまとめる
@@ -471,6 +473,8 @@ mod tests {
         }
     }
 
+    /// 全てのRefineModeバリアントを網羅するテーブル駆動テスト
+    /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
     #[test]
     fn test_all_refine_modes() {
         struct TestCase {

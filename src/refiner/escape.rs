@@ -128,6 +128,8 @@ pub fn regex_unescape(input: &str) -> String {
 mod tests {
     use super::*;
 
+    /// escape_string関数の基本的な動作テスト
+    /// 改行やダブルクォートなどがエスケープされることを確認
     #[test]
     fn test_escape_string() {
         assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
@@ -138,6 +140,8 @@ mod tests {
         assert_eq!(escape_string("\t\r"), "\\t\\r");
     }
 
+    /// unescape_string関数の基本的な動作テスト
+    /// エスケープされたシーケンスが元の文字に戻ることを確認
     #[test]
     fn test_unescape_string() {
         assert_eq!(unescape_string("hello\\nworld"), "hello\nworld");
@@ -149,6 +153,8 @@ mod tests {
         assert_eq!(unescape_string("unknown \\z"), "unknown \\z");
     }
 
+    /// regex_escape関数の基本的な動作テスト
+    /// 正規表現のメタ文字がエスケープされることを確認
     #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("hello.world*"), "hello\\.world\\*");
@@ -156,6 +162,8 @@ mod tests {
         assert_eq!(regex_escape("^$| () {}"), "\\^\\$\\| \\(\\)\x20\\{\\}");
     }
 
+    /// regex_unescape関数の基本的な動作テスト
+    /// エスケープされた正規表現メタ文字が元に戻ることを確認
     #[test]
     fn test_regex_unescape() {
         assert_eq!(regex_unescape("hello\\.world\\*"), "hello.world*");
@@ -165,26 +173,32 @@ mod tests {
         assert_eq!(regex_unescape("escaped \\n"), "escaped \\n"); //  regex unescape shouldn't touch \n
     }
 
+    /// 空文字列に対するescape_stringのテスト
     #[test]
     fn test_escape_string_empty() {
         assert_eq!(escape_string(""), "");
     }
 
+    /// エスケープ対象の文字が含まれない場合のテスト
     #[test]
     fn test_escape_string_no_escapables() {
         assert_eq!(escape_string("plain text"), "plain text");
     }
 
+    /// すべての文字がエスケープ対象である場合のテスト
     #[test]
     fn test_escape_string_all_escapable() {
         assert_eq!(escape_string("\n\r\t\"\\"), "\\n\\r\\t\\\"\\\\");
     }
 
+    /// 空文字列に対するunescape_stringのテスト
     #[test]
     fn test_unescape_string_empty() {
         assert_eq!(unescape_string(""), "");
     }
 
+    /// 複雑な正規表現パターンに対するregex_escapeのテスト
+    /// バックスラッシュの扱いや、カッコのネストなどを確認
     #[test]
     fn test_regex_escape_complex() {
         assert_eq!(
