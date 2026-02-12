@@ -126,4 +126,25 @@ mod tests {
         );
         assert_eq!(remove_utm_params("?utm_source=a"), "");
     }
+
+    #[test]
+    fn test_url_encode_space_special() {
+        assert_eq!(url_encode("foo bar"), "foo%20bar");
+        // ENCODE_SET does not include '+', so it remains as '+'
+        assert_eq!(url_encode("foo+bar"), "foo+bar");
+    }
+
+    #[test]
+    fn test_remove_utm_params_complex() {
+        assert_eq!(
+            remove_utm_params("http://example.com?a=1&utm_source=s&b=2"),
+            "http://example.com?a=1&b=2"
+        );
+        // Case sensitive check? utm_ is usually lowercase.
+        // My implementation assumes lowercase "utm_".
+        assert_eq!(
+            remove_utm_params("http://example.com?UTM_SOURCE=S"),
+            "http://example.com?UTM_SOURCE=S"
+        );
+    }
 }

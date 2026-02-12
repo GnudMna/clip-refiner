@@ -99,4 +99,18 @@ mod tests {
         let output = yaml_to_json(input);
         assert!(output.contains("\"nested\": {"));
     }
+
+    #[test]
+    fn test_yaml_to_json_list() {
+        let input = "- a\n- b";
+        let output = yaml_to_json(input);
+        assert_eq!(output, "[\n  \"a\",\n  \"b\"\n]");
+    }
+
+    #[test]
+    fn test_yaml_to_json_empty() {
+        let input = "{}";
+        let output = yaml_to_json(input);
+        assert_eq!(output, "{}");
+    }
 }

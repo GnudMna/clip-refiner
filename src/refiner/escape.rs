@@ -164,4 +164,33 @@ mod tests {
         assert_eq!(regex_unescape("normal text"), "normal text");
         assert_eq!(regex_unescape("escaped \\n"), "escaped \\n"); //  regex unescape shouldn't touch \n
     }
+
+    #[test]
+    fn test_escape_string_empty() {
+        assert_eq!(escape_string(""), "");
+    }
+
+    #[test]
+    fn test_escape_string_no_escapables() {
+        assert_eq!(escape_string("plain text"), "plain text");
+    }
+
+    #[test]
+    fn test_escape_string_all_escapable() {
+        assert_eq!(escape_string("\n\r\t\"\\"), "\\n\\r\\t\\\"\\\\");
+    }
+
+    #[test]
+    fn test_unescape_string_empty() {
+        assert_eq!(unescape_string(""), "");
+    }
+
+    #[test]
+    fn test_regex_escape_complex() {
+        assert_eq!(
+            regex_escape(r"C:\Path\To\File.txt"),
+            r"C:\\Path\\To\\File\.txt"
+        );
+        assert_eq!(regex_escape(r"(\d+(\.\d+)?)"), r"\(\\d\+\(\\\.\\d\+\)\?\)");
+    }
 }

@@ -41,4 +41,18 @@ mod tests {
         let actual = trim_lines(input);
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn test_trim_lines_empty() {
+        let input = "";
+        let expected = "";
+        assert_eq!(trim_lines(input), expected);
+    }
+
+    #[test]
+    fn test_trim_lines_whitespace_only() {
+        let input = "  \n\t\n";
+        let expected = "\n\n";
+        assert_eq!(trim_lines(input), expected);
+    }
 }

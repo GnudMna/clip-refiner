@@ -184,4 +184,17 @@ mod tests {
         let output = json_to_yaml_preserve_order(input);
         assert_eq!(output, input);
     }
+
+    #[test]
+    fn test_format_json_empty() {
+        assert_eq!(format_json("{}"), "{}");
+        assert_eq!(format_json("[]"), "[]");
+    }
+
+    #[test]
+    fn test_format_json_nested() {
+        let input = r#"{"a":{"b":1}}"#;
+        let output = format_json(input);
+        assert!(output.contains(r#""b": 1"#));
+    }
 }

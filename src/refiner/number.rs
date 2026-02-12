@@ -139,4 +139,23 @@ mod tests {
         assert_eq!(remove_commas("1,234 yen"), "1,234 yen");
         assert_eq!(remove_commas(""), "");
     }
+
+    #[test]
+    fn test_add_commas_zero() {
+        assert_eq!(add_commas("0"), "0");
+        assert_eq!(add_commas("0.0"), "0.0");
+    }
+
+    #[test]
+    fn test_add_commas_negative() {
+        assert_eq!(add_commas("-1234.56"), "-1,234.56");
+        assert_eq!(add_commas("-.5"), "-.5");
+    }
+
+    #[test]
+    fn test_is_numeric_input_check() {
+        assert!(!is_numeric_input("abc"));
+        assert!(!is_numeric_input("12.34.56"));
+        assert!(is_numeric_input("-1,234.5"));
+    }
 }

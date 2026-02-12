@@ -219,4 +219,16 @@ mod tests {
         let expected = Some("C:/foo/bar.txt\nNot a path\nD:/data".to_string());
         assert_eq!(convert_to_forward_slash(input), expected);
     }
+
+    #[test]
+    fn test_extract_basename_spaces() {
+        let input = "C:\\Program Files\\My App\\app.exe";
+        assert_eq!(extract_basename(input), Some("app.exe".to_string()));
+    }
+
+    #[test]
+    fn test_extract_basename_relative() {
+        let input = "./foo/bar/baz.txt";
+        assert_eq!(extract_basename(input), Some("baz.txt".to_string()));
+    }
 }

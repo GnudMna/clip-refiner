@@ -180,4 +180,37 @@ mod tests {
         let expected = "| A | B<br>C |\n|---|---|";
         assert_eq!(output, expected);
     }
+
+    #[test]
+    fn test_markdown_to_html_complex() {
+        let input = "> blockquote\n\n```rust\nfn main() {}\n```\n\n- list\n  - nested";
+        let output = markdown_to_html(input);
+        assert!(output.contains("<blockquote>"));
+        assert!(output.contains("<pre><code class=\"language-rust\">"));
+        assert!(output.contains("<ul>"));
+        assert!(output.contains("<li>list"));
+    }
+
+    #[test]
+    fn test_excel_to_markdown_table_empty_cells() {
+        let input = "A\tB\tC\n1\t\t3";
+        let output = excel_to_markdown_table(input);
+        let expected = "| A | B | C |\n|---|---|---|\n| 1 |  | 3 |";
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_excel_to_markdown_table_varying_columns() {
+        // csv crate with flexible(true) fills missing columns with empty strings if the header is longer?
+        // Or if rows are shorter? Let's verify behavior.
+        // Actually, csv crate's records() returns whatever is in the line.
+        // My implementation calculates max_cols.
+        let input = "H1\tH2\nR1\nR2C1\tR2C2\tR2C3";
+        let output = excel_to_markdown_table(input);
+        // max_cols should be 3 (from last row)
+        // Header needs padding
+        // Row 1 needs padding
+        let expected = "| H1 | H2 |  |\n|---|---|---|\n| R1 |  |  |\n| R2C1 | R2C2 | R2C3 |";
+        assert_eq!(output, expected);
+    }
 }
