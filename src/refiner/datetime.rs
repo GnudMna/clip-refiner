@@ -10,11 +10,11 @@ const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 /// # Returns
 /// * `String` - "YYYY-MM-DD HH:MM:SS"形式の日時文字列。変換失敗時は元の文字列を返す。
 pub fn timestamp_to_datetime_string(input: &str) -> String {
-    if let Ok(timestamp) = input.trim().parse::<i64>() {
-        if let Some(utc_dt) = DateTime::from_timestamp(timestamp, 0) {
-            let local_dt: DateTime<Local> = utc_dt.with_timezone(&Local);
-            return local_dt.format(DATETIME_FORMAT).to_string();
-        }
+    if let Ok(timestamp) = input.trim().parse::<i64>()
+        && let Some(utc_dt) = DateTime::from_timestamp(timestamp, 0)
+    {
+        let local_dt: DateTime<Local> = utc_dt.with_timezone(&Local);
+        return local_dt.format(DATETIME_FORMAT).to_string();
     }
     input.to_string()
 }
@@ -27,10 +27,10 @@ pub fn timestamp_to_datetime_string(input: &str) -> String {
 /// # Returns
 /// * `String` - Unixタイムスタンプを表す文字列。変換失敗時は元の文字列を返す。
 pub fn datetime_string_to_timestamp(input: &str) -> String {
-    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input.trim(), DATETIME_FORMAT) {
-        if let Some(local_dt) = Local.from_local_datetime(&naive_dt).single() {
-            return local_dt.timestamp().to_string();
-        }
+    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input.trim(), DATETIME_FORMAT)
+        && let Some(local_dt) = Local.from_local_datetime(&naive_dt).single()
+    {
+        return local_dt.timestamp().to_string();
     }
     input.to_string()
 }

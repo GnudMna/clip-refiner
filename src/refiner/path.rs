@@ -59,10 +59,10 @@ pub fn remove_path_quotes(text: &str) -> Option<String> {
 pub fn add_path_quotes(text: &str) -> Option<String> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
-        if !trimmed.is_empty() && !(trimmed.starts_with('"') && trimmed.ends_with('"')) {
-            if is_path_like_raw(trimmed) {
-                return Some((format!("\"{}\"", trimmed), true));
-            }
+        if !(trimmed.is_empty() || trimmed.starts_with('"') && trimmed.ends_with('"'))
+            && is_path_like_raw(trimmed)
+        {
+            return Some((format!("\"{}\"", trimmed), true));
         }
         None
     })

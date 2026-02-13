@@ -45,7 +45,7 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
             let current_mode = state.get_mode();
             if let Some(processed) = process_clipboard(clipboard, current_mode) {
                 state.set_last_processed_text(processed.clone());
-                notifier::show_process_notification(&state, current_mode, &processed);
+                notifier::show_process_notification(state, current_mode, &processed);
 
                 if state.history_enabled.load(Ordering::Relaxed) {
                     state.add_to_history(processed);
