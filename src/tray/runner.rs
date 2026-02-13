@@ -126,17 +126,13 @@ pub fn run_loop() -> Result<()> {
             }
             tao::event::Event::WindowEvent {
                 window_id, event, ..
-            } => match event {
-                tao::event::WindowEvent::Focused(focused) => {
-                    if !focused && window_id == selector.id() && selector.is_visible() {
-                        // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
-                        if last_selector_show.elapsed().as_millis() > 200 {
-                            selector.hide();
-                        }
+            } => if let tao::event::WindowEvent::Focused(focused) = event
+                && !focused && window_id == selector.id() && selector.is_visible() {
+                    // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
+                    if last_selector_show.elapsed().as_millis() > 200 {
+                        selector.hide();
                     }
-                }
-                _ => {}
-            },
+                },
             _ => {}
         }
 
@@ -412,7 +408,7 @@ fn update_refine(
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
         state.set_last_processed_text(processed.clone());
-        notifier::show_process_notification(&state, mode, &processed);
+        notifier::show_process_notification(state, mode, &processed);
     }
 }
 

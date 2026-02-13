@@ -8,21 +8,16 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// クリップボードの監視方式
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
     /// 一定間隔でクリップボードの内容を確認するポーリング方式。
     /// すべてのプラットフォームで動作する基本的な監視モードです。
+    #[default]
     Polling,
     /// OSのクリップボード更新イベントを購読する方式（Windows専用）。
     /// 低遅延かつCPU負荷が低いのが特徴です。
     #[cfg(windows)]
     Event,
-}
-
-impl Default for MonitorMode {
-    fn default() -> Self {
-        Self::Polling
-    }
 }
 
 /// 通知の内容に関する設定

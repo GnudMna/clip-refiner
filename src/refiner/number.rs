@@ -34,13 +34,11 @@ pub fn add_commas(text: &str) -> String {
         integer_part
     };
 
-    let mut count = 0;
-    for c in abs_integer.chars().rev() {
+    for (count, c) in abs_integer.chars().rev().enumerate() {
         if count > 0 && count % 3 == 0 {
             result.push(',');
         }
         result.push(c);
-        count += 1;
     }
 
     let mut formatted_int: String = result.chars().rev().collect();

@@ -35,13 +35,7 @@ pub fn excel_to_markdown_table(text: &str) -> String {
         .flexible(true) // 行ごとのカラム数が異なっても許容する
         .from_reader(text.as_bytes());
 
-    let mut records: Vec<csv::StringRecord> = Vec::new();
-    for result in reader.records() {
-        if let Ok(record) = result {
-            records.push(record);
-        }
-    }
-
+    let records: Vec<csv::StringRecord> = reader.records().flatten().collect();
     if records.is_empty() {
         return String::new();
     }
