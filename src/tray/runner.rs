@@ -116,6 +116,9 @@ pub fn run_loop() -> Result<()> {
                         state.paused.store(new_paused, Ordering::Relaxed);
                         menu.pause_item.set_checked(new_paused);
                         notifier::show_pause_notification(&state, new_paused, "ショートカット");
+                        if !new_paused {
+                            spawn_monitor_thread(Arc::clone(&state));
+                        }
                     } else if event.id == quit_hotkey.id() {
                         *control_flow = ControlFlow::Exit;
                     }
@@ -211,6 +214,9 @@ fn handle_app_control(
         let paused = menu.pause_item.is_checked();
         state.paused.store(paused, Ordering::Relaxed);
         notifier::show_pause_notification(state, paused, "設定変更");
+        if !paused {
+            spawn_monitor_thread(Arc::clone(state));
+        }
         true
     } else if id == menu.shortcut_list_item.id() {
         notification::show_notification(
