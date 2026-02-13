@@ -1,3 +1,6 @@
+pub mod app;
+pub mod event;
+pub mod hotkey;
 pub mod menu;
 pub mod monitor;
 pub mod notifier;
