@@ -38,18 +38,15 @@ pub fn run_loop() -> Result<()> {
     let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
     let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
 
-    hotkey_manager
-        .register(selector_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(notification_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(pause_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
-    hotkey_manager
-        .register(quit_hotkey)
-        .map_err(|e| anyhow::anyhow!(e))?;
+    let register = |hotkey| {
+        hotkey_manager
+            .register(hotkey)
+            .map_err(|e| anyhow::anyhow!(e))
+    };
+    register(selector_hotkey)?;
+    register(notification_hotkey)?;
+    register(pause_hotkey)?;
+    register(quit_hotkey)?;
 
     // ホットキーイベントをイベントループに転送するスレッドを開始
     let hotkey_proxy = proxy.clone();
@@ -176,106 +173,211 @@ fn handle_menu_event(
     clipboard: &mut Clipboard,
     control_flow: &mut ControlFlow,
 ) {
-    if event.id == menu.quit_item.id() {
+    if handle_app_control(&event.id, menu, state, control_flow) {
+        return;
+    }
+    if handle_history_event(&event.id, menu, state, clipboard) {
+        return;
+    }
+    if handle_notification_event(&event.id, menu, state) {
+        return;
+    }
+    if handle_refine_mode_event(&event.id, menu, state, clipboard) {
+        return;
+    }
+    handle_monitor_event(&event.id, menu, state);
+}
+
+/// アプリケーション制御イベント（終了、一時停止、ショートカット一覧）を処理する。
+///
+/// # Arguments
+/// * `id` - メニュー項目のID。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+/// * `control_flow` - イベントループの制御フラグ。
+///
+/// # Returns
+/// * `bool` - イベントが処理された場合は `true`、そうでない場合は `false`。
+fn handle_app_control(
+    id: &tray_icon::menu::MenuId,
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+    control_flow: &mut ControlFlow,
+) -> bool {
+    if id == menu.quit_item.id() {
         *control_flow = ControlFlow::Exit;
-    } else if event.id == menu.pause_item.id() {
+        true
+    } else if id == menu.pause_item.id() {
         let paused = menu.pause_item.is_checked();
         state.paused.store(paused, Ordering::Relaxed);
-        notifier::show_pause_notification(&state, paused, "設定変更");
-    } else if event.id == menu.history.enabled_item.id() {
+        notifier::show_pause_notification(state, paused, "設定変更");
+        true
+    } else if id == menu.shortcut_list_item.id() {
+        notification::show_notification(
+            "ショートカット一覧",
+            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
+        );
+        true
+    } else {
+        false
+    }
+}
+
+/// 履歴関連のイベント（有効化、クリア、履歴からの復元）を処理する。
+///
+/// # Arguments
+/// * `id` - メニュー項目のID。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+/// * `clipboard` - クリップボードのインスタンス。
+///
+/// # Returns
+/// * `bool` - イベントが処理された場合は `true`、そうでない場合は `false`。
+fn handle_history_event(
+    id: &tray_icon::menu::MenuId,
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+    clipboard: &mut Clipboard,
+) -> bool {
+    if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
         state.history_enabled.store(enabled, Ordering::Relaxed);
         state.save_config();
         let _ = menu.refresh_history(state);
-    } else if event.id == menu.history.clear_item.id() {
+        return true;
+    }
+    if id == menu.history.clear_item.id() {
         state.clear_history();
         state.save_config();
         let _ = menu.refresh_history(state);
-    } else if event.id == menu.notification.enabled_item.id() {
+        return true;
+    }
+
+    // 履歴アイテムのクリック判定
+    // メニューIDと一致する履歴を探す
+    let menu_records = menu.history.records.lock_ignore_poison();
+
+    if let Some((_, text)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
+        if let Err(e) = clipboard.set_text(text.clone()) {
+            notification::show_anyhow_error("クリップボード設定エラー", &anyhow::anyhow!(e));
+        } else {
+            state.set_last_processed_text(text.clone());
+            if state.show_success_notification.load(Ordering::Relaxed) {
+                notification::show_notification("履歴から復元", "クリップボードにコピーしました");
+            }
+        }
+        return true;
+    }
+
+    false
+}
+
+/// 通知設定関連のイベントを処理する。
+///
+/// # Arguments
+/// * `id` - メニュー項目のID。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+///
+/// # Returns
+/// * `bool` - イベントが処理された場合は `true`、そうでない場合は `false`。
+fn handle_notification_event(
+    id: &tray_icon::menu::MenuId,
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+) -> bool {
+    if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
         state
             .show_success_notification
             .store(enabled, Ordering::Relaxed);
         menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
-    } else if event.id == menu.notification.notify_mode_item.id() {
+        return true;
+    }
+    if id == menu.notification.notify_mode_item.id() {
         let enabled = menu.notification.notify_mode_item.is_checked();
         state
             .notification_notify_mode
             .store(enabled, Ordering::Relaxed);
         state.save_config();
-    } else if event.id == menu.notification.notify_result_item.id() {
+        return true;
+    }
+    if id == menu.notification.notify_result_item.id() {
         let enabled = menu.notification.notify_result_item.is_checked();
         state
             .notification_notify_result
             .store(enabled, Ordering::Relaxed);
         state.save_config();
-    } else if event.id == menu.notification.notify_pause_item.id() {
+        return true;
+    }
+    if id == menu.notification.notify_pause_item.id() {
         let enabled = menu.notification.notify_pause_item.is_checked();
         state
             .notification_notify_pause
             .store(enabled, Ordering::Relaxed);
         state.save_config();
-    } else if event.id == menu.shortcut_list_item.id() {
-        notification::show_notification(
-            "ショートカット一覧",
-            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
-        );
-    } else if let Some((_, text)) = menu
-        .history
-        .records
-        .lock_ignore_poison()
-        .iter()
-        .find(|(id, _)| event.id == *id)
-    {
-        match Clipboard::new() {
-            Ok(mut cb) => {
-                if let Err(e) = cb.set_text(text.clone()) {
-                    notification::show_anyhow_error(
-                        "クリップボード設定エラー",
-                        &anyhow::anyhow!(e),
-                    );
-                } else {
-                    state.set_last_processed_text(text.clone());
-                    if state.show_success_notification.load(Ordering::Relaxed) {
-                        notification::show_notification(
-                            "履歴から復元",
-                            "クリップボードにコピーしました",
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                notification::show_anyhow_error("クリップボード初期化エラー", &anyhow::anyhow!(e))
-            }
-        }
-    } else if let Some((_, mode)) = menu
-        .refine
-        .all_items() // すべての変換モードアイテムから該当するものを検索
-        .find(|(item, _)| event.id == item.id())
-    {
+        return true;
+    }
+    false
+}
+
+/// 加工モード選択イベントを処理する。
+///
+/// # Arguments
+/// * `id` - メニュー項目のID。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+/// * `clipboard` - クリップボードのインスタンス。
+///
+/// # Returns
+/// * `bool` - イベントが処理された場合は `true`、そうでない場合は `false`。
+fn handle_refine_mode_event(
+    id: &tray_icon::menu::MenuId,
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+    clipboard: &mut Clipboard,
+) -> bool {
+    if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
         update_refine(state, menu, clipboard, *mode);
-    } else if let Some((_, monitor_mode)) = menu
-        .monitor
-        .items
-        .iter() // 監視方式アイテムから該当するものを検索
-        .find(|(item, _)| event.id == item.id())
-    {
-        update_monitor_mode(state, menu, *monitor_mode);
+        true
     } else {
-        // 監視周期アイテム（ミリ秒）から該当するものを検索
-        for (item, ms) in &menu.interval.items {
-            if event.id == item.id() {
-                state.interval_ms.store(*ms, Ordering::Relaxed);
-                for (it, _) in &menu.interval.items {
-                    it.set_checked(false);
-                }
-                item.set_checked(true);
-                state.save_config();
-                break;
+        false
+    }
+}
+
+/// 監視設定（監視方式、監視間隔）イベントを処理する。
+///
+/// # Arguments
+/// * `id` - メニュー項目のID。
+/// * `menu` - トレイメニューのインスタンス。
+/// * `state` - アプリケーションの共有状態。
+///
+/// # Returns
+/// * `bool` - イベントが処理された場合は `true`、そうでない場合は `false`。
+fn handle_monitor_event(
+    id: &tray_icon::menu::MenuId,
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+) -> bool {
+    if let Some((_, monitor_mode)) = menu.monitor.items.iter().find(|(item, _)| item.id() == id) {
+        update_monitor_mode(state, menu, *monitor_mode);
+        return true;
+    }
+
+    // 監視周期アイテム（ミリ秒）から該当するものを検索
+    for (item, ms) in &menu.interval.items {
+        if item.id() == id {
+            state.interval_ms.store(*ms, Ordering::Relaxed);
+            for (it, _) in &menu.interval.items {
+                it.set_checked(false);
             }
+            item.set_checked(true);
+            state.save_config();
+            return true;
         }
     }
+    false
 }
 
 /// 選択された加工モードをアプリケーションの状態に反映し、UIを更新する。

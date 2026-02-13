@@ -71,37 +71,46 @@ pub fn remove_utm_params(input: &str) -> String {
 mod tests {
     use super::*;
 
+    /// 英数字のURLエンコードテスト
+    /// 変更されないことを確認
     #[test]
     fn test_url_encode_alphanumeric() {
         assert_eq!(url_encode("abc123"), "abc123");
     }
 
+    /// 記号のURLエンコードテスト
     #[test]
     fn test_url_encode_symbols() {
         assert_eq!(url_encode(" "), "%20");
         assert_eq!(url_encode("\""), "%22");
     }
 
+    /// 英数字のURLデコードテスト
     #[test]
     fn test_url_decode_alphanumeric() {
         assert_eq!(url_decode("abc123").unwrap(), "abc123");
     }
 
+    /// 記号のURLデコードテスト
     #[test]
     fn test_url_decode_symbols() {
         assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
+    /// マルチバイト文字のURLデコードテスト
     #[test]
     fn test_url_decode_multibyte() {
         assert_eq!(url_decode("%E3%81%82%E3%81%84%E3%81%86").unwrap(), "あいう");
     }
 
+    /// 不正なUTF-8シーケンスのURLデコードテスト
+    /// エラーになることを確認
     #[test]
     fn test_url_decode_bad_utf8() {
         assert!(url_decode("%FF").is_err());
     }
 
+    /// UTMパラメータ削除のテスト(基本)
     #[test]
     fn test_remove_utm_params() {
         assert_eq!(
@@ -125,5 +134,29 @@ mod tests {
             "https://example.com/?foo=bar"
         );
         assert_eq!(remove_utm_params("?utm_source=a"), "");
+    }
+
+    /// スペースや特殊文字が含まれる場合のURLエンコードテスト
+    /// プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認
+    #[test]
+    fn test_url_encode_space_special() {
+        assert_eq!(url_encode("foo bar"), "foo%20bar");
+        // ENCODE_SET does not include '+', so it remains as '+'
+        assert_eq!(url_encode("foo+bar"), "foo+bar");
+    }
+
+    /// UTMパラメータが他のパラメータと混在している場合のテスト
+    #[test]
+    fn test_remove_utm_params_complex() {
+        assert_eq!(
+            remove_utm_params("http://example.com?a=1&utm_source=s&b=2"),
+            "http://example.com?a=1&b=2"
+        );
+        // Case sensitive check? utm_ is usually lowercase.
+        // My implementation assumes lowercase "utm_".
+        assert_eq!(
+            remove_utm_params("http://example.com?UTM_SOURCE=S"),
+            "http://example.com?UTM_SOURCE=S"
+        );
     }
 }

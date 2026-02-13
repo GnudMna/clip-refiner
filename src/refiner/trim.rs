@@ -28,17 +28,36 @@ pub fn trim_lines(input: &str) -> String {
 mod tests {
     use super::*;
 
+    /// 文字列全体のトリムテスト
     #[test]
     fn test_trim_text() {
         assert_eq!(trim_text("  hello  "), "hello");
         assert_eq!(trim_text("\n world \r\n"), "world");
     }
 
+    /// 各行ごとのトリムテスト
     #[test]
     fn test_trim_lines() {
         let input = "  hello  \n  world \r\n  rust ";
         let expected = "hello\nworld\nrust";
         let actual = trim_lines(input);
         assert_eq!(actual, expected);
+    }
+
+    /// 空文字列に対する行トリムテスト
+    #[test]
+    fn test_trim_lines_empty() {
+        let input = "";
+        let expected = "";
+        assert_eq!(trim_lines(input), expected);
+    }
+
+    /// 空白文字のみの行に対するトリムテスト
+    /// 空行になることを確認
+    #[test]
+    fn test_trim_lines_whitespace_only() {
+        let input = "  \n\t\n";
+        let expected = "\n\n";
+        assert_eq!(trim_lines(input), expected);
     }
 }

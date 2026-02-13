@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use super::notifier;
-use super::state::{AppEvent, AppState};
+use super::state::AppState;
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::process_clipboard;
@@ -49,14 +49,12 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
 
                 if state.history_enabled.load(Ordering::Relaxed) {
                     state.add_to_history(processed);
-                    let _ = state.proxy.send_event(AppEvent::RefreshHistory);
                 }
                 return true;
             }
 
             if state.history_enabled.load(Ordering::Relaxed) {
                 state.add_to_history(text.clone());
-                let _ = state.proxy.send_event(AppEvent::RefreshHistory);
             }
         }
         state.set_last_processed_text(text);
