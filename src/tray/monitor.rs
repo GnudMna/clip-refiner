@@ -94,7 +94,7 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
             thread::sleep(Duration::from_millis(interval));
 
             if state.paused.load(Ordering::Relaxed) {
-                continue;
+                break;
             }
 
             handle_clipboard_update(&mut clipboard, &state);
@@ -133,8 +133,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
             }
 
             if state.paused.load(Ordering::Relaxed) {
-                thread::sleep(Duration::from_millis(200));
-                continue;
+                break;
             }
 
             // クリップボードのシーケンス番号をチェック
