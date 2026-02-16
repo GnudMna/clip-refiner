@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
+use strum::IntoEnumIterator;
 
 use anyhow::{Context, Result};
 use tray_icon::{
@@ -183,7 +184,7 @@ impl TrayMenu {
         let mut items_by_category: HashMap<RefineCategory, Vec<(CheckMenuItem, RefineMode)>> =
             HashMap::new();
 
-        for &mode in RefineMode::variants() {
+        for mode in RefineMode::iter() {
             let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
             items_by_category
                 .entry(mode.category())
