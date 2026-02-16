@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
+use strum::IntoEnumIterator;
 
 use anyhow::{Context, Result};
 use tray_icon::{
@@ -62,6 +63,16 @@ pub struct HistoryMenu {
     pub records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
 }
 
+/// 通知メニューの構成要素
+pub struct NotificationMenu {
+    pub main_submenu: Submenu,
+    pub enabled_item: CheckMenuItem,
+    pub content_submenu: Submenu,
+    pub notify_mode_item: CheckMenuItem,
+    pub notify_result_item: CheckMenuItem,
+    pub notify_pause_item: CheckMenuItem,
+}
+
 /// トレイメニューの管理
 pub struct TrayMenu {
     /// トレイアイコンのインスタンス。Dropされるとアイコンが消えるため、所有権を維持する必要がある。
@@ -72,7 +83,7 @@ pub struct TrayMenu {
     pub monitor: MonitorMenu,
     pub interval: IntervalMenu,
     pub history: HistoryMenu,
-    pub show_success_notification_item: CheckMenuItem,
+    pub notification: NotificationMenu,
     pub shortcut_list_item: MenuItem,
 }
 
@@ -99,10 +110,15 @@ impl TrayMenu {
         let monitor = Self::build_monitor_menu(current_monitor_mode)?;
         let interval = Self::build_interval_menu(current_interval, current_monitor_mode)?;
         let history = Self::build_history_menu(history_enabled)?;
-
-        // 通知メニュー
-        let show_success_notification_item =
-            CheckMenuItem::new("成功通知を表示", true, show_success_notification, None);
+        let notification = Self::build_notification_menu(
+            show_success_notification,
+            state.notification_notify_mode.load(Ordering::Relaxed),
+            state.notification_notify_result.load(Ordering::Relaxed),
+            state.notification_notify_pause.load(Ordering::Relaxed),
+        )?;
+        notification
+            .content_submenu
+            .set_enabled(show_success_notification);
 
         // その他のメニュー
         let pause_item =
@@ -118,8 +134,7 @@ impl TrayMenu {
                 &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-                &show_success_notification_item as &dyn tray_icon::menu::IsMenuItem,
+                &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -146,7 +161,7 @@ impl TrayMenu {
             monitor,
             interval,
             history,
-            show_success_notification_item,
+            notification,
             shortcut_list_item,
         };
 
@@ -169,7 +184,7 @@ impl TrayMenu {
         let mut items_by_category: HashMap<RefineCategory, Vec<(CheckMenuItem, RefineMode)>> =
             HashMap::new();
 
-        for &mode in RefineMode::variants() {
+        for mode in RefineMode::iter() {
             let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
             items_by_category
                 .entry(mode.category())
@@ -394,6 +409,56 @@ impl TrayMenu {
             enabled_item,
             clear_item,
             records,
+        })
+    }
+
+    /// 通知メニューを構築する
+    ///
+    /// # Arguments
+    /// * `enabled` - 成功通知を有効にするかどうか。
+    /// * `notify_mode` - 通知にモード変化を表示するかどうか。
+    /// * `notify_result` - 通知に加工結果を表示するかどうか。
+    ///
+    /// # Returns
+    /// 成功した場合は `NotificationMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    fn build_notification_menu(
+        enabled: bool,
+        notify_mode: bool,
+        notify_result: bool,
+        notify_pause: bool,
+    ) -> Result<NotificationMenu> {
+        let enabled_item = CheckMenuItem::new("成功通知を有効化", true, enabled, None);
+        let notify_mode_item = CheckMenuItem::new("モード変更を通知", true, notify_mode, None);
+        let notify_result_item = CheckMenuItem::new("変換結果を通知", true, notify_result, None);
+        let notify_pause_item = CheckMenuItem::new("一時停止を通知", true, notify_pause, None);
+
+        let content_submenu = Submenu::with_items(
+            "通知内容",
+            true,
+            &[
+                &notify_mode_item as &dyn tray_icon::menu::IsMenuItem,
+                &notify_result_item as &dyn tray_icon::menu::IsMenuItem,
+                &notify_pause_item as &dyn tray_icon::menu::IsMenuItem,
+            ],
+        )?;
+
+        let main_submenu = Submenu::with_items(
+            "通知",
+            true,
+            &[
+                &enabled_item as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &content_submenu as &dyn tray_icon::menu::IsMenuItem,
+            ],
+        )?;
+
+        Ok(NotificationMenu {
+            main_submenu,
+            enabled_item,
+            content_submenu,
+            notify_mode_item,
+            notify_result_item,
+            notify_pause_item,
         })
     }
 
