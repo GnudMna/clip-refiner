@@ -23,6 +23,7 @@ serde_json = "1.0.149"
 serde_with = "3.16.1"
 serde_yaml = "0.9.34"
 single-instance = "0.3.3"
+strum = { version = "0.27.2", features = ["derive"] }
 tao = "0.34.5"
 tray-icon = "0.21.3"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
