@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use super::menu::TrayMenu;
 use super::notifier;

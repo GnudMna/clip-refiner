@@ -1,7 +1,4 @@
-use std::sync::{
-    Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
 use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::RefineMode;
@@ -110,61 +107,79 @@ impl AppState {
     pub fn set_monitor_mode(&self, mode: MonitorMode) {
         self.config.write_ignore_poison().monitor_mode = mode;
     }
-    
+
     pub fn is_paused(&self) -> bool {
         self.config.read_ignore_poison().is_paused
     }
-    
+
     pub fn set_paused(&self, paused: bool) {
         self.config.write_ignore_poison().is_paused = paused;
     }
-    
+
     pub fn interval_ms(&self) -> u64 {
         self.config.read_ignore_poison().interval_ms
     }
-    
+
     pub fn set_interval_ms(&self, ms: u64) {
         self.config.write_ignore_poison().interval_ms = ms;
     }
-    
+
     pub fn is_history_enabled(&self) -> bool {
         self.config.read_ignore_poison().history_enabled
     }
-    
+
     pub fn set_history_enabled(&self, enabled: bool) {
         self.config.write_ignore_poison().history_enabled = enabled;
     }
-    
+
     pub fn show_success_notification(&self) -> bool {
         self.config.read_ignore_poison().show_success_notification
     }
-    
+
     pub fn set_show_success_notification(&self, show: bool) {
         self.config.write_ignore_poison().show_success_notification = show;
     }
-    
+
     pub fn notify_mode(&self) -> bool {
-        self.config.read_ignore_poison().notification_settings.notify_mode
+        self.config
+            .read_ignore_poison()
+            .notification_settings
+            .notify_mode
     }
-    
+
     pub fn set_notify_mode(&self, b: bool) {
-        self.config.write_ignore_poison().notification_settings.notify_mode = b;
+        self.config
+            .write_ignore_poison()
+            .notification_settings
+            .notify_mode = b;
     }
 
     pub fn notify_result(&self) -> bool {
-        self.config.read_ignore_poison().notification_settings.notify_result
+        self.config
+            .read_ignore_poison()
+            .notification_settings
+            .notify_result
     }
-    
+
     pub fn set_notify_result(&self, b: bool) {
-        self.config.write_ignore_poison().notification_settings.notify_result = b;
+        self.config
+            .write_ignore_poison()
+            .notification_settings
+            .notify_result = b;
     }
-    
+
     pub fn notify_pause(&self) -> bool {
-        self.config.read_ignore_poison().notification_settings.notify_pause
+        self.config
+            .read_ignore_poison()
+            .notification_settings
+            .notify_pause
     }
-    
+
     pub fn set_notify_pause(&self, b: bool) {
-        self.config.write_ignore_poison().notification_settings.notify_pause = b;
+        self.config
+            .write_ignore_poison()
+            .notification_settings
+            .notify_pause = b;
     }
 
     /// 加工済みの最新テキストをスレッド安全に取得する

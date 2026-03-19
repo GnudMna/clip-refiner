@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
 
 use super::menu::TrayMenu;
 use super::monitor::spawn_monitor_thread;
@@ -6,9 +6,9 @@ use super::notifier;
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::notification;
-use crate::refiner::{RefineMode, process_clipboard};
+use crate::refiner::RefineMode;
 
-use arboard::Clipboard;
+use super::worker::ClipboardCommand;
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
@@ -25,19 +25,19 @@ pub fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard: &mut Clipboard,
+    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
     control_flow: &mut ControlFlow,
 ) {
     if handle_app_control(&event.id, menu, state, control_flow) {
         return;
     }
-    if handle_history_event(&event.id, menu, state, clipboard) {
+    if handle_history_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
     if handle_notification_event(&event.id, menu, state) {
         return;
     }
-    if handle_refine_mode_event(&event.id, menu, state, clipboard) {
+    if handle_refine_mode_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
     handle_monitor_event(&event.id, menu, state);
@@ -117,7 +117,7 @@ fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard: &mut Clipboard,
+    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
@@ -136,14 +136,7 @@ fn handle_history_event(
     let menu_records = menu.history.records.lock_ignore_poison();
 
     if let Some((_, text)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
-        if let Err(e) = clipboard.set_text(text.clone()) {
-            notification::show_anyhow_error("クリップボード設定エラー", &anyhow::anyhow!(e));
-        } else {
-            state.set_last_processed_text(text.clone());
-            if state.show_success_notification() {
-                notification::show_notification("履歴から復元", "クリップボードにコピーしました");
-            }
-        }
+        let _ = clipboard_tx.send(ClipboardCommand::SetText(text.clone()));
         return true;
     }
 
@@ -206,10 +199,10 @@ fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard: &mut Clipboard,
+    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
 ) -> bool {
     if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
-        update_refine(state, menu, clipboard, *mode);
+        update_refine(state, menu, clipboard_tx, *mode);
         true
     } else {
         false
@@ -259,7 +252,7 @@ fn handle_monitor_event(
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    clipboard: &mut Clipboard,
+    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
     mode: RefineMode,
 ) {
     state.set_mode(mode);
@@ -270,10 +263,7 @@ pub fn update_refine(
     menu.refresh_category_labels(mode);
 
     state.save_config();
-    if let Some(processed) = process_clipboard(clipboard, mode) {
-        state.set_last_processed_text(processed.clone());
-        notifier::show_process_notification(state, mode, &processed);
-    }
+    let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
 }
 
 /// 監視モードを更新し、それに応じたスレッドを再起動する。

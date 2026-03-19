@@ -4,12 +4,11 @@ use std::time::Instant;
 use super::event;
 use super::hotkey::HotkeyHandler;
 use super::menu::TrayMenu;
-use super::monitor::{init_clipboard, spawn_monitor_thread};
+use super::monitor::spawn_monitor_thread;
 use super::selector::{SelectorWindow, init_selector};
 use super::state::{AppEvent, AppState};
 
 use anyhow::Result;
-use arboard::Clipboard;
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 use tray_icon::menu::MenuEvent;
@@ -20,7 +19,7 @@ pub struct App {
     pub menu: TrayMenu,
     pub selector: SelectorWindow,
     pub hotkey_handler: HotkeyHandler,
-    pub clipboard: Clipboard,
+    pub clipboard_tx: std::sync::mpsc::Sender<super::worker::ClipboardCommand>,
     pub last_selector_show: Instant,
 }
 
@@ -38,7 +37,7 @@ impl App {
         let menu = TrayMenu::build(&state)?;
         let hotkey_handler = HotkeyHandler::new()?;
         let selector = init_selector(event_loop, proxy.clone())?;
-        let clipboard = init_clipboard()?;
+        let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 
         hotkey_handler.start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -49,7 +48,7 @@ impl App {
             menu,
             selector,
             hotkey_handler,
-            clipboard,
+            clipboard_tx,
             last_selector_show: Instant::now(),
         })
     }
@@ -77,7 +76,7 @@ impl App {
                         menu_event,
                         &self.menu,
                         &self.state,
-                        &mut self.clipboard,
+                        &self.clipboard_tx,
                         control_flow,
                     );
                 }
@@ -94,7 +93,7 @@ impl App {
         match event {
             AppEvent::RequestModeChange(mode) => {
                 self.selector.hide();
-                event::update_refine(&self.state, &self.menu, &mut self.clipboard, mode);
+                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode);
             }
             AppEvent::HideSelector => {
                 self.selector.hide();
