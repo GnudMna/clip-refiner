@@ -101,10 +101,10 @@ impl TrayMenu {
     pub fn build(state: &AppState) -> Result<Self> {
         use std::sync::atomic::Ordering;
         let current_mode = state.get_mode();
-        let current_interval = state.interval_ms.load(Ordering::Relaxed);
+        let current_interval = state.interval_ms();
         let current_monitor_mode = state.get_monitor_mode();
-        let history_enabled = state.history_enabled.load(Ordering::Relaxed);
-        let show_success_notification = state.show_success_notification.load(Ordering::Relaxed);
+        let history_enabled = state.is_history_enabled();
+        let show_success_notification = state.show_success_notification();
 
         let refine = Self::build_refine_menu(current_mode)?;
         let monitor = Self::build_monitor_menu(current_monitor_mode)?;
@@ -112,9 +112,9 @@ impl TrayMenu {
         let history = Self::build_history_menu(history_enabled)?;
         let notification = Self::build_notification_menu(
             show_success_notification,
-            state.notification_notify_mode.load(Ordering::Relaxed),
-            state.notification_notify_result.load(Ordering::Relaxed),
-            state.notification_notify_pause.load(Ordering::Relaxed),
+            state.notify_mode(),
+            state.notify_result(),
+            state.notify_pause(),
         )?;
         notification
             .content_submenu
@@ -122,7 +122,7 @@ impl TrayMenu {
 
         // その他のメニュー
         let pause_item =
-            CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
+            CheckMenuItem::new("一時停止", true, state.is_paused(), None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
