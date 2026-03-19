@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use crate::notification;
 use crate::refiner::RefineMode;

@@ -99,7 +99,6 @@ impl TrayMenu {
     /// # Returns
     /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す。
     pub fn build(state: &AppState) -> Result<Self> {
-        use std::sync::atomic::Ordering;
         let current_mode = state.get_mode();
         let current_interval = state.interval_ms();
         let current_monitor_mode = state.get_monitor_mode();
@@ -121,8 +120,7 @@ impl TrayMenu {
             .set_enabled(show_success_notification);
 
         // その他のメニュー
-        let pause_item =
-            CheckMenuItem::new("一時停止", true, state.is_paused(), None);
+        let pause_item = CheckMenuItem::new("一時停止", true, state.is_paused(), None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
