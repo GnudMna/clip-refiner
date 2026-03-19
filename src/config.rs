@@ -60,6 +60,9 @@ pub struct AppConfig {
     /// 成功時に通知を表示するかどうか
     #[serde(default)]
     pub show_success_notification: bool,
+    /// 監視が一時停止されているかどうか
+    #[serde(default)]
+    pub is_paused: bool,
     /// 通知の内容設定
     #[serde(default)]
     pub notification_settings: NotificationSettings,
@@ -73,6 +76,7 @@ impl Default for AppConfig {
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
             show_success_notification: false,
+            is_paused: false,
             notification_settings: NotificationSettings::default(),
         }
     }

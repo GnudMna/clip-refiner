@@ -77,7 +77,7 @@ impl AppState {
         let config = AppConfig::load();
         Self {
             mode: Mutex::new(config.mode),
-            paused: AtomicBool::new(false),
+            paused: AtomicBool::new(config.is_paused),
             monitor_mode: Mutex::new(config.monitor_mode),
             monitor_generation: AtomicU64::new(0),
             interval_ms: AtomicU64::new(config.interval_ms),
@@ -100,6 +100,7 @@ impl AppState {
             monitor_mode: self.get_monitor_mode(),
             history_enabled: self.history_enabled.load(Ordering::Relaxed),
             show_success_notification: self.show_success_notification.load(Ordering::Relaxed),
+            is_paused: self.paused.load(Ordering::Relaxed),
             notification_settings: crate::config::NotificationSettings {
                 notify_mode: self.notification_notify_mode.load(Ordering::Relaxed),
                 notify_result: self.notification_notify_result.load(Ordering::Relaxed),
