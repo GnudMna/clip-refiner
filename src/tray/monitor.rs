@@ -47,13 +47,13 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
                 state.set_last_processed_text(processed.clone());
                 notifier::show_process_notification(state, current_mode, &processed);
 
-                if state.history_enabled.load(Ordering::Relaxed) {
+                if state.is_history_enabled() {
                     state.add_to_history(processed);
                 }
                 return true;
             }
 
-            if state.history_enabled.load(Ordering::Relaxed) {
+            if state.is_history_enabled() {
                 state.add_to_history(text.clone());
             }
         }
@@ -90,10 +90,10 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            let interval = state.interval_ms.load(Ordering::Relaxed);
+            let interval = state.interval_ms();
             thread::sleep(Duration::from_millis(interval));
 
-            if state.paused.load(Ordering::Relaxed) {
+            if state.is_paused() {
                 break;
             }
 
@@ -132,7 +132,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            if state.paused.load(Ordering::Relaxed) {
+            if state.is_paused() {
                 break;
             }
 

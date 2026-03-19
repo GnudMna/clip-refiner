@@ -12,15 +12,15 @@ use crate::tray::state::AppState;
 /// * `mode` - 実行された変換モード
 /// * `processed` - 変換後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
-    if !state.show_success_notification.load(Ordering::Relaxed) {
+    if !state.show_success_notification() {
         return;
     }
 
     let mut lines = Vec::new();
-    if state.notification_notify_mode.load(Ordering::Relaxed) {
+    if state.notify_mode() {
         lines.push(format!("モード: {}", mode.label()));
     }
-    if state.notification_notify_result.load(Ordering::Relaxed) {
+    if state.notify_result() {
         let snippet = if processed.chars().count() > 50 {
             format!("{}...", processed.chars().take(47).collect::<String>())
         } else {
@@ -38,9 +38,7 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// * `paused` - 一時停止状態かどうか（true: 一時停止、false: 再開）
 /// * `source` - 通知のタイトル（例: "ショートカット"、"設定変更"）
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
-    if state.show_success_notification.load(Ordering::Relaxed)
-        && state.notification_notify_pause.load(Ordering::Relaxed)
-    {
+    if state.show_success_notification() && state.notify_pause() {
         notification::show_notification(
             source,
             if paused {

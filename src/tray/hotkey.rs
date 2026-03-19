@@ -91,10 +91,8 @@ impl HotkeyHandler {
                     selector.show(state.get_mode());
                 }
             } else if event.id == self.notification_hotkey.id() {
-                let new_val = !state.show_success_notification.load(Ordering::Relaxed);
-                state
-                    .show_success_notification
-                    .store(new_val, Ordering::Relaxed);
+                let new_val = !state.show_success_notification();
+                state.set_show_success_notification(new_val);
                 menu.notification.enabled_item.set_checked(new_val);
                 menu.notification.content_submenu.set_enabled(new_val);
                 state.save_config();
@@ -107,8 +105,8 @@ impl HotkeyHandler {
                     },
                 );
             } else if event.id == self.pause_hotkey.id() {
-                let new_paused = !state.paused.load(Ordering::Relaxed);
-                state.paused.store(new_paused, Ordering::Relaxed);
+                let new_paused = !state.is_paused();
+                state.set_paused(new_paused);
                 menu.pause_item.set_checked(new_paused);
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
                 if !new_paused {

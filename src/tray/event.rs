@@ -85,7 +85,7 @@ fn handle_app_control(
         true
     } else if id == menu.pause_item.id() {
         let paused = menu.pause_item.is_checked();
-        state.paused.store(paused, Ordering::Relaxed);
+        state.set_paused(paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
         if !paused {
@@ -121,7 +121,7 @@ fn handle_history_event(
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
-        state.history_enabled.store(enabled, Ordering::Relaxed);
+        state.set_history_enabled(enabled);
         state.save_config();
         let _ = menu.refresh_history(state);
         return true;
@@ -140,7 +140,7 @@ fn handle_history_event(
             notification::show_anyhow_error("クリップボード設定エラー", &anyhow::anyhow!(e));
         } else {
             state.set_last_processed_text(text.clone());
-            if state.show_success_notification.load(Ordering::Relaxed) {
+            if state.show_success_notification() {
                 notification::show_notification("履歴から復元", "クリップボードにコピーしました");
             }
         }
@@ -166,34 +166,26 @@ fn handle_notification_event(
 ) -> bool {
     if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
-        state
-            .show_success_notification
-            .store(enabled, Ordering::Relaxed);
+        state.set_show_success_notification(enabled);
         menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_mode_item.id() {
         let enabled = menu.notification.notify_mode_item.is_checked();
-        state
-            .notification_notify_mode
-            .store(enabled, Ordering::Relaxed);
+        state.set_notify_mode(enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_result_item.id() {
         let enabled = menu.notification.notify_result_item.is_checked();
-        state
-            .notification_notify_result
-            .store(enabled, Ordering::Relaxed);
+        state.set_notify_result(enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_pause_item.id() {
         let enabled = menu.notification.notify_pause_item.is_checked();
-        state
-            .notification_notify_pause
-            .store(enabled, Ordering::Relaxed);
+        state.set_notify_pause(enabled);
         state.save_config();
         return true;
     }
@@ -245,7 +237,7 @@ fn handle_monitor_event(
 
     for (item, ms) in &menu.interval.items {
         if item.id() == id {
-            state.interval_ms.store(*ms, Ordering::Relaxed);
+            state.set_interval_ms(*ms);
             for (it, _) in &menu.interval.items {
                 it.set_checked(false);
             }
