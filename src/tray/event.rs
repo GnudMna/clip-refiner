@@ -87,6 +87,7 @@ fn handle_app_control(
         let paused = menu.pause_item.is_checked();
         state.paused.store(paused, Ordering::Relaxed);
         notifier::show_pause_notification(state, paused, "設定変更");
+        state.save_config();
         if !paused {
             spawn_monitor_thread(Arc::clone(state));
         }
