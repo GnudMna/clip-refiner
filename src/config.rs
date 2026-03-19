@@ -160,20 +160,16 @@ impl AppConfig {
 /// # Returns
 /// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
 fn get_config_dir() -> Result<PathBuf> {
+    let base_dirs = directories::BaseDirs::new()
+        .context("システムディレクトリの取得に失敗しました")?;
+
     #[cfg(windows)]
-    {
-        let appdata = std::env::var("APPDATA").context("APPDATA環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(appdata).join(consts::APP_NAME))
-    }
+    let dir_name = consts::APP_NAME;
 
     #[cfg(not(windows))]
-    {
-        // XDG Base Directory Specification に従い、~/.config/clip-refiner を使用
-        let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(home)
-            .join(".config")
-            .join(consts::APP_NAME_KEBAB))
-    }
+    let dir_name = consts::APP_NAME_KEBAB;
+
+    Ok(base_dirs.config_dir().join(dir_name))
 }
 
 #[cfg(test)]
