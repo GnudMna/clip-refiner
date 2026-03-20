@@ -59,12 +59,13 @@ pub fn handle_window_event(
     selector: &super::selector::SelectorWindow,
     last_selector_show: &std::time::Instant,
 ) {
-    if let WindowEvent::Focused(focused) = event {
-        if !focused && selector.is_visible() {
-            // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
-            if last_selector_show.elapsed().as_millis() > 200 {
-                selector.hide();
-            }
+    if let WindowEvent::Focused(focused) = event
+        && !focused
+        && selector.is_visible()
+    {
+        // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
+        if last_selector_show.elapsed().as_millis() > 200 {
+            selector.hide();
         }
     }
 }

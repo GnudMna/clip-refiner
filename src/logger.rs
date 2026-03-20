@@ -45,7 +45,7 @@ impl TracingLogger {
         let now = chrono::Local::now().date_naive();
         let mut last_cleanup = self.last_cleanup.lock().unwrap();
 
-        if last_cleanup.map_or(true, |date| now > date) {
+        if last_cleanup.is_none_or(|date| now > date) {
             if let Err(e) = cleanup_old_logs(&self.log_dir, 14) {
                 // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
                 tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
@@ -104,18 +104,17 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() {
-            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                // clip-refiner.log.YYYY-MM-DD 形式を想定
-                if filename.starts_with("clip-refiner.log.") {
-                    let date_str = &filename["clip-refiner.log.".len()..];
-                    if let Ok(file_date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                        let age = now - file_date;
-                        if age.num_days() > max_days {
-                            tracing::info!("古いログファイルを削除します: {}", filename);
-                            let _ = std::fs::remove_file(path);
-                        }
-                    }
+        if path.is_file()
+            && let Some(filename) = path.file_name().and_then(|n| n.to_str())
+        {
+            // clip-refiner.log.YYYY-MM-DD 形式を想定
+            if let Some(date_str) = filename.strip_prefix("clip-refiner.log.")
+                && let Ok(file_date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            {
+                let age = now - file_date;
+                if age.num_days() > max_days {
+                    tracing::info!("古いログファイルを削除します: {}", filename);
+                    let _ = std::fs::remove_file(path);
                 }
             }
         }

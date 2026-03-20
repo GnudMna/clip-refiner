@@ -346,7 +346,7 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
     }
 
     let result = refined.into_owned();
-    if let Ok(_) = clipboard.set_text(result.clone()) {
+    if clipboard.set_text(result.clone()).is_ok() {
         Some(result)
     } else {
         None
