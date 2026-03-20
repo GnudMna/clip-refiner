@@ -16,13 +16,3 @@ pub fn show_notification(summary: &str, body: &str) {
         .timeout(Duration::from_secs(3))
         .show();
 }
-
-/// anyhow::Error からエラー通知を表示する
-///
-/// # Arguments
-/// * `summary` - 通知のタイトル。
-/// * `err` - 表示する `anyhow::Error` インスタンス。
-pub fn show_anyhow_error(summary: &str, err: &anyhow::Error) {
-    let body = format!("{:#}", err); // {:#} で原因のチェーンを含めて表示
-    show_notification(summary, &body);
-}

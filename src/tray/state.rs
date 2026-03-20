@@ -84,7 +84,7 @@ impl AppState {
     pub fn save_config(&self) {
         let config = self.config.read_ignore_poison();
         if let Err(e) = config.save() {
-            eprintln!("設定の保存に失敗: {}", e);
+            crate::log_error!("設定の保存に失敗: {:?}", e);
         }
     }
 
@@ -236,6 +236,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering;
     use tao::event_loop::EventLoopBuilder;
     #[cfg(windows)]
     use tao::platform::windows::EventLoopBuilderExtWindows;

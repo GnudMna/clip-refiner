@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use crate::consts;
-use crate::notification::show_notification;
 use crate::refiner::RefineMode;
 
 use anyhow::{Context, Result};
@@ -102,7 +101,7 @@ impl AppConfig {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルパスの取得に失敗: {:?}", e);
                 return Self::default();
             }
         };
@@ -116,7 +115,7 @@ impl AppConfig {
         let content = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
-                show_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルの読み込みに失敗: {:?}", e);
                 return Self::default();
             }
         };
@@ -125,7 +124,7 @@ impl AppConfig {
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => config,
             Err(e) => {
-                show_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルの解析に失敗: {:?}", e);
                 Self::default()
             }
         }
@@ -137,17 +136,17 @@ impl AppConfig {
     /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
-            show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+            crate::log_error!("設定ファイルパスの取得に失敗: {:?}", e);
             e
         })?;
 
         let content = serde_json::to_string_pretty(self).map_err(|e| {
-            show_notification("設定のシリアライズに失敗", &format!("{:?}", e));
+            crate::log_error!("設定のシリアライズに失敗: {:?}", e);
             e
         })?;
 
         std::fs::write(&config_path, content).map_err(|e| {
-            show_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
+            crate::log_error!("設定ファイルの書き込みに失敗: {:?}", e);
             e
         })?;
 
@@ -159,9 +158,9 @@ impl AppConfig {
 ///
 /// # Returns
 /// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
-fn get_config_dir() -> Result<PathBuf> {
-    let base_dirs = directories::BaseDirs::new()
-        .context("システムディレクトリの取得に失敗しました")?;
+pub fn get_config_dir() -> Result<PathBuf> {
+    let base_dirs =
+        directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
 
     #[cfg(windows)]
     let dir_name = consts::APP_NAME;
