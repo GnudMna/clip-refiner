@@ -1,12 +1,14 @@
+use std::borrow::Cow;
+
 /// 文字列の前後空白を削除する
 ///
 /// # Arguments
 /// * `input` - トリムする文字列。
 ///
 /// # Returns
-/// * `String` - 前後の空白が削除された文字列。
-pub fn trim_text(input: &str) -> String {
-    input.trim().to_string()
+/// * `Cow<'_, str>` - 前後の空白が削除された文字列。
+pub fn trim_text(input: &str) -> Cow<'_, str> {
+    Cow::Borrowed(input.trim())
 }
 
 /// 文字列の各行の前後空白を削除する
@@ -15,13 +17,19 @@ pub fn trim_text(input: &str) -> String {
 /// * `input` - 各行をトリムする文字列。
 ///
 /// # Returns
-/// * `String` - 各行の前後の空白が削除された文字列。
-pub fn trim_lines(input: &str) -> String {
-    input
+/// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。
+pub fn trim_lines(input: &str) -> Cow<'_, str> {
+    let result = input
         .split('\n')
         .map(|line| line.trim_matches(['\r', ' ', '\t']))
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+
+    if result == input {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 #[cfg(test)]
