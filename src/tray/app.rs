@@ -4,41 +4,51 @@ use std::time::Instant;
 use super::event;
 use super::hotkey::HotkeyHandler;
 use super::menu::TrayMenu;
-use super::monitor::{init_clipboard, spawn_monitor_thread};
+use super::monitor::spawn_monitor_thread;
 use super::selector::{SelectorWindow, init_selector};
 use super::state::{AppEvent, AppState};
 
 use anyhow::Result;
-use arboard::Clipboard;
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 use tray_icon::menu::MenuEvent;
 
-/// アプリケーション全体のコンテキストを管理する構造体
+/// アプリケーション全体のコンテキストとメインロジックを管理する構造体
+///
+/// 各コンポーネント（状態、メニュー、UI、ホットキー、ワーカー）を保持し、
+/// イベントループからのメッセージを処理します。
 pub struct App {
+    /// アプリケーションの共有状態
     pub state: Arc<AppState>,
+    /// システムトレイメニュー
     pub menu: TrayMenu,
+    /// モード選択用のUIウィンドウ
     pub selector: SelectorWindow,
+    /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
-    pub clipboard: Clipboard,
+    /// クリップボード処理ワーカーへの送信チャネル
+    pub clipboard_tx: std::sync::mpsc::Sender<super::worker::ClipboardCommand>,
+    /// 最後にセレクタを表示した時刻（連打防止用）
     pub last_selector_show: Instant,
 }
 
 impl App {
-    /// アプリケーションを初期化する。必要なコンポーネントをすべて生成し、監視を開始する。
+    /// アプリケーションを初期化する
+    ///
+    /// 必要なコンポーネントをすべて生成し、ホットキーやクリップボードの監視を開始します。
     ///
     /// # Arguments
-    /// * `event_loop` - ウィンドウを作成するためのイベントループのターゲット。
-    /// * `proxy` - UIイベントを送信するためのプロキシ。
+    /// * `event_loop` - ウィンドウを作成するためのイベントループ
+    /// * `proxy` - UIスレッドへイベントを送信するためのプロキシ
     ///
     /// # Returns
-    /// * `Result<Self>` - 初期化された `App` インスタンス。
+    /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合はエラーを返します。
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
         let state = Arc::new(AppState::new(proxy.clone()));
         let menu = TrayMenu::build(&state)?;
         let hotkey_handler = HotkeyHandler::new()?;
         let selector = init_selector(event_loop, proxy.clone())?;
-        let clipboard = init_clipboard()?;
+        let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 
         hotkey_handler.start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -49,16 +59,18 @@ impl App {
             menu,
             selector,
             hotkey_handler,
-            clipboard,
+            clipboard_tx,
             last_selector_show: Instant::now(),
         })
     }
 
-    /// メインループからのイベントを適切に振り分けて処理する。
+    /// メインループからのイベントを受信し、適切に振り分けて処理する
+    ///
+    /// ユーザーイベント、ウィンドウイベント、メニューイベントなどを各ハンドラに委譲します。
     ///
     /// # Arguments
-    /// * `event` - 受信したイベント。
-    /// * `control_flow` - イベントループの制御フロー。
+    /// * `event` - 受信したイベント
+    /// * `control_flow` - イベントループの制御フロー
     pub fn handle_event(&mut self, event: Event<AppEvent>, control_flow: &mut ControlFlow) {
         *control_flow = ControlFlow::Wait;
 
@@ -77,7 +89,7 @@ impl App {
                         menu_event,
                         &self.menu,
                         &self.state,
-                        &mut self.clipboard,
+                        &self.clipboard_tx,
                         control_flow,
                     );
                 }
@@ -85,16 +97,18 @@ impl App {
         }
     }
 
-    /// `AppEvent`（カスタムユーザーイベント）を処理する。
+    /// アプリケーション独自のユーザーイベント (`AppEvent`) を処理する
+    ///
+    /// モード変更要求、ホットキー通知、履歴の更新などを処理します。
     ///
     /// # Arguments
-    /// * `event` - 処理対象の `AppEvent`。
-    /// * `control_flow` - イベントループの制御フロー。
+    /// * `event` - 処理対象の `AppEvent`
+    /// * `control_flow` - イベントループの制御フロー
     fn handle_user_event(&mut self, event: AppEvent, control_flow: &mut ControlFlow) {
         match event {
             AppEvent::RequestModeChange(mode) => {
                 self.selector.hide();
-                event::update_refine(&self.state, &self.menu, &mut self.clipboard, mode);
+                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode);
             }
             AppEvent::HideSelector => {
                 self.selector.hide();

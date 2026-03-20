@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
 use crate::consts;
-use crate::notification::show_notification;
 use crate::refiner::RefineMode;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// クリップボードの監視方式
+///
+/// クリップボードの更新を検知するための異なるアプローチを提供します。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
     /// 一定間隔でクリップボードの内容を確認するポーリング方式。
@@ -21,6 +22,8 @@ pub enum MonitorMode {
 }
 
 /// 通知の内容に関する設定
+///
+/// どのタイミングでどのような通知を表示するかを制御します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// 実行されたモード名を通知するかどうか
@@ -35,6 +38,10 @@ pub struct NotificationSettings {
 }
 
 impl Default for NotificationSettings {
+    /// デフォルトの通知設定を生成する
+    ///
+    /// # Returns
+    /// * `Self` - すべての通知が有効なデフォルト設定。
     fn default() -> Self {
         Self {
             notify_mode: true,
@@ -44,7 +51,9 @@ impl Default for NotificationSettings {
     }
 }
 
-/// アプリケーションの設定情報。JSONファイルとして保存・読み込みされます。
+/// アプリケーションの設定情報
+///
+/// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定です。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 最後に使用した（または常駐時に使用する）加工モード
@@ -60,12 +69,19 @@ pub struct AppConfig {
     /// 成功時に通知を表示するかどうか
     #[serde(default)]
     pub show_success_notification: bool,
+    /// 監視が一時停止されているかどうか
+    #[serde(default)]
+    pub is_paused: bool,
     /// 通知の内容設定
     #[serde(default)]
     pub notification_settings: NotificationSettings,
 }
 
 impl Default for AppConfig {
+    /// デフォルトのアプリケーション設定を生成する
+    ///
+    /// # Returns
+    /// * `Self` - 標準的な動作環境のためのデフォルト設定。
     fn default() -> Self {
         Self {
             mode: RefineMode::UrlDecode,
@@ -73,6 +89,7 @@ impl Default for AppConfig {
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
             show_success_notification: false,
+            is_paused: false,
             notification_settings: NotificationSettings::default(),
         }
     }
@@ -89,7 +106,9 @@ impl AppConfig {
         Ok(config_dir.join("config.json"))
     }
 
-    /// 設定ファイルを読み込む。存在しない場合や失敗した場合はデフォルト設定を返す
+    /// 設定ファイルを読み込む
+    ///
+    /// 存在しない場合や失敗した場合はデフォルト設定を返します。
     ///
     /// # Returns
     /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`。
@@ -98,7 +117,7 @@ impl AppConfig {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルパスの取得に失敗: {:?}", e);
                 return Self::default();
             }
         };
@@ -112,7 +131,7 @@ impl AppConfig {
         let content = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
-                show_notification("設定ファイルの読み込みに失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルの読み込みに失敗: {:?}", e);
                 return Self::default();
             }
         };
@@ -121,7 +140,7 @@ impl AppConfig {
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => config,
             Err(e) => {
-                show_notification("設定ファイルの解析に失敗", &format!("{:?}", e));
+                crate::log_warn!("設定ファイルの解析に失敗: {:?}", e);
                 Self::default()
             }
         }
@@ -130,20 +149,20 @@ impl AppConfig {
     /// 現在の設定をファイルへ保存する
     ///
     /// # Returns
-    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
+    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
-            show_notification("設定ファイルパスの取得に失敗", &format!("{:?}", e));
+            crate::log_error!("設定ファイルパスの取得に失敗: {:?}", e);
             e
         })?;
 
         let content = serde_json::to_string_pretty(self).map_err(|e| {
-            show_notification("設定のシリアライズに失敗", &format!("{:?}", e));
+            crate::log_error!("設定のシリアライズに失敗: {:?}", e);
             e
         })?;
 
         std::fs::write(&config_path, content).map_err(|e| {
-            show_notification("設定ファイルの書き込みに失敗", &format!("{:?}", e));
+            crate::log_error!("設定ファイルの書き込みに失敗: {:?}", e);
             e
         })?;
 
@@ -151,25 +170,23 @@ impl AppConfig {
     }
 }
 
-/// 設定ディレクトリのパスを取得
+/// 設定ディレクトリのパスを取得する
+///
+/// OSに応じたアプリケーション設定ディレクトリのパスを計算します。
 ///
 /// # Returns
 /// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
-fn get_config_dir() -> Result<PathBuf> {
+pub fn get_config_dir() -> Result<PathBuf> {
+    let base_dirs =
+        directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
+
     #[cfg(windows)]
-    {
-        let appdata = std::env::var("APPDATA").context("APPDATA環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(appdata).join(consts::APP_NAME))
-    }
+    let dir_name = consts::APP_NAME;
 
     #[cfg(not(windows))]
-    {
-        // XDG Base Directory Specification に従い、~/.config/clip-refiner を使用
-        let home = std::env::var("HOME").context("HOME環境変数の取得に失敗しました")?;
-        Ok(PathBuf::from(home)
-            .join(".config")
-            .join(consts::APP_NAME_KEBAB))
-    }
+    let dir_name = consts::APP_NAME_KEBAB;
+
+    Ok(base_dirs.config_dir().join(dir_name))
 }
 
 #[cfg(test)]

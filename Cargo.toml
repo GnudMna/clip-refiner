@@ -1,6 +1,6 @@
 [package]
 name = "clip-refiner"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 authors = ["y_hirata"]
 description = "クリップボードのテキストを加工するツール"
@@ -12,19 +12,24 @@ chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
 clipboard-win = { version = "5.0", features = ["std"] }
 csv = "1.3"
+directories = "6.0.0"
 global-hotkey = "0.7.0"
 image = "0.25.1"
 indexmap = { version = "2.13.0", features = ["serde"] }
 notify-rust = "4.11.3"
 percent-encoding = "2.3.2"
 pulldown-cmark = "0.13.0"
+regex = "1.11.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.149"
 serde_with = "3.16.1"
 serde_yaml = "0.9.34"
 single-instance = "0.3.3"
-strum = { version = "0.27.2", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 tao = "0.34.5"
+tracing = "0.1.44"
+tracing-appender = "0.2.4"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tray-icon = "0.21.3"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 wry = "0.54.1"

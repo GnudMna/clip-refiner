@@ -6,12 +6,13 @@ use tao::event_loop::{EventLoop, EventLoopBuilder};
 #[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
 
-/// アプリケーションのメインループを開始する。
+/// アプリケーションのメインイベントループを開始する
 ///
-/// この関数はイベントループを初期化し、App構造体を生成して実行する。
+/// イベントループを初期化し、`App` 構造体を生成して実行します。
+/// この関数はアプリケーションが終了するまでブロックされます。
 ///
 /// # Returns
-/// * `Result<()>` - アプリケーションが正常に終了した場合は `Ok(())`、エラーが発生した場合は `Err`。
+/// * `Result<()>` - アプリケーションが正常に終了した場合は `Ok(())`、起動や実行中にエラーが発生した場合は `Err` を返します。
 pub fn run_loop() -> Result<()> {
     let event_loop = create_event_loop();
     let proxy = event_loop.create_proxy();
@@ -23,10 +24,10 @@ pub fn run_loop() -> Result<()> {
     })
 }
 
-/// プラットフォームに応じたイベントループを作成する。
+/// 実行プラットフォームに適した設定でイベントループを作成する
 ///
 /// # Returns
-/// * `EventLoop<AppEvent>` - 生成されたイベントループ。
+/// * `EventLoop<AppEvent>` - 生成された `tao` のイベントループ
 fn create_event_loop() -> EventLoop<AppEvent> {
     #[cfg(windows)]
     return EventLoopBuilder::<AppEvent>::with_user_event()
