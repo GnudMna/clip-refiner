@@ -63,27 +63,27 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
     let mut changed = false;
 
     while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some(&next) = chars.peek() {
-                match next {
-                    '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => {
-                        chars.next();
-                        result.push(match next {
-                            '"' => '"',
-                            '\\' => '\\',
-                            '/' => '/',
-                            'b' => '\x08',
-                            'f' => '\x0c',
-                            'n' => '\n',
-                            'r' => '\r',
-                            't' => '\t',
-                            _ => unreachable!(),
-                        });
-                        changed = true;
-                        continue;
-                    }
-                    _ => {}
+        if c == '\\'
+            && let Some(&next) = chars.peek()
+        {
+            match next {
+                '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => {
+                    chars.next();
+                    result.push(match next {
+                        '"' => '"',
+                        '\\' => '\\',
+                        '/' => '/',
+                        'b' => '\x08',
+                        'f' => '\x0c',
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        _ => unreachable!(),
+                    });
+                    changed = true;
+                    continue;
                 }
+                _ => {}
             }
         }
         result.push(c);
@@ -133,15 +133,14 @@ pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     let mut changed = false;
 
     while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some(&next) = chars.peek() {
-                if "\\^$.|?*+()[]{}".contains(next) {
-                    chars.next();
-                    result.push(next);
-                    changed = true;
-                    continue;
-                }
-            }
+        if c == '\\'
+            && let Some(&next) = chars.peek()
+            && "\\^$.|?*+()[]{}".contains(next)
+        {
+            chars.next();
+            result.push(next);
+            changed = true;
+            continue;
         }
         result.push(c);
     }
