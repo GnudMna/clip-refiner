@@ -10,6 +10,8 @@ pub mod url;
 pub mod utils;
 pub mod yaml;
 
+use std::borrow::Cow;
+
 use arboard::Clipboard;
 use clap::ValueEnum;
 use indexmap::IndexMap;
@@ -264,34 +266,24 @@ pub trait Refiner {
     /// * `text` - 加工前のテキスト
     ///
     /// # Returns
-    /// * `String` - 加工後のテキスト
-    fn refine(&self, text: &str) -> String;
+    /// * `Cow<'a, str>` - 加工後のテキスト（変更がない場合は元のテキストを借用）
+    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str>;
 }
 
 impl Refiner for RefineMode {
-    fn refine(&self, text: &str) -> String {
+    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str> {
         match self {
             RefineMode::UrlEncode => url::url_encode(text),
-            RefineMode::UrlDecode => url::url_decode(text).unwrap_or_else(|_| text.to_string()),
+            RefineMode::UrlDecode => url::url_decode(text)
+                .map(Cow::Owned)
+                .unwrap_or_else(|_| Cow::Borrowed(text)),
             RefineMode::RemoveUtm => url::remove_utm_params(text),
-            RefineMode::ExtractBasename => {
-                path::extract_basename(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::ExtractBasenameQuoted => {
-                path::extract_basename_quoted(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::AddPathQuotes => {
-                path::add_path_quotes(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::RemovePathQuotes => {
-                path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::PathToSlash => {
-                path::convert_to_forward_slash(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::PathToBackslash => {
-                path::convert_to_backslash(text).unwrap_or_else(|| text.to_string())
-            }
+            RefineMode::ExtractBasename => path::extract_basename(text),
+            RefineMode::ExtractBasenameQuoted => path::extract_basename_quoted(text),
+            RefineMode::AddPathQuotes => path::add_path_quotes(text),
+            RefineMode::RemovePathQuotes => path::remove_path_quotes(text),
+            RefineMode::PathToSlash => path::convert_to_forward_slash(text),
+            RefineMode::PathToBackslash => path::convert_to_backslash(text),
             RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
             RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
             RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
@@ -332,11 +324,16 @@ pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<
         return None;
     }
 
-    let processed = mode.refine(&text);
+    let refined = mode.refine(&text);
 
-    if processed != text {
-        let _ = clipboard.set_text(processed.clone());
-        Some(processed)
+    // 変更がない場合は更新しない
+    if refined == text {
+        return None;
+    }
+
+    let result = refined.into_owned();
+    if let Ok(_) = clipboard.set_text(result.clone()) {
+        Some(result)
     } else {
         None
     }

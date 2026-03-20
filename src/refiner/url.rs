@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::Result;
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 
@@ -20,9 +22,9 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
 /// * `input` - エンコードする文字列。
 ///
 /// # Returns
-/// * `String` - URLエンコードされた文字列。
-pub fn url_encode(input: &str) -> String {
-    utf8_percent_encode(input, ENCODE_SET).to_string()
+/// * `Cow<'_, str>` - URLエンコードされた文字列。
+pub fn url_encode(input: &str) -> Cow<'_, str> {
+    utf8_percent_encode(input, ENCODE_SET).into()
 }
 
 /// 文字列をURLデコードする
@@ -43,27 +45,34 @@ pub fn url_decode(input: &str) -> Result<String> {
 /// * `input` - 対象のURL文字列。
 ///
 /// # Returns
-/// * `String` - UTMパラメータが除去されたURL文字列。
-pub fn remove_utm_params(input: &str) -> String {
+/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。
+pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");
     let query = match parts.next() {
         Some(q) => q,
-        None => return input.to_string(),
+        None => return Cow::Borrowed(input),
     };
 
-    let filtered_query: Vec<&str> = query
-        .split('&')
+    let params: Vec<&str> = query.split('&').collect();
+    let filtered_params: Vec<&str> = params
+        .iter()
+        .copied()
         .filter(|param| {
             let key = param.split('=').next().unwrap_or("");
             !key.starts_with("utm_")
         })
         .collect();
 
-    if filtered_query.is_empty() {
-        base.to_string()
+    if params.len() == filtered_params.len() {
+        // 全く削除されなかった場合
+        Cow::Borrowed(input)
+    } else if filtered_params.is_empty() {
+        // すべて削除された場合
+        Cow::Owned(base.to_string())
     } else {
-        format!("{}?{}", base, filtered_query.join("&"))
+        // 一部削除された場合
+        Cow::Owned(format!("{}?{}", base, filtered_params.join("&")))
     }
 }
 

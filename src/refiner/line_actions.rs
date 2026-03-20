@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use csv::{ReaderBuilder, WriterBuilder};
 
 /// 行またはCSVレコード単位でテキストを並び替える
@@ -7,10 +9,10 @@ use csv::{ReaderBuilder, WriterBuilder};
 /// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
-/// * `String` - 並び替え後のテキスト。
-pub fn sort_lines(text: &str, descending: bool) -> String {
+/// * `Cow<'_, str>` - 並び替え後のテキスト。
+pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     if text.is_empty() {
-        return String::new();
+        return Cow::Borrowed(text);
     }
 
     let line_ending = super::utils::detect_line_ending(text);
@@ -28,10 +30,10 @@ pub fn sort_lines(text: &str, descending: bool) -> String {
 /// * `text` - 処理対象のテキスト。
 ///
 /// # Returns
-/// * `String` - 空行が削除されたテキスト。
-pub fn remove_empty_lines(text: &str) -> String {
+/// * `Cow<'_, str>` - 空行が削除されたテキスト。
+pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
-        return String::new();
+        return Cow::Borrowed(text);
     }
 
     let line_ending = super::utils::detect_line_ending(text);
@@ -39,7 +41,13 @@ pub fn remove_empty_lines(text: &str) -> String {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .collect();
-    lines.join(line_ending)
+
+    let result = lines.join(line_ending);
+    if result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 /// 重複行を削除する（順序を維持する）
@@ -48,10 +56,10 @@ pub fn remove_empty_lines(text: &str) -> String {
 /// * `text` - 処理対象のテキスト。
 ///
 /// # Returns
-/// * `String` - 重複行が削除されたテキスト。
-pub fn remove_duplicate_lines(text: &str) -> String {
+/// * `Cow<'_, str>` - 重複行が削除されたテキスト。
+pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
-        return String::new();
+        return Cow::Borrowed(text);
     }
 
     let line_ending = super::utils::detect_line_ending(text);
@@ -64,7 +72,12 @@ pub fn remove_duplicate_lines(text: &str) -> String {
         }
     }
 
-    lines.join(line_ending)
+    let result = lines.join(line_ending);
+    if result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 /// CSVである可能性が高いか判定する
@@ -101,8 +114,8 @@ fn is_likely_csv(text: &str) -> bool {
 /// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
-/// * `String` - レコード単位で並び替えられたCSVテキスト。
-fn sort_csv_records(text: &str, line_ending: &str, descending: bool) -> String {
+/// * `Cow<'_, str>` - レコード単位で並び替えられたCSVテキスト。
+fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
         .from_reader(text.as_bytes());
@@ -137,7 +150,12 @@ fn sort_csv_records(text: &str, line_ending: &str, descending: bool) -> String {
         let _ = wtr.write_record(&record);
     }
 
-    String::from_utf8(wtr.into_inner().unwrap_or_default()).unwrap_or_default()
+    let result = String::from_utf8(wtr.into_inner().unwrap_or_default()).unwrap_or_default();
+    if result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 /// 単純な行として並び替える
@@ -148,15 +166,20 @@ fn sort_csv_records(text: &str, line_ending: &str, descending: bool) -> String {
 /// * `descending` - 降順にする場合は `true`。
 ///
 /// # Returns
-/// * `String` - 行単位で並び替えられたテキスト。
-fn sort_plain_lines(text: &str, line_ending: &str, descending: bool) -> String {
+/// * `Cow<'_, str>` - 行単位で並び替えられたテキスト。
+fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
     let mut lines: Vec<&str> = text.lines().collect();
     if descending {
         lines.sort_by_key(|b| std::cmp::Reverse(b.to_lowercase()));
     } else {
         lines.sort_by_key(|a| a.to_lowercase());
     }
-    lines.join(line_ending)
+    let result = lines.join(line_ending);
+    if result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 #[cfg(test)]

@@ -1,20 +1,22 @@
+use std::borrow::Cow;
+
 /// 数値にカンマを付与する
 ///
 /// # Arguments
 /// * `text` - カンマを付与する対象の文字列型数値。
 ///
 /// # Returns
-/// * `String` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す。
-pub fn add_commas(text: &str) -> String {
+/// * `Cow<'_, str>` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す。
+pub fn add_commas(text: &str) -> Cow<'_, str> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     // 数値、カンマ、小数点以外の文字が含まれているかチェック
     // カンマが含まれていても、最終的に一貫した形式にするために一旦除去して再付与するアプローチを取る
     if !is_numeric_input(trimmed) {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     // カンマを除去して純粋な数値にする
@@ -46,13 +48,19 @@ pub fn add_commas(text: &str) -> String {
         formatted_int.insert(0, '-');
     }
 
-    if !decimal_part.is_empty() {
+    let final_result = if !decimal_part.is_empty() {
         format!("{}.{}", formatted_int, decimal_part)
     } else if pure_numeric.contains('.') {
         // 元々小数点が末尾にあった場合
         format!("{}.", formatted_int)
     } else {
         formatted_int
+    };
+
+    if final_result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(final_result)
     }
 }
 
@@ -62,18 +70,23 @@ pub fn add_commas(text: &str) -> String {
 /// * `text` - カンマを除去する対象の文字列。
 ///
 /// # Returns
-/// * `String` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す。
-pub fn remove_commas(text: &str) -> String {
+/// * `Cow<'_, str>` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す。
+pub fn remove_commas(text: &str) -> Cow<'_, str> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     if !is_numeric_input(trimmed) {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
-    trimmed.replace(',', "")
+    let result = trimmed.replace(',', "");
+    if result == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(result)
+    }
 }
 
 /// 入力が数値(およびカンマ、小数点、マイナス記号)のみで構成されているか判定
