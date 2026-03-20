@@ -1,4 +1,5 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
@@ -74,7 +75,11 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::show_anyhow_error("監視スレッドエラー", &e);
+                crate::log_error!("ポーリング監視スレッド初期化エラー: {:?}", e);
+                notification::show_notification(
+                    "監視スレッドエラー",
+                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
+                );
                 return;
             }
         };
@@ -117,7 +122,11 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::show_anyhow_error("監視スレッドエラー", &e);
+                crate::log_error!("イベント監視スレッド初期化エラー: {:?}", e);
+                notification::show_notification(
+                    "監視スレッドエラー",
+                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
+                );
                 return;
             }
         };
