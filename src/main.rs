@@ -18,6 +18,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
 /// コマンドライン引数
+///
+/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -38,10 +40,13 @@ struct Args {
     mode: Option<refiner::RefineMode>,
 }
 
-/// エントリポイント
+/// アプリケーションのエントリポイント
+///
+/// 設定の初期化、ロギングのセットアップ、コマンドライン引数の解析を行い、
+/// 常駐モードまたはワンショットモードで処理を開始します。
 ///
 /// # Returns
-/// * `Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す。
+/// * `Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返します。
 fn main() -> Result<()> {
     setup_console();
 
@@ -60,9 +65,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Windowsの場合、親プロセスのコンソールをアタッチする
+/// Windows環境で親プロセスのコンソールをアタッチする
 ///
-/// これにより、`cargo run`などで起動した場合にコンソール出力が表示されるようになる。
+/// これにより、コンソール（`cmd.exe` や `PowerShell`）から `cargo run` などで起動した場合に、
+/// アプリケーションからの標準出力がコンソール上に表示されるようになります。
 fn setup_console() {
     #[cfg(windows)]
     unsafe {
@@ -72,10 +78,12 @@ fn setup_console() {
 
 /// ロギングシステムを初期化する
 ///
-/// 設定ディレクトリ内の `logs` フォルダに日次のログファイルを作成する。
+/// 設定ディレクトリ内の `logs` フォルダに日次のログファイルを作成し、
+/// 標準出力とファイルの両方にログを出力するように設定します。
+/// また、システム全体のグローバルロガーもここで初期化されます。
 ///
 /// # Returns
-/// * `Result<tracing_appender::non_blocking::WorkerGuard>` - ログ出力スレッドを維持するためのガード
+/// * `Result<tracing_appender::non_blocking::WorkerGuard>` - ログ出力非同期スレッドを維持するためのガード。
 fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     let config_dir = config::get_config_dir()?;
     let log_dir = config_dir.join("logs");
@@ -111,11 +119,13 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     Ok(guard)
 }
 
-/// 多重起動を防止し、インスタンスを保持する
+/// アプリケーションの多重起動を防止し、インスタンスを保持する
+///
+/// `APP_ID` を使用してシステム全体で一意のインスタンスを確認します。
 ///
 /// # Returns
-/// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す。
-///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを終了する。
+/// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返します。
+///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了します。
 fn ensure_single_instance() -> Result<SingleInstance> {
     let instance = SingleInstance::new(consts::APP_ID)
         .context("多重起動防止のインスタンス作成に失敗しました")?;
@@ -133,11 +143,14 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 
 /// クリップボードの内容を一度だけ加工して終了する
 ///
+/// 常駐せずに、現在のクリップボードのテキストを指定されたモードで加工し、
+/// 結果をクリップボードに書き戻します。
+///
 /// # Arguments
-/// * `mode` - 適用する `refiner::RefineMode`。
+/// * `mode` - 適用する加工モード (`refiner::RefineMode`)
 ///
 /// # Returns
-/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返す。
+/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返します。
 fn run_once(mode: refiner::RefineMode) -> Result<()> {
     log_info!("ワンショットモードで実行: {:?}", mode);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;

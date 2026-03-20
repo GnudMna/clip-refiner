@@ -16,10 +16,13 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-/// 文字列をURLエンコードする
+/// 文字列をURLエンコード（パーセントエンコーディング）する
+///
+/// 入力文字列内の特殊文字を `%XX` 形式に変換します。
+/// 英数字以外の多くの文字がエンコード対象となります。
 ///
 /// # Arguments
-/// * `input` - エンコードする文字列。
+/// * `input` - エンコード対象の文字列
 ///
 /// # Returns
 /// * `Cow<'_, str>` - URLエンコードされた文字列。
@@ -27,25 +30,30 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
     utf8_percent_encode(input, ENCODE_SET).into()
 }
 
-/// 文字列をURLデコードする
+/// URLエンコードされた文字列をデコードする
+///
+/// `%XX` 形式の記述を元の文字に戻します。結果はUTF-8として解釈されます。
 ///
 /// # Arguments
-/// * `input` - デコードする文字列。
+/// * `input` - デコード対象の文字列
 ///
 /// # Returns
-/// * `Result<String>` - デコードされた文字列。デコードに失敗した場合は `Err` を返す。
+/// * `Result<String>` - デコードされた文字列。不正なエンコードやUTF-8として不正な場合は `Err` を返します。
 pub fn url_decode(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
 
-/// URLからUTMパラメータを除去する
+/// URLからUTMパラメータ（計測用パラメータ）を除去する
+///
+/// URLのクエリ文字列（?以降）に含まれる `utm_` で始まるパラメータをすべて取り除きます。
+/// 他のパラメータは維持されます。
 ///
 /// # Arguments
-/// * `input` - 対象のURL文字列。
+/// * `input` - 対象のURL文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。
+/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。変更がない場合は元の文字列への参照を返します。
 pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");

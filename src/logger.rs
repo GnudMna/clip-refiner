@@ -4,21 +4,36 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 /// アプリケーション全体のロガー用トレイト
+///
+/// 異なるバックエンド（tracing, mockなど）を抽象化するための共通インターフェースを提供します。
 pub trait Logger: Send + Sync {
+    /// 情報ログ（INFOレベル）を出力する
     fn info(&self, msg: &str);
+    /// 警告ログ（WARNレベル）を出力する
     fn warn(&self, msg: &str);
+    /// エラーログ（ERRORレベル）を出力する
     fn error(&self, msg: &str);
+    /// デバッグログ（DEBUGレベル）を出力する
     #[allow(unused)]
     fn debug(&self, msg: &str);
 }
 
 /// tracing クレートを使用した Logger の実装
+///
+/// ファイルへのログ出力と、定期的な古いログのクリーンアップ機能を備えています。
 pub struct TracingLogger {
     log_dir: PathBuf,
     last_cleanup: Mutex<Option<NaiveDate>>,
 }
 
 impl TracingLogger {
+    /// 新しい `TracingLogger` インスタンスを生成する
+    ///
+    /// # Arguments
+    /// * `log_dir` - ログファイルを保存するディレクトリのパス
+    ///
+    /// # Returns
+    /// * `Self` - 生成された `TracingLogger` インスタンス。
     pub fn new(log_dir: PathBuf) -> Self {
         Self {
             log_dir,
@@ -63,11 +78,25 @@ impl Logger for TracingLogger {
 static GLOBAL_LOGGER: OnceLock<Box<dyn Logger>> = OnceLock::new();
 
 /// グローバルロガーを初期化する
+///
+/// アプリケーション起動時に一度だけ呼び出し、グローバルなロガーインスタンスを設定します。
+///
+/// # Arguments
+/// * `logger` - 使用するロガーの実装（`Box<dyn Logger>`）
 pub fn init_global_logger(logger: Box<dyn Logger>) {
     let _ = GLOBAL_LOGGER.set(logger);
 }
 
 /// 指定された日数より古いログファイルを削除する
+///
+/// 指定されたディレクトリ内の古いログファイルをスキャンし、期限を過ぎたものを削除します。
+///
+/// # Arguments
+/// * `log_dir` - ログファイルが格納されているディレクトリのパス
+/// * `max_days` - ログを保持する最大日数
+///
+/// # Returns
+/// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
 pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> {
     let now = chrono::Local::now().date_naive();
     let entries = std::fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
@@ -95,6 +124,11 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
 }
 
 /// グローバルロガーを取得する
+///
+/// 初期化されていない場合は、何もしない `NoOpLogger` を返します。
+///
+/// # Returns
+/// * `&'static dyn Logger` - 現在設定されているグローバルロガーへの参照。
 pub fn get_logger() -> &'static dyn Logger {
     GLOBAL_LOGGER
         .get()
@@ -111,7 +145,9 @@ impl Logger for NoOpLogger {
     fn debug(&self, _msg: &str) {}
 }
 
-/// ログ出力用マクロ（利用を簡潔にするため）
+/// 情報ログ（INFOレベル）を出力するマクロ
+///
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
@@ -119,6 +155,9 @@ macro_rules! log_info {
     };
 }
 
+/// 警告ログ（WARNレベル）を出力するマクロ
+///
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
@@ -126,6 +165,9 @@ macro_rules! log_warn {
     };
 }
 
+/// エラーログ（ERRORレベル）を出力するマクロ
+///
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
@@ -133,6 +175,9 @@ macro_rules! log_error {
     };
 }
 
+/// デバッグログ（DEBUGレベル）を出力するマクロ
+///
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {

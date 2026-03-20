@@ -5,24 +5,25 @@ use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
 
-/// アプリケーション内でのカスタムイベント
+/// アプリケーション内で発生するカスタムユーザーイベント
 #[derive(Debug, Clone, Copy)]
 pub enum AppEvent {
-    /// モード変更要求
+    /// クリップボード加工モードの変更要求
     RequestModeChange(RefineMode),
-    /// セレクターを閉じる
+    /// モード選択用セレクタウィンドウの非表示要求
     HideSelector,
-    /// 履歴メニューの更新要求
+    /// 履歴メニューの内容再構築要求
     RefreshHistory,
-    /// ホットキーイベント
+    /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
 
 /// 履歴の最大保持数
 pub const HISTORY_LIMIT: usize = 10;
 
-/// Mutexのポイズニングを無視してロックを取得するための拡張トレイト
+/// `Mutex` のポイズニング（パニックによる汚染）を無視して強制的にロックを取得するための拡張
 pub trait LockExt<T> {
+    /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得します。
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;
 }
 
@@ -32,8 +33,11 @@ impl<T> LockExt<T> for Mutex<T> {
     }
 }
 
+/// `RwLock` のポイズニングを無視して強制的にロックを取得するための拡張
 pub trait RwLockExt<T> {
+    /// 読み取りロックを取得する
     fn read_ignore_poison(&self) -> RwLockReadGuard<'_, T>;
+    /// 書き込みロックを取得する
     fn write_ignore_poison(&self) -> RwLockWriteGuard<'_, T>;
 }
 
@@ -47,20 +51,19 @@ impl<T> RwLockExt<T> for RwLock<T> {
     }
 }
 
-/// アプリケーション内で共有されるミュータブルな状態
+/// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
-/// Mutexのロックに失敗した場合（ポイズニング）、パニックせずに以前の値を返して
-/// アプリケーションの実行を継続する方針をとる。
+/// 設定、クリップボードの最終処理内容、履歴などを保持します。
 pub struct AppState {
-    /// 永続化される設定全体を1つのRwLock内で管理
+    /// 永続化設定データ
     pub config: RwLock<AppConfig>,
-    /// 監視スレッドの世代管理用カウンタ。設定変更時に古いスレッドを破棄するために使用
+    /// クリップボード監視スレッドの世代管理カウンタ
     pub monitor_generation: AtomicU64,
-    /// 二重加工を防止するために保持される、最後に加工されたテキスト
+    /// 二重加工防止用の、直近の処理テキスト
     pub last_processed_text: Mutex<String>,
-    /// クリップボード履歴（最大10件）
+    /// クリップボードの履歴リスト
     pub history: Mutex<Vec<String>>,
-    /// イベントループへのプロキシ。別スレッドからUIイベント（例: 履歴更新）を送信するために使用される。
+    /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
 }
 
@@ -208,8 +211,11 @@ impl AppState {
         self.history.lock_ignore_poison().clear();
     }
 
-    /// 履歴にテキストを追加する。
-    /// すでに存在する場合は最上位に移動させ、最大10件を保持する。
+    /// クリップボード履歴に新しいテキストを追加する
+    ///
+    /// 空文字やトリム後に空になる文字列は無視されます。
+    /// 既にある文字列はリストの先頭に移動し、最大保持数（ `HISTORY_LIMIT` ）を超えた分は削除されます。
+    /// 追加完了後、UIスレッドへ履歴更新イベントを通知します。
     pub fn add_to_history(&self, text: String) {
         if text.trim().is_empty() {
             return;

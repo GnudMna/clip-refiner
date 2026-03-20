@@ -8,12 +8,12 @@ use crate::refiner::{RefineMode, process_clipboard};
 
 use arboard::Clipboard;
 
-/// UI イベントからバックグラウンドワーカーへ送るコマンド
+/// UI メッセージやホットキーからバックグラウンドワーカーへ送られる操作コマンド
 #[derive(Clone)]
 pub enum ClipboardCommand {
-    /// 指定されたテキストをクリップボードに設定する
+    /// 指定されたテキストをクリップボードにセットする（履歴からの復元用など）
     SetText(String),
-    /// 現在のクリップボードのテキストを指定されたモードで加工する
+    /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
 }
 
@@ -26,13 +26,15 @@ impl std::fmt::Debug for ClipboardCommand {
     }
 }
 
-/// クリップボード処理を非同期に行うワーカースレッドを開始する
+/// クリップボードの実際の書き込みや加工リクエストを非同期に処理するワーカースレッドを開始する
+///
+/// UI スレッドをブロックせずにクリップボード操作を行うための専用スレッドです。
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `Sender<ClipboardCommand>` - ワーカースレッドにコマンドを送信するためのチャネルの送信端
+/// * `Sender<ClipboardCommand>` - ワーカーに操作を依頼するためのチャネル送信端
 pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> {
     let (tx, rx): (Sender<ClipboardCommand>, Receiver<ClipboardCommand>) = mpsc::channel();
 
