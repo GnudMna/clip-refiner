@@ -4,12 +4,15 @@ use csv::{ReaderBuilder, WriterBuilder};
 
 /// 行またはCSVレコード単位でテキストを並び替える
 ///
+/// テキストの内容（プレーンテキストの行、またはCSV形式のレコード）を自動判別し、
+/// アルファベット順（大文字小文字無視）でソートします。
+///
 /// # Arguments
-/// * `text` - 並び替える対象のテキスト。
-/// * `descending` - 降順にする場合は `true`。
+/// * `text` - 並び替える対象のテキスト
+/// * `descending` - 降順にする場合は `true`、昇順にする場合は `false`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 並び替え後のテキスト。
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返します。
 pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -24,13 +27,16 @@ pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     }
 }
 
-/// 空行を削除する
+/// テキストから空行を削除する
+///
+/// 改行のみの行、または空白文字（スペース、タブなど）のみの行を取り除きます。
+/// 元の改行形式（LF または CRLF）は維持されます。
 ///
 /// # Arguments
-/// * `text` - 処理対象のテキスト。
+/// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 空行が削除されたテキスト。
+/// * `Cow<'_, str>` - 空行が削除されたテキスト。変更がない場合は元の文字列への参照を返します。
 pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -50,13 +56,16 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// 重複行を削除する（順序を維持する）
+/// 重複行を削除する（出現順序を維持する）
+///
+/// テキスト内の重複する行を特定し、最初に出現した行のみを残して他を削除します。
+/// セット（HashSet）を使用して効率的に重複を判定します。
 ///
 /// # Arguments
-/// * `text` - 処理対象のテキスト。
+/// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 重複行が削除されたテキスト。
+/// * `Cow<'_, str>` - 重複行が削除されたテキスト。変更がない場合は元の文字列への参照を返します。
 pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -80,10 +89,12 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// CSVである可能性が高いか判定する
+/// テキストがCSVである可能性が高いか判定する
+///
+/// カンマ区切りかつ、複数行にわたってカラム数が一致するかを簡易的に検証します。
 ///
 /// # Arguments
-/// * `text` - 判定対象のテキスト。
+/// * `text` - 判定対象のテキスト
 ///
 /// # Returns
 /// * `bool` - CSVとみなせる場合は `true`、そうでない場合は `false`。
@@ -106,12 +117,15 @@ fn is_likely_csv(text: &str) -> bool {
     false
 }
 
-/// CSVレコードとして並び替える
+/// CSVレコードとしてテキストを並び替える
+///
+/// レコード全体をカンマで結合した文字列に基づいてソートを行います。
+/// クォートで囲まれた改行を含むレコードも正しく処理します。
 ///
 /// # Arguments
-/// * `text` - 並び替える対象のCSVテキスト。
-/// * `line_ending` - 使用する改行コード。
-/// * `descending` - 降順にする場合は `true`。
+/// * `text` - 並び替える対象のCSVテキスト
+/// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
+/// * `descending` - 降順にする場合は `true`
 ///
 /// # Returns
 /// * `Cow<'_, str>` - レコード単位で並び替えられたCSVテキスト。
@@ -158,12 +172,14 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
     }
 }
 
-/// 単純な行として並び替える
+/// 単純なテキスト行として並び替える
+///
+/// 各行を文字列として比較し、ソートを行います。比較時は大文字小文字を区別しません。
 ///
 /// # Arguments
-/// * `text` - 並び替える対象のテキスト。
-/// * `line_ending` - 使用する改行コード。
-/// * `descending` - 降順にする場合は `true`。
+/// * `text` - 並び替える対象のテキスト
+/// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
+/// * `descending` - 降順にする場合は `true`
 ///
 /// # Returns
 /// * `Cow<'_, str>` - 行単位で並び替えられたテキスト。

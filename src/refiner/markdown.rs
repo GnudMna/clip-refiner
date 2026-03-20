@@ -2,7 +2,16 @@ use std::borrow::Cow;
 
 use pulldown_cmark::{Options, Parser, html};
 
-/// MarkdownをHTMLへ変換
+/// MarkdownをHTMLへ変換する
+///
+/// 入力されたMarkdownテキストを解析し、HTML形式の文字列に変換します。
+/// テーブル、脚注、取り消し線、タスクリスト、スマートパンクチュエーションなどの拡張機能をサポートしています。
+///
+/// # Arguments
+/// * `text` - 変換対象のMarkdownテキスト
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合は元の文字列への参照を返します。
 pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -23,7 +32,17 @@ pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// Excel(TSV)形式のテキストをMarkdownの表形式へ変換
+/// Excel(TSV)形式のテキストをMarkdownの表形式へ変換する
+///
+/// タブ区切り（TSV）のテキストを解析し、Markdownのテーブル形式に変換します。
+/// セル内の改行は `<br>` タグに置換され、パイプ記号（`|`）はエスケープされます。
+/// 1行目はヘッダーとして扱われます。
+///
+/// # Arguments
+/// * `text` - 変換対象のTSVテキスト
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。パースに失敗した場合は元の文字列を返します。
 pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b'\t')

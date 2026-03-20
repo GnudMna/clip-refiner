@@ -13,14 +13,17 @@ use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
-/// トレイアイコンメニューから受信したイベントを処理する。
+/// システムトレイアイコンのメニューから受信したイベントを処理する
+///
+/// クリックされたメニュー項目の ID に基づいて、アプリケーション設定の変更、
+/// 履歴操作、加工モードの切り替え、またはプログラムの終了などを実行します。
 ///
 /// # Arguments
-/// * `event` - 受信したメニューイベント。
-/// * `menu` - トレイメニュー構造体。
-/// * `state` - アプリケーションの状態。
-/// * `clipboard` - クリップボード・ハンドラ。
-/// * `control_flow` - イベントループの制御フロー。
+/// * `event` - 受信したメニューイベント
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
+/// * `control_flow` - イベントループの制御フロー
 pub fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
@@ -43,12 +46,14 @@ pub fn handle_menu_event(
     handle_monitor_event(&event.id, menu, state);
 }
 
-/// ウィンドウイベント（フォーカスロストなど）を処理する。
+/// UIウィンドウ（セレクタ）に関連するイベントを処理する
+///
+/// 主にフォーカス喪失時の自動非表示処理などを行います。
 ///
 /// # Arguments
-/// * `event` - 受信したウィンドウイベント。
-/// * `selector` - セレクターウィンドウ。
-/// * `last_selector_show` - セレクターが最後に表示された時刻。
+/// * `event` - 受信したウィンドウイベント
+/// * `selector` - セレクタウィンドウのインスタンス
+/// * `last_selector_show` - セレクタが最後に表示された時刻
 pub fn handle_window_event(
     event: WindowEvent,
     selector: &super::selector::SelectorWindow,
@@ -64,16 +69,16 @@ pub fn handle_window_event(
     }
 }
 
-/// アプリケーションの基本操作（終了、一時停止、ショートカット一覧）を処理する。
+/// アプリケーションの基本操作（終了、一時停止、ショートカット一覧表示）を処理する
 ///
 /// # Arguments
-/// * `id` - クリックされたメニュー項目の ID。
-/// * `menu` - トレイメニュー。
-/// * `state` - アプリケーションの状態。
-/// * `control_flow` - イベントループの制御フロー。
+/// * `id` - クリックされたメニュー項目の ID
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `control_flow` - イベントループの制御フロー
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数で処理された場合は `true`、それ以外は `false`。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
 fn handle_app_control(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -103,16 +108,16 @@ fn handle_app_control(
     }
 }
 
-/// クリップボード履歴に関連するイベントを処理する。
+/// クリップボード履歴に関連するメニューイベント（有効化切替、消去、過去項目の選択）を処理する
 ///
 /// # Arguments
-/// * `id` - クリックされたメニュー項目の ID。
-/// * `menu` - トレイメニュー。
-/// * `state` - アプリケーションの状態。
-/// * `clipboard` - クリップボード・ハンドラ。
+/// * `id` - クリックされたメニュー項目の ID
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数で処理された場合は `true`、それ以外は `false`。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
 fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -143,15 +148,15 @@ fn handle_history_event(
     false
 }
 
-/// 通知設定に関連するイベントを処理する。
+/// 通知設定に関連するメニューイベントを処理する
 ///
 /// # Arguments
-/// * `id` - クリックされたメニュー項目の ID。
-/// * `menu` - トレイメニュー。
-/// * `state` - アプリケーションの状態。
+/// * `id` - クリックされたメニュー項目の ID
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数で処理された場合は `true`、それ以外は `false`。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
 fn handle_notification_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -185,16 +190,16 @@ fn handle_notification_event(
     false
 }
 
-/// 加工モードの選択イベントを処理する。
+/// 加工モードの選択メニューイベントを処理する
 ///
 /// # Arguments
-/// * `id` - クリックされたメニュー項目の ID。
-/// * `menu` - トレイメニュー。
-/// * `state` - アプリケーションの状態。
-/// * `clipboard` - クリップボード・ハンドラ。
+/// * `id` - クリックされたメニュー項目の ID
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数で処理された場合は `true`、それ以外は `false`。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
 fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -209,15 +214,15 @@ fn handle_refine_mode_event(
     }
 }
 
-/// 監視設定（監視モード、ポーリング間隔）に関連するイベントを処理する。
+/// 監視設定（監視モード、ポーリング間隔）に関連するメニューイベントを処理する
 ///
 /// # Arguments
-/// * `id` - クリックされたメニュー項目の ID。
-/// * `menu` - トレイメニュー。
-/// * `state` - アプリケーションの状態。
+/// * `id` - クリックされたメニュー項目の ID
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数で処理された場合は `true`、それ以外は `false`。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
 fn handle_monitor_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -242,13 +247,15 @@ fn handle_monitor_event(
     false
 }
 
-/// 選択された加工モードをアプリケーションの状態に反映し、UIを更新する。
+/// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
+///
+/// 必要に応じてクリップボードワーカーに加工命令を送信します。
 ///
 /// # Arguments
-/// * `state` - アプリケーションの状態。
-/// * `menu` - トレイメニュー構造体。
-/// * `clipboard` - クリップボード・ハンドラ。
-/// * `mode` - 設定する加工モード。
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
+/// * `mode` - 設定する新しい加工モード
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
@@ -266,12 +273,12 @@ pub fn update_refine(
     let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
 }
 
-/// 監視モードを更新し、それに応じたスレッドを再起動する。
+/// 監視モードを更新し、必要に応じて監視用スレッドのリセットを行う
 ///
 /// # Arguments
-/// * `state` - アプリケーションの状態。
-/// * `menu` - トレイメニュー構造体。
-/// * `monitor_mode` - 設定する監視モード。
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `monitor_mode` - 設定する新しい監視モード
 pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
     if state.get_monitor_mode() == monitor_mode {
         return;

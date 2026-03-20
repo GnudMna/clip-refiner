@@ -1,16 +1,25 @@
 /// アプリケーションの表示名 (PascalCase)
+///
+/// ウィンドウタイトルやメニューの表示に使用されます。
 pub const APP_NAME: &str = "ClipRefiner";
 
 /// アプリケーションの識別子 (kebab-case)
-/// フォルダ名などに使用される。
+///
+/// 設定フォルダ名やデータ保存パスの生成に使用されます。
 #[allow(dead_code)]
 pub const APP_NAME_KEBAB: &str = "clip-refiner";
 
 /// アプリケーションの一意な識別子
-/// 多重起動防止用などに使用される。
+///
+/// 多重起動防止やレジストリ、設定のスコープ分離に使用されます。
 pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 
 /// Serdeのデフォルト値(true)を返すヘルパー関数
+///
+/// 設定ファイルのデシリアライズ時に、項目が欠けている場合のデフォルト値（true）を提供します。
+///
+/// # Returns
+/// * `bool` - 常に `true`。
 pub fn default_true() -> bool {
     true
 }

@@ -13,20 +13,28 @@ use global_hotkey::{
 };
 use tao::event_loop::{ControlFlow, EventLoopProxy};
 
-/// グローバルホットキーを管理する構造体
+/// グローバルホットキーの登録と管理を行う構造体
+///
+/// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
+/// モード選択UIの表示や設定の切り替えなどを実行します。
 pub struct HotkeyHandler {
+    /// ホットキーマネージャーのインスタンス保持用
     _manager: GlobalHotKeyManager,
+    /// セレクタ表示・非表示用ホットキー (Alt+Shift+S)
     selector_hotkey: HotKey,
+    /// 通知有効・無効切替用ホットキー (Alt+Shift+N)
     notification_hotkey: HotKey,
+    /// 一時停止・再開用ホットキー (Alt+Shift+P)
     pause_hotkey: HotKey,
+    /// アプリケーション終了用ホットキー (Alt+Shift+Q)
     quit_hotkey: HotKey,
 }
 
 impl HotkeyHandler {
-    /// ホットキーハンドラを初期化し、ショートカットを登録する。
+    /// ホットキーハンドラを初期化し、各種ショートカットをシステムに登録する
     ///
     /// # Returns
-    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。
+    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返します。
     pub fn new() -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
         let selector_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS);
@@ -50,10 +58,12 @@ impl HotkeyHandler {
         })
     }
 
-    /// ホットキーイベントを監視するスレッドを開始する。
+    /// ホットキーイベントを受信するためのバックグラウンドスレッドを開始する
+    ///
+    /// 受信したイベントは `proxy` を介してメインのイベントループへ転送されます。
     ///
     /// # Arguments
-    /// * `proxy` - UIイベントを送信するためのプロキシ。
+    /// * `proxy` - UIスレッド（イベントループ）へイベントを送信するためのプロキシ
     pub fn start_event_listener(&self, proxy: EventLoopProxy<AppEvent>) {
         std::thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
@@ -63,15 +73,15 @@ impl HotkeyHandler {
         });
     }
 
-    /// ホットキーイベントを処理する。
+    /// 受信したホットキーイベントを解析し、対応するアクションを実行する
     ///
     /// # Arguments
-    /// * `event` - 受信したホットキーイベント。
-    /// * `state` - アプリケーションの状態。
-    /// * `menu` - トレイメニュー。
-    /// * `selector` - セレクターウィンドウ。
-    /// * `control_flow` - イベントループの制御フロー。
-    /// * `last_selector_show` - セレクターが最後に表示された時刻。
+    /// * `event` - 受信したホットキーイベント
+    /// * `state` - アプリケーションの共有状態
+    /// * `menu` - トレイメニュー構造体
+    /// * `selector` - セレクタウィンドウのインスタンス
+    /// * `control_flow` - イベントループの制御フロー
+    /// * `last_selector_show` - セレクタが最後に表示された時刻（更新用）
     pub fn handle_event(
         &self,
         event: GlobalHotKeyEvent,

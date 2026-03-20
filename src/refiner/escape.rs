@@ -1,6 +1,15 @@
 use std::borrow::Cow;
 
 /// 文字列をバックスラッシュでエスケープする
+///
+/// JSONやプログラム文字列内で特殊な意味を持つ文字（改行、タブ、ダブルクォートなど）の前に
+/// バックスラッシュを挿入します。
+///
+/// # Arguments
+/// * `input` - エスケープ対象の文字列
+///
+/// # Returns
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返します。
 pub fn escape_string(input: &str) -> Cow<'_, str> {
     if input.is_empty() {
         return Cow::Borrowed(input);
@@ -37,6 +46,14 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
 }
 
 /// 文字列のエスケープを解除する
+///
+/// バックスラッシュでエスケープされた特殊文字（`\n`, `\t` など）を元の文字に戻します。
+///
+/// # Arguments
+/// * `input` - エスケープ解除対象の文字列
+///
+/// # Returns
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返します。
 pub fn unescape_string(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -80,6 +97,15 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
 }
 
 /// 正規表現のメタ文字をエスケープする
+///
+/// 正規表現内で特殊な意味を持つ文字（`.`, `*`, `+` など）の前にバックスラッシュを挿入し、
+/// リテラルとして扱えるようにします。
+///
+/// # Arguments
+/// * `input` - エスケープ対象の文字列
+///
+/// # Returns
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返します。
 pub fn regex_escape(input: &str) -> Cow<'_, str> {
     let result = regex::escape(input);
     if result == input {
@@ -90,6 +116,14 @@ pub fn regex_escape(input: &str) -> Cow<'_, str> {
 }
 
 /// 正規表現のエスケープを解除する（簡易版）
+///
+/// 正規表現のメタ文字の前に付与されたバックスラッシュを削除します。
+///
+/// # Arguments
+/// * `input` - エスケープ解除対象の文字列
+///
+/// # Returns
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返します。
 pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);

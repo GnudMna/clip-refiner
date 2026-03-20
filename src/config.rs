@@ -7,6 +7,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// クリップボードの監視方式
+///
+/// クリップボードの更新を検知するための異なるアプローチを提供します。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
     /// 一定間隔でクリップボードの内容を確認するポーリング方式。
@@ -20,6 +22,8 @@ pub enum MonitorMode {
 }
 
 /// 通知の内容に関する設定
+///
+/// どのタイミングでどのような通知を表示するかを制御します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// 実行されたモード名を通知するかどうか
@@ -34,6 +38,10 @@ pub struct NotificationSettings {
 }
 
 impl Default for NotificationSettings {
+    /// デフォルトの通知設定を生成する
+    ///
+    /// # Returns
+    /// * `Self` - すべての通知が有効なデフォルト設定。
     fn default() -> Self {
         Self {
             notify_mode: true,
@@ -43,7 +51,9 @@ impl Default for NotificationSettings {
     }
 }
 
-/// アプリケーションの設定情報。JSONファイルとして保存・読み込みされます。
+/// アプリケーションの設定情報
+///
+/// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定です。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 最後に使用した（または常駐時に使用する）加工モード
@@ -68,6 +78,10 @@ pub struct AppConfig {
 }
 
 impl Default for AppConfig {
+    /// デフォルトのアプリケーション設定を生成する
+    ///
+    /// # Returns
+    /// * `Self` - 標準的な動作環境のためのデフォルト設定。
     fn default() -> Self {
         Self {
             mode: RefineMode::UrlDecode,
@@ -92,7 +106,9 @@ impl AppConfig {
         Ok(config_dir.join("config.json"))
     }
 
-    /// 設定ファイルを読み込む。存在しない場合や失敗した場合はデフォルト設定を返す
+    /// 設定ファイルを読み込む
+    ///
+    /// 存在しない場合や失敗した場合はデフォルト設定を返します。
     ///
     /// # Returns
     /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`。
@@ -133,7 +149,7 @@ impl AppConfig {
     /// 現在の設定をファイルへ保存する
     ///
     /// # Returns
-    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す。
+    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
             crate::log_error!("設定ファイルパスの取得に失敗: {:?}", e);
@@ -154,7 +170,9 @@ impl AppConfig {
     }
 }
 
-/// 設定ディレクトリのパスを取得
+/// 設定ディレクトリのパスを取得する
+///
+/// OSに応じたアプリケーション設定ディレクトリのパスを計算します。
 ///
 /// # Returns
 /// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
