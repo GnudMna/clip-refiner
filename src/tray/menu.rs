@@ -3,9 +3,9 @@ use std::sync::Mutex;
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
-use strum::IntoEnumIterator;
 
 use anyhow::{Context, Result};
+use strum::IntoEnumIterator;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},

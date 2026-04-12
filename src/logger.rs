@@ -1,10 +1,12 @@
-use anyhow::{Context, Result};
-use chrono::NaiveDate;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{
     OnceLock,
     atomic::{AtomicI64, Ordering},
 };
+
+use anyhow::{Context, Result};
+use chrono::NaiveDate;
 
 // ======================================================================
 // ロガートレイト
@@ -131,7 +133,7 @@ pub fn init_global_logger(logger: Box<dyn Logger>) {
 /// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
 pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> {
     let now = chrono::Local::now().date_naive();
-    let entries = std::fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
+    let entries = fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
 
     for entry in entries {
         let entry = entry?;
@@ -146,7 +148,7 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
                 let age = now - file_date;
                 if age.num_days() > max_days {
                     tracing::info!("古いログファイルを削除します: {}", filename);
-                    let _ = std::fs::remove_file(path);
+                    let _ = fs::remove_file(path);
                 }
             }
         }

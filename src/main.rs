@@ -12,33 +12,8 @@ use arboard::Clipboard;
 use clap::Parser;
 use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
+use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-#[cfg(windows)]
-use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-/// コマンドライン引数
-///
-/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
-#[derive(Parser, Debug)]
-#[command(
-    author,
-    version,
-    about = "クリップボードのテキストを加工するツール",
-    help_template = "\
-{about-with-newline}
-使用方法:
-    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
-    --mode指定: クリップボードの内容を一度だけ加工
-
-{all-args}
-"
-)]
-struct Args {
-    /// 実行モードの指定（ワンショット実行用）
-    #[arg(short = 'm', long = "mode", value_enum)]
-    mode: Option<refiner::RefineMode>,
-}
 
 // ======================================================================
 // エントリポイント
@@ -69,6 +44,32 @@ fn main() -> Result<()> {
 }
 
 // ======================================================================
+// 引数設定
+// ======================================================================
+/// コマンドライン引数
+///
+/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
+#[derive(Parser, Debug)]
+#[command(
+    author,
+    version,
+    about = "クリップボードのテキストを加工するツール",
+    help_template = "\
+{about-with-newline}
+使用方法:
+    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
+    --mode指定: クリップボードの内容を一度だけ加工
+
+{all-args}
+"
+)]
+struct Args {
+    /// 実行モードの指定（ワンショット実行用）
+    #[arg(short = 'm', long = "mode", value_enum)]
+    mode: Option<refiner::RefineMode>,
+}
+
+// ======================================================================
 // コンソール設定
 // ======================================================================
 /// Windows環境で親プロセスのコンソールをアタッチする
@@ -76,6 +77,9 @@ fn main() -> Result<()> {
 /// これにより、コンソール（`cmd.exe` や `PowerShell`）から `cargo run` などで起動した場合に、
 /// アプリケーションからの標準出力がコンソール上に表示されるようになります。
 fn setup_console() {
+    #[cfg(windows)]
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+
     #[cfg(windows)]
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
@@ -104,15 +108,13 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     let file_appender = tracing_appender::rolling::daily(&log_dir, "clip-refiner.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(non_blocking)
-        .with_ansi(false);
+    let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
 
     // stdout への出力はデバッグビルド限定とする。
     #[cfg(debug_assertions)]
-    let stdout_layer = Some(tracing_subscriber::fmt::layer().with_writer(std::io::stdout));
+    let stdout_layer = Some(ts_fmt::layer().with_writer(std::io::stdout));
     #[cfg(not(debug_assertions))]
-    let stdout_layer: Option<tracing_subscriber::fmt::Layer<_, _, _, _>> = None;
+    let stdout_layer: Option<ts_fmt::Layer<_, _, _, _>> = None;
 
     tracing_subscriber::registry()
         .with(

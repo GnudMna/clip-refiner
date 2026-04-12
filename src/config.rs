@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 use crate::consts;
@@ -114,7 +115,7 @@ impl AppConfig {
     /// * `Result<PathBuf>` - 設定ファイルの完全なパス。
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
-        std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+        fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
         Ok(config_dir.join("config.json"))
     }
 
@@ -140,7 +141,7 @@ impl AppConfig {
         }
 
         // ファイル読み込み
-        let content = match std::fs::read_to_string(&config_path) {
+        let content = match fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
                 crate::log_warn!("設定ファイルの読み込みに失敗: {:?}", e);
@@ -173,7 +174,7 @@ impl AppConfig {
             e
         })?;
 
-        std::fs::write(&config_path, content).map_err(|e| {
+        fs::write(&config_path, content).map_err(|e| {
             crate::log_error!("設定ファイルの書き込みに失敗: {:?}", e);
             e
         })?;

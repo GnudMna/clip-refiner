@@ -1,14 +1,16 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
+use std::time::Instant;
 
 use super::menu::TrayMenu;
 use super::monitor::spawn_monitor_thread;
 use super::notifier;
 use super::state::{AppState, LockExt};
+use super::worker::ClipboardCommand;
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::RefineMode;
 
-use super::worker::ClipboardCommand;
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
@@ -31,7 +33,7 @@ pub fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
     control_flow: &mut ControlFlow,
 ) {
     if handle_app_control(&event.id, menu, state, control_flow) {
@@ -60,7 +62,7 @@ pub fn handle_menu_event(
 pub fn handle_window_event(
     event: WindowEvent,
     selector: &super::selector::SelectorWindow,
-    last_selector_show: &std::time::Instant,
+    last_selector_show: &Instant,
 ) {
     if let WindowEvent::Focused(focused) = event
         && !focused
@@ -132,7 +134,7 @@ fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
@@ -220,7 +222,7 @@ fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
     if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
         update_refine(state, menu, clipboard_tx, *mode);
@@ -281,7 +283,7 @@ fn handle_monitor_event(
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
     mode: RefineMode,
 ) {
     state.set_mode(mode);

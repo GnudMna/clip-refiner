@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::event;
@@ -30,7 +31,7 @@ pub struct App {
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
-    pub clipboard_tx: std::sync::mpsc::Sender<super::worker::ClipboardCommand>,
+    pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
     /// 最後にセレクタを表示した時刻（連打防止用）
     pub last_selector_show: Instant,
 }
