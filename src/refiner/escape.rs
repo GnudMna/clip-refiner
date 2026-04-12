@@ -83,6 +83,59 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                     changed = true;
                     continue;
                 }
+                'u' => {
+                    chars.next(); // consume 'u'
+                    let hex: String = std::iter::from_fn(|| chars.next()).take(4).collect();
+                    if hex.len() == 4 {
+                        if let Ok(code) = u16::from_str_radix(&hex, 16) {
+                            // サロゲートペア上位 (U+D800..U+DBFF) の処理
+                            if (0xD800..=0xDBFF).contains(&code) {
+                                // \uXXXX の次に \uYYYY があるか確認
+                                let mut temp_chars = chars.clone();
+                                if temp_chars.next() == Some('\\') && temp_chars.next() == Some('u')
+                                {
+                                    let low_hex: String =
+                                        std::iter::from_fn(|| temp_chars.next()).take(4).collect();
+                                    if low_hex.len() == 4 {
+                                        if let Ok(low) = u16::from_str_radix(&low_hex, 16) {
+                                            if (0xDC00..=0xDFFF).contains(&low) {
+                                                // サロゲートペアをUnicodeスカラー値に変換
+                                                let scalar = 0x10000u32
+                                                    + ((code as u32 - 0xD800) << 10)
+                                                    + (low as u32 - 0xDC00);
+                                                if let Some(ch) = char::from_u32(scalar) {
+                                                    // 消費済みの分だけ chars を進める
+                                                    chars.next(); // '\'
+                                                    chars.next(); // 'u'
+                                                    for _ in 0..4 {
+                                                        chars.next();
+                                                    }
+                                                    result.push(ch);
+                                                    changed = true;
+                                                    continue;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // サロゲートペアでない場合はそのまま出力
+                                result.push_str(&format!("\\u{}", hex));
+                            } else if let Some(ch) = char::from_u32(code as u32) {
+                                result.push(ch);
+                                changed = true;
+                                continue;
+                            } else {
+                                result.push_str(&format!("\\u{}", hex));
+                            }
+                        } else {
+                            result.push_str(&format!("\\u{}", hex));
+                        }
+                    } else {
+                        result.push_str(&format!("\\u{}", hex));
+                    }
+                    changed = true;
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -168,6 +221,21 @@ mod tests {
         assert_eq!(unescape_string("hello\\nworld"), "hello\nworld");
         assert_eq!(unescape_string("plain"), "plain");
         assert!(matches!(unescape_string("plain"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_unescape_unicode() {
+        // 基本的な \uXXXX
+        assert_eq!(unescape_string("\\u0041"), "A");
+        assert_eq!(unescape_string("\\u3042"), "あ");
+        // テキスト中に埋め込まれた \uXXXX
+        assert_eq!(unescape_string("hello\\u0020world"), "hello world");
+        // サロゲートペア (U+1F600 GRINNING FACE)
+        assert_eq!(unescape_string("\\uD83D\\uDE00"), "\u{1F600}");
+        // 不完全な \uXXXX はそのまま残す
+        assert_eq!(unescape_string("\\u004"), "\\u004");
+        // 無効な16進数はそのまま残す
+        assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
     }
 
     #[test]
