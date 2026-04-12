@@ -164,7 +164,14 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
         let _ = wtr.write_record(&record);
     }
 
-    let result = String::from_utf8(wtr.into_inner().unwrap_or_default()).unwrap_or_default();
+    let bytes = match wtr.into_inner() {
+        Ok(b) => b,
+        Err(_) => return Cow::Borrowed(text),
+    };
+    let result = match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => return Cow::Borrowed(text),
+    };
     if result == text {
         Cow::Borrowed(text)
     } else {
