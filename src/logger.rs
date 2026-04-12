@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    OnceLock,
+    atomic::{AtomicI64, Ordering},
+};
 
 /// アプリケーション全体のロガー用トレイト
 ///
@@ -23,7 +26,11 @@ pub trait Logger: Send + Sync {
 /// ファイルへのログ出力と、定期的な古いログのクリーンアップ機能を備えています。
 pub struct TracingLogger {
     log_dir: PathBuf,
-    last_cleanup: Mutex<Option<NaiveDate>>,
+    /// 最後にクリーンアップを実行した日をUNIXエポックからの日数で保持する。
+    /// -1 は「まだ実行していない」を示す。
+    /// Mutex の代わりに AtomicI64 を使うことで、ログ呼び出しごとの
+    /// ロック取得コストをなくし、日付が変わっていない場合は完全にロックフリーで動作する。
+    last_cleanup_day: AtomicI64,
 }
 
 impl TracingLogger {
@@ -37,20 +44,34 @@ impl TracingLogger {
     pub fn new(log_dir: PathBuf) -> Self {
         Self {
             log_dir,
-            last_cleanup: Mutex::new(None),
+            last_cleanup_day: AtomicI64::new(-1),
         }
     }
 
     fn check_and_cleanup(&self) {
-        let now = chrono::Local::now().date_naive();
-        let mut last_cleanup = self.last_cleanup.lock().unwrap();
+        let today = chrono::Local::now()
+            .date_naive()
+            .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
+            .num_days();
 
-        if last_cleanup.is_none_or(|date| now > date) {
+        // ファストパス: 今日のクリーンアップが既に完了していればロックなしで即リターン
+        if self.last_cleanup_day.load(Ordering::Relaxed) >= today {
+            return;
+        }
+
+        // compare_exchange で1スレッドだけがクリーンアップを実行する
+        // 失敗した場合は他スレッドが先に更新済みなので何もしない
+        if self
+            .last_cleanup_day
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
+                if prev < today { Some(today) } else { None }
+            })
+            .is_ok()
+        {
             if let Err(e) = cleanup_old_logs(&self.log_dir, 14) {
                 // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
                 tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
             }
-            *last_cleanup = Some(now);
         }
     }
 }
