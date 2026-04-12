@@ -4,6 +4,9 @@ use crate::notification;
 use crate::refiner::RefineMode;
 use crate::tray::state::AppState;
 
+// ======================================================================
+// 加工完了通知
+// ======================================================================
 /// 加工完了時のデスクトップ通知を表示する
 ///
 /// 設定に応じて、実行されたモード名や加工後のテキストスニペットを通知内容に含めます。
@@ -13,7 +16,7 @@ use crate::tray::state::AppState;
 /// * `mode` - 実行された加工モード
 /// * `processed` - 加工後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
-    if !state.show_success_notification() {
+    if !state.is_notification_enabled() {
         return;
     }
 
@@ -32,6 +35,9 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
     notification::show_notification("変換完了", &lines.join("\n"));
 }
 
+// ======================================================================
+// 一時停止通知
+// ======================================================================
 /// 監視の一時停止または再開時のデスクトップ通知を表示する
 ///
 /// # Arguments
@@ -39,7 +45,7 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// * `paused` - 新しい一時停止状態 (`true`: 一時停止中, `false`: 監視中)
 /// * `source` - 通知のタイトル（操作元を示す文字列、例: "ショートカット", "設定変更"）
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
-    if state.show_success_notification() && state.notify_pause() {
+    if state.is_notification_enabled() && state.notify_pause() {
         notification::show_notification(
             source,
             if paused {

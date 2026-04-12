@@ -1,18 +1,23 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
+use std::time::Instant;
 
 use super::menu::TrayMenu;
 use super::monitor::spawn_monitor_thread;
 use super::notifier;
 use super::state::{AppState, LockExt};
+use super::worker::ClipboardCommand;
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::RefineMode;
 
-use super::worker::ClipboardCommand;
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// システムトレイアイコンのメニューから受信したイベントを処理する
 ///
 /// クリックされたメニュー項目の ID に基づいて、アプリケーション設定の変更、
@@ -28,7 +33,7 @@ pub fn handle_menu_event(
     event: MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
     control_flow: &mut ControlFlow,
 ) {
     if handle_app_control(&event.id, menu, state, control_flow) {
@@ -57,7 +62,7 @@ pub fn handle_menu_event(
 pub fn handle_window_event(
     event: WindowEvent,
     selector: &super::selector::SelectorWindow,
-    last_selector_show: &std::time::Instant,
+    last_selector_show: &Instant,
 ) {
     if let WindowEvent::Focused(focused) = event
         && !focused
@@ -70,6 +75,9 @@ pub fn handle_window_event(
     }
 }
 
+// ======================================================================
+// アプリケーション制御
+// ======================================================================
 /// アプリケーションの基本操作（終了、一時停止、ショートカット一覧表示）を処理する
 ///
 /// # Arguments
@@ -109,6 +117,9 @@ fn handle_app_control(
     }
 }
 
+// ======================================================================
+// 履歴
+// ======================================================================
 /// クリップボード履歴に関連するメニューイベント（有効化切替、消去、過去項目の選択）を処理する
 ///
 /// # Arguments
@@ -123,7 +134,7 @@ fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
@@ -149,6 +160,9 @@ fn handle_history_event(
     false
 }
 
+// ======================================================================
+// 通知設定
+// ======================================================================
 /// 通知設定に関連するメニューイベントを処理する
 ///
 /// # Arguments
@@ -165,7 +179,7 @@ fn handle_notification_event(
 ) -> bool {
     if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
-        state.set_show_success_notification(enabled);
+        state.set_notification_enabled(enabled);
         menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
         return true;
@@ -191,6 +205,9 @@ fn handle_notification_event(
     false
 }
 
+// ======================================================================
+// 加工モード
+// ======================================================================
 /// 加工モードの選択メニューイベントを処理する
 ///
 /// # Arguments
@@ -205,7 +222,7 @@ fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
     if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
         update_refine(state, menu, clipboard_tx, *mode);
@@ -215,6 +232,9 @@ fn handle_refine_mode_event(
     }
 }
 
+// ======================================================================
+// 監視設定
+// ======================================================================
 /// 監視設定（監視モード、ポーリング間隔）に関連するメニューイベントを処理する
 ///
 /// # Arguments
@@ -248,6 +268,9 @@ fn handle_monitor_event(
     false
 }
 
+// ======================================================================
+// モード・監視更新
+// ======================================================================
 /// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
 /// 必要に応じてクリップボードワーカーに加工命令を送信します。
@@ -260,7 +283,7 @@ fn handle_monitor_event(
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    clipboard_tx: &std::sync::mpsc::Sender<ClipboardCommand>,
+    clipboard_tx: &Sender<ClipboardCommand>,
     mode: RefineMode,
 ) {
     state.set_mode(mode);

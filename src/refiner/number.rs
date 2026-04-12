@@ -1,5 +1,8 @@
 use std::borrow::Cow;
 
+// ======================================================================
+// カンマ付与
+// ======================================================================
 /// 数値に3桁区切りのカンマを付与する
 ///
 /// 入力された文字列が数値として妥当な場合、整数部分に3桁ごとのカンマを挿入します。
@@ -67,6 +70,9 @@ pub fn add_commas(text: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// カンマ除去
+// ======================================================================
 /// 数値からカンマを除去する
 ///
 /// 入力された文字列に含まれるすべてのカンマを削除します。
@@ -95,6 +101,9 @@ pub fn remove_commas(text: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// 数値判定
+// ======================================================================
 /// 入力が数値として妥当な形式か判定する
 ///
 /// 数字、カンマ、小数点、および先頭のマイナス記号のみで構成されているかチェックします。
@@ -134,6 +143,9 @@ fn is_numeric_input(text: &str) -> bool {
     true
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +195,37 @@ mod tests {
         assert!(!is_numeric_input("abc"));
         assert!(!is_numeric_input("12.34.56"));
         assert!(is_numeric_input("-1,234.5"));
+    }
+
+    /// 小数点のみ (整数部なし) の処理
+    #[test]
+    fn test_add_commas_decimal_only() {
+        assert_eq!(add_commas(".5"), ".5");
+        assert_eq!(add_commas("-.5"), "-.5");
+    }
+
+    /// 末尾に小数点がある値の処理
+    #[test]
+    fn test_add_commas_trailing_dot() {
+        assert_eq!(add_commas("1234."), "1,234.");
+    }
+
+    /// スペース前後のトリムが効くこと
+    #[test]
+    fn test_add_commas_trimmed_input() {
+        assert_eq!(add_commas("  5678  "), "5,678");
+    }
+
+    /// remove_commas: カンマがない場合は Borrowed を返すこと
+    #[test]
+    fn test_remove_commas_no_comma_returns_borrowed() {
+        let input = "1234";
+        assert!(matches!(remove_commas(input), Cow::Borrowed(_)));
+    }
+
+    /// remove_commas: 空文字列は Borrowed を返すこと
+    #[test]
+    fn test_remove_commas_empty() {
+        assert!(matches!(remove_commas(""), Cow::Borrowed(_)));
     }
 }

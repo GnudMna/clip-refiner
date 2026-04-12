@@ -2,8 +2,11 @@ use std::borrow::Cow;
 
 use crate::refiner::OrderedValue;
 
-use serde_yaml::Value;
+use serde_norway::Value;
 
+// ======================================================================
+// YAML → JSON 変換
+// ======================================================================
 /// YAML文字列をJSON文字列へ変換する(キー順序不同)
 ///
 /// 入力されたYAMLを解析し、対応するJSON形式の文字列に変換します。
@@ -15,7 +18,7 @@ use serde_yaml::Value;
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返します。
 pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
-    let v: Value = match serde_yaml::from_str(text) {
+    let v: Value = match serde_norway::from_str(text) {
         Ok(v) => v,
         Err(_) => return Cow::Borrowed(text),
     };
@@ -37,7 +40,7 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返します。
 pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
-    let v: OrderedValue = match serde_yaml::from_str(text) {
+    let v: OrderedValue = match serde_norway::from_str(text) {
         Ok(v) => v,
         Err(_) => return Cow::Borrowed(text),
     };
@@ -48,6 +51,9 @@ pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;

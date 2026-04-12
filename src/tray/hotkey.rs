@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use super::menu::TrayMenu;
+use super::monitor::spawn_monitor_thread;
 use super::notifier;
 use super::selector::SelectorWindow;
 use super::state::{AppEvent, AppState};
@@ -13,6 +15,9 @@ use global_hotkey::{
 };
 use tao::event_loop::{ControlFlow, EventLoopProxy};
 
+// ======================================================================
+// ホットキーハンドラ構造体
+// ======================================================================
 /// グローバルホットキーの登録と管理を行う構造体
 ///
 /// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
@@ -30,6 +35,9 @@ pub struct HotkeyHandler {
     quit_hotkey: HotKey,
 }
 
+// ======================================================================
+// 初期化・登録
+// ======================================================================
 impl HotkeyHandler {
     /// ホットキーハンドラを初期化し、各種ショートカットをシステムに登録する
     ///
@@ -57,7 +65,12 @@ impl HotkeyHandler {
             quit_hotkey,
         })
     }
+}
 
+// ======================================================================
+// イベントリスナー
+// ======================================================================
+impl HotkeyHandler {
     /// ホットキーイベントを受信するためのバックグラウンドスレッドを開始する
     ///
     /// 受信したイベントは `proxy` を介してメインのイベントループへ転送されます。
@@ -72,7 +85,12 @@ impl HotkeyHandler {
             }
         });
     }
+}
 
+// ======================================================================
+// イベント処理
+// ======================================================================
+impl HotkeyHandler {
     /// 受信したホットキーイベントを解析し、対応するアクションを実行する
     ///
     /// # Arguments
@@ -89,19 +107,19 @@ impl HotkeyHandler {
         menu: &TrayMenu,
         selector: &SelectorWindow,
         control_flow: &mut ControlFlow,
-        last_selector_show: &mut std::time::Instant,
+        last_selector_show: &mut Instant,
     ) {
         if event.state == global_hotkey::HotKeyState::Pressed {
             if event.id == self.selector_hotkey.id() {
                 if selector.is_visible() {
                     selector.hide();
                 } else {
-                    *last_selector_show = std::time::Instant::now();
+                    *last_selector_show = Instant::now();
                     selector.show(state.get_mode());
                 }
             } else if event.id == self.notification_hotkey.id() {
-                let new_val = !state.show_success_notification();
-                state.set_show_success_notification(new_val);
+                let new_val = !state.is_notification_enabled();
+                state.set_notification_enabled(new_val);
                 menu.notification.enabled_item.set_checked(new_val);
                 menu.notification.content_submenu.set_enabled(new_val);
                 state.save_config();
@@ -119,7 +137,7 @@ impl HotkeyHandler {
                 menu.pause_item.set_checked(new_paused);
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
                 if !new_paused {
-                    crate::tray::monitor::spawn_monitor_thread(Arc::clone(state));
+                    spawn_monitor_thread(Arc::clone(state));
                 }
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;

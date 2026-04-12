@@ -1,8 +1,16 @@
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{
+    OnceLock,
+    atomic::{AtomicI64, Ordering},
+};
+
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
 
+// ======================================================================
+// ロガートレイト
+// ======================================================================
 /// アプリケーション全体のロガー用トレイト
 ///
 /// 異なるバックエンド（tracing, mockなど）を抽象化するための共通インターフェースを提供します。
@@ -18,12 +26,19 @@ pub trait Logger: Send + Sync {
     fn debug(&self, msg: &str);
 }
 
+// ======================================================================
+// tracing ロガー
+// ======================================================================
 /// tracing クレートを使用した Logger の実装
 ///
 /// ファイルへのログ出力と、定期的な古いログのクリーンアップ機能を備えています。
 pub struct TracingLogger {
     log_dir: PathBuf,
-    last_cleanup: Mutex<Option<NaiveDate>>,
+    /// 最後にクリーンアップを実行した日をUNIXエポックからの日数で保持する。
+    /// -1 は「まだ実行していない」を示す。
+    /// Mutex の代わりに AtomicI64 を使うことで、ログ呼び出しごとの
+    /// ロック取得コストをなくし、日付が変わっていない場合は完全にロックフリーで動作する。
+    last_cleanup_day: AtomicI64,
 }
 
 impl TracingLogger {
@@ -37,20 +52,33 @@ impl TracingLogger {
     pub fn new(log_dir: PathBuf) -> Self {
         Self {
             log_dir,
-            last_cleanup: Mutex::new(None),
+            last_cleanup_day: AtomicI64::new(-1),
         }
     }
 
     fn check_and_cleanup(&self) {
-        let now = chrono::Local::now().date_naive();
-        let mut last_cleanup = self.last_cleanup.lock().unwrap();
+        let today = chrono::Local::now()
+            .date_naive()
+            .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
+            .num_days();
 
-        if last_cleanup.is_none_or(|date| now > date) {
-            if let Err(e) = cleanup_old_logs(&self.log_dir, 14) {
-                // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
-                tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
-            }
-            *last_cleanup = Some(now);
+        // ファストパス: 今日のクリーンアップが既に完了していればロックなしで即リターン
+        if self.last_cleanup_day.load(Ordering::Relaxed) >= today {
+            return;
+        }
+
+        // compare_exchange で1スレッドだけがクリーンアップを実行する
+        // 失敗した場合は他スレッドが先に更新済みなので何もしない
+        if self
+            .last_cleanup_day
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
+                if prev < today { Some(today) } else { None }
+            })
+            .is_ok()
+            && let Err(e) = cleanup_old_logs(&self.log_dir, 14)
+        {
+            // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
+            tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
         }
     }
 }
@@ -74,6 +102,9 @@ impl Logger for TracingLogger {
     }
 }
 
+// ======================================================================
+// グローバルロガー
+// ======================================================================
 /// グローバルなロガーインスタンス
 static GLOBAL_LOGGER: OnceLock<Box<dyn Logger>> = OnceLock::new();
 
@@ -87,6 +118,9 @@ pub fn init_global_logger(logger: Box<dyn Logger>) {
     let _ = GLOBAL_LOGGER.set(logger);
 }
 
+// ======================================================================
+// ログクリーンアップ
+// ======================================================================
 /// 指定された日数より古いログファイルを削除する
 ///
 /// 指定されたディレクトリ内の古いログファイルをスキャンし、期限を過ぎたものを削除します。
@@ -99,7 +133,7 @@ pub fn init_global_logger(logger: Box<dyn Logger>) {
 /// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
 pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> {
     let now = chrono::Local::now().date_naive();
-    let entries = std::fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
+    let entries = fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
 
     for entry in entries {
         let entry = entry?;
@@ -114,7 +148,7 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
                 let age = now - file_date;
                 if age.num_days() > max_days {
                     tracing::info!("古いログファイルを削除します: {}", filename);
-                    let _ = std::fs::remove_file(path);
+                    let _ = fs::remove_file(path);
                 }
             }
         }
@@ -122,6 +156,9 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
     Ok(())
 }
 
+// ======================================================================
+// ロガー取得
+// ======================================================================
 /// グローバルロガーを取得する
 ///
 /// 初期化されていない場合は、何もしない `NoOpLogger` を返します。
@@ -144,6 +181,9 @@ impl Logger for NoOpLogger {
     fn debug(&self, _msg: &str) {}
 }
 
+// ======================================================================
+// ログマクロ
+// ======================================================================
 /// 情報ログ（INFOレベル）を出力するマクロ
 ///
 /// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
@@ -183,6 +223,9 @@ macro_rules! log_debug {
         $crate::logger::get_logger().debug(&format!($($arg)*));
     };
 }
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
