@@ -12,6 +12,11 @@ use crate::refiner::process_clipboard;
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 
+/// ポーリングスリープを分割するチック間隔（ミリ秒）
+///
+/// この値ごとに停止条件を確認するため、スレッド停止の最大遅延がこの値に抑えられます。
+const POLL_TICK_MS: u64 = 50;
+
 /// クリップボード監視スレッドを開始する
 ///
 /// 現在の監視モード設定（ポーリングまたはイベント）に基づいて、適切な監視スレッドを起動します。
@@ -104,10 +109,22 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
 
             // config RwLock を1回のみ取得してスナップショットを作成
             let snap = state.monitor_snapshot();
-            thread::sleep(Duration::from_millis(snap.interval_ms));
-
             if snap.is_paused {
                 break;
+            }
+
+            // interval_ms を POLL_TICK_MS 刻みで分割してスリープし、
+            // 各チックで停止条件を確認することでスレッド停止の最大遅延を POLL_TICK_MS に抑える
+            let mut elapsed = 0u64;
+            while elapsed < snap.interval_ms {
+                let tick = POLL_TICK_MS.min(snap.interval_ms - elapsed);
+                thread::sleep(Duration::from_millis(tick));
+                elapsed += tick;
+                if state.monitor_generation.load(Ordering::SeqCst) != generation
+                    || state.is_paused()
+                {
+                    return;
+                }
             }
 
             handle_clipboard_update(&mut clipboard, &state, &snap);
