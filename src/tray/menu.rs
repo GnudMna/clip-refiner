@@ -131,7 +131,7 @@ impl TrayMenu {
         let current_interval = state.interval_ms();
         let current_monitor_mode = state.get_monitor_mode();
         let history_enabled = state.is_history_enabled();
-        let show_success_notification = state.show_success_notification();
+        let show_success_notification = state.is_notification_enabled();
 
         let refine = Self::build_refine_menu(current_mode)?;
         let monitor = Self::build_monitor_menu(current_monitor_mode)?;

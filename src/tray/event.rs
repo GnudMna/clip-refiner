@@ -177,7 +177,7 @@ fn handle_notification_event(
 ) -> bool {
     if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
-        state.set_show_success_notification(enabled);
+        state.set_notification_enabled(enabled);
         menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
         return true;
