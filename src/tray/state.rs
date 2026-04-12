@@ -166,12 +166,18 @@ impl AppState {
         self.config.write_ignore_poison().history_enabled = enabled;
     }
 
-    pub fn show_success_notification(&self) -> bool {
-        self.config.read_ignore_poison().show_success_notification
+    pub fn is_notification_enabled(&self) -> bool {
+        self.config
+            .read_ignore_poison()
+            .notification_settings
+            .enabled
     }
 
-    pub fn set_show_success_notification(&self, show: bool) {
-        self.config.write_ignore_poison().show_success_notification = show;
+    pub fn set_notification_enabled(&self, show: bool) {
+        self.config
+            .write_ignore_poison()
+            .notification_settings
+            .enabled = show;
     }
 
     pub fn notify_mode(&self) -> bool {
@@ -315,8 +321,8 @@ mod tests {
                 monitor_mode: MonitorMode::Polling,
                 interval_ms: 1000,
                 history_enabled: false,
-                show_success_notification: false,
                 notification_settings: crate::config::NotificationSettings {
+                    enabled: false,
                     notify_mode: true,
                     notify_result: true,
                     notify_pause: true,

@@ -116,8 +116,8 @@ impl HotkeyHandler {
                     selector.show(state.get_mode());
                 }
             } else if event.id == self.notification_hotkey.id() {
-                let new_val = !state.show_success_notification();
-                state.set_show_success_notification(new_val);
+                let new_val = !state.is_notification_enabled();
+                state.set_notification_enabled(new_val);
                 menu.notification.enabled_item.set_checked(new_val);
                 menu.notification.content_submenu.set_enabled(new_val);
                 state.save_config();

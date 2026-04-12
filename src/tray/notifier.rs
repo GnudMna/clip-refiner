@@ -16,7 +16,7 @@ use crate::tray::state::AppState;
 /// * `mode` - 実行された加工モード
 /// * `processed` - 加工後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
-    if !state.show_success_notification() {
+    if !state.is_notification_enabled() {
         return;
     }
 
@@ -45,7 +45,7 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// * `paused` - 新しい一時停止状態 (`true`: 一時停止中, `false`: 監視中)
 /// * `source` - 通知のタイトル（操作元を示す文字列、例: "ショートカット", "設定変更"）
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
-    if state.show_success_notification() && state.notify_pause() {
+    if state.is_notification_enabled() && state.notify_pause() {
         notification::show_notification(
             source,
             if paused {

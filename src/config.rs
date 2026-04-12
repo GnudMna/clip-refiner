@@ -32,6 +32,9 @@ pub enum MonitorMode {
 /// どのタイミングでどのような通知を表示するかを制御します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
+    /// 成功通知機能全体の有効/無効スイッチ
+    #[serde(default)]
+    pub enabled: bool,
     /// 実行されたモード名を通知するかどうか
     #[serde(default = "consts::default_true")]
     pub notify_mode: bool,
@@ -47,9 +50,10 @@ impl Default for NotificationSettings {
     /// デフォルトの通知設定を生成する
     ///
     /// # Returns
-    /// * `Self` - すべての通知が有効なデフォルト設定。
+    /// * `Self` - 通知オフ・各サブ設定はオンのデフォルト設定。
     fn default() -> Self {
         Self {
+            enabled: false,
             notify_mode: true,
             notify_result: true,
             notify_pause: true,
@@ -75,9 +79,6 @@ pub struct AppConfig {
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
-    /// 成功時に通知を表示するかどうか
-    #[serde(default)]
-    pub show_success_notification: bool,
     /// 監視が一時停止されているかどうか
     #[serde(default)]
     pub is_paused: bool,
@@ -97,7 +98,6 @@ impl Default for AppConfig {
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
-            show_success_notification: false,
             is_paused: false,
             notification_settings: NotificationSettings::default(),
         }
