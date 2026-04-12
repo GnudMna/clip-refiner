@@ -575,12 +575,14 @@ impl TrayMenu {
 /// # Returns
 /// * `Result<Icon>` - 作成されたアイコン。失敗した場合はエラーを返します。
 pub fn create_icon() -> Result<Icon> {
+    use std::io::Cursor;
+
     let icon_bytes = include_bytes!("../../assets/icon.png");
-    let decoder = png::Decoder::new(icon_bytes.as_slice());
+    let decoder = png::Decoder::new(Cursor::new(icon_bytes.as_slice()));
     let mut reader = decoder
         .read_info()
         .context("アイコンPNGのデコードに失敗しました")?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(0)];
     let info = reader
         .next_frame(&mut buf)
         .context("アイコンPNGフレームの読み取りに失敗しました")?;
