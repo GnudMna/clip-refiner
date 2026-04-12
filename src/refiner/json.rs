@@ -82,7 +82,7 @@ pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
         Err(_) => return Cow::Borrowed(text),
     };
 
-    match serde_yml::to_string(&v) {
+    match serde_norway::to_string(&v) {
         Ok(yaml_text) => Cow::Owned(yaml_text),
         Err(_) => Cow::Borrowed(text),
     }
@@ -104,7 +104,7 @@ pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
         Err(_) => return Cow::Borrowed(text),
     };
 
-    match serde_yml::to_string(&v) {
+    match serde_norway::to_string(&v) {
         Ok(yaml_text) => Cow::Owned(yaml_text),
         Err(_) => Cow::Borrowed(text),
     }
