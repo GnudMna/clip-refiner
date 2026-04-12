@@ -62,9 +62,15 @@ pub fn url_decode(input: &str) -> Result<String> {
 pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");
-    let query = match parts.next() {
+    let query_and_fragment = match parts.next() {
         Some(q) => q,
         None => return Cow::Borrowed(input),
+    };
+
+    // クエリ文字列とフラグメント（#以降）を分離する
+    let (query, fragment) = match query_and_fragment.split_once('#') {
+        Some((q, f)) => (q, Some(f)),
+        None => (query_and_fragment, None),
     };
 
     let params: Vec<&str> = query.split('&').collect();
@@ -80,12 +86,21 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     if params.len() == filtered_params.len() {
         // 全く削除されなかった場合
         Cow::Borrowed(input)
-    } else if filtered_params.is_empty() {
-        // すべて削除された場合
-        Cow::Owned(base.to_string())
     } else {
-        // 一部削除された場合
-        Cow::Owned(format!("{}?{}", base, filtered_params.join("&")))
+        // フラグメントを復元する
+        let fragment_str = fragment.map(|f| format!("#{f}")).unwrap_or_default();
+        if filtered_params.is_empty() {
+            // すべて削除された場合
+            Cow::Owned(format!("{base}{fragment_str}"))
+        } else {
+            // 一部削除された場合
+            Cow::Owned(format!(
+                "{}?{}{}",
+                base,
+                filtered_params.join("&"),
+                fragment_str
+            ))
+        }
     }
 }
 
@@ -182,6 +197,31 @@ mod tests {
         assert_eq!(
             remove_utm_params("http://example.com?UTM_SOURCE=S"),
             "http://example.com?UTM_SOURCE=S"
+        );
+    }
+
+    /// フラグメント（#）がある場合のUTMパラメータ削除テスト
+    #[test]
+    fn test_remove_utm_params_with_fragment() {
+        // UTMパラメータ削除後もフラグメントが保持されること
+        assert_eq!(
+            remove_utm_params("https://example.com/?utm_source=google&id=123#section"),
+            "https://example.com/?id=123#section"
+        );
+        // UTMパラメータのみ存在する場合、フラグメントだけが残ること
+        assert_eq!(
+            remove_utm_params("https://example.com/?utm_source=google#section"),
+            "https://example.com/#section"
+        );
+        // 変更なしの場合はフラグメントごと元の参照を返すこと
+        assert_eq!(
+            remove_utm_params("https://example.com/?id=123#section"),
+            "https://example.com/?id=123#section"
+        );
+        // フラグメントのみ（クエリなし）はそのまま
+        assert_eq!(
+            remove_utm_params("https://example.com/#section"),
+            "https://example.com/#section"
         );
     }
 }
