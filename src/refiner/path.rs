@@ -126,7 +126,9 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 
 /// 入力がパスらしい形式か判定する（簡易版）
 ///
-/// スラッシュ、バックスラッシュ、またはドライブレター（コロン）が含まれているかを確認します。
+/// スラッシュ、バックスラッシュ、またはWindowsドライブレター形式（例: `C:\`, `D:/`）が
+/// 含まれているかを確認します。単独のコロン（時刻文字列・URLポート番号・YAMLキーなど）は
+/// パスとみなしません。
 ///
 /// # Arguments
 /// * `text` - 判定対象の文字列
@@ -134,7 +136,13 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `bool` - パスらしい場合は `true`、そうでない場合は `false`。
 fn is_path_like_raw(text: &str) -> bool {
-    text.contains('/') || text.contains('\\') || text.contains(':')
+    if text.contains('/') || text.contains('\\') {
+        return true;
+    }
+    // Windowsドライブレター: 先頭が ASCII アルファベット1文字 + ':' + パス区切り文字
+    // 例: C:\ や D:/ はパスだが、12:00:00 や key: value などは除外する
+    let b = text.as_bytes();
+    b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/')
 }
 
 /// 1つの行からベースネームを抽出する
