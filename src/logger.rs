@@ -73,11 +73,10 @@ impl TracingLogger {
                 if prev < today { Some(today) } else { None }
             })
             .is_ok()
+            && let Err(e) = cleanup_old_logs(&self.log_dir, 14)
         {
-            if let Err(e) = cleanup_old_logs(&self.log_dir, 14) {
-                // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
-                tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
-            }
+            // ここで自身を呼び出すと無限ループになる可能性があるため、tracing を直接使う
+            tracing::warn!("自動ログクリーンアップに失敗: {:?}", e);
         }
     }
 }

@@ -226,4 +226,43 @@ mod tests {
         assert_eq!(config.interval_ms, decoded.interval_ms);
         assert_eq!(config.mode, decoded.mode);
     }
+
+    /// NotificationSettings のデフォルト値が正しいこと
+    #[test]
+    fn test_notification_settings_default() {
+        let ns = NotificationSettings::default();
+        assert!(!ns.enabled, "enabled のデフォルトは false");
+        assert!(ns.notify_mode);
+        assert!(ns.notify_result);
+        assert!(ns.notify_pause);
+    }
+
+    /// 古い設定 JSON (show_success_notification フィールドあり) を読んでも
+    /// デフォルト値でデシリアライズできること
+    #[test]
+    fn test_app_config_backward_compat_old_field() {
+        // mode の serde 表現は enum のバリアント名そのまま ("UrlDecode")
+        let old_json = r#"{
+            "mode": "UrlDecode",
+            "interval_ms": 1000,
+            "show_success_notification": true
+        }"#;
+        let config: AppConfig = serde_json::from_str(old_json).unwrap();
+        // 未知フィールドは無視され、notification_settings はデフォルト値になる
+        assert_eq!(config.interval_ms, 1000);
+        assert!(!config.notification_settings.enabled);
+    }
+
+    /// notification_settings.enabled が JSON に保存・復元されること
+    #[test]
+    fn test_notification_settings_serde_roundtrip() {
+        let mut config = AppConfig::default();
+        config.notification_settings.enabled = true;
+        config.notification_settings.notify_result = false;
+
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        assert!(decoded.notification_settings.enabled);
+        assert!(!decoded.notification_settings.notify_result);
+    }
 }

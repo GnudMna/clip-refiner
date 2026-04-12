@@ -305,8 +305,7 @@ mod tests {
     #[cfg(windows)]
     use tao::platform::windows::EventLoopBuilderExtWindows;
 
-    #[test]
-    fn test_app_state_helpers() {
+    fn create_test_state() -> AppState {
         #[cfg(windows)]
         let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
             .with_any_thread(true)
@@ -314,7 +313,7 @@ mod tests {
         #[cfg(not(windows))]
         let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
 
-        let state = AppState {
+        AppState {
             config: RwLock::new(AppConfig {
                 mode: RefineMode::Trim,
                 is_paused: false,
@@ -332,7 +331,12 @@ mod tests {
             last_processed_text: Mutex::new(String::new()),
             history: Mutex::new(Vec::new()),
             proxy: event_loop.create_proxy(),
-        };
+        }
+    }
+
+    #[test]
+    fn test_app_state_helpers() {
+        let state = create_test_state();
 
         assert_eq!(state.get_mode(), RefineMode::Trim);
         state.set_mode(RefineMode::UrlEncode);
@@ -348,5 +352,96 @@ mod tests {
         assert_eq!(state.interval_ms(), 2000);
 
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
+    }
+
+    /// 一時停止フラグの getter/setter
+    #[test]
+    fn test_paused_accessor() {
+        let state = create_test_state();
+        assert!(!state.is_paused());
+        state.set_paused(true);
+        assert!(state.is_paused());
+        state.set_paused(false);
+        assert!(!state.is_paused());
+    }
+
+    /// 履歴機能の getter/setter
+    #[test]
+    fn test_history_enabled_accessor() {
+        let state = create_test_state();
+        assert!(!state.is_history_enabled());
+        state.set_history_enabled(true);
+        assert!(state.is_history_enabled());
+    }
+
+    /// 通知関連フラグの getter/setter すべて
+    #[test]
+    fn test_notification_flags_accessors() {
+        let state = create_test_state();
+
+        assert!(!state.is_notification_enabled());
+        state.set_notification_enabled(true);
+        assert!(state.is_notification_enabled());
+
+        assert!(state.notify_mode());
+        state.set_notify_mode(false);
+        assert!(!state.notify_mode());
+
+        assert!(state.notify_result());
+        state.set_notify_result(false);
+        assert!(!state.notify_result());
+
+        assert!(state.notify_pause());
+        state.set_notify_pause(false);
+        assert!(!state.notify_pause());
+    }
+
+    /// `monitor_snapshot` が設定値を正しく反映すること
+    #[test]
+    fn test_monitor_snapshot_values() {
+        let state = create_test_state();
+        state.set_mode(RefineMode::UrlEncode);
+        state.set_interval_ms(1500);
+        state.set_paused(true);
+        state.set_history_enabled(true);
+
+        let snap = state.monitor_snapshot();
+        assert_eq!(snap.mode, RefineMode::UrlEncode);
+        assert_eq!(snap.interval_ms, 1500);
+        assert!(snap.is_paused);
+        assert!(snap.history_enabled);
+    }
+
+    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になる
+    #[test]
+    fn test_history_add_dedup_limit_and_clear() {
+        let state = create_test_state();
+
+        // 空白は無視
+        state.add_to_history("   ".to_string());
+        assert!(state.get_history().is_empty());
+
+        // 重複するエントリは先頭に移動する
+        state.add_to_history("first".to_string());
+        state.add_to_history("second".to_string());
+        state.add_to_history("first".to_string());
+        let h = state.get_history();
+        assert_eq!(h[0], "first");
+        assert_eq!(h[1], "second");
+        assert_eq!(h.len(), 2);
+
+        // HISTORY_LIMIT を超えた分は切り捨てられる
+        for i in 0..(HISTORY_LIMIT + 5) {
+            state.add_to_history(format!("item-{i}"));
+        }
+        assert_eq!(state.get_history().len(), HISTORY_LIMIT);
+        assert_eq!(
+            state.get_history()[0],
+            format!("item-{}", HISTORY_LIMIT + 4)
+        );
+
+        // clear で履歴が消える
+        state.clear_history();
+        assert!(state.get_history().is_empty());
     }
 }
