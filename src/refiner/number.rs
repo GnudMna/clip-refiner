@@ -196,4 +196,36 @@ mod tests {
         assert!(!is_numeric_input("12.34.56"));
         assert!(is_numeric_input("-1,234.5"));
     }
+
+    /// 小数点のみ (整数部なし) の処理
+    #[test]
+    fn test_add_commas_decimal_only() {
+        assert_eq!(add_commas(".5"), ".5");
+        assert_eq!(add_commas("-.5"), "-.5");
+    }
+
+    /// 末尾に小数点がある値の処理
+    #[test]
+    fn test_add_commas_trailing_dot() {
+        assert_eq!(add_commas("1234."), "1,234.");
+    }
+
+    /// スペース前後のトリムが効くこと
+    #[test]
+    fn test_add_commas_trimmed_input() {
+        assert_eq!(add_commas("  5678  "), "5,678");
+    }
+
+    /// remove_commas: カンマがない場合は Borrowed を返すこと
+    #[test]
+    fn test_remove_commas_no_comma_returns_borrowed() {
+        let input = "1234";
+        assert!(matches!(remove_commas(input), Cow::Borrowed(_)));
+    }
+
+    /// remove_commas: 空文字列は Borrowed を返すこと
+    #[test]
+    fn test_remove_commas_empty() {
+        assert!(matches!(remove_commas(""), Cow::Borrowed(_)));
+    }
 }
