@@ -111,20 +111,18 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
 
     // stdout への出力はデバッグビルド限定とする。
-    #[cfg(debug_assertions)]
-    let stdout_layer = Some(ts_fmt::layer().with_writer(std::io::stdout));
-    #[cfg(not(debug_assertions))]
-    let stdout_layer: Option<ts_fmt::Layer<_, _, _, _>> = None;
-
-    tracing_subscriber::registry()
+    let builder = tracing_subscriber::registry()
         .with(
             EnvFilter::builder()
                 .with_default_directive(tracing::Level::INFO.into())
                 .from_env_lossy(),
         )
-        .with(file_layer)
-        .with(stdout_layer)
-        .init();
+        .with(file_layer);
+
+    #[cfg(debug_assertions)]
+    let builder = builder.with(ts_fmt::layer().with_writer(std::io::stdout));
+
+    builder.init();
 
     // グローバルロガーを初期化
     logger::init_global_logger(Box::new(logger::TracingLogger::new(log_dir)));
