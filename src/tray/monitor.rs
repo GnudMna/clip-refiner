@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use super::notifier;
-use super::state::AppState;
+use super::state::{AppState, MonitorSnapshot};
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::process_clipboard;
@@ -38,26 +38,30 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
 /// # Arguments
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
+/// * `snap` - ループ先頭で取得済みの設定スナップショット
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返します。
-pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>) -> bool {
+pub fn handle_clipboard_update(
+    clipboard: &mut Clipboard,
+    state: &Arc<AppState>,
+    snap: &MonitorSnapshot,
+) -> bool {
     if let Ok(text) = clipboard.get_text() {
         let shared_last = state.get_last_processed_text();
 
         if !text.is_empty() && text != shared_last {
-            let current_mode = state.get_mode();
-            if let Some(processed) = process_clipboard(clipboard, current_mode) {
+            if let Some(processed) = process_clipboard(clipboard, snap.mode) {
                 state.set_last_processed_text(processed.clone());
-                notifier::show_process_notification(state, current_mode, &processed);
+                notifier::show_process_notification(state, snap.mode, &processed);
 
-                if state.is_history_enabled() {
+                if snap.history_enabled {
                     state.add_to_history(processed);
                 }
                 return true;
             }
 
-            if state.is_history_enabled() {
+            if snap.history_enabled {
                 state.add_to_history(text.clone());
             }
         }
@@ -98,14 +102,15 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            let interval = state.interval_ms();
-            thread::sleep(Duration::from_millis(interval));
+            // config RwLock を1回のみ取得してスナップショットを作成
+            let snap = state.monitor_snapshot();
+            thread::sleep(Duration::from_millis(snap.interval_ms));
 
-            if state.is_paused() {
+            if snap.is_paused {
                 break;
             }
 
-            handle_clipboard_update(&mut clipboard, &state);
+            handle_clipboard_update(&mut clipboard, &state, &snap);
         }
     });
 }
@@ -145,7 +150,9 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            if state.is_paused() {
+            // config RwLock を1回のみ取得してスナップショットを作成
+            let snap = state.monitor_snapshot();
+            if snap.is_paused {
                 break;
             }
 
@@ -156,7 +163,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                     last_seq = seq;
 
                     // クリップボードの更新を処理し、加工が行われたかチェック
-                    if handle_clipboard_update(&mut clipboard, &state) {
+                    if handle_clipboard_update(&mut clipboard, &state, &snap) {
                         // 加工が実行された場合、クリップボードが変更されたのでシーケンス番号を再取得して更新
                         last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
                     }

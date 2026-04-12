@@ -21,6 +21,20 @@ pub enum AppEvent {
 /// 履歴の最大保持数
 pub const HISTORY_LIMIT: usize = 10;
 
+/// 監視ループがループ先頭で一括取得する設定スナップショット
+///
+/// 1ループあたり `config` RwLock の取得を1回に削減するために使用します。
+pub struct MonitorSnapshot {
+    /// 現在の加工モード
+    pub mode: RefineMode,
+    /// ポーリング間隔（ミリ秒）
+    pub interval_ms: u64,
+    /// 一時停止中かどうか
+    pub is_paused: bool,
+    /// クリップボード履歴が有効かどうか
+    pub history_enabled: bool,
+}
+
 /// `Mutex` のポイズニング（パニックによる汚染）を無視して強制的にロックを取得するための拡張
 pub trait LockExt<T> {
     /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得します。
@@ -183,6 +197,19 @@ impl AppState {
             .write_ignore_poison()
             .notification_settings
             .notify_pause = b;
+    }
+
+    /// 監視ループ向けに設定フィールドをまとめて一括取得する
+    ///
+    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減します。
+    pub fn monitor_snapshot(&self) -> MonitorSnapshot {
+        let config = self.config.read_ignore_poison();
+        MonitorSnapshot {
+            mode: config.mode,
+            interval_ms: config.interval_ms,
+            is_paused: config.is_paused,
+            history_enabled: config.history_enabled,
+        }
     }
 
     /// 加工済みの最新テキストをスレッド安全に取得する
