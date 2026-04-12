@@ -108,7 +108,11 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         .with_writer(non_blocking)
         .with_ansi(false);
 
-    let stdout_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stdout);
+    // stdout への出力はデバッグビルド限定とする。
+    #[cfg(debug_assertions)]
+    let stdout_layer = Some(tracing_subscriber::fmt::layer().with_writer(std::io::stdout));
+    #[cfg(not(debug_assertions))]
+    let stdout_layer: Option<tracing_subscriber::fmt::Layer<_, _, _, _>> = None;
 
     tracing_subscriber::registry()
         .with(
