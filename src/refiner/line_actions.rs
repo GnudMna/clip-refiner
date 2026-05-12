@@ -99,30 +99,55 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// テキストがCSVである可能性が高いか判定する
 ///
-/// カンマ区切りかつ、複数行にわたってカラム数が一致するかを簡易的に検証します。
+/// 以下の条件をすべて満たす場合に CSV と判定します。
+/// 1. カラム数が 2 以上
+/// 2. 行数が 2 以上（1行のみでは断定しない）
+/// 3. すべての行でカラム数が一致する(不一致・パースエラーは`false`)
 ///
 /// # Arguments
 /// * `text` - 判定対象のテキスト
 ///
 /// # Returns
-/// * `bool` - CSVとみなせる場合は `true`、そうでない場合は `false`。
+/// * `bool` - CSVとみなせる場合は`true`、そうでない場合は`false`。
 fn is_likely_csv(text: &str) -> bool {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
         .from_reader(text.as_bytes());
 
     let mut records = rdr.records();
-    if let Some(Ok(first)) = records.next() {
-        // カラムが2つ以上あればCSVとみなす
-        if first.len() > 1 {
-            // さらに数行チェックしてカラム数が一致するか見る(簡易的な検証)
-            if let Some(Ok(second)) = records.next() {
-                return first.len() == second.len();
-            }
-            return true;
+
+    // 1行目取得・パース失敗はCSVでない
+    let first = match records.next() {
+        Some(Ok(r)) => r,
+        _ => return false,
+    };
+
+    // カラムが2つ未満はCSVでない
+    let col_count = first.len();
+    if col_count < 2 {
+        return false;
+    }
+
+    // 2行目が必須: 1行だけではCSVと断定しない
+    // パースエラー(列数不一致含む)はCSVでないと判断する
+    let second = match records.next() {
+        Some(Ok(r)) => r,
+        Some(Err(_)) => return false,
+        None => return false,
+    };
+    if second.len() != col_count {
+        return false;
+    }
+
+    // 残りの行もカラム数が一貫しているか確認(最大5行まで)
+    for record in records.take(5) {
+        match record {
+            Ok(r) if r.len() == col_count => {}
+            _ => return false,
         }
     }
-    false
+
+    true
 }
 
 // ======================================================================
@@ -297,6 +322,8 @@ mod tests {
         assert!(is_likely_csv("a,b\nc,d"));
         // 3列 × 2行
         assert!(is_likely_csv("1,2,3\n4,5,6"));
+        // 2列 × 3行
+        assert!(is_likely_csv("banana,2\napple,1\ncherry,3"));
     }
 
     /// is_likely_csv: 1列しかない場合はCSVでない
@@ -305,14 +332,18 @@ mod tests {
         assert!(!is_likely_csv("apple\nbanana\ncherry"));
     }
 
-    /// is_likely_csv: 列数が揃っていない場合は CSV でない
-    /// 注意: csv クレートの flexible=false では 2行目のパースが失敗するため、
-    /// フォールスルーで true を返す実装になっている。
-    /// 2行目がパースできるかどうかで判定どおりの挙動を確認
+    /// is_likely_csv: 1行だけではCSVと断定しない
     #[test]
-    fn test_is_likely_csv_inconsistent_returns_true_due_to_parse_fail() {
-        // csv クレートは列数不一致でパースエラーになり、フォールスルーで true を返す
-        assert!(is_likely_csv("a,b,c\nd,e"));
+    fn test_is_likely_csv_false_single_row() {
+        assert!(!is_likely_csv("a,b,c"));
+        assert!(!is_likely_csv("hello,world"));
+    }
+
+    /// is_likely_csv: 列数が揃っていない場合はCSVでない
+    #[test]
+    fn test_is_likely_csv_false_inconsistent_columns() {
+        assert!(!is_likely_csv("a,b,c\nd,e"));
+        assert!(!is_likely_csv("1,2\n3,4,5"));
     }
 
     /// CSVレコードの昇順ソート
