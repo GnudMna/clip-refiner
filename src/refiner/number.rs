@@ -107,7 +107,13 @@ pub fn remove_commas(text: &str) -> Cow<'_, str> {
 /// 入力が数値として妥当な形式か判定する
 ///
 /// 数字、カンマ、小数点、および先頭のマイナス記号のみで構成されているかチェックします。
-/// 小数点が複数含まれる場合は不当とみなします。
+/// 以下の場合は不当とみなします。
+/// - 先頭カンマ (`,123`)
+/// - 末尾カンマ (`123,`)
+/// - 連続カンマ (`1,,234`)
+/// - 小数部のカンマ (`1.2,3`)
+/// - 複数の小数点 (`1.2.3`)
+/// - カンマ直後の小数点 (`1,.2`)
 ///
 /// # Arguments
 /// * `text` - 判定対象の文字列
@@ -115,7 +121,6 @@ pub fn remove_commas(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `bool` - 数値入力として妥当な場合は `true`、そうでない場合は `false`。
 fn is_numeric_input(text: &str) -> bool {
-    let mut has_decimal = false;
     let mut chars = text.chars().peekable();
 
     // マイナス記号のチェック
@@ -127,19 +132,46 @@ fn is_numeric_input(text: &str) -> bool {
         return false;
     }
 
+    // 直前の文字種を追跡する
+    #[derive(PartialEq, Clone, Copy)]
+    enum Prev {
+        Start,
+        Digit,
+        Comma,
+        Dot,
+    }
+    let mut prev = Prev::Start;
+    let mut has_dot = false;
+
     for c in chars {
         match c {
-            '0'..='9' => {}
-            ',' => {}
-            '.' => {
-                if has_decimal {
-                    return false; // 小数点が複数ある
+            '0'..='9' => {
+                prev = Prev::Digit;
+            }
+            ',' => {
+                // 先頭カンマ・連続カンマ・小数部のカンマはすべて不正
+                if prev != Prev::Digit || has_dot {
+                    return false;
                 }
-                has_decimal = true;
+                prev = Prev::Comma;
+            }
+            '.' => {
+                // 複数の小数点・カンマ直後の小数点は不正
+                if has_dot || prev == Prev::Comma {
+                    return false;
+                }
+                has_dot = true;
+                prev = Prev::Dot;
             }
             _ => return false,
         }
     }
+
+    // 末尾カンマは不正
+    if prev == Prev::Comma {
+        return false;
+    }
+
     true
 }
 
@@ -195,6 +227,29 @@ mod tests {
         assert!(!is_numeric_input("abc"));
         assert!(!is_numeric_input("12.34.56"));
         assert!(is_numeric_input("-1,234.5"));
+    }
+
+    /// カンマ位置の不正パターンを弾くこと
+    #[test]
+    fn test_is_numeric_input_invalid_comma() {
+        assert!(!is_numeric_input(",123"), "先頭カンマは不正");
+        assert!(!is_numeric_input("123,"), "末尾カンマは不正");
+        assert!(!is_numeric_input("1,,234"), "連続カンマは不正");
+        assert!(!is_numeric_input("1.2,3"), "小数部のカンマは不正");
+        assert!(!is_numeric_input("1,.2"), "カンマ直後の小数点は不正");
+    }
+
+    /// 正当なパターンを通過させること
+    #[test]
+    fn test_is_numeric_input_valid() {
+        assert!(is_numeric_input("1234"));
+        assert!(is_numeric_input("1,234"));
+        assert!(is_numeric_input("1,234,567"));
+        assert!(is_numeric_input("-1234"));
+        assert!(is_numeric_input(".5"));
+        assert!(is_numeric_input("-.5"));
+        assert!(is_numeric_input("1234."));
+        assert!(is_numeric_input("0"));
     }
 
     /// 小数点のみ (整数部なし) の処理
