@@ -20,6 +20,7 @@ fn main() {
         // アイコン設定
         res.set_icon("assets/icon.ico");
 
-        res.compile().expect("Windowsリソースのコンパイルに失敗しました");
+        res.compile()
+            .expect("Windowsリソースのコンパイルに失敗しました");
     }
 }

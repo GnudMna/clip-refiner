@@ -223,7 +223,8 @@ mod tests {
     fn test_app_config_serde() {
         let config = AppConfig::default();
         let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
-        let decoded: AppConfig = serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
+        let decoded: AppConfig =
+            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
         assert_eq!(config.interval_ms, decoded.interval_ms);
         assert_eq!(config.mode, decoded.mode);
     }
@@ -248,7 +249,8 @@ mod tests {
             "interval_ms": 1000,
             "show_success_notification": true
         }"#;
-        let config: AppConfig = serde_json::from_str(old_json).expect("後方互換 JSON のデシリアライズに失敗");
+        let config: AppConfig =
+            serde_json::from_str(old_json).expect("後方互換 JSON のデシリアライズに失敗");
         // 未知フィールドは無視され、notification_settings はデフォルト値になる
         assert_eq!(config.interval_ms, 1000);
         assert!(!config.notification_settings.enabled);
@@ -262,7 +264,8 @@ mod tests {
         config.notification_settings.notify_result = false;
 
         let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
-        let decoded: AppConfig = serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
+        let decoded: AppConfig =
+            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
         assert!(decoded.notification_settings.enabled);
         assert!(!decoded.notification_settings.notify_result);
     }
