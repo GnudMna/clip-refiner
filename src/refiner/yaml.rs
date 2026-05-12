@@ -20,12 +20,18 @@ use serde_norway::Value;
 pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
     let v: Value = match serde_norway::from_str(text) {
         Ok(v) => v,
-        Err(_) => return Cow::Borrowed(text),
+        Err(e) => {
+            crate::log_debug!("YAML パースに失敗 (yaml_to_json): {}", e);
+            return Cow::Borrowed(text);
+        }
     };
 
     match serde_json::to_string_pretty(&v) {
         Ok(json_text) => Cow::Owned(json_text),
-        Err(_) => Cow::Borrowed(text),
+        Err(e) => {
+            crate::log_debug!("JSON 変換に失敗 (yaml_to_json): {}", e);
+            Cow::Borrowed(text)
+        }
     }
 }
 
@@ -42,12 +48,18 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
 pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
     let v: OrderedValue = match serde_norway::from_str(text) {
         Ok(v) => v,
-        Err(_) => return Cow::Borrowed(text),
+        Err(e) => {
+            crate::log_debug!("YAML パースに失敗 (yaml_to_json_preserve_order): {}", e);
+            return Cow::Borrowed(text);
+        }
     };
 
     match serde_json::to_string_pretty(&v) {
         Ok(json) => Cow::Owned(json),
-        Err(_) => Cow::Borrowed(text),
+        Err(e) => {
+            crate::log_debug!("JSON 変換に失敗 (yaml_to_json_preserve_order): {}", e);
+            Cow::Borrowed(text)
+        }
     }
 }
 

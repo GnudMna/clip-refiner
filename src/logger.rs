@@ -59,7 +59,9 @@ impl TracingLogger {
     fn check_and_cleanup(&self) {
         let today = chrono::Local::now()
             .date_naive()
-            .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).expect("1970-01-01 は常に有効な日付です"))
+            .signed_duration_since(
+                NaiveDate::from_ymd_opt(1970, 1, 1).expect("1970-01-01 は常に有効な日付です"),
+            )
             .num_days();
 
         // ファストパス: 今日のクリーンアップが既に完了していればロックなしで即リターン
@@ -237,16 +239,28 @@ mod tests {
 
     impl Logger for MockLogger {
         fn info(&self, msg: &str) {
-            self.logs.lock().expect("MockLogger ロックの取得に失敗").push(format!("INFO: {}", msg));
+            self.logs
+                .lock()
+                .expect("MockLogger ロックの取得に失敗")
+                .push(format!("INFO: {}", msg));
         }
         fn warn(&self, msg: &str) {
-            self.logs.lock().expect("MockLogger ロックの取得に失敗").push(format!("WARN: {}", msg));
+            self.logs
+                .lock()
+                .expect("MockLogger ロックの取得に失敗")
+                .push(format!("WARN: {}", msg));
         }
         fn error(&self, msg: &str) {
-            self.logs.lock().expect("MockLogger ロックの取得に失敗").push(format!("ERROR: {}", msg));
+            self.logs
+                .lock()
+                .expect("MockLogger ロックの取得に失敗")
+                .push(format!("ERROR: {}", msg));
         }
         fn debug(&self, msg: &str) {
-            self.logs.lock().expect("MockLogger ロックの取得に失敗").push(format!("DEBUG: {}", msg));
+            self.logs
+                .lock()
+                .expect("MockLogger ロックの取得に失敗")
+                .push(format!("DEBUG: {}", msg));
         }
     }
 
