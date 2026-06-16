@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
+use super::clipboard_change::ChangeWatcher;
 use super::notifier;
 use super::state::{AppState, MonitorSnapshot};
 use crate::config::MonitorMode;
@@ -28,8 +29,16 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
 
     match monitor_mode {
         MonitorMode::Polling => spawn_polling_monitor_thread(state, generation),
-        #[cfg(windows)]
-        MonitorMode::Event => spawn_event_monitor_thread(state, generation),
+        MonitorMode::Event => {
+            if ChangeWatcher::new().is_supported() {
+                spawn_event_monitor_thread(state, generation);
+            } else {
+                crate::log_warn!(
+                    "イベント監視が利用できないため、ポーリング監視にフォールバックします"
+                );
+                spawn_polling_monitor_thread(state, generation);
+            }
+        }
     }
 }
 
@@ -83,6 +92,9 @@ pub fn handle_clipboard_update(
 ///
 /// この値ごとに停止条件を確認するため、スレッド停止の最大遅延がこの値に抑えられます。
 const POLL_TICK_MS: u64 = 50;
+
+/// イベント監視ループのスリープ間隔（ミリ秒）
+const EVENT_POLL_MS: u64 = 100;
 
 /// ポーリング（定時確認）方式でクリップボードを監視するスレッドを開始する
 ///
@@ -142,20 +154,19 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
 }
 
 // ======================================================================
-// イベント監視 (Windows)
+// イベント監視
 // ======================================================================
-/// OSのイベント通知方式でクリップボードを監視するスレッドを開始する（Windows限定）
+/// OSの変更トークンを利用してクリップボードを監視するスレッドを開始する
 ///
-/// クリップボードの内容が書き換わった際にOSから送られる通知をリッスンします。
-/// ポーリングよりも低負荷かつ低遅延で動作します。
+/// クリップボード本文の定期読み取りを避け、変更トークンの変化時のみ内容を取得します。
+/// ポーリングより低遅延かつ低CPU負荷で動作します。
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `generation` - このスレッドの世代番号。
-#[cfg(windows)]
 pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
     thread::spawn(move || {
-        use clipboard_win::raw::seq_num;
+        let watcher = ChangeWatcher::new();
 
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
@@ -171,7 +182,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
 
         let current_text = clipboard.get_text().unwrap_or_default();
         state.set_last_processed_text(current_text);
-        let mut last_seq = seq_num().map(|s| s.get()).unwrap_or(0);
+        let mut last_token = watcher.token().unwrap_or(0);
 
         loop {
             // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
@@ -185,22 +196,30 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            // クリップボードのシーケンス番号をチェック
-            if let Some(seq_nonzero) = seq_num() {
-                let seq = seq_nonzero.get();
-                if seq != last_seq {
-                    last_seq = seq;
+            if let Some(token) = watcher.token()
+                && token != last_token
+            {
+                last_token = token;
 
-                    // クリップボードの更新を処理し、加工が行われたかチェック
-                    if handle_clipboard_update(&mut clipboard, &state, &snap) {
-                        // 加工が実行された場合、クリップボードが変更されたのでシーケンス番号を再取得して更新
-                        last_seq = seq_num().map(|s| s.get()).unwrap_or(last_seq);
-                    }
+                // クリップボードの更新を処理し、加工が行われたかチェック
+                if handle_clipboard_update(&mut clipboard, &state, &snap) {
+                    // 加工が実行された場合、クリップボードが変更されたのでトークンを再取得して更新
+                    last_token = watcher.token().unwrap_or(last_token);
                 }
             }
 
-            // 変化がない時のCPU負荷を抑える
-            thread::sleep(Duration::from_millis(100));
+            // 変化がない時のCPU負荷を抑えつつ、停止条件を定期的に確認する
+            let mut elapsed = 0u64;
+            while elapsed < EVENT_POLL_MS {
+                let tick = POLL_TICK_MS.min(EVENT_POLL_MS - elapsed);
+                thread::sleep(Duration::from_millis(tick));
+                elapsed += tick;
+                if state.monitor_generation.load(Ordering::SeqCst) != generation
+                    || state.is_paused()
+                {
+                    return;
+                }
+            }
         }
     });
 }
@@ -224,14 +243,8 @@ pub fn init_clipboard() -> Result<Clipboard> {
 /// * `menu` - トレイメニュー構造体
 /// * `monitor_mode` - 新しく選択された監視方式
 pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: MonitorMode) {
-    #[cfg(windows)]
     match monitor_mode {
         MonitorMode::Event => menu.interval.main_submenu.set_enabled(false),
-        MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
-    }
-
-    #[cfg(not(windows))]
-    match monitor_mode {
         MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
     }
 }
