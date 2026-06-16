@@ -67,7 +67,7 @@ pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> 
                             "履歴からの復元処理に失敗しました。",
                         );
                     } else {
-                        state.set_last_processed_text(text);
+                        state.record_clipboard_set(&text);
                         if state.with_config(|c| c.notification_settings.enabled) {
                             notification::show_notification(
                                 "履歴から復元",
@@ -78,7 +78,7 @@ pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> 
                 }
                 ClipboardCommand::ProcessMode(mode) => {
                     if let Some(processed) = process_clipboard(&mut clipboard, mode) {
-                        state.set_last_processed_text(processed.clone());
+                        state.record_processing_success(&processed);
                         notifier::show_process_notification(&state, mode, &processed);
                     }
                 }

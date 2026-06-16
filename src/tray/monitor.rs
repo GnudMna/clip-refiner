@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use super::clipboard_change::ChangeWatcher;
 use super::notifier;
-use super::state::{AppState, MonitorSnapshot};
+use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::process_clipboard;
@@ -45,6 +45,35 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
 // ======================================================================
 // クリップボード更新処理
 // ======================================================================
+/// 加工を試みるべきか判定する。スキップする場合は `processed_state` を更新する。
+///
+/// # Returns
+/// * `true` - 加工を試みる
+/// * `false` - スキップする
+pub(crate) fn should_process_clipboard(
+    ps: &mut ProcessedState,
+    text: &str,
+    event_driven: bool,
+) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+
+    // 自身の書き戻しによるクリップボード変更イベントを1回無視
+    if ps.last_written_text.as_deref() == Some(text) {
+        ps.last_written_text = None;
+        ps.last_seen_text = text.to_string();
+        return false;
+    }
+
+    // ポーリング: 前回と同じ内容なら加工しない
+    if !event_driven && text == ps.last_seen_text {
+        return false;
+    }
+
+    true
+}
+
 /// クリップボードの内容更新を検知し、必要に応じて加工処理を行う
 ///
 /// 内容に変更があった場合、現在の加工モードを適用し、結果をクリップボードに書き戻します。
@@ -54,6 +83,7 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
 /// * `snap` - ループ先頭で取得済みの設定スナップショット
+/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返します。
@@ -61,28 +91,37 @@ pub fn handle_clipboard_update(
     clipboard: &mut Clipboard,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
+    event_driven: bool,
 ) -> bool {
-    if let Ok(text) = clipboard.get_text() {
-        let shared_last = state.get_last_processed_text();
+    let Ok(text) = clipboard.get_text() else {
+        return false;
+    };
 
-        if !text.is_empty() && text != shared_last {
-            if let Some(processed) = process_clipboard(clipboard, snap.mode) {
-                state.set_last_processed_text(processed.clone());
-                notifier::show_process_notification(state, snap.mode, &processed);
+    let should_process = state.with_processed_state(|ps| {
+        should_process_clipboard(ps, &text, event_driven)
+    });
 
-                if snap.history_enabled {
-                    state.add_to_history(processed);
-                }
-                return true;
-            }
-
-            if snap.history_enabled {
-                state.add_to_history(text.clone());
-            }
-        }
-        state.set_last_processed_text(text);
+    if !should_process {
+        return false;
     }
-    false // 加工されなかった
+
+    if let Some(processed) = process_clipboard(clipboard, snap.mode) {
+        state.record_processing_success(&processed);
+        notifier::show_process_notification(state, snap.mode, &processed);
+
+        if snap.history_enabled {
+            state.add_to_history(processed);
+        }
+        return true;
+    }
+
+    state.record_clipboard_observed(&text);
+
+    if snap.history_enabled {
+        state.add_to_history(text);
+    }
+
+    false
 }
 
 // ======================================================================
@@ -119,7 +158,7 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
 
         {
             let current_text = clipboard.get_text().unwrap_or_default();
-            state.set_last_processed_text(current_text);
+            state.record_clipboard_observed(&current_text);
         }
 
         loop {
@@ -148,7 +187,7 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 }
             }
 
-            handle_clipboard_update(&mut clipboard, &state, &snap);
+            handle_clipboard_update(&mut clipboard, &state, &snap, false);
         }
     });
 }
@@ -181,7 +220,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
         };
 
         let current_text = clipboard.get_text().unwrap_or_default();
-        state.set_last_processed_text(current_text);
+        state.record_clipboard_observed(&current_text);
         let mut last_token = watcher.token().unwrap_or(0);
 
         loop {
@@ -202,7 +241,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 last_token = token;
 
                 // クリップボードの更新を処理し、加工が行われたかチェック
-                if handle_clipboard_update(&mut clipboard, &state, &snap) {
+                if handle_clipboard_update(&mut clipboard, &state, &snap, true) {
                     // 加工が実行された場合、クリップボードが変更されたのでトークンを再取得して更新
                     last_token = watcher.token().unwrap_or(last_token);
                 }
@@ -246,5 +285,57 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
     match monitor_mode {
         MonitorMode::Event => menu.interval.main_submenu.set_enabled(false),
         MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_skip_own_write_back_echo() {
+        let mut ps = ProcessedState {
+            last_seen_text: "input".to_string(),
+            last_written_text: Some("output".to_string()),
+        };
+
+        assert!(!should_process_clipboard(&mut ps, "output", true));
+        assert_eq!(ps.last_written_text, None);
+        assert_eq!(ps.last_seen_text, "output");
+    }
+
+    #[test]
+    fn polling_skips_unchanged_text() {
+        let mut ps = ProcessedState {
+            last_seen_text: "same".to_string(),
+            last_written_text: None,
+        };
+
+        assert!(!should_process_clipboard(&mut ps, "same", false));
+        assert!(should_process_clipboard(&mut ps, "same", true));
+    }
+
+    #[test]
+    fn event_mode_allows_recopy_of_processed_output() {
+        let mut ps = ProcessedState {
+            last_seen_text: "processed".to_string(),
+            last_written_text: None,
+        };
+
+        // 加工結果と同じ文字列の再コピー（イベント駆動）も加工対象とする
+        assert!(should_process_clipboard(&mut ps, "processed", true));
+    }
+
+    #[test]
+    fn event_mode_allows_recopy_of_source_text() {
+        let mut ps = ProcessedState {
+            last_seen_text: "processed".to_string(),
+            last_written_text: None,
+        };
+
+        assert!(should_process_clipboard(&mut ps, "  source  ", true));
     }
 }

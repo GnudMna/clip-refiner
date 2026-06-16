@@ -1,6 +1,6 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
@@ -36,6 +36,15 @@ pub struct MonitorSnapshot {
     pub is_paused: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
+}
+
+/// 監視ループにおける二重加工防止用の状態
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ProcessedState {
+    /// ポーリングで前回観測したクリップボード本文
+    pub last_seen_text: String,
+    /// 直近の加工でクリップボードへ書き戻した本文（自身の変更イベントを1回無視）
+    pub last_written_text: Option<String>,
 }
 
 // ======================================================================
@@ -82,8 +91,8 @@ pub struct AppState {
     pub config: RwLock<AppConfig>,
     /// クリップボード監視スレッドの世代管理カウンタ
     pub monitor_generation: AtomicU64,
-    /// 二重加工防止用の、直近の処理テキスト
-    pub last_processed_text: Mutex<String>,
+    /// 二重加工防止用の監視状態
+    processed_state: Mutex<ProcessedState>,
     /// クリップボードの履歴リスト
     pub history: Mutex<Vec<String>>,
     /// メインのイベントループへメッセージを送るためのプロキシ
@@ -103,7 +112,7 @@ impl AppState {
         Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
-            last_processed_text: Mutex::new(String::new()),
+            processed_state: Mutex::new(ProcessedState::default()),
             history: Mutex::new(Vec::new()),
             proxy,
         }
@@ -143,20 +152,32 @@ impl AppState {
         })
     }
 
-    /// 加工済みの最新テキストをスレッド安全に取得する
-    ///
-    /// # Returns
-    /// * `String` - 最後に加工されたテキストのクローン。
-    pub fn get_last_processed_text(&self) -> String {
-        self.last_processed_text.lock_ignore_poison().clone()
+    /// 二重加工防止状態を更新する
+    pub fn with_processed_state<R>(&self, f: impl FnOnce(&mut ProcessedState) -> R) -> R {
+        f(&mut self.processed_state.lock_ignore_poison())
     }
 
-    /// 加工済みの最新テキストをスレッド安全に更新する
-    ///
-    /// # Arguments
-    /// * `text` - 新しく設定する、加工済みのテキスト。
-    pub fn set_last_processed_text(&self, text: String) {
-        *self.last_processed_text.lock_ignore_poison() = text;
+    /// 加工成功後にクリップボードへ書き戻したことを記録する
+    pub fn record_processing_success(&self, output: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_written_text = Some(output.to_string());
+            ps.last_seen_text = output.to_string();
+        });
+    }
+
+    /// 加工せずに観測したクリップボード本文を記録する
+    pub fn record_clipboard_observed(&self, text: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_seen_text = text.to_string();
+        });
+    }
+
+    /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
+    pub fn record_clipboard_set(&self, text: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_written_text = None;
+            ps.last_seen_text = text.to_string();
+        });
     }
 
     /// 履歴を取得する
@@ -231,7 +252,7 @@ mod tests {
                 },
             }),
             monitor_generation: AtomicU64::new(0),
-            last_processed_text: Mutex::new(String::new()),
+            processed_state: Mutex::new(ProcessedState::default()),
             history: Mutex::new(Vec::new()),
             proxy: event_loop.create_proxy(),
         }
@@ -245,9 +266,13 @@ mod tests {
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
         assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
 
-        assert_eq!(state.get_last_processed_text(), "");
-        state.set_last_processed_text("hello".to_string());
-        assert_eq!(state.get_last_processed_text(), "hello");
+        let mut ps = ProcessedState::default();
+        ps.last_seen_text = "hello".to_string();
+        state.with_processed_state(|s| *s = ps.clone());
+        assert_eq!(
+            state.with_processed_state(|s| s.last_seen_text.clone()),
+            "hello"
+        );
 
         assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
 
