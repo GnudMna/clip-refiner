@@ -99,12 +99,10 @@ fn handle_app_control(
         true
     } else if id == menu.pause_item.id() {
         let paused = menu.pause_item.is_checked();
-        state.set_paused(paused);
+        state.with_config_mut(|c| c.is_paused = paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
-        if !paused {
-            spawn_monitor_thread(Arc::clone(state));
-        }
+        spawn_monitor_thread(Arc::clone(state));
         true
     } else if id == menu.shortcut_list_item.id() {
         notification::show_notification(
@@ -138,7 +136,7 @@ fn handle_history_event(
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
-        state.set_history_enabled(enabled);
+        state.with_config_mut(|c| c.history_enabled = enabled);
         state.save_config();
         let _ = menu.refresh_history(state);
         return true;
@@ -179,26 +177,26 @@ fn handle_notification_event(
 ) -> bool {
     if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
-        state.set_notification_enabled(enabled);
+        state.with_config_mut(|c| c.notification_settings.enabled = enabled);
         menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_mode_item.id() {
         let enabled = menu.notification.notify_mode_item.is_checked();
-        state.set_notify_mode(enabled);
+        state.with_config_mut(|c| c.notification_settings.notify_mode = enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_result_item.id() {
         let enabled = menu.notification.notify_result_item.is_checked();
-        state.set_notify_result(enabled);
+        state.with_config_mut(|c| c.notification_settings.notify_result = enabled);
         state.save_config();
         return true;
     }
     if id == menu.notification.notify_pause_item.id() {
         let enabled = menu.notification.notify_pause_item.is_checked();
-        state.set_notify_pause(enabled);
+        state.with_config_mut(|c| c.notification_settings.notify_pause = enabled);
         state.save_config();
         return true;
     }
@@ -256,7 +254,7 @@ fn handle_monitor_event(
 
     for (item, ms) in &menu.interval.items {
         if item.id() == id {
-            state.set_interval_ms(*ms);
+            state.with_config_mut(|c| c.interval_ms = *ms);
             for (it, _) in &menu.interval.items {
                 it.set_checked(false);
             }
@@ -286,7 +284,7 @@ pub fn update_refine(
     clipboard_tx: &Sender<ClipboardCommand>,
     mode: RefineMode,
 ) {
-    state.set_mode(mode);
+    state.with_config_mut(|c| c.mode = mode);
 
     menu.refine
         .all_items()
@@ -304,11 +302,11 @@ pub fn update_refine(
 /// * `menu` - トレイメニュー構造体
 /// * `monitor_mode` - 設定する新しい監視モード
 pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
-    if state.get_monitor_mode() == monitor_mode {
+    if state.with_config(|c| c.monitor_mode) == monitor_mode {
         return;
     }
 
-    state.set_monitor_mode(monitor_mode);
+    state.with_config_mut(|c| c.monitor_mode = monitor_mode);
 
     for (item, m) in &menu.monitor.items {
         item.set_checked(*m == monitor_mode);

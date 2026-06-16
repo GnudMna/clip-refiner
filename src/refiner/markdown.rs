@@ -56,7 +56,19 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
         .flexible(true)
         .from_reader(text.as_bytes());
 
-    let records: Vec<csv::StringRecord> = reader.records().flatten().collect();
+    let records: Vec<csv::StringRecord> = reader
+        .records()
+        .filter_map(|r| match r {
+            Ok(record) => Some(record),
+            Err(e) => {
+                crate::log_debug!(
+                    "TSV レコードのパースに失敗 (excel_to_markdown_table): {}",
+                    e
+                );
+                None
+            }
+        })
+        .collect();
     if records.is_empty() {
         return Cow::Borrowed(text);
     }

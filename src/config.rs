@@ -19,9 +19,8 @@ pub enum MonitorMode {
     /// すべてのプラットフォームで動作する基本的な監視モードです。
     #[default]
     Polling,
-    /// OSのクリップボード更新イベントを購読する方式（Windows専用）。
-    /// 低遅延かつCPU負荷が低いのが特徴です。
-    #[cfg(windows)]
+    /// OSの変更トークンを監視する方式。
+    /// クリップボード本文の定期読み取りを避け、低遅延かつ低CPU負荷で動作します。
     Event,
 }
 
@@ -222,8 +221,9 @@ mod tests {
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
-        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
+        let decoded: AppConfig =
+            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
         assert_eq!(config.interval_ms, decoded.interval_ms);
         assert_eq!(config.mode, decoded.mode);
     }
@@ -248,7 +248,8 @@ mod tests {
             "interval_ms": 1000,
             "show_success_notification": true
         }"#;
-        let config: AppConfig = serde_json::from_str(old_json).unwrap();
+        let config: AppConfig =
+            serde_json::from_str(old_json).expect("後方互換 JSON のデシリアライズに失敗");
         // 未知フィールドは無視され、notification_settings はデフォルト値になる
         assert_eq!(config.interval_ms, 1000);
         assert!(!config.notification_settings.enabled);
@@ -261,8 +262,9 @@ mod tests {
         config.notification_settings.enabled = true;
         config.notification_settings.notify_result = false;
 
-        let json = serde_json::to_string(&config).unwrap();
-        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
+        let decoded: AppConfig =
+            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
         assert!(decoded.notification_settings.enabled);
         assert!(!decoded.notification_settings.notify_result);
     }

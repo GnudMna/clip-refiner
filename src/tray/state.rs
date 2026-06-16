@@ -1,6 +1,6 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
-use crate::config::{AppConfig, MonitorMode};
+use crate::config::AppConfig;
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
@@ -36,6 +36,15 @@ pub struct MonitorSnapshot {
     pub is_paused: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
+}
+
+/// 監視ループにおける二重加工防止用の状態
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ProcessedState {
+    /// ポーリングで前回観測したクリップボード本文
+    pub last_seen_text: String,
+    /// 直近の加工でクリップボードへ書き戻した本文（自身の変更イベントを1回無視）
+    pub last_written_text: Option<String>,
 }
 
 // ======================================================================
@@ -82,8 +91,8 @@ pub struct AppState {
     pub config: RwLock<AppConfig>,
     /// クリップボード監視スレッドの世代管理カウンタ
     pub monitor_generation: AtomicU64,
-    /// 二重加工防止用の、直近の処理テキスト
-    pub last_processed_text: Mutex<String>,
+    /// 二重加工防止用の監視状態
+    processed_state: Mutex<ProcessedState>,
     /// クリップボードの履歴リスト
     pub history: Mutex<Vec<String>>,
     /// メインのイベントループへメッセージを送るためのプロキシ
@@ -103,7 +112,7 @@ impl AppState {
         Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
-            last_processed_text: Mutex::new(String::new()),
+            processed_state: Mutex::new(ProcessedState::default()),
             history: Mutex::new(Vec::new()),
             proxy,
         }
@@ -111,115 +120,19 @@ impl AppState {
 
     /// 現在の設定をファイルへ保存する。
     pub fn save_config(&self) {
-        let config = self.config.read_ignore_poison();
-        if let Err(e) = config.save() {
+        if let Err(e) = self.with_config(|c| c.save()) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
         }
     }
-}
 
-// ======================================================================
-// 設定操作
-// ======================================================================
-impl AppState {
-    /// 現在の `RefineMode` をスレッドセーフに取得する。
-    pub fn get_mode(&self) -> RefineMode {
-        self.config.read_ignore_poison().mode
+    /// 設定を読み取り専用で参照する
+    pub fn with_config<R>(&self, f: impl FnOnce(&AppConfig) -> R) -> R {
+        f(&self.config.read_ignore_poison())
     }
 
-    /// `RefineMode` をスレッドセーフに設定する。
-    pub fn set_mode(&self, mode: RefineMode) {
-        self.config.write_ignore_poison().mode = mode;
-    }
-
-    /// 現在の `MonitorMode` をスレッドセーフに取得する。
-    pub fn get_monitor_mode(&self) -> MonitorMode {
-        self.config.read_ignore_poison().monitor_mode
-    }
-
-    /// `MonitorMode` をスレッドセーフに設定する。
-    pub fn set_monitor_mode(&self, mode: MonitorMode) {
-        self.config.write_ignore_poison().monitor_mode = mode;
-    }
-
-    pub fn is_paused(&self) -> bool {
-        self.config.read_ignore_poison().is_paused
-    }
-
-    pub fn set_paused(&self, paused: bool) {
-        self.config.write_ignore_poison().is_paused = paused;
-    }
-
-    pub fn interval_ms(&self) -> u64 {
-        self.config.read_ignore_poison().interval_ms
-    }
-
-    pub fn set_interval_ms(&self, ms: u64) {
-        self.config.write_ignore_poison().interval_ms = ms;
-    }
-
-    pub fn is_history_enabled(&self) -> bool {
-        self.config.read_ignore_poison().history_enabled
-    }
-
-    pub fn set_history_enabled(&self, enabled: bool) {
-        self.config.write_ignore_poison().history_enabled = enabled;
-    }
-
-    pub fn is_notification_enabled(&self) -> bool {
-        self.config
-            .read_ignore_poison()
-            .notification_settings
-            .enabled
-    }
-
-    pub fn set_notification_enabled(&self, show: bool) {
-        self.config
-            .write_ignore_poison()
-            .notification_settings
-            .enabled = show;
-    }
-
-    pub fn notify_mode(&self) -> bool {
-        self.config
-            .read_ignore_poison()
-            .notification_settings
-            .notify_mode
-    }
-
-    pub fn set_notify_mode(&self, b: bool) {
-        self.config
-            .write_ignore_poison()
-            .notification_settings
-            .notify_mode = b;
-    }
-
-    pub fn notify_result(&self) -> bool {
-        self.config
-            .read_ignore_poison()
-            .notification_settings
-            .notify_result
-    }
-
-    pub fn set_notify_result(&self, b: bool) {
-        self.config
-            .write_ignore_poison()
-            .notification_settings
-            .notify_result = b;
-    }
-
-    pub fn notify_pause(&self) -> bool {
-        self.config
-            .read_ignore_poison()
-            .notification_settings
-            .notify_pause
-    }
-
-    pub fn set_notify_pause(&self, b: bool) {
-        self.config
-            .write_ignore_poison()
-            .notification_settings
-            .notify_pause = b;
+    /// 設定を変更する
+    pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
+        f(&mut self.config.write_ignore_poison())
     }
 }
 
@@ -231,29 +144,40 @@ impl AppState {
     ///
     /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減します。
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
-        let config = self.config.read_ignore_poison();
-        MonitorSnapshot {
+        self.with_config(|config| MonitorSnapshot {
             mode: config.mode,
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
-        }
+        })
     }
 
-    /// 加工済みの最新テキストをスレッド安全に取得する
-    ///
-    /// # Returns
-    /// * `String` - 最後に加工されたテキストのクローン。
-    pub fn get_last_processed_text(&self) -> String {
-        self.last_processed_text.lock_ignore_poison().clone()
+    /// 二重加工防止状態を更新する
+    pub fn with_processed_state<R>(&self, f: impl FnOnce(&mut ProcessedState) -> R) -> R {
+        f(&mut self.processed_state.lock_ignore_poison())
     }
 
-    /// 加工済みの最新テキストをスレッド安全に更新する
-    ///
-    /// # Arguments
-    /// * `text` - 新しく設定する、加工済みのテキスト。
-    pub fn set_last_processed_text(&self, text: String) {
-        *self.last_processed_text.lock_ignore_poison() = text;
+    /// 加工成功後にクリップボードへ書き戻したことを記録する
+    pub fn record_processing_success(&self, output: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_written_text = Some(output.to_string());
+            ps.last_seen_text = output.to_string();
+        });
+    }
+
+    /// 加工せずに観測したクリップボード本文を記録する
+    pub fn record_clipboard_observed(&self, text: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_seen_text = text.to_string();
+        });
+    }
+
+    /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
+    pub fn record_clipboard_set(&self, text: &str) {
+        self.with_processed_state(|ps| {
+            ps.last_written_text = None;
+            ps.last_seen_text = text.to_string();
+        });
     }
 
     /// 履歴を取得する
@@ -328,7 +252,7 @@ mod tests {
                 },
             }),
             monitor_generation: AtomicU64::new(0),
-            last_processed_text: Mutex::new(String::new()),
+            processed_state: Mutex::new(ProcessedState::default()),
             history: Mutex::new(Vec::new()),
             proxy: event_loop.create_proxy(),
         }
@@ -338,72 +262,78 @@ mod tests {
     fn test_app_state_helpers() {
         let state = create_test_state();
 
-        assert_eq!(state.get_mode(), RefineMode::Trim);
-        state.set_mode(RefineMode::UrlEncode);
-        assert_eq!(state.get_mode(), RefineMode::UrlEncode);
+        assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
+        state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
+        assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
 
-        assert_eq!(state.get_last_processed_text(), "");
-        state.set_last_processed_text("hello".to_string());
-        assert_eq!(state.get_last_processed_text(), "hello");
+        let mut ps = ProcessedState::default();
+        ps.last_seen_text = "hello".to_string();
+        state.with_processed_state(|s| *s = ps.clone());
+        assert_eq!(
+            state.with_processed_state(|s| s.last_seen_text.clone()),
+            "hello"
+        );
 
-        assert_eq!(state.get_monitor_mode(), MonitorMode::Polling);
+        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
 
-        state.set_interval_ms(2000);
-        assert_eq!(state.interval_ms(), 2000);
+        state.with_config_mut(|c| c.interval_ms = 2000);
+        assert_eq!(state.with_config(|c| c.interval_ms), 2000);
 
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 一時停止フラグの getter/setter
+    /// 一時停止フラグの更新
     #[test]
     fn test_paused_accessor() {
         let state = create_test_state();
-        assert!(!state.is_paused());
-        state.set_paused(true);
-        assert!(state.is_paused());
-        state.set_paused(false);
-        assert!(!state.is_paused());
+        assert!(!state.with_config(|c| c.is_paused));
+        state.with_config_mut(|c| c.is_paused = true);
+        assert!(state.with_config(|c| c.is_paused));
+        state.with_config_mut(|c| c.is_paused = false);
+        assert!(!state.with_config(|c| c.is_paused));
     }
 
-    /// 履歴機能の getter/setter
+    /// 履歴機能の更新
     #[test]
     fn test_history_enabled_accessor() {
         let state = create_test_state();
-        assert!(!state.is_history_enabled());
-        state.set_history_enabled(true);
-        assert!(state.is_history_enabled());
+        assert!(!state.with_config(|c| c.history_enabled));
+        state.with_config_mut(|c| c.history_enabled = true);
+        assert!(state.with_config(|c| c.history_enabled));
     }
 
-    /// 通知関連フラグの getter/setter すべて
+    /// 通知設定の更新
     #[test]
-    fn test_notification_flags_accessors() {
+    fn test_notification_settings_accessor() {
         let state = create_test_state();
 
-        assert!(!state.is_notification_enabled());
-        state.set_notification_enabled(true);
-        assert!(state.is_notification_enabled());
+        assert!(!state.with_config(|c| c.notification_settings.enabled));
+        state.with_config_mut(|c| c.notification_settings.enabled = true);
+        assert!(state.with_config(|c| c.notification_settings.enabled));
 
-        assert!(state.notify_mode());
-        state.set_notify_mode(false);
-        assert!(!state.notify_mode());
+        assert!(state.with_config(|c| c.notification_settings.notify_mode));
+        state.with_config_mut(|c| c.notification_settings.notify_mode = false);
+        assert!(!state.with_config(|c| c.notification_settings.notify_mode));
 
-        assert!(state.notify_result());
-        state.set_notify_result(false);
-        assert!(!state.notify_result());
+        assert!(state.with_config(|c| c.notification_settings.notify_result));
+        state.with_config_mut(|c| c.notification_settings.notify_result = false);
+        assert!(!state.with_config(|c| c.notification_settings.notify_result));
 
-        assert!(state.notify_pause());
-        state.set_notify_pause(false);
-        assert!(!state.notify_pause());
+        assert!(state.with_config(|c| c.notification_settings.notify_pause));
+        state.with_config_mut(|c| c.notification_settings.notify_pause = false);
+        assert!(!state.with_config(|c| c.notification_settings.notify_pause));
     }
 
     /// `monitor_snapshot` が設定値を正しく反映すること
     #[test]
     fn test_monitor_snapshot_values() {
         let state = create_test_state();
-        state.set_mode(RefineMode::UrlEncode);
-        state.set_interval_ms(1500);
-        state.set_paused(true);
-        state.set_history_enabled(true);
+        state.with_config_mut(|c| {
+            c.mode = RefineMode::UrlEncode;
+            c.interval_ms = 1500;
+            c.is_paused = true;
+            c.history_enabled = true;
+        });
 
         let snap = state.monitor_snapshot();
         assert_eq!(snap.mode, RefineMode::UrlEncode);
