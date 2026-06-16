@@ -16,7 +16,7 @@ use arboard::Clipboard;
 use clap::ValueEnum;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use strum::{EnumIter, EnumMessage, EnumProperty, IntoEnumIterator, IntoStaticStr};
+use strum::{EnumIter, EnumMessage, IntoEnumIterator, IntoStaticStr};
 
 // ======================================================================
 // 加工モード定義
@@ -24,7 +24,8 @@ use strum::{EnumIter, EnumMessage, EnumProperty, IntoEnumIterator, IntoStaticStr
 /// クリップボードのテキストを加工する各モードの定義
 ///
 /// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応しています。
-/// `strum` マクロを使用して、UI表示用のラベルやカテゴリ情報を保持しています。
+/// `strum` マクロを使用して UI 表示用のラベルを保持しています。
+/// カテゴリへの所属は `RefineMode::category()` で定義します。
 #[derive(
     Copy,
     Clone,
@@ -36,139 +37,132 @@ use strum::{EnumIter, EnumMessage, EnumProperty, IntoEnumIterator, IntoStaticStr
     Deserialize,
     EnumIter,
     EnumMessage,
-    EnumProperty,
     IntoStaticStr,
 )]
 pub enum RefineMode {
     /// URLエンコードを行う
     #[value(help = "URLエンコード")]
-    #[strum(message = "URLエンコード", props(Category = "URL操作"))]
+    #[strum(message = "URLエンコード")]
     UrlEncode,
     /// URLデコードを行う。失敗した場合は元のテキストを維持する
     #[value(help = "URLデコード")]
-    #[strum(message = "URLデコード", props(Category = "URL操作"))]
+    #[strum(message = "URLデコード")]
     UrlDecode,
     /// URLから utm_ で始まる計測用パラメータを削除する
     #[value(help = "UTMパラメータを削除")]
-    #[strum(message = "UTM除去", props(Category = "URL操作"))]
+    #[strum(message = "UTM除去")]
     RemoveUtm,
     /// パスからベースネームを抽出する
     #[value(help = "パスからベースネームを抽出")]
-    #[strum(message = "ベースネーム抽出", props(Category = "パス操作"))]
+    #[strum(message = "ベースネーム抽出")]
     ExtractBasename,
     /// パスからベースネームを抽出しダブルクォーテーションで囲む
     #[value(help = "パスからベースネームを抽出(引用符付き)")]
-    #[strum(message = "ベースネーム抽出(引用符付)", props(Category = "パス操作"))]
+    #[strum(message = "ベースネーム抽出(引用符付)")]
     ExtractBasenameQuoted,
     /// パスの前後にダブルクォーテーションを付与する
     #[value(help = "パスに引用符を付与")]
-    #[strum(message = "引用符を付与", props(Category = "パス操作"))]
+    #[strum(message = "引用符を付与")]
     AddPathQuotes,
     /// パスの前後にあるダブルクォーテーションを削除する
     #[value(help = "パスの引用符を削除")]
-    #[strum(message = "引用符を削除", props(Category = "パス操作"))]
+    #[strum(message = "引用符を削除")]
     RemovePathQuotes,
     /// パスのバックスラッシュをスラッシュに変換する
     #[value(help = "パスをスラッシュ区切りに変換")]
-    #[strum(message = "スラッシュ区切りに変換", props(Category = "パス操作"))]
+    #[strum(message = "スラッシュ区切りに変換")]
     PathToSlash,
     /// パスのスラッシュをバックスラッシュに変換する
     #[value(help = "パスをバックスラッシュ区切りに変換")]
-    #[strum(message = "バックスラッシュ区切りに変換", props(Category = "パス操作"))]
+    #[strum(message = "バックスラッシュ区切りに変換")]
     PathToBackslash,
     /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
     #[value(help = "昇順で並び替え")]
-    #[strum(message = "昇順で並び替え", props(Category = "行操作"))]
+    #[strum(message = "昇順で並び替え")]
     SortLinesAsc,
     /// 行単位で降順に並び替える。CSVの場合は各行をレコードとして認識してソートする
     #[value(help = "降順で並び替え")]
-    #[strum(message = "降順で並び替え", props(Category = "行操作"))]
+    #[strum(message = "降順で並び替え")]
     SortLinesDesc,
     /// 空行を削除する
     #[value(help = "空行を削除")]
-    #[strum(message = "空行削除", props(Category = "行操作"))]
+    #[strum(message = "空行削除")]
     RemoveEmptyLines,
     /// 重複行を削除する
     #[value(help = "重複行を削除")]
-    #[strum(message = "重複行削除", props(Category = "行操作"))]
+    #[strum(message = "重複行削除")]
     RemoveDuplicateLines,
     /// テキスト全体の前後にある空白および改行を削除する
     #[value(help = "改行や空白を整形")]
-    #[strum(message = "全体をトリム", props(Category = "トリム"))]
+    #[strum(message = "全体をトリム")]
     Trim,
     /// 行ごとに前後の空白を削除する
     #[value(help = "行単位で改行や空白を整形")]
-    #[strum(message = "行単位でトリム", props(Category = "トリム"))]
+    #[strum(message = "行単位でトリム")]
     TrimLines,
     /// 文字列をバックスラッシュでエスケープする
     #[value(help = "文字列をエスケープ")]
-    #[strum(message = "エスケープ", props(Category = "エスケープ"))]
+    #[strum(message = "エスケープ")]
     Escape,
     /// 文字列のエスケープを解除する
     #[value(help = "文字列のアンエスケープ")]
-    #[strum(message = "アンエスケープ", props(Category = "エスケープ"))]
+    #[strum(message = "アンエスケープ")]
     Unescape,
     /// 正規表現のメタ文字をエスケープする
     #[value(help = "正規表現のエスケープ")]
-    #[strum(message = "正規表現エスケープ", props(Category = "エスケープ"))]
+    #[strum(message = "正規表現エスケープ")]
     RegexEscape,
     /// 正規表現のエスケープを解除する
     #[value(help = "正規表現のアンエスケープ")]
-    #[strum(message = "正規表現アンエスケープ", props(Category = "エスケープ"))]
+    #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
     /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
     #[value(help = "JSON形式を整形(キー順序不同)")]
-    #[strum(message = "JSON整形(キー順序不同)", props(Category = "JSON整形"))]
+    #[strum(message = "JSON整形(キー順序不同)")]
     JsonFormat,
     /// JSON形式をインデント整形する（元のキー順序を維持する）
     #[value(help = "JSON形式を整形(キー順序保持)")]
-    #[strum(message = "JSON整形(キー順序保持)", props(Category = "JSON整形"))]
+    #[strum(message = "JSON整形(キー順序保持)")]
     JsonFormatPreserveOrder,
     /// YAML形式をJSON形式へ変換する
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
-    #[strum(message = "YAML→JSON(キー順序不同)", props(Category = "JSONへ変換"))]
+    #[strum(message = "YAML→JSON(キー順序不同)")]
     YamlToJson,
     /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
-    #[strum(message = "YAML→JSON(キー順序保持)", props(Category = "JSONへ変換"))]
+    #[strum(message = "YAML→JSON(キー順序保持)")]
     YamlToJsonPreserveOrder,
     /// JSON形式をYAML形式へ変換する
     #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
-    #[strum(message = "JSON→YAML(キー順序不同)", props(Category = "YAMLへ変換"))]
+    #[strum(message = "JSON→YAML(キー順序不同)")]
     JsonToYaml,
     /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
-    #[strum(message = "JSON→YAML(キー順序保持)", props(Category = "YAMLへ変換"))]
+    #[strum(message = "JSON→YAML(キー順序保持)")]
     JsonToYamlPreserveOrder,
     /// Markdown形式のテキストをHTML形式へ変換する
     #[value(help = "MarkdownをHTML形式へ変換")]
-    #[strum(message = "Markdown→HTML", props(Category = ""))]
+    #[strum(message = "Markdown→HTML")]
     MarkdownToHtml,
     /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
     #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
-    #[strum(message = "Excel→Markdown", props(Category = ""))]
+    #[strum(message = "Excel→Markdown")]
     ExcelToMarkdown,
     /// Unixタイムスタンプを日時文字列へ変換する
     #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
-    #[strum(
-        message = "Unixタイムスタンプ→日時文字列",
-        props(Category = "日時変換")
-    )]
+    #[strum(message = "Unixタイムスタンプ→日時文字列")]
     TimestampToDatetime,
     /// 日時文字列をUnixタイムスタンプへ変換する
     #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
-    #[strum(
-        message = "日時文字列→Unixタイムスタンプ",
-        props(Category = "日時変換")
-    )]
+    #[strum(message = "日時文字列→Unixタイムスタンプ")]
     DatetimeToTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
-    #[strum(message = "カンマ追加", props(Category = "数値変換"))]
+    #[strum(message = "カンマ追加")]
     AddComma,
     /// 数値からカンマを削除する（例: 1,000 -> 1000）
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
-    #[strum(message = "カンマ除去", props(Category = "数値変換"))]
+    #[strum(message = "カンマ除去")]
     RemoveComma,
 }
 
@@ -226,6 +220,25 @@ impl RefineCategory {
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
+
+    /// トレイメニューのサブメニュー表示順（`Normal` を除く）
+    pub const SUBMENU_ORDER: [Self; 10] = [
+        Self::UrlActions,
+        Self::Path,
+        Self::LineActions,
+        Self::Trim,
+        Self::Escape,
+        Self::JsonFormat,
+        Self::ToJson,
+        Self::ToYaml,
+        Self::Datetime,
+        Self::Number,
+    ];
+
+    /// ルート直下の通常項目の後ろにサブメニューを遅延配置するカテゴリかどうか
+    pub fn is_deferred_in_menu(self) -> bool {
+        matches!(self, Self::Datetime | Self::Number)
+    }
 }
 
 impl RefineMode {
@@ -242,10 +255,28 @@ impl RefineMode {
     /// # Returns
     /// * `RefineCategory` - モードが属するカテゴリ。
     pub fn category(&self) -> RefineCategory {
-        let cat_str = self.get_str("Category").unwrap_or("");
-        RefineCategory::iter()
-            .find(|c| c.label() == cat_str)
-            .unwrap_or(RefineCategory::Normal)
+        use RefineCategory as C;
+        match self {
+            Self::UrlEncode | Self::UrlDecode | Self::RemoveUtm => C::UrlActions,
+            Self::ExtractBasename
+            | Self::ExtractBasenameQuoted
+            | Self::AddPathQuotes
+            | Self::RemovePathQuotes
+            | Self::PathToSlash
+            | Self::PathToBackslash => C::Path,
+            Self::SortLinesAsc
+            | Self::SortLinesDesc
+            | Self::RemoveEmptyLines
+            | Self::RemoveDuplicateLines => C::LineActions,
+            Self::Trim | Self::TrimLines => C::Trim,
+            Self::Escape | Self::Unescape | Self::RegexEscape | Self::RegexUnescape => C::Escape,
+            Self::JsonFormat | Self::JsonFormatPreserveOrder => C::JsonFormat,
+            Self::YamlToJson | Self::YamlToJsonPreserveOrder => C::ToJson,
+            Self::JsonToYaml | Self::JsonToYamlPreserveOrder => C::ToYaml,
+            Self::MarkdownToHtml | Self::ExcelToMarkdown => C::Normal,
+            Self::TimestampToDatetime | Self::DatetimeToTimestamp => C::Datetime,
+            Self::AddComma | Self::RemoveComma => C::Number,
+        }
     }
 
     /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
@@ -398,6 +429,28 @@ mod tests {
         assert_eq!(
             RefineMode::TimestampToDatetime.category(),
             RefineCategory::Datetime
+        );
+
+        assert_eq!(
+            RefineMode::MarkdownToHtml.category(),
+            RefineCategory::Normal
+        );
+    }
+
+    /// 全モードのカテゴリが SUBMENU_ORDER で網羅されていること
+    #[test]
+    fn test_submenu_order_covers_all_categories() {
+        use std::collections::HashSet;
+
+        let used: HashSet<_> = RefineMode::iter()
+            .map(|m| m.category())
+            .filter(|c| *c != RefineCategory::Normal)
+            .collect();
+        let ordered: HashSet<_> = RefineCategory::SUBMENU_ORDER.into_iter().collect();
+
+        assert_eq!(
+            used, ordered,
+            "RefineCategory::SUBMENU_ORDER が全サブメニューカテゴリを網羅していません"
         );
     }
 

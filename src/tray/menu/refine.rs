@@ -36,18 +36,7 @@ impl TrayMenu {
             .unwrap_or_default();
 
         // サブメニューの順序
-        let category_order = [
-            RefineCategory::UrlActions,
-            RefineCategory::Path,
-            RefineCategory::LineActions,
-            RefineCategory::Trim,
-            RefineCategory::Escape,
-            RefineCategory::JsonFormat,
-            RefineCategory::ToJson,
-            RefineCategory::ToYaml,
-            RefineCategory::Datetime,
-            RefineCategory::Number,
-        ];
+        let category_order = RefineCategory::SUBMENU_ORDER;
 
         let mut groups = Vec::new();
         for &category in &category_order {
@@ -73,10 +62,7 @@ impl TrayMenu {
 
         // カテゴリグループの追加
         for group in &groups {
-            // 特定のカテゴリ以外を最初に追加
-            if group.category != RefineCategory::Datetime
-                && group.category != RefineCategory::Number
-            {
+            if !group.category.is_deferred_in_menu() {
                 mode_menu_items.push(&group.submenu);
             }
         }
@@ -84,12 +70,9 @@ impl TrayMenu {
         // 通常アイテムと遅延追加カテゴリの配置
         for (item, mode) in &normal_items {
             mode_menu_items.push(item);
-            // 特定の通常項目の後にカテゴリを配置
             if *mode == RefineMode::ExcelToMarkdown {
                 for group in &groups {
-                    if group.category == RefineCategory::Datetime
-                        || group.category == RefineCategory::Number
-                    {
+                    if group.category.is_deferred_in_menu() {
                         mode_menu_items.push(&group.submenu);
                     }
                 }
