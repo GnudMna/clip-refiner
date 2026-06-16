@@ -102,9 +102,7 @@ fn handle_app_control(
         state.with_config_mut(|c| c.is_paused = paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
-        if !paused {
-            spawn_monitor_thread(Arc::clone(state));
-        }
+        spawn_monitor_thread(Arc::clone(state));
         true
     } else if id == menu.shortcut_list_item.id() {
         notification::show_notification(

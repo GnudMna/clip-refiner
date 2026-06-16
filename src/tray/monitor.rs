@@ -19,11 +19,16 @@ use arboard::Clipboard;
 /// クリップボード監視スレッドを開始する
 ///
 /// 現在の監視モード設定（ポーリングまたはイベント）に基づいて、適切な監視スレッドを起動します。
+/// 一時停止中（`is_paused == true`）の場合はスレッドを起動しません。
 /// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するように制御します。
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 pub fn spawn_monitor_thread(state: Arc<AppState>) {
+    if state.with_config(|c| c.is_paused) {
+        return;
+    }
+
     let monitor_mode = state.with_config(|c| c.monitor_mode);
     let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
@@ -337,5 +342,27 @@ mod tests {
         };
 
         assert!(should_process_clipboard(&mut ps, "  source  ", true));
+    }
+
+    #[test]
+    fn spawn_monitor_thread_skips_when_paused() {
+        use crate::tray::state::AppEvent;
+        use std::sync::{Arc, atomic::Ordering};
+        use tao::event_loop::EventLoopBuilder;
+        #[cfg(windows)]
+        use tao::platform::windows::EventLoopBuilderExtWindows;
+
+        #[cfg(windows)]
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        #[cfg(not(windows))]
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+
+        let state = Arc::new(AppState::new(event_loop.create_proxy()));
+        state.with_config_mut(|c| c.is_paused = true);
+
+        spawn_monitor_thread(Arc::clone(&state));
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 }

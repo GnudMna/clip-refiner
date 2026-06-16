@@ -141,9 +141,7 @@ impl HotkeyHandler {
                 menu.pause_item.set_checked(new_paused);
                 state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
-                if !new_paused {
-                    spawn_monitor_thread(Arc::clone(state));
-                }
+                spawn_monitor_thread(Arc::clone(state));
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;
             }
