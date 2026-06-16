@@ -134,28 +134,24 @@ impl TrayMenu {
     /// # Returns
     /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す。
     pub fn build(state: &AppState) -> Result<Self> {
-        let current_mode = state.get_mode();
-        let current_interval = state.interval_ms();
-        let current_monitor_mode = state.get_monitor_mode();
-        let history_enabled = state.is_history_enabled();
-        let show_success_notification = state.is_notification_enabled();
+        let config = state.with_config(|c| c.clone());
 
-        let refine = Self::build_refine_menu(current_mode)?;
-        let monitor = Self::build_monitor_menu(current_monitor_mode)?;
-        let interval = Self::build_interval_menu(current_interval, current_monitor_mode)?;
-        let history = Self::build_history_menu(history_enabled)?;
+        let refine = Self::build_refine_menu(config.mode)?;
+        let monitor = Self::build_monitor_menu(config.monitor_mode)?;
+        let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
+        let history = Self::build_history_menu(config.history_enabled)?;
         let notification = Self::build_notification_menu(
-            show_success_notification,
-            state.notify_mode(),
-            state.notify_result(),
-            state.notify_pause(),
+            config.notification_settings.enabled,
+            config.notification_settings.notify_mode,
+            config.notification_settings.notify_result,
+            config.notification_settings.notify_pause,
         )?;
         notification
             .content_submenu
-            .set_enabled(show_success_notification);
+            .set_enabled(config.notification_settings.enabled);
 
         // その他のメニュー
-        let pause_item = CheckMenuItem::new("一時停止", true, state.is_paused(), None);
+        let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -199,7 +195,7 @@ impl TrayMenu {
         };
 
         // カテゴリラベルの初期更新
-        this.refresh_category_labels(current_mode);
+        this.refresh_category_labels(config.mode);
 
         Ok(this)
     }

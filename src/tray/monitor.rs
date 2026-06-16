@@ -24,7 +24,7 @@ use arboard::Clipboard;
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 pub fn spawn_monitor_thread(state: Arc<AppState>) {
-    let monitor_mode = state.get_monitor_mode();
+    let monitor_mode = state.with_config(|c| c.monitor_mode);
     let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
 
     match monitor_mode {
@@ -142,7 +142,7 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 thread::sleep(Duration::from_millis(tick));
                 elapsed += tick;
                 if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.is_paused()
+                    || state.with_config(|c| c.is_paused)
                 {
                     return;
                 }
@@ -215,7 +215,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 thread::sleep(Duration::from_millis(tick));
                 elapsed += tick;
                 if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.is_paused()
+                    || state.with_config(|c| c.is_paused)
                 {
                     return;
                 }
