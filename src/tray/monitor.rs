@@ -102,9 +102,8 @@ pub fn handle_clipboard_update(
         return false;
     };
 
-    let should_process = state.with_processed_state(|ps| {
-        should_process_clipboard(ps, &text, event_driven)
-    });
+    let should_process =
+        state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
 
     if !should_process {
         return false;

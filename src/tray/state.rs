@@ -1,6 +1,6 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
-use crate::config::{AppConfig, MonitorMode};
+use crate::config::AppConfig;
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
