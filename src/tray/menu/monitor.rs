@@ -24,7 +24,6 @@ impl TrayMenu {
             None,
         );
 
-        #[cfg(windows)]
         let event_item = CheckMenuItem::new(
             "イベント",
             true,
@@ -32,14 +31,10 @@ impl TrayMenu {
             None,
         );
 
-        #[cfg(windows)]
         let monitor_mode_items = vec![
             (polling_item, MonitorMode::Polling),
             (event_item, MonitorMode::Event),
         ];
-
-        #[cfg(not(windows))]
-        let monitor_mode_items = vec![(polling_item, MonitorMode::Polling)];
 
         let mut monitor_mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
         for (item, _) in &monitor_mode_items {
@@ -98,7 +93,6 @@ impl TrayMenu {
             .context("監視周期メニューの作成に失敗しました")?;
 
         // イベントモードの場合は監視周期を無効化
-        #[cfg(windows)]
         if monitor_mode == MonitorMode::Event {
             main_submenu.set_enabled(false);
         }
