@@ -68,7 +68,7 @@ pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> 
                         );
                     } else {
                         state.set_last_processed_text(text);
-                        if state.is_notification_enabled() {
+                        if state.with_config(|c| c.notification_settings.enabled) {
                             notification::show_notification(
                                 "履歴から復元",
                                 "クリップボードにコピーしました",

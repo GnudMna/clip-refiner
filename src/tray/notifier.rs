@@ -16,15 +16,16 @@ use crate::tray::state::AppState;
 /// * `mode` - 実行された加工モード
 /// * `processed` - 加工後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
-    if !state.is_notification_enabled() {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if !settings.enabled {
         return;
     }
 
     let mut lines = Vec::new();
-    if state.notify_mode() {
+    if settings.notify_mode {
         lines.push(format!("モード: {}", mode.label()));
     }
-    if state.notify_result() {
+    if settings.notify_result {
         let snippet = if processed.chars().count() > 50 {
             format!("{}...", processed.chars().take(47).collect::<String>())
         } else {
@@ -45,7 +46,8 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// * `paused` - 新しい一時停止状態 (`true`: 一時停止中, `false`: 監視中)
 /// * `source` - 通知のタイトル（操作元を示す文字列、例: "ショートカット", "設定変更"）
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
-    if state.is_notification_enabled() && state.notify_pause() {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if settings.enabled && settings.notify_pause {
         notification::show_notification(
             source,
             if paused {
