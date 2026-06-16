@@ -135,6 +135,7 @@ impl HotkeyHandler {
                 let new_paused = !state.is_paused();
                 state.set_paused(new_paused);
                 menu.pause_item.set_checked(new_paused);
+                state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
                 if !new_paused {
                     spawn_monitor_thread(Arc::clone(state));
