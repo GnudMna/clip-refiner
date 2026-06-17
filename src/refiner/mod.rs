@@ -383,36 +383,72 @@ impl Refiner for RefineMode {
 // ======================================================================
 // クリップボード処理
 // ======================================================================
+/// クリップボード加工の成功結果
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardProcessOutcome {
+    /// 加工してクリップボードへ書き戻した
+    Processed(String),
+    /// テキストに変更がなかった
+    Unchanged,
+}
+
+/// クリップボード加工の失敗理由
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardProcessError {
+    /// クリップボードが空、またはテキスト形式ではない
+    NoText,
+    /// クリップボードの読み取りに失敗
+    ReadFailed(String),
+    /// クリップボードへの書き込みに失敗
+    WriteFailed(String),
+}
+
+impl ClipboardProcessError {
+    /// ユーザー向けのエラーメッセージを返す
+    pub fn user_message(&self) -> &str {
+        match self {
+            Self::NoText => "クリップボードにテキストがありません",
+            Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
+            Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
+        }
+    }
+}
+
 /// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
 ///
-/// テキストが変更された場合のみクリップボードを更新し、その内容を返す
+/// テキストが変更された場合のみクリップボードを更新する
 ///
 /// # Arguments
 /// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
 /// * `mode` - 適用する加工モード (`RefineMode`)
 ///
 /// # Returns
-/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返し、
-///   変更がなかった場合や空の場合は `None` を返す
-pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
-    let text = clipboard.get_text().ok()?;
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+pub fn process_clipboard(
+    clipboard: &mut Clipboard,
+    mode: RefineMode,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    let text = clipboard
+        .get_text()
+        .map_err(|e| ClipboardProcessError::ReadFailed(e.to_string()))?;
+
     if text.is_empty() {
-        return None;
+        return Err(ClipboardProcessError::NoText);
     }
 
     let refined = mode.refine(&text);
 
-    // 変更がない場合は更新しない
     if refined == text {
-        return None;
+        return Ok(ClipboardProcessOutcome::Unchanged);
     }
 
     let result = refined.into_owned();
-    if clipboard.set_text(result.clone()).is_ok() {
-        Some(result)
-    } else {
-        None
-    }
+    clipboard
+        .set_text(result.clone())
+        .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
+    Ok(ClipboardProcessOutcome::Processed(result))
 }
 
 // ======================================================================
@@ -479,6 +515,23 @@ mod tests {
         assert_eq!(variants.len(), 31);
     }
 
+    /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
+    #[test]
+    fn test_clipboard_process_error_user_message() {
+        assert_eq!(
+            ClipboardProcessError::NoText.user_message(),
+            "クリップボードにテキストがありません"
+        );
+        assert_eq!(
+            ClipboardProcessError::ReadFailed("detail".to_string()).user_message(),
+            "クリップボードの読み取りに失敗しました"
+        );
+        assert_eq!(
+            ClipboardProcessError::WriteFailed("detail".to_string()).user_message(),
+            "クリップボードへの書き込みに失敗しました"
+        );
+    }
+
     /// クリップボード処理の統合テスト
     /// 実際のクリップボード操作を伴うため、実行環境によってはスキップされる可能性がある
     #[test]
@@ -492,7 +545,12 @@ mod tests {
             if let Ok(current) = cb.get_text() {
                 if current == unique_str_1 {
                     let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert_eq!(result, Some("clip_refiner_test_1".to_string()));
+                    assert_eq!(
+                        result,
+                        Ok(ClipboardProcessOutcome::Processed(
+                            "clip_refiner_test_1".to_string()
+                        ))
+                    );
                 } else {
                     eprintln!(
                         "Clipboard content mismatch for unique_str_1. Expected: '{}', Got: '{}'",
@@ -509,7 +567,7 @@ mod tests {
             if let Ok(current) = cb.get_text() {
                 if current == unique_str_2 {
                     let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert!(result.is_none());
+                    assert_eq!(result, Ok(ClipboardProcessOutcome::Unchanged));
                 } else {
                     eprintln!(
                         "Clipboard content mismatch for unique_str_2. Expected: '{}', Got: '{}'",

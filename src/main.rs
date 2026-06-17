@@ -169,11 +169,33 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 /// * `mode` - 適用する加工モード (`refiner::RefineMode`)
 ///
 /// # Returns
-/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返す
+/// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
 fn run_once(mode: refiner::RefineMode) -> Result<()> {
+    use refiner::{ClipboardProcessError, ClipboardProcessOutcome};
+
     log_info!("ワンショットモードで実行: {:?}", mode);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
-    refiner::process_clipboard(&mut clipboard, mode);
-    log_info!("ワンショット処理が完了しました");
-    Ok(())
+
+    match refiner::process_clipboard(&mut clipboard, mode) {
+        Ok(ClipboardProcessOutcome::Processed(_)) => {
+            log_info!("ワンショット処理が完了しました");
+            eprintln!("加工が完了しました");
+            Ok(())
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => {
+            log_info!("テキストに変更はありませんでした");
+            eprintln!("テキストに変更はありませんでした");
+            Ok(())
+        }
+        Err(e) => {
+            crate::log_error!("ワンショット処理に失敗: {} ({:?})", e.user_message(), e);
+            eprintln!("エラー: {}", e.user_message());
+            if let ClipboardProcessError::ReadFailed(detail)
+            | ClipboardProcessError::WriteFailed(detail) = &e
+            {
+                eprintln!("詳細: {detail}");
+            }
+            Err(anyhow::anyhow!(e.user_message().to_string()))
+        }
+    }
 }
