@@ -100,35 +100,63 @@ pub(crate) fn handle_clipboard_update(
         return false;
     }
 
-    match process_clipboard(clipboard, snap.mode) {
-        Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            state.record_processing_success(&processed);
-            notifier::show_process_notification(state, snap.mode, &processed);
+    let outcome = process_clipboard(clipboard, snap.mode);
+    let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
+    match &outcome {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            notifier::show_process_notification(state, snap.mode, processed);
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => {}
+        Err(ClipboardProcessError::NoText) => {}
+        Err(e) => {
+            crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
+            notification::show_notification("加工エラー", e.user_message());
+        }
+    }
+
+    updated
+}
+
+/// 加工結果に応じて共有状態と履歴を更新する
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `snap` - 監視設定スナップショット
+/// * `outcome` - `process_clipboard` の結果
+/// * `observed_text` - 加工前に観測したクリップボード本文
+///
+/// # Returns
+/// * `bool` - クリップボードが加工更新された場合は `true`
+pub(crate) fn record_clipboard_outcome(
+    state: &Arc<AppState>,
+    snap: &MonitorSnapshot,
+    outcome: &Result<ClipboardProcessOutcome, ClipboardProcessError>,
+    observed_text: &str,
+) -> bool {
+    match outcome {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            state.record_processing_success(processed);
             if snap.history_enabled {
-                state.add_to_history(processed);
+                state.add_to_history(processed.clone());
             }
             true
         }
         Ok(ClipboardProcessOutcome::Unchanged) => {
-            state.record_clipboard_observed(&text);
-
+            state.record_clipboard_observed(observed_text);
             if snap.history_enabled {
-                state.add_to_history(text);
+                state.add_to_history(observed_text.to_string());
             }
             false
         }
         Err(ClipboardProcessError::NoText) => {
-            state.record_clipboard_observed(&text);
+            state.record_clipboard_observed(observed_text);
             false
         }
-        Err(e) => {
-            crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
-            notification::show_notification("加工エラー", e.user_message());
-            state.record_clipboard_observed(&text);
-
+        Err(_) => {
+            state.record_clipboard_observed(observed_text);
             if snap.history_enabled {
-                state.add_to_history(text);
+                state.add_to_history(observed_text.to_string());
             }
             false
         }
@@ -158,6 +186,26 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::refiner::RefineMode;
+
+    /// 空文字列は加工対象外とすること
+    #[test]
+    fn empty_text_is_not_processed() {
+        let mut ps = ProcessedState::default();
+        assert!(!should_process_clipboard(&mut ps, "", false));
+        assert!(!should_process_clipboard(&mut ps, "", true));
+    }
+
+    /// ポーリング時は新しいテキストを加工対象とすること
+    #[test]
+    fn polling_processes_new_text() {
+        let mut ps = ProcessedState {
+            last_seen_text: "old".to_string(),
+            last_written_text: None,
+        };
+
+        assert!(should_process_clipboard(&mut ps, "new", false));
+    }
 
     /// 自身の書き戻しによる変更イベントを1回スキップすること
     #[test]
@@ -210,20 +258,9 @@ mod tests {
     /// 一時停止中は bump_monitor_generation が世代を進めないこと
     #[test]
     fn bump_monitor_generation_skips_when_paused() {
-        use crate::tray::state::AppEvent;
-        use std::sync::{Arc, atomic::Ordering};
-        use tao::event_loop::EventLoopBuilder;
-        #[cfg(windows)]
-        use tao::platform::windows::EventLoopBuilderExtWindows;
+        use std::sync::atomic::Ordering;
 
-        #[cfg(windows)]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
-            .with_any_thread(true)
-            .build();
-        #[cfg(not(windows))]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-
-        let state = Arc::new(AppState::new(event_loop.create_proxy()));
+        let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.is_paused = true);
 
         bump_monitor_generation(Arc::clone(&state));
@@ -233,20 +270,9 @@ mod tests {
     /// 監視中は bump_monitor_generation が世代カウンタをインクリメントすること
     #[test]
     fn bump_monitor_generation_increments_when_active() {
-        use crate::tray::state::AppEvent;
-        use std::sync::{Arc, atomic::Ordering};
-        use tao::event_loop::EventLoopBuilder;
-        #[cfg(windows)]
-        use tao::platform::windows::EventLoopBuilderExtWindows;
+        use std::sync::atomic::Ordering;
 
-        #[cfg(windows)]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
-            .with_any_thread(true)
-            .build();
-        #[cfg(not(windows))]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-
-        let state = Arc::new(AppState::new(event_loop.create_proxy()));
+        let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.is_paused = false);
 
         bump_monitor_generation(Arc::clone(&state));
@@ -254,5 +280,125 @@ mod tests {
 
         bump_monitor_generation(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
+    }
+
+    fn test_snapshot(mode: RefineMode, history_enabled: bool) -> MonitorSnapshot {
+        MonitorSnapshot {
+            mode,
+            interval_ms: 1000,
+            is_paused: false,
+            history_enabled,
+        }
+    }
+
+    /// 加工成功時に processed_state と履歴が更新されること
+    #[test]
+    fn record_outcome_processed_updates_state_and_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Ok(ClipboardProcessOutcome::Processed("trimmed".to_string()));
+
+        assert!(record_clipboard_outcome(
+            &state,
+            &snap,
+            &outcome,
+            "  trimmed  "
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "trimmed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
+        assert_eq!(state.get_history(), vec!["trimmed".to_string()]);
+    }
+
+    /// 変更なし時は観測のみ記録し、履歴に元テキストを追加すること
+    #[test]
+    fn record_outcome_unchanged_observes_and_adds_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Ok(ClipboardProcessOutcome::Unchanged);
+
+        assert!(!record_clipboard_outcome(
+            &state,
+            &snap,
+            &outcome,
+            "unchanged"
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "unchanged");
+        assert_eq!(ps.last_written_text, None);
+        assert_eq!(state.get_history(), vec!["unchanged".to_string()]);
+    }
+
+    /// 履歴無効時は履歴に追加しないこと
+    #[test]
+    fn record_outcome_skips_history_when_disabled() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, false);
+        let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
+
+        record_clipboard_outcome(&state, &snap, &outcome, "x");
+        assert!(state.get_history().is_empty());
+    }
+
+    /// NoText エラー時は観測のみ記録し履歴に追加しないこと
+    #[test]
+    fn record_outcome_no_text_observes_only() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Err(ClipboardProcessError::NoText);
+
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "");
+        assert!(state.get_history().is_empty());
+    }
+
+    /// 読み取り失敗時は観測を記録し履歴に追加すること
+    #[test]
+    fn record_outcome_read_error_observes_and_adds_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
+
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
+
+        assert_eq!(state.get_history(), vec!["source".to_string()]);
+    }
+
+    /// クリップボード更新の統合テスト
+    ///
+    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
+    /// 手動実行: `cargo test test_handle_clipboard_update_integration -- --ignored`
+    #[test]
+    #[ignore = "システムクリップボードへのアクセスが必要"]
+    fn test_handle_clipboard_update_integration() {
+        let mut clipboard = Clipboard::new().expect("クリップボードの初期化に失敗");
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.mode = RefineMode::Trim);
+
+        let input = "  clip_refiner_monitor_test  ";
+        clipboard
+            .set_text(input.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+
+        let snap = test_snapshot(RefineMode::Trim, false);
+        assert!(handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            false
+        ));
+
+        assert_eq!(
+            clipboard
+                .get_text()
+                .expect("クリップボードの読み取りに失敗"),
+            "clip_refiner_monitor_test"
+        );
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "clip_refiner_monitor_test");
     }
 }

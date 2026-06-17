@@ -504,6 +504,49 @@ mod tests {
         );
     }
 
+    /// 全 RefineMode の label が空でないこと
+    #[test]
+    fn test_all_refine_modes_have_nonempty_labels() {
+        for mode in RefineMode::iter() {
+            assert!(!mode.label().is_empty(), "{mode:?} の label が空です");
+        }
+    }
+
+    /// is_deferred_in_menu が Datetime / Number のみ true であること
+    #[test]
+    fn test_refine_category_is_deferred_in_menu() {
+        use RefineCategory::*;
+
+        assert!(Datetime.is_deferred_in_menu());
+        assert!(Number.is_deferred_in_menu());
+
+        for category in RefineCategory::iter() {
+            if matches!(category, Datetime | Number) {
+                continue;
+            }
+            assert!(
+                !category.is_deferred_in_menu(),
+                "{category:?} は遅延配置対象ではない"
+            );
+        }
+    }
+
+    /// to_json_list が全モード分の有効な JSON を返すこと
+    #[test]
+    fn test_to_json_list() {
+        let json = RefineMode::to_json_list();
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&json).expect("to_json_list の出力が JSON として不正");
+
+        assert_eq!(parsed.len(), RefineMode::iter().count());
+
+        for item in parsed {
+            assert!(item.get("id").is_some());
+            assert!(item.get("label").is_some());
+            assert!(item.get("category").is_some());
+        }
+    }
+
     /// RefineMode のバリアント数と主要バリアントの存在を確認すること
     #[test]
     fn test_refine_mode_variants() {
@@ -572,200 +615,132 @@ mod tests {
     /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
     #[test]
     fn test_all_refine_modes() {
-        struct TestCase {
-            mode: RefineMode,
-            input: &'static str,
-            expected: &'static str,
-        }
-
-        let cases = vec![
-            TestCase {
-                mode: RefineMode::UrlEncode,
-                input: "あいう",
-                expected: "%E3%81%82%E3%81%84%E3%81%86",
-            },
-            TestCase {
-                mode: RefineMode::UrlDecode,
-                input: "%E3%81%82%E3%81%84%E3%81%86",
-                expected: "あいう",
-            },
-            TestCase {
-                mode: RefineMode::RemoveUtm,
-                input: "http://example.com/?utm_source=test",
-                expected: "http://example.com/",
-            },
-            TestCase {
-                mode: RefineMode::ExtractBasename,
-                input: "C:\\path\\to\\file.txt",
-                expected: "file.txt",
-            },
-            TestCase {
-                mode: RefineMode::ExtractBasenameQuoted,
-                input: "C:\\path\\to\\file.txt",
-                expected: "\"file.txt\"",
-            },
-            TestCase {
-                mode: RefineMode::AddPathQuotes,
-                input: "C:\\path\\to\\file.txt",
-                expected: "\"C:\\path\\to\\file.txt\"",
-            },
-            TestCase {
-                mode: RefineMode::RemovePathQuotes,
-                input: "\"C:\\path\\to\\file.txt\"",
-                expected: "C:\\path\\to\\file.txt",
-            },
-            TestCase {
-                mode: RefineMode::PathToSlash,
-                input: "C:\\path\\to\\file.txt",
-                expected: "C:/path/to/file.txt",
-            },
-            TestCase {
-                mode: RefineMode::PathToBackslash,
-                input: "C:/path/to/file.txt",
-                expected: "C:\\path\\to\\file.txt",
-            },
-            TestCase {
-                mode: RefineMode::SortLinesAsc,
-                input: "c\na\nb",
-                expected: "a\nb\nc",
-            },
-            TestCase {
-                mode: RefineMode::SortLinesDesc,
-                input: "a\nc\nb",
-                expected: "c\nb\na",
-            },
-            TestCase {
-                mode: RefineMode::RemoveEmptyLines,
-                input: "a\n\nb",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::RemoveDuplicateLines,
-                input: "a\na\nb",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::Trim,
-                input: "  abc  ",
-                expected: "abc",
-            },
-            TestCase {
-                mode: RefineMode::TrimLines,
-                input: " a \n b ",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::Escape,
-                input: "\"",
-                expected: "\\\"",
-            },
-            TestCase {
-                mode: RefineMode::Unescape,
-                input: "\\\"",
-                expected: "\"",
-            },
-            TestCase {
-                mode: RefineMode::RegexEscape,
-                input: "(.*)",
-                expected: "\\(\\.\\*\\)",
-            },
-            TestCase {
-                mode: RefineMode::RegexUnescape,
-                input: "\\(\\.\\*\\)",
-                expected: "(.*)",
-            },
-            TestCase {
-                mode: RefineMode::JsonFormat,
-                input: "{\"b\":1,\"a\":2}",
-                expected: "{\n  \"a\": 2,\n  \"b\": 1\n}",
-            },
-            TestCase {
-                mode: RefineMode::JsonFormatPreserveOrder,
-                input: "{\"b\":1,\"a\":2}",
-                expected: "{\n  \"b\": 1,\n  \"a\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::YamlToJson,
-                input: "a: 1\nb: 2",
-                expected: "{\n  \"a\": 1,\n  \"b\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::YamlToJsonPreserveOrder,
-                input: "a: 1\nb: 2",
-                expected: "{\n  \"a\": 1,\n  \"b\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::JsonToYaml,
-                input: "{\"a\":1}",
-                expected: "a: 1\n",
-            },
-            TestCase {
-                mode: RefineMode::JsonToYamlPreserveOrder,
-                input: "{\"a\":1}",
-                expected: "a: 1\n",
-            },
-            TestCase {
-                mode: RefineMode::MarkdownToHtml,
-                input: "**bold**",
-                expected: "<p><strong>bold</strong></p>",
-            },
-            TestCase {
-                mode: RefineMode::ExcelToMarkdown,
-                input: "A\tB\n1\t2",
-                expected: "| A | B |\n|---|---|\n| 1 | 2 |",
-            },
-            TestCase {
-                mode: RefineMode::TimestampToDatetime,
-                input: "1672531200",
-                expected: "",
-            },
-            TestCase {
-                mode: RefineMode::DatetimeToTimestamp,
-                input: "",
-                expected: "",
-            },
-            TestCase {
-                mode: RefineMode::AddComma,
-                input: "1000",
-                expected: "1,000",
-            },
-            TestCase {
-                mode: RefineMode::RemoveComma,
-                input: "1,000",
-                expected: "1000",
-            },
+        const CASES: &[(RefineMode, &str, &str)] = &[
+            (
+                RefineMode::UrlEncode,
+                "あいう",
+                "%E3%81%82%E3%81%84%E3%81%86",
+            ),
+            (
+                RefineMode::UrlDecode,
+                "%E3%81%82%E3%81%84%E3%81%86",
+                "あいう",
+            ),
+            (
+                RefineMode::RemoveUtm,
+                "http://example.com/?utm_source=test",
+                "http://example.com/",
+            ),
+            (
+                RefineMode::ExtractBasename,
+                "C:\\path\\to\\file.txt",
+                "file.txt",
+            ),
+            (
+                RefineMode::ExtractBasenameQuoted,
+                "C:\\path\\to\\file.txt",
+                "\"file.txt\"",
+            ),
+            (
+                RefineMode::AddPathQuotes,
+                "C:\\path\\to\\file.txt",
+                "\"C:\\path\\to\\file.txt\"",
+            ),
+            (
+                RefineMode::RemovePathQuotes,
+                "\"C:\\path\\to\\file.txt\"",
+                "C:\\path\\to\\file.txt",
+            ),
+            (
+                RefineMode::PathToSlash,
+                "C:\\path\\to\\file.txt",
+                "C:/path/to/file.txt",
+            ),
+            (
+                RefineMode::PathToBackslash,
+                "C:/path/to/file.txt",
+                "C:\\path\\to\\file.txt",
+            ),
+            (RefineMode::SortLinesAsc, "c\na\nb", "a\nb\nc"),
+            (RefineMode::SortLinesDesc, "a\nc\nb", "c\nb\na"),
+            (RefineMode::RemoveEmptyLines, "a\n\nb", "a\nb"),
+            (RefineMode::RemoveDuplicateLines, "a\na\nb", "a\nb"),
+            (RefineMode::Trim, "  abc  ", "abc"),
+            (RefineMode::TrimLines, " a \n b ", "a\nb"),
+            (RefineMode::Escape, "\"", "\\\""),
+            (RefineMode::Unescape, "\\\"", "\""),
+            (RefineMode::RegexEscape, "(.*)", "\\(\\.\\*\\)"),
+            (RefineMode::RegexUnescape, "\\(\\.\\*\\)", "(.*)"),
+            (
+                RefineMode::JsonFormat,
+                "{\"b\":1,\"a\":2}",
+                "{\n  \"a\": 2,\n  \"b\": 1\n}",
+            ),
+            (
+                RefineMode::JsonFormatPreserveOrder,
+                "{\"b\":1,\"a\":2}",
+                "{\n  \"b\": 1,\n  \"a\": 2\n}",
+            ),
+            (
+                RefineMode::YamlToJson,
+                "a: 1\nb: 2",
+                "{\n  \"a\": 1,\n  \"b\": 2\n}",
+            ),
+            (
+                RefineMode::YamlToJsonPreserveOrder,
+                "a: 1\nb: 2",
+                "{\n  \"a\": 1,\n  \"b\": 2\n}",
+            ),
+            (RefineMode::JsonToYaml, "{\"a\":1}", "a: 1\n"),
+            (RefineMode::JsonToYamlPreserveOrder, "{\"a\":1}", "a: 1\n"),
+            (
+                RefineMode::MarkdownToHtml,
+                "**bold**",
+                "<p><strong>bold</strong></p>",
+            ),
+            (
+                RefineMode::ExcelToMarkdown,
+                "A\tB\n1\t2",
+                "| A | B |\n|---|---|\n| 1 | 2 |",
+            ),
+            (RefineMode::AddComma, "1000", "1,000"),
+            (RefineMode::RemoveComma, "1,000", "1000"),
         ];
 
-        // 全モードが網羅されているかチェック
-        let all_variants: Vec<_> = RefineMode::iter().collect();
         assert_eq!(
-            cases.len(),
-            all_variants.len(),
-            "TestCase count does not match RefineMode variants count. Please add missing test cases."
+            CASES.len() + 2,
+            RefineMode::iter().count(),
+            "固定ケースと日時モード2件の合計が RefineMode バリアント数と一致しません"
         );
 
-        for case in cases {
-            if matches!(case.mode, RefineMode::TimestampToDatetime) {
-                let actual = case.mode.refine(case.input);
-                let expected = datetime::timestamp_to_datetime_string(case.input);
-                assert_eq!(actual, expected);
-                assert_ne!(actual, case.input);
-                continue;
+        for mode in RefineMode::iter() {
+            match mode {
+                RefineMode::TimestampToDatetime => {
+                    let input = "1672531200";
+                    let actual = mode.refine(input);
+                    let expected = datetime::timestamp_to_datetime_string(input);
+                    assert_eq!(actual, expected);
+                    assert_ne!(actual.as_ref(), input);
+                }
+                RefineMode::DatetimeToTimestamp => {
+                    let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
+                    let actual = mode.refine(&datetime_input);
+                    assert_eq!(actual, "1672531200");
+                }
+                other => {
+                    let (input, expected) = CASES
+                        .iter()
+                        .find(|(m, _, _)| *m == other)
+                        .map(|(_, input, expected)| (*input, *expected))
+                        .unwrap_or_else(|| panic!("TestCase missing for {:?}", other));
+                    let actual = other.refine(input);
+                    assert_eq!(
+                        actual, expected,
+                        "Failed at mode: {:?}\nInput: {}\nExpected: {}\nActual: {}",
+                        other, input, expected, actual
+                    );
+                }
             }
-
-            if matches!(case.mode, RefineMode::DatetimeToTimestamp) {
-                let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
-                let actual = case.mode.refine(&datetime_input);
-                assert_eq!(actual, "1672531200");
-                continue;
-            }
-
-            let actual = case.mode.refine(case.input);
-            assert_eq!(
-                actual, case.expected,
-                "Failed at mode: {:?}\nInput: {}\nExpected: {}\nActual: {}",
-                case.mode, case.input, case.expected, actual
-            );
         }
     }
 }

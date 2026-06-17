@@ -216,41 +216,48 @@ impl AppState {
 }
 
 // ======================================================================
+// テスト用ヘルパー
+// ======================================================================
+/// ユニットテスト用の `AppState` を生成する
+#[cfg(test)]
+pub(crate) fn test_app_state() -> AppState {
+    use crate::config::AppConfig;
+    use tao::event_loop::EventLoopBuilder;
+    #[cfg(windows)]
+    use tao::platform::windows::EventLoopBuilderExtWindows;
+
+    #[cfg(windows)]
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+        .with_any_thread(true)
+        .build();
+    #[cfg(not(windows))]
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+
+    let mut config = AppConfig::default();
+    config.mode = RefineMode::Trim;
+
+    AppState {
+        config: RwLock::new(config),
+        monitor_generation: AtomicU64::new(0),
+        processed_state: Mutex::new(ProcessedState::default()),
+        history: Mutex::new(Vec::new()),
+        proxy: event_loop.create_proxy(),
+    }
+}
+
+// ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AppConfig, MonitorMode};
+    use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
-    use tao::event_loop::EventLoopBuilder;
-    #[cfg(windows)]
-    use tao::platform::windows::EventLoopBuilderExtWindows;
-
-    fn create_test_state() -> AppState {
-        #[cfg(windows)]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
-            .with_any_thread(true)
-            .build();
-        #[cfg(not(windows))]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-
-        let mut config = AppConfig::default();
-        config.mode = RefineMode::Trim;
-
-        AppState {
-            config: RwLock::new(config),
-            monitor_generation: AtomicU64::new(0),
-            processed_state: Mutex::new(ProcessedState::default()),
-            history: Mutex::new(Vec::new()),
-            proxy: event_loop.create_proxy(),
-        }
-    }
 
     /// with_config / with_processed_state / monitor_generation の基本動作
     #[test]
     fn test_app_state_helpers() {
-        let state = create_test_state();
+        let state = test_app_state();
 
         assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
@@ -275,7 +282,7 @@ mod tests {
     /// 一時停止フラグの更新
     #[test]
     fn test_paused_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
         assert!(!state.with_config(|c| c.is_paused));
         state.with_config_mut(|c| c.is_paused = true);
         assert!(state.with_config(|c| c.is_paused));
@@ -286,7 +293,7 @@ mod tests {
     /// 履歴機能の更新
     #[test]
     fn test_history_enabled_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
         assert!(!state.with_config(|c| c.history_enabled));
         state.with_config_mut(|c| c.history_enabled = true);
         assert!(state.with_config(|c| c.history_enabled));
@@ -295,7 +302,7 @@ mod tests {
     /// 通知設定の更新
     #[test]
     fn test_notification_settings_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
 
         assert!(!state.with_config(|c| c.notification_settings.enabled));
         state.with_config_mut(|c| c.notification_settings.enabled = true);
@@ -317,7 +324,7 @@ mod tests {
     /// `monitor_snapshot` が設定値を正しく反映すること
     #[test]
     fn test_monitor_snapshot_values() {
-        let state = create_test_state();
+        let state = test_app_state();
         state.with_config_mut(|c| {
             c.mode = RefineMode::UrlEncode;
             c.interval_ms = 1500;
@@ -335,7 +342,7 @@ mod tests {
     /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になる
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
-        let state = create_test_state();
+        let state = test_app_state();
         let limit = crate::consts::DEFAULT_HISTORY_LIMIT;
 
         // 空白は無視
@@ -361,5 +368,48 @@ mod tests {
         // clear_history で履歴が空になること
         state.clear_history();
         assert!(state.get_history().is_empty());
+    }
+
+    /// 加工成功時に書き戻し本文と観測済み本文が更新されること
+    #[test]
+    fn test_record_processing_success() {
+        let state = test_app_state();
+        state.record_processing_success("processed");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "processed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("processed"));
+    }
+
+    /// 観測のみの場合は last_written_text を変更しないこと
+    #[test]
+    fn test_record_clipboard_observed() {
+        let state = test_app_state();
+        state.with_processed_state(|ps| {
+            ps.last_written_text = Some("written".to_string());
+            ps.last_seen_text = "old".to_string();
+        });
+
+        state.record_clipboard_observed("observed");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "observed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("written"));
+    }
+
+    /// 履歴復元など外部設定時は書き戻しフラグをクリアすること
+    #[test]
+    fn test_record_clipboard_set() {
+        let state = test_app_state();
+        state.with_processed_state(|ps| {
+            ps.last_written_text = Some("written".to_string());
+            ps.last_seen_text = "old".to_string();
+        });
+
+        state.record_clipboard_set("restored");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "restored");
+        assert_eq!(ps.last_written_text, None);
     }
 }
