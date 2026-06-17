@@ -227,9 +227,9 @@ impl RefineCategory {
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
     pub const SUBMENU_ORDER: [Self; 10] = [
+        Self::LineActions,
         Self::UrlActions,
         Self::Path,
-        Self::LineActions,
         Self::Trim,
         Self::Escape,
         Self::JsonFormat,
@@ -283,17 +283,36 @@ impl RefineMode {
         }
     }
 
+    /// クイックセレクタ向けのモード表示順を返す
+    ///
+    /// トレイメニューと同様に、通常項目を先頭に、続けてカテゴリ順で並べる
+    ///
+    /// # Returns
+    /// * `Vec<RefineMode>` - 表示順に並んだモード一覧
+    pub fn selector_modes() -> Vec<Self> {
+        let mut ordered = Vec::new();
+        ordered.extend(Self::iter().filter(|m| m.category() == RefineCategory::Normal));
+        for category in RefineCategory::SUBMENU_ORDER {
+            ordered.extend(Self::iter().filter(|m| m.category() == category));
+        }
+        ordered
+    }
+
     /// UI(Webview)に渡すためのモード情報のJSONリストを生成する
     ///
     /// # Returns
-    /// * `String` - モード ID・ラベル・カテゴリを含む JSON 配列文字列
+    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名を含む JSON 配列文字列
     pub fn to_json_list() -> String {
-        let list: Vec<serde_json::Value> = RefineMode::iter()
+        let list: Vec<serde_json::Value> = Self::selector_modes()
+            .iter()
             .map(|m| {
                 serde_json::json!({
                     "id": m,
                     "label": m.label(),
                     "category": m.category().label(),
+                    "value": m.to_possible_value()
+                        .map(|v| v.get_name().to_string())
+                        .unwrap_or_default(),
                 })
             })
             .collect();
@@ -544,7 +563,32 @@ mod tests {
             assert!(item.get("id").is_some());
             assert!(item.get("label").is_some());
             assert!(item.get("category").is_some());
+            assert!(item.get("value").is_some());
         }
+    }
+
+    /// selector_modes が全モードをトレイメニュー相当の順序で返すこと
+    #[test]
+    fn test_selector_modes_order() {
+        let ordered = RefineMode::selector_modes();
+        assert_eq!(ordered.len(), RefineMode::iter().count());
+
+        let normal_count = RefineMode::iter()
+            .filter(|m| m.category() == RefineCategory::Normal)
+            .count();
+        assert!(normal_count > 0);
+        for mode in &ordered[..normal_count] {
+            assert_eq!(mode.category(), RefineCategory::Normal);
+        }
+
+        let mut seen_categories = Vec::new();
+        for mode in ordered.iter().skip(normal_count) {
+            let category = mode.category();
+            if seen_categories.last() != Some(&category) {
+                seen_categories.push(category);
+            }
+        }
+        assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
     }
 
     /// RefineMode のバリアント数と主要バリアントの存在を確認すること
