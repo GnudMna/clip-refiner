@@ -13,10 +13,10 @@ impl TrayMenu {
     /// 変換モードメニューを構築する
     ///
     /// # Arguments
-    /// * `current_mode` - 現在選択されている変換モード。
+    /// * `current_mode` - 現在選択されている変換モード
     ///
     /// # Returns
-    /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_refine_menu(current_mode: RefineMode) -> Result<RefineMenu> {
         use std::collections::HashMap;
 
@@ -92,10 +92,10 @@ impl TrayMenu {
     /// 所属カテゴリに基づいてサブメニューのラベルを更新する
     ///
     /// 選択されているモードが属するカテゴリのサブメニューに「✓」プレフィックスを付与し、
-    /// それ以外のサブメニューからは削除する。
+    /// それ以外のサブメニューからは削除する
     ///
     /// # Arguments
-    /// * `current_mode` - 現在選択されている変換モード。
+    /// * `current_mode` - 現在選択されている変換モード
     pub fn refresh_category_labels(&self, current_mode: RefineMode) {
         let current_category = current_mode.category();
 

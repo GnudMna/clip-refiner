@@ -26,7 +26,7 @@ pub const HISTORY_LIMIT: usize = 10;
 
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
-/// 1ループあたり `config` RwLock の取得を1回に削減するために使用します。
+/// 1ループあたり `config` RwLock の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
     /// 現在の加工モード
     pub mode: RefineMode,
@@ -52,7 +52,7 @@ pub struct ProcessedState {
 // ======================================================================
 /// `Mutex` のポイズニング（パニックによる汚染）を無視して強制的にロックを取得するための拡張
 pub trait LockExt<T> {
-    /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得します。
+    /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得する。
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;
 }
 
@@ -85,7 +85,7 @@ impl<T> RwLockExt<T> for RwLock<T> {
 // ======================================================================
 /// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
-/// 設定、クリップボードの最終処理内容、履歴などを保持します。
+/// 設定、クリップボードの最終処理内容、履歴などを保持する
 pub struct AppState {
     /// 永続化設定データ
     pub config: RwLock<AppConfig>,
@@ -106,7 +106,7 @@ impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
     ///
     /// # Returns
-    /// * `Self` - 新しく生成された `AppState` インスタンス。
+    /// * `Self` - 新しく生成された `AppState` インスタンス
     pub fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
         let config = AppConfig::load();
         Self {
@@ -118,7 +118,7 @@ impl AppState {
         }
     }
 
-    /// 現在の設定をファイルへ保存する。
+    /// 現在の設定をファイルへ保存する
     pub fn save_config(&self) {
         if let Err(e) = self.with_config(|c| c.save()) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
@@ -142,7 +142,7 @@ impl AppState {
 impl AppState {
     /// 監視ループ向けに設定フィールドをまとめて一括取得する
     ///
-    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減します。
+    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
             mode: config.mode,
@@ -192,9 +192,9 @@ impl AppState {
 
     /// クリップボード履歴に新しいテキストを追加する
     ///
-    /// 空文字やトリム後に空になる文字列は無視されます。
-    /// 既にある文字列はリストの先頭に移動し、最大保持数（ `HISTORY_LIMIT` ）を超えた分は削除されます。
-    /// 追加完了後、UIスレッドへ履歴更新イベントを通知します。
+    /// 空文字やトリム後に空になる文字列は無視される
+    /// 既にある文字列はリストの先頭に移動し、最大保持数（ `HISTORY_LIMIT` ）を超えた分は削除される
+    /// 追加完了後、UIスレッドへ履歴更新イベントを通知する
     pub fn add_to_history(&self, text: String) {
         if text.trim().is_empty() {
             return;
@@ -259,6 +259,7 @@ mod tests {
         }
     }
 
+    /// with_config / with_processed_state / monitor_generation の基本動作
     #[test]
     fn test_app_state_helpers() {
         let state = create_test_state();
@@ -371,7 +372,7 @@ mod tests {
             format!("item-{}", HISTORY_LIMIT + 4)
         );
 
-        // clear で履歴が消える
+        // clear_history で履歴が空になること
         state.clear_history();
         assert!(state.get_history().is_empty());
     }

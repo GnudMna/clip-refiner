@@ -13,7 +13,7 @@ use wry::{WebContext, WebViewBuilder};
 // ======================================================================
 /// クイックセレクタ（モード選択用のコマンドパレット風 UI）を管理する構造体
 ///
-/// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画します。
+/// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画する
 pub struct SelectorWindow {
     /// WebView インスタンス
     webview: wry::WebView,
@@ -34,12 +34,12 @@ impl SelectorWindow {
     /// * `proxy` - UIスレッド（イベントループ）へメッセージを送信するためのプロキシ
     ///
     /// # Returns
-    /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返します。
+    /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返す
     pub fn new(window: Window, proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let window = Arc::new(window);
         let modes_json = RefineMode::to_json_list();
 
-        // HTML content for the Command Palette
+        // コマンドパレット用 HTML を組み立て
         let css = include_str!("../ui/selector.css");
         let html = include_str!("../ui/selector.html")
             .replace("__SELECTOR_CSS__", css)
@@ -59,7 +59,7 @@ impl SelectorWindow {
                 let msg = req.body();
                 if msg.starts_with("select:") {
                     let mode_str = msg.trim_start_matches("select:");
-                    // JSON String to Enum (RefineMode implements Deserialize)
+                    // IPC メッセージから RefineMode を復元
                     if let Ok(mode) =
                         serde_json::from_str::<RefineMode>(&format!("\"{}\"", mode_str))
                     {
@@ -85,7 +85,7 @@ impl SelectorWindow {
 impl SelectorWindow {
     /// セレクタを表示し、現在の加工モードを反映させる
     ///
-    /// 表示時に UI 側の検索フォームにフォーカスを合わせ、現在のモードをハイライトします。
+    /// 表示時に UI 側の検索フォームにフォーカスを合わせ、現在のモードをハイライトする
     ///
     /// # Arguments
     /// * `current_mode` - 現在アプリケーションで選択されている加工モード
@@ -125,14 +125,14 @@ impl SelectorWindow {
 // ======================================================================
 /// セレクタウィンドウを初期化して、非表示状態のインスタンスを作成する
 ///
-/// ウィンドウの各種属性（透明度、フレームなしなど）を設定し、画面中央に配置します。
+/// ウィンドウの各種属性（透明度、フレームなしなど）を設定し、画面中央に配置する
 ///
 /// # Arguments
 /// * `event_loop` - ウィンドウ作成用のイベントループ
 /// * `proxy` - イベント送信用プロキシ
 ///
 /// # Returns
-/// * `anyhow::Result<SelectorWindow>` - 初期化に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返します。
+/// * `anyhow::Result<SelectorWindow>` - 初期化に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返す
 pub fn init_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
     proxy: EventLoopProxy<AppEvent>,

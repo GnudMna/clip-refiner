@@ -1,3 +1,7 @@
+//! クリップボード加工モードの定義と、各モードへのディスパッチを提供するモジュール
+//!
+//! `RefineMode` による加工処理の統合と、クリップボードへの読み書きを担当する
+
 pub mod datetime;
 pub mod escape;
 pub mod json;
@@ -23,9 +27,9 @@ use strum::{EnumIter, EnumMessage, IntoEnumIterator, IntoStaticStr};
 // ======================================================================
 /// クリップボードのテキストを加工する各モードの定義
 ///
-/// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応しています。
-/// `strum` マクロを使用して UI 表示用のラベルを保持しています。
-/// カテゴリへの所属は `RefineMode::category()` で定義します。
+/// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応している
+/// `strum` マクロを使用して UI 表示用のラベルを保持しています
+/// カテゴリへの所属は `RefineMode::category()` で定義する
 #[derive(
     Copy,
     Clone,
@@ -171,7 +175,7 @@ pub enum RefineMode {
 // ======================================================================
 /// トレイメニューの階層化に使用されるカテゴリ
 ///
-/// 多くの加工モードを整理するために、関連するモードをグループ化します。
+/// 多くの加工モードを整理するために、関連するモードをグループ化する
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, EnumIter, EnumMessage, IntoStaticStr)]
 pub enum RefineCategory {
     /// 通常の単独メニュー
@@ -216,7 +220,7 @@ impl RefineCategory {
     /// カテゴリの表示名を取得する
     ///
     /// # Returns
-    /// * `&'static str` - UIに表示するためのカテゴリ名。
+    /// * `&'static str` - UIに表示するためのカテゴリ名
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
@@ -245,7 +249,7 @@ impl RefineMode {
     /// UIに表示する名前を取得する
     ///
     /// # Returns
-    /// * `&'static str` - モードに対応する静的な文字列ラベル。
+    /// * `&'static str` - モードに対応する静的な文字列ラベル
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
@@ -253,7 +257,7 @@ impl RefineMode {
     /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
     ///
     /// # Returns
-    /// * `RefineCategory` - モードが属するカテゴリ。
+    /// * `RefineCategory` - モードが属するカテゴリ
     pub fn category(&self) -> RefineCategory {
         use RefineCategory as C;
         match self {
@@ -280,6 +284,9 @@ impl RefineMode {
     }
 
     /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
+    ///
+    /// # Returns
+    /// * `String` - モード ID・ラベル・カテゴリを含む JSON 配列文字列
     pub fn to_json_list() -> String {
         let list: Vec<serde_json::Value> = RefineMode::iter()
             .map(|m| {
@@ -300,15 +307,21 @@ impl RefineMode {
 /// JSONやYAMLのパース時にキーの順序を保持するための値構造
 ///
 /// `serde_json::Value` と似ていますが、オブジェクトの保持に `IndexMap` を使用し、
-/// データの順序を維持したままシリアライズ・デシリアライズが可能です。
+/// データの順序を維持したままシリアライズ・デシリアライズが可能
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OrderedValue {
+    /// JSON の null 値
     Null,
+    /// 真偽値
     Bool(bool),
+    /// 数値
     Number(serde_json::Number),
+    /// 文字列
     String(String),
+    /// 配列
     Array(Vec<OrderedValue>),
+    /// キー順序を保持するオブジェクト
     Object(IndexMap<String, OrderedValue>),
 }
 
@@ -372,7 +385,7 @@ impl Refiner for RefineMode {
 // ======================================================================
 /// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
 ///
-/// テキストが変更された場合のみクリップボードを更新し、その内容を返します。
+/// テキストが変更された場合のみクリップボードを更新し、その内容を返す
 ///
 /// # Arguments
 /// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
@@ -380,7 +393,7 @@ impl Refiner for RefineMode {
 ///
 /// # Returns
 /// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返し、
-///   変更がなかった場合や空の場合は `None` を返します。
+///   変更がなかった場合や空の場合は `None` を返す
 pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
     if text.is_empty() {
@@ -410,6 +423,7 @@ mod tests {
     use super::*;
     use arboard::Clipboard;
 
+    /// RefineMode のラベルとカテゴリが期待どおりであること
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
@@ -454,6 +468,7 @@ mod tests {
         );
     }
 
+    /// RefineMode のバリアント数と主要バリアントの存在を確認すること
     #[test]
     fn test_refine_mode_variants() {
         let variants: Vec<_> = RefineMode::iter().collect();
@@ -470,7 +485,7 @@ mod tests {
     fn test_process_clipboard_integration() {
         // 並列実行による干渉を避けるため、1つのテストケースにまとめる
         if let Ok(mut cb) = Clipboard::new() {
-            // Case 1: 変化あり
+            // 変化ありのケース
             let unique_str_1 = "  clip_refiner_test_1  ";
             let _ = cb.set_text(unique_str_1.to_string());
             // システムのクリップボードへの反映を待つ必要がある場合があるが、まずはそのまま
@@ -488,7 +503,7 @@ mod tests {
                 eprintln!("Failed to get clipboard text for unique_str_1.");
             }
 
-            // Case 2: 変化なし
+            // 変化なしのケース
             let unique_str_2 = "clip_refiner_test_2";
             let _ = cb.set_text(unique_str_2.to_string());
             if let Ok(current) = cb.get_text() {
@@ -691,7 +706,7 @@ mod tests {
             if matches!(case.mode, RefineMode::TimestampToDatetime) {
                 let result = case.mode.refine(case.input);
                 assert_ne!(result, case.input, "TimestampToDatetime failed to convert");
-                // JST環境なら一致するはずだが、CI環境などでUTCの場合は一致しない。
+                // JST環境なら一致するはずだが、CI環境などでUTCの場合は一致しない
                 // 厳密なチェックは datetime.rs のテストに任せる
                 continue;
             }

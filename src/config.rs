@@ -12,15 +12,15 @@ use serde::{Deserialize, Serialize};
 // ======================================================================
 /// クリップボードの監視方式
 ///
-/// クリップボードの更新を検知するための異なるアプローチを提供します。
+/// クリップボードの更新を検知するための異なるアプローチを提供する
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
-    /// 一定間隔でクリップボードの内容を確認するポーリング方式。
-    /// すべてのプラットフォームで動作する基本的な監視モードです。
+    /// 一定間隔でクリップボードの内容を確認するポーリング方式
+    /// すべてのプラットフォームで動作する基本的な監視モード
     #[default]
     Polling,
-    /// OSの変更トークンを監視する方式。
-    /// クリップボード本文の定期読み取りを避け、低遅延かつ低CPU負荷で動作します。
+    /// OSの変更トークンを監視する方式
+    /// クリップボード本文の定期読み取りを避け、低遅延かつ低CPU負荷で動作する
     Event,
 }
 
@@ -29,7 +29,7 @@ pub enum MonitorMode {
 // ======================================================================
 /// 通知の内容に関する設定
 ///
-/// どのタイミングでどのような通知を表示するかを制御します。
+/// どのタイミングでどのような通知を表示するかを制御する
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// 成功通知機能全体の有効/無効スイッチ
@@ -50,7 +50,7 @@ impl Default for NotificationSettings {
     /// デフォルトの通知設定を生成する
     ///
     /// # Returns
-    /// * `Self` - 通知オフ・各サブ設定はオンのデフォルト設定。
+    /// * `Self` - 通知オフ・各サブ設定はオンのデフォルト設定
     fn default() -> Self {
         Self {
             enabled: false,
@@ -66,12 +66,12 @@ impl Default for NotificationSettings {
 // ======================================================================
 /// アプリケーションの設定情報
 ///
-/// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定です。
+/// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 最後に使用した（または常駐時に使用する）加工モード
     pub mode: RefineMode,
-    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用されます。
+    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
     pub interval_ms: u64,
     /// 使用する監視方式（Polling または Event）
     #[serde(default)]
@@ -91,7 +91,7 @@ impl Default for AppConfig {
     /// デフォルトのアプリケーション設定を生成する
     ///
     /// # Returns
-    /// * `Self` - 標準的な動作環境のためのデフォルト設定。
+    /// * `Self` - 標準的な動作環境のためのデフォルト設定
     fn default() -> Self {
         Self {
             mode: RefineMode::UrlDecode,
@@ -111,7 +111,7 @@ impl AppConfig {
     /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
     ///
     /// # Returns
-    /// * `Result<PathBuf>` - 設定ファイルの完全なパス。
+    /// * `Result<PathBuf>` - 設定ファイルの完全なパス
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
         fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
@@ -120,12 +120,11 @@ impl AppConfig {
 
     /// 設定ファイルを読み込む
     ///
-    /// 存在しない場合や失敗した場合はデフォルト設定を返します。
+    /// 存在しない場合や失敗した場合はデフォルト設定を返す
     ///
     /// # Returns
-    /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`。
+    /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`
     pub fn load() -> Self {
-        // 設定ファイルパス取得
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
@@ -134,12 +133,10 @@ impl AppConfig {
             }
         };
 
-        // 設定ファイルが存在しない → デフォルトで継続
         if !config_path.exists() {
             return Self::default();
         }
 
-        // ファイル読み込み
         let content = match fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
@@ -148,7 +145,6 @@ impl AppConfig {
             }
         };
 
-        // JSON パース
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => config,
             Err(e) => {
@@ -161,7 +157,7 @@ impl AppConfig {
     /// 現在の設定をファイルへ保存する
     ///
     /// # Returns
-    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
+    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path().map_err(|e| {
             crate::log_error!("設定ファイルパスの取得に失敗: {:?}", e);
@@ -187,10 +183,10 @@ impl AppConfig {
 // ======================================================================
 /// 設定ディレクトリのパスを取得する
 ///
-/// OSに応じたアプリケーション設定ディレクトリのパスを計算します。
+/// OSに応じたアプリケーション設定ディレクトリのパスを計算する
 ///
 /// # Returns
-/// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス。
+/// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス
 pub fn get_config_dir() -> Result<PathBuf> {
     let base_dirs =
         directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
@@ -211,6 +207,7 @@ pub fn get_config_dir() -> Result<PathBuf> {
 mod tests {
     use super::*;
 
+    /// AppConfig のデフォルト値が正しいこと
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
@@ -218,6 +215,7 @@ mod tests {
         assert_eq!(config.mode, RefineMode::UrlDecode);
     }
 
+    /// AppConfig のシリアライズ/デシリアライズ往復
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();

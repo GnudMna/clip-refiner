@@ -13,7 +13,7 @@ use chrono::NaiveDate;
 // ======================================================================
 /// アプリケーション全体のロガー用トレイト
 ///
-/// 異なるバックエンド（tracing, mockなど）を抽象化するための共通インターフェースを提供します。
+/// 異なるバックエンド（tracing, mockなど）を抽象化するための共通インターフェースを提供する
 pub trait Logger: Send + Sync {
     /// 情報ログ（INFOレベル）を出力する
     fn info(&self, msg: &str);
@@ -31,13 +31,13 @@ pub trait Logger: Send + Sync {
 // ======================================================================
 /// tracing クレートを使用した Logger の実装
 ///
-/// ファイルへのログ出力と、定期的な古いログのクリーンアップ機能を備えています。
+/// ファイルへのログ出力と、定期的な古いログのクリーンアップ機能を備えている
 pub struct TracingLogger {
     log_dir: PathBuf,
-    /// 最後にクリーンアップを実行した日をUNIXエポックからの日数で保持する。
-    /// -1 は「まだ実行していない」を示す。
+    /// 最後にクリーンアップを実行した日をUNIXエポックからの日数で保持する
+    /// -1 は「まだ実行していない」を示す
     /// Mutex の代わりに AtomicI64 を使うことで、ログ呼び出しごとの
-    /// ロック取得コストをなくし、日付が変わっていない場合は完全にロックフリーで動作する。
+    /// ロック取得コストをなくし、日付が変わっていない場合は完全にロックフリーで動作する
     last_cleanup_day: AtomicI64,
 }
 
@@ -48,7 +48,7 @@ impl TracingLogger {
     /// * `log_dir` - ログファイルを保存するディレクトリのパス
     ///
     /// # Returns
-    /// * `Self` - 生成された `TracingLogger` インスタンス。
+    /// * `Self` - 生成された `TracingLogger` インスタンス
     pub fn new(log_dir: PathBuf) -> Self {
         Self {
             log_dir,
@@ -112,7 +112,7 @@ static GLOBAL_LOGGER: OnceLock<Box<dyn Logger>> = OnceLock::new();
 
 /// グローバルロガーを初期化する
 ///
-/// アプリケーション起動時に一度だけ呼び出し、グローバルなロガーインスタンスを設定します。
+/// アプリケーション起動時に一度だけ呼び出し、グローバルなロガーインスタンスを設定する
 ///
 /// # Arguments
 /// * `logger` - 使用するロガーの実装（`Box<dyn Logger>`）
@@ -125,14 +125,14 @@ pub fn init_global_logger(logger: Box<dyn Logger>) {
 // ======================================================================
 /// 指定された日数より古いログファイルを削除する
 ///
-/// 指定されたディレクトリ内の古いログファイルをスキャンし、期限を過ぎたものを削除します。
+/// 指定されたディレクトリ内の古いログファイルをスキャンし、期限を過ぎたものを削除する
 ///
 /// # Arguments
 /// * `log_dir` - ログファイルが格納されているディレクトリのパス
 /// * `max_days` - ログを保持する最大日数
 ///
 /// # Returns
-/// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返します。
+/// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返す
 pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> {
     let now = chrono::Local::now().date_naive();
     let entries = fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
@@ -163,10 +163,10 @@ pub fn cleanup_old_logs(log_dir: &std::path::Path, max_days: i64) -> Result<()> 
 // ======================================================================
 /// グローバルロガーを取得する
 ///
-/// 初期化されていない場合は、何もしない `NoOpLogger` を返します。
+/// 初期化されていない場合は、何もしない `NoOpLogger` を返す
 ///
 /// # Returns
-/// * `&'static dyn Logger` - 現在設定されているグローバルロガーへの参照。
+/// * `&'static dyn Logger` - 現在設定されているグローバルロガーへの参照
 pub fn get_logger() -> &'static dyn Logger {
     GLOBAL_LOGGER
         .get()
@@ -188,7 +188,7 @@ impl Logger for NoOpLogger {
 // ======================================================================
 /// 情報ログ（INFOレベル）を出力するマクロ
 ///
-/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
@@ -198,7 +198,7 @@ macro_rules! log_info {
 
 /// 警告ログ（WARNレベル）を出力するマクロ
 ///
-/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
@@ -208,7 +208,7 @@ macro_rules! log_warn {
 
 /// エラーログ（ERRORレベル）を出力するマクロ
 ///
-/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
@@ -218,7 +218,7 @@ macro_rules! log_error {
 
 /// デバッグログ（DEBUGレベル）を出力するマクロ
 ///
-/// `format!` 構文をサポートしており、グローバルロガー経由で出力されます。
+/// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
@@ -264,6 +264,7 @@ mod tests {
         }
     }
 
+    /// MockLogger が info/error を記録すること
     #[test]
     fn test_mock_logger() {
         let logger = MockLogger {

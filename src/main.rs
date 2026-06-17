@@ -21,10 +21,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 /// アプリケーションのエントリポイント
 ///
 /// 設定の初期化、ロギングのセットアップ、コマンドライン引数の解析を行い、
-/// 常駐モードまたはワンショットモードで処理を開始します。
+/// 常駐モードまたはワンショットモードで処理を開始する
 ///
 /// # Returns
-/// * `Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返します。
+/// * `Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す
 fn main() -> Result<()> {
     setup_console();
 
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
 // ======================================================================
 /// コマンドライン引数
 ///
-/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
+/// アプリケーションの動作モード（常駐またはワンショット）を指定する
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -75,7 +75,7 @@ struct Args {
 /// Windows環境で親プロセスのコンソールをアタッチする
 ///
 /// これにより、コンソール（`cmd.exe` や `PowerShell`）から `cargo run` などで起動した場合に、
-/// アプリケーションからの標準出力がコンソール上に表示されるようになります。
+/// アプリケーションからの標準出力がコンソール上に表示されるようになります
 fn setup_console() {
     #[cfg(windows)]
     use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
@@ -92,11 +92,11 @@ fn setup_console() {
 /// ロギングシステムを初期化する
 ///
 /// 設定ディレクトリ内の `logs` フォルダに日次のログファイルを作成し、
-/// 標準出力とファイルの両方にログを出力するように設定します。
-/// また、システム全体のグローバルロガーもここで初期化されます。
+/// 標準出力とファイルの両方にログを出力するように設定する
+/// また、システム全体のグローバルロガーもここで初期化される
 ///
 /// # Returns
-/// * `Result<tracing_appender::non_blocking::WorkerGuard>` - ログ出力非同期スレッドを維持するためのガード。
+/// * `Result<tracing_appender::non_blocking::WorkerGuard>` - ログ出力非同期スレッドを維持するためのガード
 fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     let config_dir = config::get_config_dir()?;
     let log_dir = config_dir.join("logs");
@@ -110,7 +110,7 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 
     let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
 
-    // stdout への出力はデバッグビルド限定とする。
+    // stdout への出力はデバッグビルド限定とする
     let builder = tracing_subscriber::registry()
         .with(
             EnvFilter::builder()
@@ -137,11 +137,11 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 // ======================================================================
 /// アプリケーションの多重起動を防止し、インスタンスを保持する
 ///
-/// `APP_ID` を使用してシステム全体で一意のインスタンスを確認します。
+/// `APP_ID` を使用してシステム全体で一意のインスタンスを確認する
 ///
 /// # Returns
-/// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返します。
-///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了します。
+/// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す
+///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了する
 fn ensure_single_instance() -> Result<SingleInstance> {
     let instance = SingleInstance::new(consts::APP_ID)
         .context("多重起動防止のインスタンス作成に失敗しました")?;
@@ -163,13 +163,13 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 /// クリップボードの内容を一度だけ加工して終了する
 ///
 /// 常駐せずに、現在のクリップボードのテキストを指定されたモードで加工し、
-/// 結果をクリップボードに書き戻します。
+/// 結果をクリップボードに書き戻す
 ///
 /// # Arguments
 /// * `mode` - 適用する加工モード (`refiner::RefineMode`)
 ///
 /// # Returns
-/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返します。
+/// * `Result<()>` - 処理が正常に完了した場合は `Ok(())` を返す
 fn run_once(mode: refiner::RefineMode) -> Result<()> {
     log_info!("ワンショットモードで実行: {:?}", mode);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;

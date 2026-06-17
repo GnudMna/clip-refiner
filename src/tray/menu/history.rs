@@ -14,10 +14,10 @@ impl TrayMenu {
     /// 履歴メニューの基本構造を構築する
     ///
     /// # Arguments
-    /// * `history_enabled` - 履歴機能が有効かどうか。
+    /// * `history_enabled` - 履歴機能が有効かどうか
     ///
     /// # Returns
-    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_history_menu(history_enabled: bool) -> Result<HistoryMenu> {
         let enabled_item = CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
         let clear_item = MenuItem::new("履歴をクリア", true, None);
@@ -50,7 +50,7 @@ impl TrayMenu {
     /// * `state` - 最新の履歴データを持つアプリケーション状態
     ///
     /// # Returns
-    /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返します。
+    /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
         let history = state.get_history();
         let mut records = self.history.records.lock_ignore_poison();
