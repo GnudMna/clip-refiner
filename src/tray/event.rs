@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::notifier;
 use super::state::{AppState, LockExt};
 use super::worker::ClipboardCommand;
@@ -102,7 +102,7 @@ fn handle_app_control(
         state.with_config_mut(|c| c.is_paused = paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
-        spawn_monitor_thread(Arc::clone(state));
+        bump_monitor_generation(Arc::clone(state));
         true
     } else if id == menu.shortcut_list_item.id() {
         let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
@@ -313,5 +313,5 @@ pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode:
     super::monitor::update_monitor_mode_impl(menu, monitor_mode);
 
     state.save_config();
-    super::monitor::spawn_monitor_thread(Arc::clone(state));
+    super::monitor::bump_monitor_generation(Arc::clone(state));
 }

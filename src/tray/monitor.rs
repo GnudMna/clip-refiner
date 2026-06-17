@@ -12,15 +12,14 @@ use arboard::Clipboard;
 // ======================================================================
 // 監視スレッド管理
 // ======================================================================
-/// クリップボード監視を再開または再起動する
+/// クリップボード監視の世代カウンタを進め、ワーカーに監視状態のリセットを通知する
 ///
-/// 監視はクリップボードワーカースレッド内で実行される
-/// この関数は世代カウンタを進めることで、ワーカーに監視状態のリセットを通知する
-/// 一時停止中(`is_paused == true`)の場合は何もしない
+/// 監視処理自体はクリップボードワーカースレッド内で実行される
+/// 一時停止中 (`is_paused == true`) の場合は何もしない
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
-pub fn spawn_monitor_thread(state: Arc<AppState>) {
+pub fn bump_monitor_generation(state: Arc<AppState>) {
     if state.with_config(|c| c.is_paused) {
         return;
     }
@@ -208,9 +207,9 @@ mod tests {
         assert!(should_process_clipboard(&mut ps, "  source  ", true));
     }
 
-    /// 一時停止中は spawn_monitor_thread が世代を進めないこと
+    /// 一時停止中は bump_monitor_generation が世代を進めないこと
     #[test]
-    fn spawn_monitor_thread_skips_when_paused() {
+    fn bump_monitor_generation_skips_when_paused() {
         use crate::tray::state::AppEvent;
         use std::sync::{Arc, atomic::Ordering};
         use tao::event_loop::EventLoopBuilder;
@@ -227,13 +226,13 @@ mod tests {
         let state = Arc::new(AppState::new(event_loop.create_proxy()));
         state.with_config_mut(|c| c.is_paused = true);
 
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 監視中は spawn_monitor_thread が世代カウンタをインクリメントすること
+    /// 監視中は bump_monitor_generation が世代カウンタをインクリメントすること
     #[test]
-    fn spawn_monitor_thread_increments_generation_when_active() {
+    fn bump_monitor_generation_increments_when_active() {
         use crate::tray::state::AppEvent;
         use std::sync::{Arc, atomic::Ordering};
         use tao::event_loop::EventLoopBuilder;
@@ -250,10 +249,10 @@ mod tests {
         let state = Arc::new(AppState::new(event_loop.create_proxy()));
         state.with_config_mut(|c| c.is_paused = false);
 
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 1);
 
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 }
