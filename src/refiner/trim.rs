@@ -58,7 +58,7 @@ mod tests {
         assert_eq!(trim_text("\n world \r\n"), "world");
     }
 
-    /// 各行ごとのトリムテスト（LF）
+    /// 各行ごとのトリムテスト(LF)
     #[test]
     fn test_trim_lines_lf() {
         let input = "  hello  \n  world \n  rust ";
@@ -66,7 +66,7 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 各行ごとのトリムテスト（CRLF 保持）
+    /// 各行ごとのトリムテスト(CRLF 保持)
     #[test]
     fn test_trim_lines_crlf() {
         let input = "  hello  \r\n  world \r\n  rust ";

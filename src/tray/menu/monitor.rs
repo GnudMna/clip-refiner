@@ -1,9 +1,9 @@
+use super::{IntervalMenu, MonitorMenu, TrayMenu};
+
 use crate::config::MonitorMode;
 
 use anyhow::{Context, Result};
 use tray_icon::menu::{CheckMenuItem, Submenu};
-
-use super::{IntervalMenu, MonitorMenu, TrayMenu};
 
 // ======================================================================
 // 監視方式メニュー
@@ -57,8 +57,8 @@ impl TrayMenu {
     /// 監視周期メニューを構築する
     ///
     /// # Arguments
-    /// * `current_interval` - 現在設定されている監視間隔（ミリ秒）
-    /// * `monitor_mode` - 現在の監視方式（イベントモード時はメニューを無効化するため）
+    /// * `current_interval` - 現在設定されている監視間隔(ミリ秒)
+    /// * `monitor_mode` - 現在の監視方式(イベントモード時はメニューを無効化するため)
     ///
     /// # Returns
     /// 成功した場合は `IntervalMenu` インスタンスを返し、失敗した場合は `Err` を返す

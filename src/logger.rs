@@ -13,15 +13,15 @@ use chrono::NaiveDate;
 // ======================================================================
 /// アプリケーション全体のロガー用トレイト
 ///
-/// 異なるバックエンド（tracing, mockなど）を抽象化するための共通インターフェースを提供する
+/// 異なるバックエンド(tracing, mockなど)を抽象化するための共通インターフェースを提供する
 pub trait Logger: Send + Sync {
-    /// 情報ログ（INFOレベル）を出力する
+    /// 情報ログ(INFOレベル)を出力する
     fn info(&self, msg: &str);
-    /// 警告ログ（WARNレベル）を出力する
+    /// 警告ログ(WARNレベル)を出力する
     fn warn(&self, msg: &str);
-    /// エラーログ（ERRORレベル）を出力する
+    /// エラーログ(ERRORレベル)を出力する
     fn error(&self, msg: &str);
-    /// デバッグログ（DEBUGレベル）を出力する
+    /// デバッグログ(DEBUGレベル)を出力する
     #[allow(unused)]
     fn debug(&self, msg: &str);
 }
@@ -115,7 +115,7 @@ static GLOBAL_LOGGER: OnceLock<Box<dyn Logger>> = OnceLock::new();
 /// アプリケーション起動時に一度だけ呼び出し、グローバルなロガーインスタンスを設定する
 ///
 /// # Arguments
-/// * `logger` - 使用するロガーの実装（`Box<dyn Logger>`）
+/// * `logger` - 使用するロガーの実装(`Box<dyn Logger>`)
 pub fn init_global_logger(logger: Box<dyn Logger>) {
     let _ = GLOBAL_LOGGER.set(logger);
 }
@@ -186,7 +186,7 @@ impl Logger for NoOpLogger {
 // ======================================================================
 // ログマクロ
 // ======================================================================
-/// 情報ログ（INFOレベル）を出力するマクロ
+/// 情報ログ(INFOレベル)を出力するマクロ
 ///
 /// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
@@ -196,7 +196,7 @@ macro_rules! log_info {
     };
 }
 
-/// 警告ログ（WARNレベル）を出力するマクロ
+/// 警告ログ(WARNレベル)を出力するマクロ
 ///
 /// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
@@ -206,7 +206,7 @@ macro_rules! log_warn {
     };
 }
 
-/// エラーログ（ERRORレベル）を出力するマクロ
+/// エラーログ(ERRORレベル)を出力するマクロ
 ///
 /// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]
@@ -216,7 +216,7 @@ macro_rules! log_error {
     };
 }
 
-/// デバッグログ（DEBUGレベル）を出力するマクロ
+/// デバッグログ(DEBUGレベル)を出力するマクロ
 ///
 /// `format!` 構文をサポートしており、グローバルロガー経由で出力される
 #[macro_export]

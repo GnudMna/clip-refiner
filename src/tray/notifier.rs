@@ -12,7 +12,7 @@ use crate::tray::state::AppState;
 /// 設定に応じて、実行されたモード名や加工後のテキストスニペットを通知内容に含める
 ///
 /// # Arguments
-/// * `state` - アプリケーションの共有状態（通知設定の参照用）
+/// * `state` - アプリケーションの共有状態(通知設定の参照用)
 /// * `mode` - 実行された加工モード
 /// * `processed` - 加工後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
@@ -44,7 +44,7 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `paused` - 新しい一時停止状態 (`true`: 一時停止中, `false`: 監視中)
-/// * `source` - 通知のタイトル（操作元を示す文字列、例: "ショートカット", "設定変更"）
+/// * `source` - 通知のタイトル(操作元を示す文字列、例: "ショートカット", "設定変更")
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
     if settings.enabled && settings.notify_pause {

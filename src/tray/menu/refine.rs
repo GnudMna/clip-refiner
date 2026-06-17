@@ -1,10 +1,10 @@
+use super::{CategoryGroup, RefineMenu, TrayMenu};
+
 use crate::refiner::{RefineCategory, RefineMode};
 
 use anyhow::{Context, Result};
 use strum::IntoEnumIterator;
 use tray_icon::menu::{CheckMenuItem, Submenu};
-
-use super::{CategoryGroup, RefineMenu, TrayMenu};
 
 // ======================================================================
 // 変換モードメニュー

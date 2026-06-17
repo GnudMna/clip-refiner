@@ -19,7 +19,7 @@ use tray_icon::menu::MenuEvent;
 // ======================================================================
 /// アプリケーション全体のコンテキストとメインロジックを管理する構造体
 ///
-/// 各コンポーネント（状態、メニュー、UI、ホットキー、ワーカー）を保持し、
+/// 各コンポーネント(状態、メニュー、UI、ホットキー、ワーカー)を保持し、
 /// イベントループからのメッセージを処理する
 pub struct App {
     /// アプリケーションの共有状態
@@ -32,7 +32,7 @@ pub struct App {
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
     pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
-    /// 最後にセレクタを表示した時刻（連打防止用）
+    /// 最後にセレクタを表示した時刻(連打防止用)
     pub last_selector_show: Instant,
 }
 

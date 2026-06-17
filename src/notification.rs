@@ -14,7 +14,7 @@ use notify_rust::Notification;
 /// 表示に失敗した場合はログへ記録する
 ///
 /// # Arguments
-/// * `summary` - 通知のタイトル（「ClipRefiner - タイトル」の形式で表示される）
+/// * `summary` - 通知のタイトル(「ClipRefiner - タイトル」の形式で表示される)
 /// * `body` - 通知の本文
 pub fn show_notification(summary: &str, body: &str) {
     if let Err(e) = Notification::new()

@@ -88,7 +88,7 @@ impl HotkeyHandler {
     /// 受信したイベントは `proxy` を介してメインのイベントループへ転送される
     ///
     /// # Arguments
-    /// * `proxy` - UIスレッド（イベントループ）へイベントを送信するためのプロキシ
+    /// * `proxy` - UIスレッド(イベントループ)へイベントを送信するためのプロキシ
     pub fn start_event_listener(&self, proxy: EventLoopProxy<AppEvent>) {
         std::thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
@@ -111,7 +111,7 @@ impl HotkeyHandler {
     /// * `menu` - トレイメニュー構造体
     /// * `selector` - セレクタウィンドウのインスタンス
     /// * `control_flow` - イベントループの制御フロー
-    /// * `last_selector_show` - セレクタが最後に表示された時刻（更新用）
+    /// * `last_selector_show` - セレクタが最後に表示された時刻(更新用)
     pub fn handle_event(
         &self,
         event: GlobalHotKeyEvent,

@@ -20,7 +20,7 @@ use arboard::Clipboard;
 /// UI・監視ループからクリップボードワーカーへ送られる操作コマンド
 #[derive(Clone)]
 pub enum ClipboardCommand {
-    /// 指定されたテキストをクリップボードにセットする（履歴からの復元用など）
+    /// 指定されたテキストをクリップボードにセットする(履歴からの復元用など)
     SetText(String),
     /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
@@ -42,7 +42,7 @@ impl std::fmt::Debug for ClipboardCommand {
 ///
 /// 監視世代、ポーリング間隔、イベントトークンの追跡を担当する
 struct MonitorLoopState {
-    /// 現在追跡中の監視世代（0 は監視停止中）
+    /// 現在追跡中の監視世代(0 は監視停止中)
     tracked_generation: u64,
     /// 前回ポーリング監視を実行した時刻
     last_poll_at: Instant,

@@ -11,7 +11,7 @@ use wry::{WebContext, WebViewBuilder};
 // ======================================================================
 // セレクタウィンドウ構造体
 // ======================================================================
-/// クイックセレクタ（モード選択用のコマンドパレット風 UI）を管理する構造体
+/// クイックセレクタ(モード選択用のコマンドパレット風 UI)を管理する構造体
 ///
 /// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画する
 pub struct SelectorWindow {
@@ -31,7 +31,7 @@ impl SelectorWindow {
     ///
     /// # Arguments
     /// * `window` - ベースとなる `tao` ウィンドウ
-    /// * `proxy` - UIスレッド（イベントループ）へメッセージを送信するためのプロキシ
+    /// * `proxy` - UIスレッド(イベントループ)へメッセージを送信するためのプロキシ
     ///
     /// # Returns
     /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返す
@@ -92,7 +92,7 @@ impl SelectorWindow {
     pub fn show(&self, current_mode: RefineMode) {
         self.window.set_visible(true);
         self.window.set_focus();
-        // UI側の初期化（入力フォーカスと現在のモードの反映）
+        // UI側の初期化(入力フォーカスと現在のモードの反映)
         let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
         let script = format!("focusInput({});", mode_id);
         let _ = self.webview.evaluate_script(&script);
@@ -125,7 +125,7 @@ impl SelectorWindow {
 // ======================================================================
 /// セレクタウィンドウを初期化して、非表示状態のインスタンスを作成する
 ///
-/// ウィンドウの各種属性（透明度、フレームなしなど）を設定し、画面中央に配置する
+/// ウィンドウの各種属性(透明度、フレームなしなど)を設定し、画面中央に配置する
 ///
 /// # Arguments
 /// * `event_loop` - ウィンドウ作成用のイベントループ

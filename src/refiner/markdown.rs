@@ -40,9 +40,9 @@ pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// Excel(TSV)形式のテキストをMarkdownの表形式へ変換する
 ///
-/// タブ区切り（TSV）のテキストを解析し、Markdownのテーブル形式に変換する
-/// セル内の改行は `<br>` タグに置換され、パイプ記号（`|`）はエスケープされる
-/// 1行目はヘッダーとして扱われます
+/// タブ区切り(TSV)のテキストを解析し、Markdownのテーブル形式に変換する
+/// セル内の改行は `<br>` タグに置換され、パイプ記号(`|`)はエスケープされる
+/// 1行目はヘッダーとして扱う
 ///
 /// # Arguments
 /// * `text` - 変換対象のTSVテキスト
@@ -93,7 +93,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     }
     markdown.push('\n');
 
-    // 区切り行（`|---|`）を出力
+    // 区切り行(`|---|`)を出力
     markdown.push('|');
     for _ in 0..max_cols {
         markdown.push_str("---|");
@@ -145,14 +145,14 @@ mod tests {
         assert!(output.contains("<em>italic</em>"));
     }
 
-    /// 取り消し線の変換（ENABLE_STRIKETHROUGH）
+    /// 取り消し線の変換(ENABLE_STRIKETHROUGH)
     #[test]
     fn test_markdown_to_html_strikethrough() {
         let output = markdown_to_html("~~strike~~");
         assert!(output.contains("<del>strike</del>"));
     }
 
-    /// テーブルの変換（ENABLE_TABLES）
+    /// テーブルの変換(ENABLE_TABLES)
     #[test]
     fn test_markdown_to_html_table() {
         let input = "| A | B |\n|---|---|\n| 1 | 2 |";
