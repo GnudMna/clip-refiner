@@ -53,7 +53,8 @@ impl App {
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
         let state = Arc::new(AppState::new(proxy.clone()));
         let menu = TrayMenu::build(&state)?;
-        let hotkey_handler = HotkeyHandler::new()?;
+        let hotkeys = state.with_config(|c| c.hotkeys.clone());
+        let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
         let selector = init_selector(event_loop, proxy.clone())?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 

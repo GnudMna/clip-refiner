@@ -21,9 +21,6 @@ pub enum AppEvent {
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
 
-/// 履歴の最大保持数
-pub const HISTORY_LIMIT: usize = 10;
-
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
 /// 1ループあたり `config` RwLock の取得を1回に削減するために使用する
@@ -193,13 +190,14 @@ impl AppState {
     /// クリップボード履歴に新しいテキストを追加する
     ///
     /// 空文字やトリム後に空になる文字列は無視される
-    /// 既にある文字列はリストの先頭に移動し、最大保持数（ `HISTORY_LIMIT` ）を超えた分は削除される
+    /// 既にある文字列はリストの先頭に移動し、設定の `history_limit` を超えた分は削除される
     /// 追加完了後、UIスレッドへ履歴更新イベントを通知する
     pub fn add_to_history(&self, text: String) {
         if text.trim().is_empty() {
             return;
         }
 
+        let limit = self.with_config(|c| c.history_limit);
         let mut history = self.history.lock_ignore_poison();
 
         // 二重登録防止: すでに存在すれば削除して最上位へ
@@ -209,9 +207,8 @@ impl AppState {
 
         history.insert(0, text);
 
-        // 最大10件
-        if history.len() > HISTORY_LIMIT {
-            history.truncate(HISTORY_LIMIT);
+        if history.len() > limit {
+            history.truncate(limit);
         }
 
         let _ = self.proxy.send_event(AppEvent::RefreshHistory);
@@ -224,7 +221,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::MonitorMode;
+    use crate::config::{AppConfig, MonitorMode};
     use std::sync::atomic::Ordering;
     use tao::event_loop::EventLoopBuilder;
     #[cfg(windows)]
@@ -238,20 +235,11 @@ mod tests {
         #[cfg(not(windows))]
         let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
 
+        let mut config = AppConfig::default();
+        config.mode = RefineMode::Trim;
+
         AppState {
-            config: RwLock::new(AppConfig {
-                mode: RefineMode::Trim,
-                is_paused: false,
-                monitor_mode: MonitorMode::Polling,
-                interval_ms: 1000,
-                history_enabled: false,
-                notification_settings: crate::config::NotificationSettings {
-                    enabled: false,
-                    notify_mode: true,
-                    notify_result: true,
-                    notify_pause: true,
-                },
-            }),
+            config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
             history: Mutex::new(Vec::new()),
@@ -348,6 +336,7 @@ mod tests {
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
         let state = create_test_state();
+        let limit = crate::consts::DEFAULT_HISTORY_LIMIT;
 
         // 空白は無視
         state.add_to_history("   ".to_string());
@@ -362,15 +351,12 @@ mod tests {
         assert_eq!(h[1], "second");
         assert_eq!(h.len(), 2);
 
-        // HISTORY_LIMIT を超えた分は切り捨てられる
-        for i in 0..(HISTORY_LIMIT + 5) {
+        // history_limit を超えた分は切り捨てられる
+        for i in 0..(limit + 5) {
             state.add_to_history(format!("item-{i}"));
         }
-        assert_eq!(state.get_history().len(), HISTORY_LIMIT);
-        assert_eq!(
-            state.get_history()[0],
-            format!("item-{}", HISTORY_LIMIT + 4)
-        );
+        assert_eq!(state.get_history().len(), limit);
+        assert_eq!(state.get_history()[0], format!("item-{}", limit + 4));
 
         // clear_history で履歴が空になること
         state.clear_history();
