@@ -5,13 +5,13 @@ use std::borrow::Cow;
 // ======================================================================
 /// テキスト全体から使用されている改行コードを判定する
 ///
-/// テキスト内に `\r\n` が含まれている場合は CRLF ("\r\n") を返し、そうでない場合は LF ("\n") を返します。
+/// テキスト内に `\r\n` が含まれている場合は CRLF ("\r\n") を返し、そうでない場合は LF ("\n") を返す
 ///
 /// # Arguments
 /// * `text` - 判定対象のテキスト
 ///
 /// # Returns
-/// * `&str` - 検出された改行コード（"\r\n" または "\n"）。
+/// * `&str` - 検出された改行コード（"\r\n" または "\n"）
 pub fn detect_line_ending(text: &str) -> &str {
     if text.contains("\r\n") { "\r\n" } else { "\n" }
 }
@@ -21,15 +21,15 @@ pub fn detect_line_ending(text: &str) -> &str {
 // ======================================================================
 /// 文字列を改行コードで分割し、各行に対して処理を行う共通ユーティリティ
 ///
-/// 改行形式を自動判別し、各行に対してクロージャ `f` を適用します。
-/// 少なくとも1つの行で変更があった場合のみ、新しい文字列を構築して返します。
+/// 改行形式を自動判別し、各行に対してクロージャ `f` を適用する
+/// 少なくとも1つの行で変更があった場合のみ、新しい文字列を構築して返す
 ///
 /// # Arguments
 /// * `text` - 処理対象の文字列
 /// * `f` - 各行に対する処理。変更があった場合は `Some(Cow::Owned)`、なかった場合は `None` または `Some(Cow::Borrowed)` を返す
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 少なくとも1行で変更があった場合は `Cow::Owned(結合後のテキスト)` を返し、そうでない場合は `Cow::Borrowed(text)` を返します。
+/// * `Cow<'_, str>` - 少なくとも1行で変更があった場合は `Cow::Owned(結合後のテキスト)` を返し、そうでない場合は `Cow::Borrowed(text)` を返す
 pub fn process_lines<'a, F>(text: &'a str, f: F) -> Cow<'a, str>
 where
     F: Fn(&str) -> Option<Cow<'_, str>>,
@@ -78,13 +78,18 @@ where
 mod tests {
     use super::*;
 
+    /// CRLF / LF の改行コード判定
     #[test]
     fn test_detect_line_ending() {
+        // LF
         assert_eq!(detect_line_ending("line1\nline2"), "\n");
+        // CRLF
         assert_eq!(detect_line_ending("line1\r\nline2"), "\r\n");
+        // 改行なし
         assert_eq!(detect_line_ending("no newline"), "\n");
     }
 
+    /// process_lines の行単位変換と Borrowed 返却
     #[test]
     fn test_process_lines() {
         let input = "a\nb\nc";

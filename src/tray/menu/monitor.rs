@@ -12,10 +12,10 @@ impl TrayMenu {
     /// 監視方式メニューを構築する
     ///
     /// # Arguments
-    /// * `current_monitor_mode` - 現在選択されている監視方式。
+    /// * `current_monitor_mode` - 現在選択されている監視方式
     ///
     /// # Returns
-    /// 成功した場合は `MonitorMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `MonitorMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_monitor_menu(current_monitor_mode: MonitorMode) -> Result<MonitorMenu> {
         let polling_item = CheckMenuItem::new(
             "ポーリング",
@@ -61,7 +61,7 @@ impl TrayMenu {
     /// * `monitor_mode` - 現在の監視方式（イベントモード時はメニューを無効化するため）
     ///
     /// # Returns
-    /// 成功した場合は `IntervalMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `IntervalMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_interval_menu(
         current_interval: u64,
         monitor_mode: MonitorMode,

@@ -6,27 +6,27 @@ use std::path::Path;
 // ======================================================================
 /// パスからベースネーム（ファイル名またはディレクトリ名）を抽出する
 ///
-/// 複数行の入力に対応しており、各行をパスとして処理します。
-/// 引用符で囲まれたパスも解析可能です。
+/// 複数行の入力に対応しており、各行をパスとして処理する
+/// 引用符で囲まれたパスも解析可能
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - ベースネームが抽出されたテキスト。変更がない行はそのまま維持されます。
+/// * `Cow<'_, str>` - ベースネームが抽出されたテキスト。変更がない行はそのまま維持される。
 pub fn extract_basename(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| extract_single_basename(line).map(Cow::Owned))
 }
 
 /// パスからベースネームを抽出し、ダブルクォーテーションで囲んで返す
 ///
-/// 複数行の入力に対応しており、抽出結果を引用符（"..."）で囲みます。
+/// 複数行の入力に対応しており、抽出結果を引用符（"..."）で囲みます
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - ベースネームが抽出（引用符付き）されたテキスト。
+/// * `Cow<'_, str>` - ベースネームが抽出（引用符付き）されたテキスト
 pub fn extract_basename_quoted(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
         extract_single_basename(line).map(|basename| Cow::Owned(format!("\"{}\"", basename)))
@@ -38,14 +38,14 @@ pub fn extract_basename_quoted(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 行の前後にあるダブルクォーテーションを削除する
 ///
-/// 入力がパスらしい形式であり、かつ引用符で囲まれている場合にのみ削除を行います。
-/// 複数行の入力に対応しています。
+/// 入力がパスらしい形式であり、かつ引用符で囲まれている場合にのみ削除を行う
+/// 複数行の入力に対応している
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 引用符が削除されたテキスト。
+/// * `Cow<'_, str>` - 引用符が削除されたテキスト
 pub fn remove_path_quotes(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
@@ -64,14 +64,14 @@ pub fn remove_path_quotes(text: &str) -> Cow<'_, str> {
 
 /// 行の前後にダブルクォーテーションを付与する
 ///
-/// 入力がパスらしい形式であり、かつ引用符で囲まれていない場合にのみ付与を行います。
-/// 複数行の入力に対応しています。
+/// 入力がパスらしい形式であり、かつ引用符で囲まれていない場合にのみ付与を行う
+/// 複数行の入力に対応している
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 引用符が付与されたテキスト。
+/// * `Cow<'_, str>` - 引用符が付与されたテキスト
 pub fn add_path_quotes(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
@@ -89,14 +89,14 @@ pub fn add_path_quotes(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// パス内のバックスラッシュをスラッシュに変換する
 ///
-/// Windows形式のパス区切り文字をUnix/Web形式に変換します。
-/// 複数行の入力に対応しています。
+/// Windows形式のパス区切り文字をUnix/Web形式に変換する
+/// 複数行の入力に対応している
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - スラッシュ区切りに変換されたテキスト。
+/// * `Cow<'_, str>` - スラッシュ区切りに変換されたテキスト
 pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
@@ -112,14 +112,14 @@ pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
 
 /// パス内のスラッシュをバックスラッシュに変換する
 ///
-/// Unix形式のパス区切り文字をWindows形式に変換します。
-/// 複数行の入力に対応しています。
+/// Unix形式のパス区切り文字をWindows形式に変換する
+/// 複数行の入力に対応している
 ///
 /// # Arguments
 /// * `text` - パスを含む文字列（複数行可）
 ///
 /// # Returns
-/// * `Cow<'_, str>` - バックスラッシュ区切りに変換されたテキスト。
+/// * `Cow<'_, str>` - バックスラッシュ区切りに変換されたテキスト
 pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
         let trimmed = line.trim();
@@ -139,14 +139,14 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 /// 入力がパスらしい形式か判定する（簡易版）
 ///
 /// スラッシュ、バックスラッシュ、またはWindowsドライブレター形式（例: `C:\`, `D:/`）が
-/// 含まれているかを確認します。単独のコロン（時刻文字列・URLポート番号・YAMLキーなど）は
-/// パスとみなしません。
+/// 含まれているかを確認する。単独のコロン（時刻文字列・URLポート番号・YAMLキーなど）は
+/// パスとみなしない
 ///
 /// # Arguments
 /// * `text` - 判定対象の文字列
 ///
 /// # Returns
-/// * `bool` - パスらしい場合は `true`、そうでない場合は `false`。
+/// * `bool` - パスらしい場合は `true`、そうでない場合は `false`
 fn is_path_like_raw(text: &str) -> bool {
     if text.contains('/') || text.contains('\\') {
         return true;
@@ -166,7 +166,6 @@ fn is_path_like_raw(text: &str) -> bool {
 /// * `Option<String>` - ベースネームが抽出できた場合は `Some(ベースネーム)` を返す
 fn extract_single_basename(line: &str) -> Option<String> {
     let trimmed = line.trim();
-    // 引用符があれば外す
     let path_str = if trimmed.starts_with('"') && trimmed.ends_with('"') {
         trimmed
             .strip_prefix('"')
@@ -176,7 +175,6 @@ fn extract_single_basename(line: &str) -> Option<String> {
         trimmed
     };
 
-    // パスらしいかチェック
     if !is_path_like_raw(path_str) {
         return None;
     }

@@ -21,7 +21,7 @@ use tray_icon::menu::MenuEvent;
 /// システムトレイアイコンのメニューから受信したイベントを処理する
 ///
 /// クリックされたメニュー項目の ID に基づいて、アプリケーション設定の変更、
-/// 履歴操作、加工モードの切り替え、またはプログラムの終了などを実行します。
+/// 履歴操作、加工モードの切り替え、またはプログラムの終了などを実行する
 ///
 /// # Arguments
 /// * `event` - 受信したメニューイベント
@@ -53,7 +53,7 @@ pub fn handle_menu_event(
 
 /// UIウィンドウ（セレクタ）に関連するイベントを処理する
 ///
-/// 主にフォーカス喪失時の自動非表示処理などを行います。
+/// 主にフォーカス喪失時の自動非表示処理などを行う
 ///
 /// # Arguments
 /// * `event` - 受信したウィンドウイベント
@@ -87,7 +87,7 @@ pub fn handle_window_event(
 /// * `control_flow` - イベントループの制御フロー
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_app_control(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -127,7 +127,7 @@ fn handle_app_control(
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -169,7 +169,7 @@ fn handle_history_event(
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_notification_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -215,7 +215,7 @@ fn handle_notification_event(
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -241,7 +241,7 @@ fn handle_refine_mode_event(
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_monitor_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -271,7 +271,7 @@ fn handle_monitor_event(
 // ======================================================================
 /// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
-/// 必要に応じてクリップボードワーカーに加工命令を送信します。
+/// 必要に応じてクリップボードワーカーに加工命令を送信する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態

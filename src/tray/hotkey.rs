@@ -21,7 +21,7 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 /// グローバルホットキーの登録と管理を行う構造体
 ///
 /// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
-/// モード選択UIの表示や設定の切り替えなどを実行します。
+/// モード選択UIの表示や設定の切り替えなどを実行する
 pub struct HotkeyHandler {
     /// ホットキーマネージャーのインスタンス保持用
     _manager: GlobalHotKeyManager,
@@ -42,7 +42,7 @@ impl HotkeyHandler {
     /// ホットキーハンドラを初期化し、各種ショートカットをシステムに登録する
     ///
     /// # Returns
-    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返します。
+    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返す。
     pub fn new() -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
         let selector_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS);
@@ -73,7 +73,7 @@ impl HotkeyHandler {
 impl HotkeyHandler {
     /// ホットキーイベントを受信するためのバックグラウンドスレッドを開始する
     ///
-    /// 受信したイベントは `proxy` を介してメインのイベントループへ転送されます。
+    /// 受信したイベントは `proxy` を介してメインのイベントループへ転送される
     ///
     /// # Arguments
     /// * `proxy` - UIスレッド（イベントループ）へイベントを送信するためのプロキシ

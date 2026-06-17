@@ -1,3 +1,7 @@
+//! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
+//!
+//! 変換モード、履歴、監視設定、通知などのサブメニューを組み立てます
+
 use std::sync::Mutex;
 
 use super::state::AppState;
@@ -42,10 +46,10 @@ pub struct RefineMenu {
 }
 
 impl RefineMenu {
-    /// すべてのモードアイテム（CheckMenuItem と RefineMode のペア）を平坦化したイテレータとして返す。
+    /// すべてのモードアイテム（CheckMenuItem と RefineMode のペア）を平坦化したイテレータとして返す
     ///
     /// # Returns
-    /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ。
+    /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ
     pub fn all_items(&self) -> impl Iterator<Item = &(CheckMenuItem, RefineMode)> {
         self.normal_items
             .iter()
@@ -99,7 +103,7 @@ pub struct NotificationMenu {
 
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体
 pub struct TrayMenu {
-    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅します。
+    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する。
     pub _tray_icon: TrayIcon,
     /// 終了項目
     pub quit_item: MenuItem,
@@ -123,16 +127,16 @@ pub struct TrayMenu {
 // メニュー全体構築
 // ======================================================================
 impl TrayMenu {
-    /// トレイアイコンのメニューを構築する。
+    /// トレイアイコンのメニューを構築する
     ///
     /// 現在のアプリケーション状態に基づいて、各種メニュー項目（変換モード、監視方式、監視周期など）を作成し、
-    /// トレイアイコンに設定する。
+    /// トレイアイコンに設定する
     ///
     /// # Arguments
     /// * `state` - 現在のアプリケーション状態。メニューの初期状態の決定に使用される。
     ///
     /// # Returns
-    /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す。
+    /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す
     pub fn build(state: &AppState) -> Result<Self> {
         let config = state.with_config(|c| c.clone());
 

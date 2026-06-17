@@ -40,7 +40,7 @@ impl std::fmt::Debug for ClipboardCommand {
 // ======================================================================
 /// ワーカースレッド内でクリップボード監視を行うための状態
 ///
-/// 監視世代、ポーリング間隔、イベントトークンの追跡を担当します。
+/// 監視世代、ポーリング間隔、イベントトークンの追跡を担当する
 struct MonitorLoopState {
     /// 現在追跡中の監視世代（0 は監視停止中）
     tracked_generation: u64,
@@ -56,7 +56,7 @@ impl MonitorLoopState {
     /// 新しい監視ループ状態を生成する
     ///
     /// # Returns
-    /// * `Self` - 監視停止状態の初期インスタンス。
+    /// * `Self` - 監視停止状態の初期インスタンス
     fn new() -> Self {
         Self {
             tracked_generation: 0,
@@ -69,7 +69,7 @@ impl MonitorLoopState {
     /// 監視世代の切り替え時にベースラインを再同期する
     ///
     /// 現在のクリップボード本文を観測済みとして記録し、イベント監視用トークンと
-    /// ポーリング用タイマーをリセットします。
+    /// ポーリング用タイマーをリセットする
     ///
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
@@ -86,14 +86,14 @@ impl MonitorLoopState {
 
     /// 設定と環境に応じた実効監視モードを返す
     ///
-    /// イベント監視が利用できない場合はポーリング方式にフォールバックします。
+    /// イベント監視が利用できない場合はポーリング方式にフォールバックする
     ///
     /// # Arguments
     /// * `watcher` - クリップボード変更検知用ウォッチャー
     /// * `state` - アプリケーションの共有状態
     ///
     /// # Returns
-    /// * `MonitorMode` - 実際に使用する監視方式。
+    /// * `MonitorMode` - 実際に使用する監視方式
     fn effective_mode(&self, watcher: &ChangeWatcher, state: &Arc<AppState>) -> MonitorMode {
         match state.with_config(|c| c.monitor_mode) {
             MonitorMode::Event if watcher.is_supported() => MonitorMode::Event,
@@ -105,14 +105,14 @@ impl MonitorLoopState {
     /// コマンド待ちのタイムアウトを計算する
     ///
     /// 監視が停止中の場合は短い間隔で再確認し、
-    /// 監視中はポーリング間隔またはイベント監視間隔に応じた値を返します。
+    /// 監視中はポーリング間隔またはイベント監視間隔に応じた値を返す
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
     /// * `watcher` - クリップボード変更検知用ウォッチャー
     ///
     /// # Returns
-    /// * `Duration` - `recv_timeout` に渡す待機時間。
+    /// * `Duration` - `recv_timeout` に渡す待機時間
     fn recv_timeout(&self, state: &Arc<AppState>, watcher: &ChangeWatcher) -> Duration {
         let generation = state.monitor_generation.load(Ordering::SeqCst);
         if state.with_config(|c| c.is_paused)
@@ -136,7 +136,7 @@ impl MonitorLoopState {
     /// 監視ループの1ティックを実行する
     ///
     /// 実効監視モードに応じてクリップボードの変更を検知し、
-    /// 必要に応じて加工処理を委譲します。
+    /// 必要に応じて加工処理を委譲する
     ///
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
@@ -185,7 +185,7 @@ impl MonitorLoopState {
 /// クリップボード操作と監視を単一スレッドで処理するワーカーを開始する
 ///
 /// すべてのクリップボード読み書きはこのスレッドに集約され、
-/// UI からのコマンドと監視ループが `recv_timeout` で交互に処理されます。
+/// UI からのコマンドと監視ループが `recv_timeout` で交互に処理される
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -203,7 +203,7 @@ pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> 
 /// クリップボードワーカースレッドのメインループを実行する
 ///
 /// クリップボードの初期化、変更検知ウォッチャーの生成、監視ループ状態の管理を行い、
-/// コマンド受信と監視処理を交互に実行します。
+/// コマンド受信と監視処理を交互に実行する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -243,14 +243,14 @@ fn run_worker_loop(state: Arc<AppState>, rx: Receiver<ClipboardCommand>) {
 /// 監視ループの1ティックを実行するかどうかを判定する
 ///
 /// 監視が停止中の場合はfalseを返し、
-/// 監視中は監視世代が一致している場合はtrueを返します。
+/// 監視中は監視世代が一致している場合はtrueを返す
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `monitor` - 監視ループ状態
 ///
 /// # Returns
-/// * `bool` - 監視ループの1ティックを実行するかどうか。
+/// * `bool` - 監視ループの1ティックを実行するかどうか
 fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLoopState) -> bool {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
     !state.with_config(|c| c.is_paused)
@@ -261,7 +261,7 @@ fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLoopState) ->
 /// 監視世代を同期する
 ///
 /// 現在のクリップボード本文を観測済みとして記録し、イベント監視用トークンと
-/// ポーリング用タイマーをリセットします。
+/// ポーリング用タイマーをリセットする
 ///
 /// # Arguments
 /// * `monitor` - 監視ループ状態
@@ -289,7 +289,7 @@ fn sync_monitor_generation(
 
 /// コマンドを処理する
 ///
-/// クリップボードの設定や加工を行い、成功時に通知を表示します。
+/// クリップボードの設定や加工を行い、成功時に通知を表示する
 ///
 /// # Arguments
 /// * `clipboard` - クリップボード操作用のインスタンス

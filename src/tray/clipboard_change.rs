@@ -17,6 +17,9 @@ impl ChangeWatcher {
     }
 
     /// イベント監視が利用可能かどうか
+    ///
+    /// # Returns
+    /// * `bool` - 現在のプラットフォームでイベント監視が利用可能な場合は `true`
     pub fn is_supported(&self) -> bool {
         #[cfg(windows)]
         {
@@ -38,7 +41,7 @@ impl ChangeWatcher {
 
     /// クリップボード変更を表すトークンを取得する
     ///
-    /// 本文を読み取らずに呼び出せる軽量な値です。変更がない間は同じ値を返します。
+    /// 本文を読み取らずに呼び出せる軽量な値。変更がない間は同じ値を返す。
     pub fn token(&self) -> Option<u64> {
         #[cfg(windows)]
         {
@@ -90,6 +93,10 @@ struct LinuxWatcher {
 
 #[cfg(target_os = "linux")]
 impl LinuxWatcher {
+    /// X11 CLIPBOARD 選択オーナーを監視するウォッチャーを生成する
+    ///
+    /// # Returns
+    /// * `Result<Self, x11rb::errors::ConnectionError>` - 接続に成功した場合はウォッチャー、失敗した場合はエラー
     fn new() -> Result<Self, x11rb::errors::ConnectionError> {
         use x11rb::connection::Connection;
         use x11rb::rust_connection::RustConnection;
@@ -103,6 +110,10 @@ impl LinuxWatcher {
         })
     }
 
+    /// 選択オーナーウィンドウ ID をトークンとして返す
+    ///
+    /// # Returns
+    /// * `Option<u64>` - クリップボード選択のオーナーウィンドウ ID。取得失敗時は `None`
     fn token(&self) -> Option<u64> {
         use x11rb::connection::Connection;
 

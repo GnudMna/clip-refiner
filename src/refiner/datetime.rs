@@ -50,8 +50,10 @@ pub fn datetime_string_to_timestamp(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
+    /// 有効な Unix タイムスタンプを日時文字列に変換できること
     #[test]
     fn test_timestamp_to_datetime_string_success() {
+        // ローカルタイムゾーンでの期待値を算出
         let dt: DateTime<Local> = DateTime::from_timestamp(1672531200, 0)
             .unwrap()
             .with_timezone(&Local);
@@ -59,6 +61,7 @@ mod tests {
         assert_eq!(timestamp_to_datetime_string("1672531200"), expected_str);
     }
 
+    /// 不正なタイムスタンプは元の文字列を返すこと
     #[test]
     fn test_timestamp_to_datetime_string_invalid() {
         assert_eq!(
@@ -67,6 +70,7 @@ mod tests {
         );
     }
 
+    /// 日時文字列を Unix タイムスタンプに変換できること
     #[test]
     fn test_datetime_string_to_timestamp_success() {
         let naive_dt =
