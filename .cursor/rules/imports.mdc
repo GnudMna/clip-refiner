@@ -1,7 +1,7 @@
 ---
 description: Rust ソースコードの use 文の記述規約
 globs: **/*.rs
-alwaysApply: false
+alwaysApply: true
 ---
 
 # use 文規約

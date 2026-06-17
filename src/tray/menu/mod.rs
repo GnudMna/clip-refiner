@@ -81,8 +81,8 @@ pub struct HistoryMenu {
     pub enabled_item: CheckMenuItem,
     /// 履歴を全削除する項目
     pub clear_item: MenuItem,
-    /// 過去のテキスト項目(表示用のIDと実データ)のリスト。メニュー更新時に利用される
-    pub records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
+    /// 過去のテキスト項目(表示用の ID とストア内インデックス)のリスト。メニュー更新時に利用される
+    pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
 }
 
 /// 通知設定に関連するメニューの構成

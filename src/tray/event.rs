@@ -148,8 +148,10 @@ fn handle_history_event(
 
     let menu_records = menu.history.records.lock_ignore_poison();
 
-    if let Some((_, text)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
-        let _ = clipboard_tx.send(ClipboardCommand::SetText(text.clone()));
+    if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
+        if let Some(text) = state.get_history_entry(*index) {
+            let _ = clipboard_tx.send(ClipboardCommand::SetText(text));
+        }
         return true;
     }
 

@@ -1,6 +1,7 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
 use crate::config::AppConfig;
+use crate::history_store::EncryptedHistoryStore;
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
@@ -82,7 +83,7 @@ impl<T> RwLockExt<T> for RwLock<T> {
 // ======================================================================
 /// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
-/// 設定、クリップボードの最終処理内容、履歴などを保持する
+/// 設定、クリップボードの最終処理内容、暗号化履歴などを保持する
 pub struct AppState {
     /// 永続化設定データ
     pub config: RwLock<AppConfig>,
@@ -90,8 +91,8 @@ pub struct AppState {
     pub monitor_generation: AtomicU64,
     /// 二重加工防止用の監視状態
     processed_state: Mutex<ProcessedState>,
-    /// クリップボードの履歴リスト
-    pub history: Mutex<Vec<String>>,
+    /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
+    history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
 }
@@ -110,7 +111,7 @@ impl AppState {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
-            history: Mutex::new(Vec::new()),
+            history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
         }
     }
@@ -177,39 +178,48 @@ impl AppState {
         });
     }
 
-    /// 履歴を取得する
+    /// 履歴を復号してすべて取得する
+    ///
+    /// メニュー表示など、一時的に平文が必要な場合に使用する
+    ///
+    /// # Returns
+    /// * `Vec<String>` - 新しい順に並んだ復号済み履歴
     pub fn get_history(&self) -> Vec<String> {
-        self.history.lock_ignore_poison().clone()
+        self.history_store.lock_ignore_poison().entries_decrypted()
+    }
+
+    /// 指定インデックスの履歴を復号して取得する
+    ///
+    /// # Arguments
+    /// * `index` - 履歴ストア内のインデックス (0 が最新)
+    ///
+    /// # Returns
+    /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
+    pub fn get_history_entry(&self, index: usize) -> Option<String> {
+        self.history_store.lock_ignore_poison().entry_at(index)
     }
 
     /// 履歴をクリアする
     pub fn clear_history(&self) {
-        self.history.lock_ignore_poison().clear();
+        self.history_store.lock_ignore_poison().clear();
     }
 
     /// クリップボード履歴に新しいテキストを追加する
     ///
     /// 空文字やトリム後に空になる文字列は無視される
     /// 既にある文字列はリストの先頭に移動し、設定の `history_limit` を超えた分は削除される
+    /// 本文はメモリ上で暗号化して保持し、再起動時には破棄される
     /// 追加完了後、UIスレッドへ履歴更新イベントを通知する
+    ///
+    /// # Arguments
+    /// * `text` - 履歴へ追加するクリップボード本文
     pub fn add_to_history(&self, text: String) {
         if text.trim().is_empty() {
             return;
         }
 
         let limit = self.with_config(|c| c.history_limit);
-        let mut history = self.history.lock_ignore_poison();
-
-        // 二重登録防止: すでに存在すれば削除して最上位へ
-        if let Some(pos) = history.iter().position(|x| x == &text) {
-            history.remove(pos);
-        }
-
-        history.insert(0, text);
-
-        if history.len() > limit {
-            history.truncate(limit);
-        }
+        self.history_store.lock_ignore_poison().add(text, limit);
 
         let _ = self.proxy.send_event(AppEvent::RefreshHistory);
     }
@@ -240,7 +250,7 @@ pub(crate) fn test_app_state() -> AppState {
         config: RwLock::new(config),
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
-        history: Mutex::new(Vec::new()),
+        history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
     }
 }
