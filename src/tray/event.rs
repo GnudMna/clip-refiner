@@ -105,10 +105,8 @@ fn handle_app_control(
         spawn_monitor_thread(Arc::clone(state));
         true
     } else if id == menu.shortcut_list_item.id() {
-        notification::show_notification(
-            "ショートカット一覧",
-            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
-        );
+        let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
+        notification::show_notification("ショートカット一覧", &body);
         true
     } else {
         false
