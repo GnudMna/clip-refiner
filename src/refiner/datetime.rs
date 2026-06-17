@@ -129,6 +129,15 @@ mod tests {
         assert_eq!(datetime_string_to_timestamp(&sample), expected);
     }
 
+    /// 不正な日時文字列は元の文字列を返すこと
+    #[test]
+    fn test_datetime_string_to_timestamp_invalid() {
+        assert_eq!(
+            datetime_string_to_timestamp("not-a-datetime"),
+            "not-a-datetime"
+        );
+    }
+
     /// ローカルタイムゾーンでタイムスタンプと日時の往復変換が一致すること
     #[test]
     fn test_local_roundtrip() {

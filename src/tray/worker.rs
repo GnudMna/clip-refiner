@@ -331,3 +331,115 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
         },
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::MonitorMode;
+    use crate::tray::clipboard_change::ChangeWatcher;
+    use crate::tray::state::test_app_state;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    fn active_monitor(generation: u64) -> MonitorLoopState {
+        let mut monitor = MonitorLoopState::new();
+        monitor.tracked_generation = generation;
+        monitor
+    }
+
+    /// 監視中かつ世代が一致する場合はティックを実行すること
+    #[test]
+    fn should_run_monitor_tick_when_active() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.is_paused = false);
+        state.monitor_generation.store(2, Ordering::SeqCst);
+
+        let monitor = active_monitor(2);
+        assert!(should_run_monitor_tick(&state, &monitor));
+    }
+
+    /// 一時停止中はティックを実行しないこと
+    #[test]
+    fn should_not_run_monitor_tick_when_paused() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.is_paused = true);
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        assert!(!should_run_monitor_tick(&state, &monitor));
+    }
+
+    /// 監視世代が 0 の場合はティックを実行しないこと
+    #[test]
+    fn should_not_run_monitor_tick_when_generation_zero() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.is_paused = false);
+
+        let monitor = active_monitor(0);
+        assert!(!should_run_monitor_tick(&state, &monitor));
+    }
+
+    /// 追跡中の世代と不一致の場合はティックを実行しないこと
+    #[test]
+    fn should_not_run_monitor_tick_when_generation_mismatch() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.is_paused = false);
+        state.monitor_generation.store(2, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        assert!(!should_run_monitor_tick(&state, &monitor));
+    }
+
+    /// 一時停止中は recv_timeout が短い間隔を返すこと
+    #[test]
+    fn recv_timeout_is_short_when_paused() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = true;
+            c.monitor_mode = MonitorMode::Polling;
+            c.interval_ms = 5000;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        let watcher = ChangeWatcher::new();
+        assert_eq!(
+            monitor.recv_timeout(&state, &watcher),
+            Duration::from_millis(100)
+        );
+    }
+
+    /// 設定が Polling の場合は実効監視モードも Polling であること
+    #[test]
+    fn effective_mode_is_polling_when_configured() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
+
+        let monitor = MonitorLoopState::new();
+        let watcher = ChangeWatcher::new();
+        assert_eq!(
+            monitor.effective_mode(&watcher, &state),
+            MonitorMode::Polling
+        );
+    }
+
+    /// Event 設定でもウォッチャー非対応時は Polling にフォールバックすること
+    #[test]
+    fn effective_mode_falls_back_when_event_unsupported() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
+
+        let monitor = MonitorLoopState::new();
+        let watcher = ChangeWatcher::new();
+        let effective = monitor.effective_mode(&watcher, &state);
+
+        if watcher.is_supported() {
+            assert_eq!(effective, MonitorMode::Event);
+        } else {
+            assert_eq!(effective, MonitorMode::Polling);
+        }
+    }
+}

@@ -84,4 +84,21 @@ mod tests {
         let input = "a: 1\n  b: 2";
         assert_eq!(yaml_to_json(input), input);
     }
+
+    /// 有効な YAML をキー順序を維持した JSON に変換できること
+    #[test]
+    fn test_yaml_to_json_preserve_order_valid() {
+        let input = "b: 1\na: 2\n";
+        let output = yaml_to_json_preserve_order(input);
+        let b_pos = output.find("\"b\"").expect("b キーが含まれる");
+        let a_pos = output.find("\"a\"").expect("a キーが含まれる");
+        assert!(b_pos < a_pos, "YAML のキー順序が維持されていない");
+    }
+
+    /// 不正な YAML (キー順序保持版) は元の文字列を返すこと
+    #[test]
+    fn test_yaml_to_json_preserve_order_invalid() {
+        let input = "a: 1\n  b: 2";
+        assert_eq!(yaml_to_json_preserve_order(input), input);
+    }
 }
