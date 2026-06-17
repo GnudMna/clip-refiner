@@ -27,8 +27,8 @@ use strum::{EnumIter, EnumMessage, IntoEnumIterator, IntoStaticStr};
 // ======================================================================
 /// クリップボードのテキストを加工する各モードの定義
 ///
-/// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応している
-/// `strum` マクロを使用して UI 表示用のラベルを保持しています
+/// 各バリアントは特定のテキスト加工処理(エンコード、デコード、整形、変換など)に対応している
+/// `strum` マクロを使用して UI 表示用のラベルを保持している
 /// カテゴリへの所属は `RefineMode::category()` で定義する
 #[derive(
     Copy,
@@ -120,11 +120,11 @@ pub enum RefineMode {
     #[value(help = "正規表現のアンエスケープ")]
     #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
-    /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
+    /// JSON形式をインデント整形する(キーの順序はパース時に不定となる)
     #[value(help = "JSON形式を整形(キー順序不同)")]
     #[strum(message = "JSON整形(キー順序不同)")]
     JsonFormat,
-    /// JSON形式をインデント整形する（元のキー順序を維持する）
+    /// JSON形式をインデント整形する(元のキー順序を維持する)
     #[value(help = "JSON形式を整形(キー順序保持)")]
     #[strum(message = "JSON整形(キー順序保持)")]
     JsonFormatPreserveOrder,
@@ -132,7 +132,7 @@ pub enum RefineMode {
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     #[strum(message = "YAML→JSON(キー順序不同)")]
     YamlToJson,
-    /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
+    /// YAML形式をJSON形式へ変換する(元のキー順序を維持する)
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     #[strum(message = "YAML→JSON(キー順序保持)")]
     YamlToJsonPreserveOrder,
@@ -140,7 +140,7 @@ pub enum RefineMode {
     #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
     #[strum(message = "JSON→YAML(キー順序不同)")]
     JsonToYaml,
-    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
+    /// JSON形式をYAML形式へ変換する(元のキー順序を維持する)
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     #[strum(message = "JSON→YAML(キー順序保持)")]
     JsonToYamlPreserveOrder,
@@ -160,11 +160,11 @@ pub enum RefineMode {
     #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
     #[strum(message = "日時文字列→Unixタイムスタンプ")]
     DatetimeToTimestamp,
-    /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
+    /// 数値に対して3桁ごとのカンマを付与する(例: 1000 -> 1,000)
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     #[strum(message = "カンマ追加")]
     AddComma,
-    /// 数値からカンマを削除する（例: 1,000 -> 1000）
+    /// 数値からカンマを削除する(例: 1,000 -> 1000)
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     #[strum(message = "カンマ除去")]
     RemoveComma,
@@ -225,7 +225,7 @@ impl RefineCategory {
         self.get_message().unwrap_or("")
     }
 
-    /// トレイメニューのサブメニュー表示順（`Normal` を除く）
+    /// トレイメニューのサブメニュー表示順(`Normal` を除く)
     pub const SUBMENU_ORDER: [Self; 10] = [
         Self::UrlActions,
         Self::Path,
@@ -283,7 +283,7 @@ impl RefineMode {
         }
     }
 
-    /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
+    /// UI(Webview)に渡すためのモード情報のJSONリストを生成する
     ///
     /// # Returns
     /// * `String` - モード ID・ラベル・カテゴリを含む JSON 配列文字列
@@ -306,7 +306,7 @@ impl RefineMode {
 // ======================================================================
 /// JSONやYAMLのパース時にキーの順序を保持するための値構造
 ///
-/// `serde_json::Value` と似ていますが、オブジェクトの保持に `IndexMap` を使用し、
+/// `serde_json::Value` と似ているが、オブジェクトの保持に `IndexMap` を使用し、
 /// データの順序を維持したままシリアライズ・デシリアライズが可能
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -336,7 +336,7 @@ pub trait Refiner {
     /// * `text` - 加工前のテキスト
     ///
     /// # Returns
-    /// * `Cow<'a, str>` - 加工後のテキスト（変更がない場合は元のテキストを借用）
+    /// * `Cow<'a, str>` - 加工後のテキスト(変更がない場合は元のテキストを借用)
     fn refine<'a>(&self, text: &'a str) -> Cow<'a, str>;
 }
 
@@ -760,7 +760,7 @@ mod tests {
 
         for case in cases {
             // TimestampToDatetime はローカルタイムゾーンに依存するため、環境によって結果が変わる可能性がある
-            // ここでは簡易的に、変換が成功して入力と異なる結果になることだけを確認する（変換失敗時は入力が返るため）
+            // ここでは簡易的に、変換が成功して入力と異なる結果になることだけを確認する(変換失敗時は入力が返るため)
             if matches!(case.mode, RefineMode::TimestampToDatetime) {
                 let result = case.mode.refine(case.input);
                 assert_ne!(result, case.input, "TimestampToDatetime failed to convert");

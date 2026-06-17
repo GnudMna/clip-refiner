@@ -1,11 +1,11 @@
 use std::sync::Mutex;
 
+use super::{HistoryMenu, TrayMenu};
+
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
-
-use super::{HistoryMenu, TrayMenu};
 
 // ======================================================================
 // 履歴メニュー
@@ -56,7 +56,7 @@ impl TrayMenu {
         let mut records = self.history.records.lock_ignore_poison();
         records.clear();
 
-        // 既存の履歴アイテムをクリア（有効化スイッチと区切り線以外）
+        // 既存の履歴アイテムをクリア(有効化スイッチと区切り線以外)
         for _ in 0..self.history.main_submenu.items().len() {
             self.history.main_submenu.remove_at(0);
         }

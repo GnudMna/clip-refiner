@@ -22,10 +22,10 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
 // ======================================================================
 // URL エンコード・デコード
 // ======================================================================
-/// 文字列をURLエンコード（パーセントエンコーディング）する
+/// 文字列をURLエンコード(パーセントエンコーディング)する
 ///
 /// 入力文字列内の特殊文字を `%XX` 形式に変換する
-/// 英数字以外の多くの文字がエンコード対象となります
+/// 英数字以外の多くの文字がエンコード対象となる
 ///
 /// # Arguments
 /// * `input` - エンコード対象の文字列
@@ -52,9 +52,9 @@ pub fn url_decode(input: &str) -> Result<String> {
 // ======================================================================
 // UTM パラメータ削除
 // ======================================================================
-/// URLからUTMパラメータ（計測用パラメータ）を除去する
+/// URLからUTMパラメータ(計測用パラメータ)を除去する
 ///
-/// URLのクエリ文字列（?以降）に含まれる `utm_` で始まるパラメータをすべて取り除く
+/// URLのクエリ文字列(?以降)に含まれる `utm_` で始まるパラメータをすべて取り除く
 /// 他のパラメータは維持される
 ///
 /// # Arguments
@@ -70,7 +70,7 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
         None => return Cow::Borrowed(input),
     };
 
-    // クエリ文字列とフラグメント（#以降）を分離する
+    // クエリ文字列とフラグメント(#以降)を分離する
     let (query, fragment) = match query_and_fragment.split_once('#') {
         Some((q, f)) => (q, Some(f)),
         None => (query_and_fragment, None),
@@ -202,7 +202,7 @@ mod tests {
         );
     }
 
-    /// フラグメント（#）がある場合のUTMパラメータ削除テスト
+    /// フラグメント(#)がある場合のUTMパラメータ削除テスト
     #[test]
     fn test_remove_utm_params_with_fragment() {
         // UTMパラメータ削除後もフラグメントが保持されること
@@ -220,7 +220,7 @@ mod tests {
             remove_utm_params("https://example.com/?id=123#section"),
             "https://example.com/?id=123#section"
         );
-        // フラグメントのみ（クエリなし）はそのまま
+        // フラグメントのみ(クエリなし)はそのまま
         assert_eq!(
             remove_utm_params("https://example.com/#section"),
             "https://example.com/#section"

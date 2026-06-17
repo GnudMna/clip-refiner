@@ -27,7 +27,7 @@ pub enum AppEvent {
 pub struct MonitorSnapshot {
     /// 現在の加工モード
     pub mode: RefineMode,
-    /// ポーリング間隔（ミリ秒）
+    /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,
     /// 一時停止中かどうか
     pub is_paused: bool,
@@ -40,14 +40,14 @@ pub struct MonitorSnapshot {
 pub struct ProcessedState {
     /// ポーリングで前回観測したクリップボード本文
     pub last_seen_text: String,
-    /// 直近の加工でクリップボードへ書き戻した本文（自身の変更イベントを1回無視）
+    /// 直近の加工でクリップボードへ書き戻した本文(自身の変更イベントを1回無視)
     pub last_written_text: Option<String>,
 }
 
 // ======================================================================
 // ロック拡張
 // ======================================================================
-/// `Mutex` のポイズニング（パニックによる汚染）を無視して強制的にロックを取得するための拡張
+/// `Mutex` のポイズニング(パニックによる汚染)を無視して強制的にロックを取得するための拡張
 pub trait LockExt<T> {
     /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得する。
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;

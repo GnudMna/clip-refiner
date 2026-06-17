@@ -1,7 +1,7 @@
+use super::{NotificationMenu, TrayMenu};
+
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, PredefinedMenuItem, Submenu};
-
-use super::{NotificationMenu, TrayMenu};
 
 // ======================================================================
 // 通知メニュー

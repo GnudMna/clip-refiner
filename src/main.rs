@@ -49,7 +49,7 @@ fn main() -> Result<()> {
 // ======================================================================
 /// コマンドライン引数
 ///
-/// アプリケーションの動作モード（常駐またはワンショット）を指定する
+/// アプリケーションの動作モード(常駐またはワンショット)を指定する
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
 "
 )]
 struct Args {
-    /// 実行モードの指定（ワンショット実行用）
+    /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<refiner::RefineMode>,
 }
@@ -75,8 +75,8 @@ struct Args {
 // ======================================================================
 /// Windows環境で親プロセスのコンソールをアタッチする
 ///
-/// これにより、コンソール（`cmd.exe` や `PowerShell`）から `cargo run` などで起動した場合に、
-/// アプリケーションからの標準出力がコンソール上に表示されるようになります
+/// これにより、コンソール(`cmd.exe` や `PowerShell`)から `cargo run` などで起動した場合に、
+/// アプリケーションからの標準出力がコンソール上に表示される
 fn setup_console() {
     #[cfg(windows)]
     use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};

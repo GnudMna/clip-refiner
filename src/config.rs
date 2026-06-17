@@ -195,11 +195,11 @@ pub struct AppConfig {
     /// 設定ファイルのスキーマバージョン
     #[serde(default = "default_config_version")]
     pub version: u32,
-    /// 最後に使用した（または常駐時に使用する）加工モード
+    /// 最後に使用した(または常駐時に使用する)加工モード
     pub mode: RefineMode,
     /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
     pub interval_ms: u64,
-    /// 使用する監視方式（Polling または Event）
+    /// 使用する監視方式(Polling または Event)
     #[serde(default)]
     pub monitor_mode: MonitorMode,
     /// 履歴機能が有効かどうか

@@ -1,6 +1,6 @@
 //! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
 //!
-//! 変換モード、履歴、監視設定、通知などのサブメニューを組み立てます
+//! 変換モード、履歴、監視設定、通知などのサブメニューを組み立てる
 
 use std::sync::Mutex;
 
@@ -46,7 +46,7 @@ pub struct RefineMenu {
 }
 
 impl RefineMenu {
-    /// すべてのモードアイテム（CheckMenuItem と RefineMode のペア）を平坦化したイテレータとして返す
+    /// すべてのモードアイテム(CheckMenuItem と RefineMode のペア)を平坦化したイテレータとして返す
     ///
     /// # Returns
     /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ
@@ -57,7 +57,7 @@ impl RefineMenu {
     }
 }
 
-/// 監視方式（ポーリング/イベント）を選択するメニューの構成
+/// 監視方式(ポーリング/イベント)を選択するメニューの構成
 pub struct MonitorMenu {
     /// 「監視方式」サブメニュー
     pub main_submenu: Submenu,
@@ -65,7 +65,7 @@ pub struct MonitorMenu {
     pub items: Vec<(CheckMenuItem, MonitorMode)>,
 }
 
-/// 監視間隔（周期）を選択するメニューの構成
+/// 監視間隔(周期)を選択するメニューの構成
 pub struct IntervalMenu {
     /// 「監視周期」サブメニュー
     pub main_submenu: Submenu,
@@ -81,7 +81,7 @@ pub struct HistoryMenu {
     pub enabled_item: CheckMenuItem,
     /// 履歴を全削除する項目
     pub clear_item: MenuItem,
-    /// 過去のテキスト項目（表示用のIDと実データ）のリスト。メニュー更新時に利用される
+    /// 過去のテキスト項目(表示用のIDと実データ)のリスト。メニュー更新時に利用される
     pub records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
 }
 
@@ -129,7 +129,7 @@ pub struct TrayMenu {
 impl TrayMenu {
     /// トレイアイコンのメニューを構築する
     ///
-    /// 現在のアプリケーション状態に基づいて、各種メニュー項目（変換モード、監視方式、監視周期など）を作成し、
+    /// 現在のアプリケーション状態に基づいて、各種メニュー項目(変換モード、監視方式、監視周期など)を作成し、
     /// トレイアイコンに設定する
     ///
     /// # Arguments

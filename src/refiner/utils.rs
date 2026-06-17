@@ -11,7 +11,7 @@ use std::borrow::Cow;
 /// * `text` - 判定対象のテキスト
 ///
 /// # Returns
-/// * `&str` - 検出された改行コード（"\r\n" または "\n"）
+/// * `&str` - 検出された改行コード("\r\n" または "\n")
 pub fn detect_line_ending(text: &str) -> &str {
     if text.contains("\r\n") { "\r\n" } else { "\n" }
 }
