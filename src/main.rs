@@ -2,6 +2,7 @@
 
 mod config;
 mod consts;
+mod history_store;
 mod hotkey_binding;
 mod logger;
 mod notification;

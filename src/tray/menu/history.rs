@@ -69,14 +69,14 @@ impl TrayMenu {
 
         // 履歴が空でない場合は、履歴アイテムを追加
         if !history.is_empty() {
-            for text in history {
+            for (index, text) in history.into_iter().enumerate() {
                 let label = if text.chars().count() > 30 {
                     format!("{}...", text.chars().take(27).collect::<String>())
                 } else {
-                    text.clone()
+                    text
                 };
                 let item = MenuItem::new(label, true, None);
-                records.push((item.id().clone(), text));
+                records.push((item.id().clone(), index));
                 self.history
                     .main_submenu
                     .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;
