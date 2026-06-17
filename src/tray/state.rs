@@ -224,6 +224,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
     use tao::event_loop::EventLoopBuilder;
     #[cfg(windows)]

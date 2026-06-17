@@ -1,26 +1,21 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::thread;
-use std::time::Duration;
 
-use super::clipboard_change::ChangeWatcher;
 use super::notifier;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
-use crate::notification;
 use crate::refiner::process_clipboard;
 
-use anyhow::{Context, Result};
 use arboard::Clipboard;
 
 // ======================================================================
 // 監視スレッド管理
 // ======================================================================
-/// クリップボード監視スレッドを開始する
+/// クリップボード監視を再開または再起動する
 ///
-/// 現在の監視モード設定（ポーリングまたはイベント）に基づいて、適切な監視スレッドを起動します。
-/// 一時停止中（`is_paused == true`）の場合はスレッドを起動しません。
-/// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するように制御します。
+/// 監視はクリップボードワーカースレッド内で実行されます。
+/// この関数は世代カウンタを進めることで、ワーカーに監視状態のリセットを通知します。
+/// 一時停止中（`is_paused == true`）の場合は何もしません。
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -29,27 +24,18 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
         return;
     }
 
-    let monitor_mode = state.with_config(|c| c.monitor_mode);
-    let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
-
-    match monitor_mode {
-        MonitorMode::Polling => spawn_polling_monitor_thread(state, generation),
-        MonitorMode::Event => {
-            if ChangeWatcher::new().is_supported() {
-                spawn_event_monitor_thread(state, generation);
-            } else {
-                crate::log_warn!(
-                    "イベント監視が利用できないため、ポーリング監視にフォールバックします"
-                );
-                spawn_polling_monitor_thread(state, generation);
-            }
-        }
-    }
+    state.monitor_generation.fetch_add(1, Ordering::SeqCst);
 }
 
 // ======================================================================
 // クリップボード更新処理
 // ======================================================================
+/// ポーリングスリープを分割するチック間隔（ミリ秒）
+pub(crate) const POLL_TICK_MS: u64 = 50;
+
+/// イベント監視ループのスリープ間隔（ミリ秒）
+pub(crate) const EVENT_POLL_MS: u64 = 100;
+
 /// 加工を試みるべきか判定する。スキップする場合は `processed_state` を更新する。
 ///
 /// # Returns
@@ -92,7 +78,7 @@ pub(crate) fn should_process_clipboard(
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返します。
-pub fn handle_clipboard_update(
+pub(crate) fn handle_clipboard_update(
     clipboard: &mut Clipboard,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
@@ -129,155 +115,8 @@ pub fn handle_clipboard_update(
 }
 
 // ======================================================================
-// ポーリング監視
+// UI更新
 // ======================================================================
-/// ポーリングスリープを分割するチック間隔（ミリ秒）
-///
-/// この値ごとに停止条件を確認するため、スレッド停止の最大遅延がこの値に抑えられます。
-const POLL_TICK_MS: u64 = 50;
-
-/// イベント監視ループのスリープ間隔（ミリ秒）
-const EVENT_POLL_MS: u64 = 100;
-
-/// ポーリング（定時確認）方式でクリップボードを監視するスレッドを開始する
-///
-/// 一定間隔（デフォルト1秒など）でクリップボードの内容を確認します。
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `generation` - このスレッドの世代番号。最新でない世代のスレッドは自動終了します。
-pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
-    thread::spawn(move || {
-        let mut clipboard = match init_clipboard() {
-            Ok(cb) => cb,
-            Err(e) => {
-                crate::log_error!("ポーリング監視スレッド初期化エラー: {:?}", e);
-                notification::show_notification(
-                    "監視スレッドエラー",
-                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
-                );
-                return;
-            }
-        };
-
-        {
-            let current_text = clipboard.get_text().unwrap_or_default();
-            state.record_clipboard_observed(&current_text);
-        }
-
-        loop {
-            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
-            if state.monitor_generation.load(Ordering::SeqCst) != generation {
-                break;
-            }
-
-            // config RwLock を1回のみ取得してスナップショットを作成
-            let snap = state.monitor_snapshot();
-            if snap.is_paused {
-                break;
-            }
-
-            // interval_ms を POLL_TICK_MS 刻みで分割してスリープし、
-            // 各チックで停止条件を確認することでスレッド停止の最大遅延を POLL_TICK_MS に抑える
-            let mut elapsed = 0u64;
-            while elapsed < snap.interval_ms {
-                let tick = POLL_TICK_MS.min(snap.interval_ms - elapsed);
-                thread::sleep(Duration::from_millis(tick));
-                elapsed += tick;
-                if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.with_config(|c| c.is_paused)
-                {
-                    return;
-                }
-            }
-
-            handle_clipboard_update(&mut clipboard, &state, &snap, false);
-        }
-    });
-}
-
-// ======================================================================
-// イベント監視
-// ======================================================================
-/// OSの変更トークンを利用してクリップボードを監視するスレッドを開始する
-///
-/// クリップボード本文の定期読み取りを避け、変更トークンの変化時のみ内容を取得します。
-/// ポーリングより低遅延かつ低CPU負荷で動作します。
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `generation` - このスレッドの世代番号。
-pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
-    thread::spawn(move || {
-        let watcher = ChangeWatcher::new();
-
-        let mut clipboard = match init_clipboard() {
-            Ok(cb) => cb,
-            Err(e) => {
-                crate::log_error!("イベント監視スレッド初期化エラー: {:?}", e);
-                notification::show_notification(
-                    "監視スレッドエラー",
-                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
-                );
-                return;
-            }
-        };
-
-        let current_text = clipboard.get_text().unwrap_or_default();
-        state.record_clipboard_observed(&current_text);
-        let mut last_token = watcher.token().unwrap_or(0);
-
-        loop {
-            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
-            if state.monitor_generation.load(Ordering::SeqCst) != generation {
-                break;
-            }
-
-            // config RwLock を1回のみ取得してスナップショットを作成
-            let snap = state.monitor_snapshot();
-            if snap.is_paused {
-                break;
-            }
-
-            if let Some(token) = watcher.token()
-                && token != last_token
-            {
-                last_token = token;
-
-                // クリップボードの更新を処理し、加工が行われたかチェック
-                if handle_clipboard_update(&mut clipboard, &state, &snap, true) {
-                    // 加工が実行された場合、クリップボードが変更されたのでトークンを再取得して更新
-                    last_token = watcher.token().unwrap_or(last_token);
-                }
-            }
-
-            // 変化がない時のCPU負荷を抑えつつ、停止条件を定期的に確認する
-            let mut elapsed = 0u64;
-            while elapsed < EVENT_POLL_MS {
-                let tick = POLL_TICK_MS.min(EVENT_POLL_MS - elapsed);
-                thread::sleep(Duration::from_millis(tick));
-                elapsed += tick;
-                if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.with_config(|c| c.is_paused)
-                {
-                    return;
-                }
-            }
-        }
-    });
-}
-
-// ======================================================================
-// ユーティリティ
-// ======================================================================
-/// クリップボード機能への初期アクセスを確立する
-///
-/// # Returns
-/// * `Result<Clipboard>` - 初期化された `Clipboard` インスタンス。失敗した場合はエラーを返します。
-pub fn init_clipboard() -> Result<Clipboard> {
-    Clipboard::new().context("クリップボードのアクセスに失敗しました")
-}
-
 /// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
 ///
 /// 例えば、イベントモード時は「監視周期」の設定メニューを無効化します。
@@ -363,5 +202,30 @@ mod tests {
 
         spawn_monitor_thread(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn spawn_monitor_thread_increments_generation_when_active() {
+        use crate::tray::state::AppEvent;
+        use std::sync::{Arc, atomic::Ordering};
+        use tao::event_loop::EventLoopBuilder;
+        #[cfg(windows)]
+        use tao::platform::windows::EventLoopBuilderExtWindows;
+
+        #[cfg(windows)]
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        #[cfg(not(windows))]
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+
+        let state = Arc::new(AppState::new(event_loop.create_proxy()));
+        state.with_config_mut(|c| c.is_paused = false);
+
+        spawn_monitor_thread(Arc::clone(&state));
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 1);
+
+        spawn_monitor_thread(Arc::clone(&state));
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 }
