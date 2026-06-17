@@ -42,8 +42,13 @@ impl SelectorWindow {
         // コマンドパレット用 HTML を組み立て
         let css = include_str!("../ui/selector.css");
         let html = include_str!("../ui/selector.html")
-            .replace("__SELECTOR_CSS__", css)
-            .replace("__MODES_JSON__", &modes_json);
+            .replace("@import url(\"selector.css\");", css)
+            .replace(
+                r#"<script type="application/json" id="modes-data">[]</script>"#,
+                &format!(
+                    r#"<script type="application/json" id="modes-data">{modes_json}</script>"#
+                ),
+            );
 
         let proxy_clone = proxy.clone();
 
@@ -146,7 +151,7 @@ pub fn init_selector(
         .with_transparent(true)
         .with_visible(false)
         .with_resizable(false)
-        .with_inner_size(tao::dpi::LogicalSize::new(500.0, 400.0))
+        .with_inner_size(tao::dpi::LogicalSize::new(520.0, 600.0))
         .build(event_loop)?;
 
     // ウィンドウを画面中央に配置

@@ -5,14 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        __SELECTOR_CSS__
+        @import url("selector.css");
     </style>
 </head>
 
 <body>
     <div id="container">
         <div id="search-box">
-            <input type="text" id="input" placeholder="モードを検索..." autocomplete="off">
+            <input type="text" id="input" placeholder="モード名・カテゴリ・CLI名で検索..." autocomplete="off" spellcheck="false">
         </div>
         <div id="results"></div>
         <div id="footer">
@@ -21,8 +21,10 @@
         </div>
     </div>
 
+    <script type="application/json" id="modes-data">[]</script>
+
     <script>
-        const modes = __MODES_JSON__;
+        const modes = JSON.parse(document.getElementById('modes-data').textContent);
         const input = document.getElementById('input');
         const results = document.getElementById('results');
 
@@ -30,39 +32,178 @@
         let filtered = [...modes];
         let selectedIndex = 0;
 
-        function render() {
-            results.innerHTML = '';
-            filtered.forEach((mode, index) => {
-                const isCurrent = mode.id === currentModeId;
-                const div = document.createElement('div');
-                div.className = 'item' +
-                    (index === selectedIndex ? ' selected' : '') +
-                    (isCurrent ? ' current' : '');
+        function normalizeQuery(query) {
+            return query.toLowerCase().trim();
+        }
 
-                div.innerHTML = `
-                    <div class="mode-info">
-                        <span class="label">${mode.label}</span>
-                        ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
-                    </div>
-                    <span class="category">${mode.category}</span>
-                `;
-                div.onclick = () => select(mode.id);
-                results.appendChild(div);
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
 
-                if (index === selectedIndex) {
-                    div.scrollIntoView({ block: 'nearest' });
-                }
+        function highlightText(text, query) {
+            const safe = escapeHtml(text);
+            if (!query) {
+                return safe;
+            }
+
+            const lowerText = text.toLowerCase();
+            const index = lowerText.indexOf(query);
+            if (index === -1) {
+                return safe;
+            }
+
+            const end = index + query.length;
+            return (
+                escapeHtml(text.slice(0, index)) +
+                '<mark>' + escapeHtml(text.slice(index, end)) + '</mark>' +
+                escapeHtml(text.slice(end))
+            );
+        }
+
+        function modeMatches(mode, query) {
+            if (!query) {
+                return true;
+            }
+
+            const fields = [mode.label, mode.category, mode.value, mode.id];
+            return fields.some((field) => field && field.toLowerCase().includes(query));
+        }
+
+        function clampSelectedIndex() {
+            if (filtered.length === 0) {
+                selectedIndex = 0;
+                return;
+            }
+            if (selectedIndex >= filtered.length) {
+                selectedIndex = filtered.length - 1;
+            }
+            if (selectedIndex < 0) {
+                selectedIndex = 0;
+            }
+        }
+
+        function createItem(mode, index, query) {
+            const isCurrent = mode.id === currentModeId;
+            const div = document.createElement('div');
+            div.className = 'item' +
+                (index === selectedIndex ? ' selected' : '') +
+                (isCurrent ? ' current' : '');
+
+            div.innerHTML = `
+                <div class="mode-info">
+                    <span class="label">${highlightText(mode.label, query)}</span>
+                    ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
+                </div>
+                ${query && mode.value ? `<span class="value-hint">${highlightText(mode.value, query)}</span>` : ''}
+            `;
+
+            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onclick = () => select(mode.id);
+            return div;
+        }
+
+        function updateSelectionHighlight() {
+            results.querySelectorAll('.item').forEach((element, index) => {
+                element.classList.toggle('selected', index === selectedIndex);
             });
         }
 
+        function scrollSelectedIntoView() {
+            const items = results.querySelectorAll('.item');
+            items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+        }
+
+        function setSelectedIndex(index, scroll) {
+            if (filtered.length === 0) {
+                return;
+            }
+
+            const next = Math.max(0, Math.min(index, filtered.length - 1));
+            if (next === selectedIndex) {
+                if (scroll) {
+                    scrollSelectedIntoView();
+                }
+                return;
+            }
+
+            selectedIndex = next;
+            updateSelectionHighlight();
+            if (scroll) {
+                scrollSelectedIntoView();
+            }
+        }
+
+        function renderList(scrollToSelection) {
+            results.innerHTML = '';
+            const query = normalizeQuery(input.value);
+            clampSelectedIndex();
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = '該当するモードがありません';
+                results.appendChild(empty);
+                return;
+            }
+
+            let itemIndex = 0;
+            let lastCategory = null;
+            let currentSection = null;
+            let rootSection = null;
+
+            filtered.forEach((mode) => {
+                let parent = results;
+
+                if (!query) {
+                    if (mode.category) {
+                        if (mode.category !== lastCategory) {
+                            currentSection = document.createElement('div');
+                            currentSection.className = 'category-section';
+
+                            const header = document.createElement('div');
+                            header.className = 'category-header';
+                            header.innerHTML =
+                                '<span class="category-accent" aria-hidden="true"></span>' +
+                                '<span class="category-label">' + escapeHtml(mode.category) + '</span>';
+                            currentSection.appendChild(header);
+                            results.appendChild(currentSection);
+                            lastCategory = mode.category;
+                        }
+                        parent = currentSection;
+                    } else {
+                        if (!rootSection) {
+                            rootSection = document.createElement('div');
+                            rootSection.className = 'category-section category-section--plain';
+                            results.appendChild(rootSection);
+                        }
+                        parent = rootSection;
+                    }
+                }
+
+                parent.appendChild(createItem(mode, itemIndex, query));
+                itemIndex++;
+            });
+
+            if (scrollToSelection) {
+                scrollSelectedIntoView();
+            }
+        }
+
         function filter() {
-            const query = input.value.toLowerCase();
-            filtered = modes.filter(m =>
-                m.label.toLowerCase().includes(query) ||
-                m.category.toLowerCase().includes(query)
-            );
-            selectedIndex = 0;
-            render();
+            const query = normalizeQuery(input.value);
+            const previousId = filtered[selectedIndex]?.id;
+
+            filtered = modes.filter((mode) => modeMatches(mode, query));
+
+            const nextIndex = previousId
+                ? filtered.findIndex((mode) => mode.id === previousId)
+                : -1;
+            selectedIndex = nextIndex !== -1 ? nextIndex : 0;
+            renderList(true);
         }
 
         function select(id) {
@@ -73,23 +214,45 @@
             window.ipc.postMessage('close');
         }
 
+        function moveSelection(delta) {
+            if (filtered.length === 0) {
+                return;
+            }
+            setSelectedIndex(selectedIndex + delta, true);
+        }
+
         input.oninput = filter;
 
         window.onkeydown = (e) => {
             if (e.key === 'ArrowDown') {
-                selectedIndex = (selectedIndex + 1) % filtered.length;
-                render();
+                moveSelection(1);
                 e.preventDefault();
             } else if (e.key === 'ArrowUp') {
-                selectedIndex = (selectedIndex - 1 + filtered.length) % filtered.length;
-                render();
+                moveSelection(-1);
                 e.preventDefault();
+            } else if (e.key === 'Home') {
+                if (filtered.length > 0) {
+                    setSelectedIndex(0, true);
+                    e.preventDefault();
+                }
+            } else if (e.key === 'End') {
+                if (filtered.length > 0) {
+                    setSelectedIndex(filtered.length - 1, true);
+                    e.preventDefault();
+                }
             } else if (e.key === 'Enter') {
                 if (filtered[selectedIndex]) {
                     select(filtered[selectedIndex].id);
+                    e.preventDefault();
                 }
             } else if (e.key === 'Escape') {
-                close();
+                if (input.value) {
+                    input.value = '';
+                    filter();
+                    e.preventDefault();
+                } else {
+                    close();
+                }
             }
         };
 
@@ -99,17 +262,17 @@
             input.value = '';
             filter();
 
-            // 現在のモードがリストにあれば、それを初期選択状態にする
-            const index = filtered.findIndex(m => m.id === currentModeId);
+            const index = filtered.findIndex((mode) => mode.id === currentModeId);
             if (index !== -1) {
                 selectedIndex = index;
-                render();
             }
 
+            renderList(true);
             input.focus();
+            input.select();
         };
 
-        render();
+        renderList(false);
     </script>
 </body>
 
