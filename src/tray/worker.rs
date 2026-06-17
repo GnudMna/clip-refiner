@@ -10,7 +10,7 @@ use super::notifier;
 use super::state::AppState;
 use crate::config::MonitorMode;
 use crate::notification;
-use crate::refiner::{RefineMode, process_clipboard};
+use crate::refiner::{ClipboardProcessOutcome, RefineMode, process_clipboard};
 
 use arboard::Clipboard;
 
@@ -314,11 +314,20 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
                 }
             }
         }
-        ClipboardCommand::ProcessMode(mode) => {
-            if let Some(processed) = process_clipboard(clipboard, mode) {
+        ClipboardCommand::ProcessMode(mode) => match process_clipboard(clipboard, mode) {
+            Ok(ClipboardProcessOutcome::Processed(processed)) => {
                 state.record_processing_success(&processed);
                 notifier::show_process_notification(state, mode, &processed);
             }
-        }
+            Ok(ClipboardProcessOutcome::Unchanged) => {
+                if state.with_config(|c| c.notification_settings.enabled) {
+                    notification::show_notification("加工結果", "テキストに変更はありませんでした");
+                }
+            }
+            Err(e) => {
+                crate::log_error!("加工エラー: {} ({:?})", e.user_message(), e);
+                notification::show_notification("加工エラー", e.user_message());
+            }
+        },
     }
 }

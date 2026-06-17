@@ -4,7 +4,8 @@ use std::sync::atomic::Ordering;
 use super::notifier;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
-use crate::refiner::process_clipboard;
+use crate::notification;
+use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
 
 use arboard::Clipboard;
 
@@ -100,23 +101,39 @@ pub(crate) fn handle_clipboard_update(
         return false;
     }
 
-    if let Some(processed) = process_clipboard(clipboard, snap.mode) {
-        state.record_processing_success(&processed);
-        notifier::show_process_notification(state, snap.mode, &processed);
+    match process_clipboard(clipboard, snap.mode) {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            state.record_processing_success(&processed);
+            notifier::show_process_notification(state, snap.mode, &processed);
 
-        if snap.history_enabled {
-            state.add_to_history(processed);
+            if snap.history_enabled {
+                state.add_to_history(processed);
+            }
+            true
         }
-        return true;
+        Ok(ClipboardProcessOutcome::Unchanged) => {
+            state.record_clipboard_observed(&text);
+
+            if snap.history_enabled {
+                state.add_to_history(text);
+            }
+            false
+        }
+        Err(ClipboardProcessError::NoText) => {
+            state.record_clipboard_observed(&text);
+            false
+        }
+        Err(e) => {
+            crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
+            notification::show_notification("加工エラー", e.user_message());
+            state.record_clipboard_observed(&text);
+
+            if snap.history_enabled {
+                state.add_to_history(text);
+            }
+            false
+        }
     }
-
-    state.record_clipboard_observed(&text);
-
-    if snap.history_enabled {
-        state.add_to_history(text);
-    }
-
-    false
 }
 
 // ======================================================================
