@@ -533,53 +533,39 @@ mod tests {
     }
 
     /// クリップボード処理の統合テスト
-    /// 実際のクリップボード操作を伴うため、実行環境によってはスキップされる可能性がある
+    ///
+    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
+    /// 手動実行: `cargo test test_process_clipboard_integration -- --ignored`
     #[test]
+    #[ignore = "システムクリップボードへのアクセスが必要"]
     fn test_process_clipboard_integration() {
-        // 並列実行による干渉を避けるため、1つのテストケースにまとめる
-        if let Ok(mut cb) = Clipboard::new() {
-            // 変化ありのケース
-            let unique_str_1 = "  clip_refiner_test_1  ";
-            let _ = cb.set_text(unique_str_1.to_string());
-            // システムのクリップボードへの反映を待つ必要がある場合があるが、まずはそのまま
-            if let Ok(current) = cb.get_text() {
-                if current == unique_str_1 {
-                    let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert_eq!(
-                        result,
-                        Ok(ClipboardProcessOutcome::Processed(
-                            "clip_refiner_test_1".to_string()
-                        ))
-                    );
-                } else {
-                    eprintln!(
-                        "Clipboard content mismatch for unique_str_1. Expected: '{}', Got: '{}'",
-                        unique_str_1, current
-                    );
-                }
-            } else {
-                eprintln!("Failed to get clipboard text for unique_str_1.");
-            }
+        let mut cb = Clipboard::new().expect("クリップボードの初期化に失敗");
 
-            // 変化なしのケース
-            let unique_str_2 = "clip_refiner_test_2";
-            let _ = cb.set_text(unique_str_2.to_string());
-            if let Ok(current) = cb.get_text() {
-                if current == unique_str_2 {
-                    let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert_eq!(result, Ok(ClipboardProcessOutcome::Unchanged));
-                } else {
-                    eprintln!(
-                        "Clipboard content mismatch for unique_str_2. Expected: '{}', Got: '{}'",
-                        unique_str_2, current
-                    );
-                }
-            } else {
-                eprintln!("Failed to get clipboard text for unique_str_2.");
-            }
-        } else {
-            eprintln!("Failed to initialize clipboard. Skipping clipboard integration tests.");
-        }
+        let unique_str_1 = "  clip_refiner_test_1  ";
+        cb.set_text(unique_str_1.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+        assert_eq!(
+            cb.get_text().expect("クリップボードの読み取りに失敗"),
+            unique_str_1
+        );
+        assert_eq!(
+            process_clipboard(&mut cb, RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Processed(
+                "clip_refiner_test_1".to_string()
+            ))
+        );
+
+        let unique_str_2 = "clip_refiner_test_2";
+        cb.set_text(unique_str_2.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+        assert_eq!(
+            cb.get_text().expect("クリップボードの読み取りに失敗"),
+            unique_str_2
+        );
+        assert_eq!(
+            process_clipboard(&mut cb, RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Unchanged)
+        );
     }
 
     /// 全てのRefineModeバリアントを網羅するテーブル駆動テスト
@@ -730,13 +716,13 @@ mod tests {
             },
             TestCase {
                 mode: RefineMode::TimestampToDatetime,
-                input: "0",
-                expected: "1970-01-01 09:00:00", // JST想定(環境依存だが固定値チェックのため)
+                input: "1672531200",
+                expected: "",
             },
             TestCase {
                 mode: RefineMode::DatetimeToTimestamp,
-                input: "1970-01-01 09:00:00",
-                expected: "0",
+                input: "",
+                expected: "",
             },
             TestCase {
                 mode: RefineMode::AddComma,
@@ -759,20 +745,18 @@ mod tests {
         );
 
         for case in cases {
-            // TimestampToDatetime はローカルタイムゾーンに依存するため、環境によって結果が変わる可能性がある
-            // ここでは簡易的に、変換が成功して入力と異なる結果になることだけを確認する(変換失敗時は入力が返るため)
             if matches!(case.mode, RefineMode::TimestampToDatetime) {
-                let result = case.mode.refine(case.input);
-                assert_ne!(result, case.input, "TimestampToDatetime failed to convert");
-                // JST環境なら一致するはずだが、CI環境などでUTCの場合は一致しない
-                // 厳密なチェックは datetime.rs のテストに任せる
+                let actual = case.mode.refine(case.input);
+                let expected = datetime::timestamp_to_datetime_string(case.input);
+                assert_eq!(actual, expected);
+                assert_ne!(actual, case.input);
                 continue;
             }
 
-            // DatetimeToTimestamp も同様
             if matches!(case.mode, RefineMode::DatetimeToTimestamp) {
-                let result = case.mode.refine(case.input);
-                assert_ne!(result, case.input, "DatetimeToTimestamp failed to convert");
+                let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
+                let actual = case.mode.refine(&datetime_input);
+                assert_eq!(actual, "1672531200");
                 continue;
             }
 

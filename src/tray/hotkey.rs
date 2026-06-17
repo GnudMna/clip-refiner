@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::notifier;
 use super::selector::SelectorWindow;
 use super::state::{AppEvent, AppState};
@@ -153,7 +153,7 @@ impl HotkeyHandler {
                 menu.pause_item.set_checked(new_paused);
                 state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
-                spawn_monitor_thread(Arc::clone(state));
+                bump_monitor_generation(Arc::clone(state));
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;
             }

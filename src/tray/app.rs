@@ -5,7 +5,7 @@ use std::time::Instant;
 use super::event;
 use super::hotkey::HotkeyHandler;
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::selector::{SelectorWindow, init_selector};
 use super::state::{AppEvent, AppState};
 
@@ -60,7 +60,7 @@ impl App {
 
         hotkey_handler.start_event_listener(proxy);
         menu.refresh_history(&state)?;
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
 
         Ok(Self {
             state,

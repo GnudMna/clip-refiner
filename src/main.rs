@@ -125,8 +125,7 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 
     builder.init();
 
-    // グローバルロガーを初期化
-    logger::init_global_logger(Box::new(logger::TracingLogger::new(log_dir)));
+    logger::cleanup_on_startup(&log_dir);
 
     log_info!("アプリケーションを起動しました");
 
