@@ -5,14 +5,14 @@ use std::borrow::Cow;
 // ======================================================================
 /// 文字列をバックスラッシュでエスケープする
 ///
-/// JSONやプログラム文字列内で特殊な意味を持つ文字（改行、タブ、ダブルクォートなど）の前に
-/// バックスラッシュを挿入します。
+/// JSONやプログラム文字列内で特殊な意味を持つ文字(改行、タブ、ダブルクォートなど)の前に
+/// バックスラッシュを挿入する
 ///
 /// # Arguments
 /// * `input` - エスケープ対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す。
 pub fn escape_string(input: &str) -> Cow<'_, str> {
     if input.is_empty() {
         return Cow::Borrowed(input);
@@ -53,13 +53,13 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 文字列のエスケープを解除する
 ///
-/// バックスラッシュでエスケープされた特殊文字（`\n`, `\t` など）を元の文字に戻します。
+/// バックスラッシュでエスケープされた特殊文字(`\n`, `\t` など)を元の文字に戻す
 ///
 /// # Arguments
 /// * `input` - エスケープ解除対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す。
 pub fn unescape_string(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -90,7 +90,7 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                     continue;
                 }
                 'u' => {
-                    chars.next(); // consume 'u'
+                    chars.next(); // 'u' を消費
                     let hex: String = std::iter::from_fn(|| chars.next()).take(4).collect();
                     if hex.len() == 4 {
                         if let Ok(code) = u16::from_str_radix(&hex, 16) {
@@ -159,14 +159,14 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 正規表現のメタ文字をエスケープする
 ///
-/// 正規表現内で特殊な意味を持つ文字（`.`, `*`, `+` など）の前にバックスラッシュを挿入し、
-/// リテラルとして扱えるようにします。
+/// 正規表現内で特殊な意味を持つ文字(`.`, `*`, `+` など)の前にバックスラッシュを挿入し、
+/// リテラルとして扱えるようにする
 ///
 /// # Arguments
 /// * `input` - エスケープ対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す。
 pub fn regex_escape(input: &str) -> Cow<'_, str> {
     let result = regex::escape(input);
     if result == input {
@@ -176,15 +176,15 @@ pub fn regex_escape(input: &str) -> Cow<'_, str> {
     }
 }
 
-/// 正規表現のエスケープを解除する（簡易版）
+/// 正規表現のエスケープを解除する(簡易版)
 ///
-/// 正規表現のメタ文字の前に付与されたバックスラッシュを削除します。
+/// 正規表現のメタ文字の前に付与されたバックスラッシュを削除する
 ///
 /// # Arguments
 /// * `input` - エスケープ解除対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す。
 pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -220,6 +220,7 @@ pub fn regex_unescape(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
+    /// 改行を含む文字列のエスケープと Borrowed 返却
     #[test]
     fn test_escape_string() {
         assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
@@ -227,6 +228,7 @@ mod tests {
         assert!(matches!(escape_string("plain"), Cow::Borrowed(_)));
     }
 
+    /// アンエスケープの基本動作
     #[test]
     fn test_unescape_string() {
         assert_eq!(unescape_string("hello\\nworld"), "hello\nworld");
@@ -234,6 +236,7 @@ mod tests {
         assert!(matches!(unescape_string("plain"), Cow::Borrowed(_)));
     }
 
+    /// \\uXXXX およびサロゲートペアのアンエスケープ
     #[test]
     fn test_unescape_unicode() {
         // 基本的な \uXXXX
@@ -249,6 +252,7 @@ mod tests {
         assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
     }
 
+    /// regex_escape の基本動作
     #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("h.w"), "h\\.w");
@@ -256,6 +260,7 @@ mod tests {
         assert!(matches!(regex_escape("plain"), Cow::Borrowed(_)));
     }
 
+    /// regex_unescape の基本動作
     #[test]
     fn test_regex_unescape() {
         assert_eq!(regex_unescape("h\\.w"), "h.w");

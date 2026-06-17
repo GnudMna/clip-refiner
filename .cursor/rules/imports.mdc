@@ -1,0 +1,51 @@
+---
+description: Rust ソースコードの use 文の記述規約
+globs: **/*.rs
+alwaysApply: true
+---
+
+# use 文規約
+
+`use` 文は次の順序で並べ、**隣接するグループの間に空行を1行入れる。** 存在しないグループは省略する。
+
+1. `std::` — 標準ライブラリ
+2. `super::` / `crate::` — クレート内部 (`super` を `crate` より前)
+3. 外部クレート
+
+各グループ内はパス全体のアルファベット順。グループ内では空行を入れない。`use` ブロックの直後にも空行を1行入れてから次のコード (セクション区切り・定義など) を書く。
+
+`main.rs` では `mod` 宣言を `use` より前に置く。
+
+```rust
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use crate::consts;
+use crate::hotkey_binding::parse_hotkey_binding;
+use crate::refiner::RefineMode;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+
+// ======================================================================
+// 監視モード
+// ======================================================================
+```
+
+```rust
+use std::sync::Arc;
+use std::time::Instant;
+
+use super::event;
+use super::hotkey::HotkeyHandler;
+use super::state::{AppEvent, AppState};
+
+use anyhow::Result;
+use tao::event_loop::EventLoop;
+```
+
+## 書かないこと
+
+- グループをまたいだ空行の欠如、またはグループ内の不要な空行
+- `super` / `crate` / 外部クレートの順序入れ替え
+- グループ内のアルファベット順でない並び

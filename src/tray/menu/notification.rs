@@ -1,7 +1,7 @@
+use super::{NotificationMenu, TrayMenu};
+
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, PredefinedMenuItem, Submenu};
-
-use super::{NotificationMenu, TrayMenu};
 
 // ======================================================================
 // 通知メニュー
@@ -10,13 +10,13 @@ impl TrayMenu {
     /// 通知メニューを構築する
     ///
     /// # Arguments
-    /// * `enabled` - 成功通知を有効にするかどうか。
-    /// * `notify_mode` - 通知にモード変化を表示するかどうか。
-    /// * `notify_result` - 通知に加工結果を表示するかどうか。
-    /// * `notify_pause` - 一時停止切替を通知するかどうか。
+    /// * `enabled` - 成功通知を有効にするかどうか
+    /// * `notify_mode` - 通知にモード変化を表示するかどうか
+    /// * `notify_result` - 通知に加工結果を表示するかどうか
+    /// * `notify_pause` - 一時停止切替を通知するかどうか
     ///
     /// # Returns
-    /// 成功した場合は `NotificationMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `NotificationMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_notification_menu(
         enabled: bool,
         notify_mode: bool,

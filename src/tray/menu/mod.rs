@@ -1,3 +1,7 @@
+//! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
+//!
+//! 変換モード、履歴、監視設定、通知などのサブメニューを組み立てる
+
 use std::sync::Mutex;
 
 use super::state::AppState;
@@ -42,10 +46,10 @@ pub struct RefineMenu {
 }
 
 impl RefineMenu {
-    /// すべてのモードアイテム（CheckMenuItem と RefineMode のペア）を平坦化したイテレータとして返す。
+    /// すべてのモードアイテム(CheckMenuItem と RefineMode のペア)を平坦化したイテレータとして返す
     ///
     /// # Returns
-    /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ。
+    /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ
     pub fn all_items(&self) -> impl Iterator<Item = &(CheckMenuItem, RefineMode)> {
         self.normal_items
             .iter()
@@ -53,7 +57,7 @@ impl RefineMenu {
     }
 }
 
-/// 監視方式（ポーリング/イベント）を選択するメニューの構成
+/// 監視方式(ポーリング/イベント)を選択するメニューの構成
 pub struct MonitorMenu {
     /// 「監視方式」サブメニュー
     pub main_submenu: Submenu,
@@ -61,7 +65,7 @@ pub struct MonitorMenu {
     pub items: Vec<(CheckMenuItem, MonitorMode)>,
 }
 
-/// 監視間隔（周期）を選択するメニューの構成
+/// 監視間隔(周期)を選択するメニューの構成
 pub struct IntervalMenu {
     /// 「監視周期」サブメニュー
     pub main_submenu: Submenu,
@@ -77,8 +81,8 @@ pub struct HistoryMenu {
     pub enabled_item: CheckMenuItem,
     /// 履歴を全削除する項目
     pub clear_item: MenuItem,
-    /// 過去のテキスト項目（表示用のIDと実データ）のリスト。メニュー更新時に利用される
-    pub records: Mutex<Vec<(tray_icon::menu::MenuId, String)>>,
+    /// 過去のテキスト項目(表示用の ID とストア内インデックス)のリスト。メニュー更新時に利用される
+    pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
 }
 
 /// 通知設定に関連するメニューの構成
@@ -99,7 +103,7 @@ pub struct NotificationMenu {
 
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体
 pub struct TrayMenu {
-    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅します。
+    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する。
     pub _tray_icon: TrayIcon,
     /// 終了項目
     pub quit_item: MenuItem,
@@ -123,16 +127,16 @@ pub struct TrayMenu {
 // メニュー全体構築
 // ======================================================================
 impl TrayMenu {
-    /// トレイアイコンのメニューを構築する。
+    /// トレイアイコンのメニューを構築する
     ///
-    /// 現在のアプリケーション状態に基づいて、各種メニュー項目（変換モード、監視方式、監視周期など）を作成し、
-    /// トレイアイコンに設定する。
+    /// 現在のアプリケーション状態に基づいて、各種メニュー項目(変換モード、監視方式、監視周期など)を作成し、
+    /// トレイアイコンに設定する
     ///
     /// # Arguments
     /// * `state` - 現在のアプリケーション状態。メニューの初期状態の決定に使用される。
     ///
     /// # Returns
-    /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す。
+    /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す
     pub fn build(state: &AppState) -> Result<Self> {
         let config = state.with_config(|c| c.clone());
 

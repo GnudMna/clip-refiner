@@ -1,11 +1,11 @@
 use std::sync::Mutex;
 
+use super::{HistoryMenu, TrayMenu};
+
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
-
-use super::{HistoryMenu, TrayMenu};
 
 // ======================================================================
 // 履歴メニュー
@@ -14,10 +14,10 @@ impl TrayMenu {
     /// 履歴メニューの基本構造を構築する
     ///
     /// # Arguments
-    /// * `history_enabled` - 履歴機能が有効かどうか。
+    /// * `history_enabled` - 履歴機能が有効かどうか
     ///
     /// # Returns
-    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す。
+    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_history_menu(history_enabled: bool) -> Result<HistoryMenu> {
         let enabled_item = CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
         let clear_item = MenuItem::new("履歴をクリア", true, None);
@@ -50,13 +50,13 @@ impl TrayMenu {
     /// * `state` - 最新の履歴データを持つアプリケーション状態
     ///
     /// # Returns
-    /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返します。
+    /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
         let history = state.get_history();
         let mut records = self.history.records.lock_ignore_poison();
         records.clear();
 
-        // 既存の履歴アイテムをクリア（有効化スイッチと区切り線以外）
+        // 既存の履歴アイテムをクリア(有効化スイッチと区切り線以外)
         for _ in 0..self.history.main_submenu.items().len() {
             self.history.main_submenu.remove_at(0);
         }
@@ -69,14 +69,14 @@ impl TrayMenu {
 
         // 履歴が空でない場合は、履歴アイテムを追加
         if !history.is_empty() {
-            for text in history {
+            for (index, text) in history.into_iter().enumerate() {
                 let label = if text.chars().count() > 30 {
                     format!("{}...", text.chars().take(27).collect::<String>())
                 } else {
-                    text.clone()
+                    text
                 };
                 let item = MenuItem::new(label, true, None);
-                records.push((item.id().clone(), text));
+                records.push((item.id().clone(), index));
                 self.history
                     .main_submenu
                     .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;

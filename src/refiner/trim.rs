@@ -5,13 +5,13 @@ use std::borrow::Cow;
 // ======================================================================
 /// 文字列全体の前後にある空白文字を削除する
 ///
-/// 入力文字列の最初と最後にあるスペース、タブ、改行などの空白文字を取り除きます。
+/// 入力文字列の最初と最後にあるスペース、タブ、改行などの空白文字を取り除く
 ///
 /// # Arguments
 /// * `input` - トリム対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 前後の空白が削除された文字列。
+/// * `Cow<'_, str>` - 前後の空白が削除された文字列
 pub fn trim_text(input: &str) -> Cow<'_, str> {
     Cow::Borrowed(input.trim())
 }
@@ -21,14 +21,14 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 文字列の各行について、前後の空白文字を削除する
 ///
-/// 行ごとにトリムを行い、改行で結合し直します。
-/// 各行末の `\r` も適切に処理されます。
+/// 行ごとにトリムを行い、改行で結合し直す
+/// 各行末の `\r` も適切に処理される
 ///
 /// # Arguments
 /// * `input` - 各行をトリムする対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返す。
 pub fn trim_lines(input: &str) -> Cow<'_, str> {
     let line_ending = super::utils::detect_line_ending(input);
     let result = input
@@ -58,7 +58,7 @@ mod tests {
         assert_eq!(trim_text("\n world \r\n"), "world");
     }
 
-    /// 各行ごとのトリムテスト（LF）
+    /// 各行ごとのトリムテスト(LF)
     #[test]
     fn test_trim_lines_lf() {
         let input = "  hello  \n  world \n  rust ";
@@ -66,7 +66,7 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 各行ごとのトリムテスト（CRLF 保持）
+    /// 各行ごとのトリムテスト(CRLF 保持)
     #[test]
     fn test_trim_lines_crlf() {
         let input = "  hello  \r\n  world \r\n  rust ";

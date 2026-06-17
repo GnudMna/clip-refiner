@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::notifier;
 use super::state::{AppState, LockExt};
 use super::worker::ClipboardCommand;
@@ -21,7 +21,7 @@ use tray_icon::menu::MenuEvent;
 /// システムトレイアイコンのメニューから受信したイベントを処理する
 ///
 /// クリックされたメニュー項目の ID に基づいて、アプリケーション設定の変更、
-/// 履歴操作、加工モードの切り替え、またはプログラムの終了などを実行します。
+/// 履歴操作、加工モードの切り替え、またはプログラムの終了などを実行する
 ///
 /// # Arguments
 /// * `event` - 受信したメニューイベント
@@ -51,9 +51,9 @@ pub fn handle_menu_event(
     handle_monitor_event(&event.id, menu, state);
 }
 
-/// UIウィンドウ（セレクタ）に関連するイベントを処理する
+/// UIウィンドウ(セレクタ)に関連するイベントを処理する
 ///
-/// 主にフォーカス喪失時の自動非表示処理などを行います。
+/// 主にフォーカス喪失時の自動非表示処理などを行う
 ///
 /// # Arguments
 /// * `event` - 受信したウィンドウイベント
@@ -68,7 +68,7 @@ pub fn handle_window_event(
         && !focused
         && selector.is_visible()
     {
-        // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
+        // 表示直後のフォーカスロスト(WindowsのAltキーイベント等によるもの)を無視する
         if last_selector_show.elapsed().as_millis() > 200 {
             selector.hide();
         }
@@ -78,7 +78,7 @@ pub fn handle_window_event(
 // ======================================================================
 // アプリケーション制御
 // ======================================================================
-/// アプリケーションの基本操作（終了、一時停止、ショートカット一覧表示）を処理する
+/// アプリケーションの基本操作(終了、一時停止、ショートカット一覧表示)を処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -87,7 +87,7 @@ pub fn handle_window_event(
 /// * `control_flow` - イベントループの制御フロー
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_app_control(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -102,13 +102,11 @@ fn handle_app_control(
         state.with_config_mut(|c| c.is_paused = paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
-        spawn_monitor_thread(Arc::clone(state));
+        bump_monitor_generation(Arc::clone(state));
         true
     } else if id == menu.shortcut_list_item.id() {
-        notification::show_notification(
-            "ショートカット一覧",
-            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
-        );
+        let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
+        notification::show_notification("ショートカット一覧", &body);
         true
     } else {
         false
@@ -118,7 +116,7 @@ fn handle_app_control(
 // ======================================================================
 // 履歴
 // ======================================================================
-/// クリップボード履歴に関連するメニューイベント（有効化切替、消去、過去項目の選択）を処理する
+/// クリップボード履歴に関連するメニューイベント(有効化切替、消去、過去項目の選択)を処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -127,7 +125,7 @@ fn handle_app_control(
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -150,8 +148,10 @@ fn handle_history_event(
 
     let menu_records = menu.history.records.lock_ignore_poison();
 
-    if let Some((_, text)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
-        let _ = clipboard_tx.send(ClipboardCommand::SetText(text.clone()));
+    if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
+        if let Some(text) = state.get_history_entry(*index) {
+            let _ = clipboard_tx.send(ClipboardCommand::SetText(text));
+        }
         return true;
     }
 
@@ -169,7 +169,7 @@ fn handle_history_event(
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_notification_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -215,7 +215,7 @@ fn handle_notification_event(
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -233,7 +233,7 @@ fn handle_refine_mode_event(
 // ======================================================================
 // 監視設定
 // ======================================================================
-/// 監視設定（監視モード、ポーリング間隔）に関連するメニューイベントを処理する
+/// 監視設定(監視モード、ポーリング間隔)に関連するメニューイベントを処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -241,7 +241,7 @@ fn handle_refine_mode_event(
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返します。
+/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
 fn handle_monitor_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
@@ -271,7 +271,7 @@ fn handle_monitor_event(
 // ======================================================================
 /// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
-/// 必要に応じてクリップボードワーカーに加工命令を送信します。
+/// 必要に応じてクリップボードワーカーに加工命令を送信する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -315,5 +315,5 @@ pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode:
     super::monitor::update_monitor_mode_impl(menu, monitor_mode);
 
     state.save_config();
-    super::monitor::spawn_monitor_thread(Arc::clone(state));
+    super::monitor::bump_monitor_generation(Arc::clone(state));
 }
