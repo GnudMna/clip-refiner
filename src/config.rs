@@ -83,6 +83,9 @@ pub struct HotkeySettings {
     /// アプリケーションの終了
     #[serde(default = "default_hotkey_quit")]
     pub quit: String,
+    /// 直近の加工を取り消す
+    #[serde(default = "default_hotkey_undo")]
+    pub undo: String,
 }
 
 impl Default for HotkeySettings {
@@ -92,6 +95,7 @@ impl Default for HotkeySettings {
             notification: default_hotkey_notification(),
             pause: default_hotkey_pause(),
             quit: default_hotkey_quit(),
+            undo: default_hotkey_undo(),
         }
     }
 }
@@ -100,8 +104,8 @@ impl HotkeySettings {
     /// ショートカット一覧表示用の文字列を生成する
     pub fn shortcut_list_text(&self) -> String {
         format!(
-            "{}: クイックセレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 終了",
-            self.selector, self.notification, self.pause, self.quit
+            "{}: クイックセレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 加工の取り消し\n{}: 終了",
+            self.selector, self.notification, self.pause, self.undo, self.quit
         )
     }
 
@@ -119,6 +123,7 @@ impl HotkeySettings {
         );
         fix_hotkey_field(&mut self.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
         fix_hotkey_field(&mut self.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
+        fix_hotkey_field(&mut self.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
     }
 }
 
@@ -167,6 +172,14 @@ fn default_hotkey_pause() -> String {
 /// * `String` - 終了のデフォルトホットキー
 fn default_hotkey_quit() -> String {
     consts::DEFAULT_HOTKEY_QUIT.to_string()
+}
+
+/// 加工取り消しのデフォルトホットキーを返す
+///
+/// # Returns
+/// * `String` - 加工取り消しのデフォルトホットキー
+fn default_hotkey_undo() -> String {
+    consts::DEFAULT_HOTKEY_UNDO.to_string()
 }
 
 /// 設定ファイルのバージョンを返す

@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::event;
-use super::hotkey::HotkeyHandler;
+use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
 use super::monitor::bump_monitor_generation;
 use super::selector::{SelectorWindow, init_selector};
@@ -130,14 +130,15 @@ impl App {
                 let _ = self.menu.refresh_history(&self.state);
             }
             AppEvent::Hotkey(hotkey_event) => {
-                self.hotkey_handler.handle_event(
-                    hotkey_event,
-                    &self.state,
-                    &self.menu,
-                    &self.selector,
+                let mut ctx = HotkeyEventContext {
+                    state: &self.state,
+                    menu: &self.menu,
+                    selector: &self.selector,
                     control_flow,
-                    &mut self.last_selector_show,
-                );
+                    last_selector_show: &mut self.last_selector_show,
+                    clipboard_tx: &self.clipboard_tx,
+                };
+                self.hotkey_handler.handle_event(hotkey_event, &mut ctx);
             }
         }
     }

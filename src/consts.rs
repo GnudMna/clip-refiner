@@ -53,6 +53,9 @@ pub const DEFAULT_HOTKEY_PAUSE: &str = "Alt+Shift+P";
 /// 終了のデフォルトホットキー
 pub const DEFAULT_HOTKEY_QUIT: &str = "Alt+Shift+Q";
 
+/// 加工取り消しのデフォルトホットキー
+pub const DEFAULT_HOTKEY_UNDO: &str = "Alt+Shift+Z";
+
 // ======================================================================
 // ヘルパー関数
 // ======================================================================

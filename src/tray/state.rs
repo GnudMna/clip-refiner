@@ -94,6 +94,8 @@ pub struct AppState {
     pub monitor_generation: AtomicU64,
     /// 二重加工防止用の監視状態
     processed_state: Mutex<ProcessedState>,
+    /// 直近の加工前テキスト (取り消し用)
+    undo_text: Mutex<Option<String>>,
     /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
     history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
@@ -114,6 +116,7 @@ impl AppState {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
+            undo_text: Mutex::new(None),
             history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
         }
@@ -179,6 +182,19 @@ impl AppState {
             ps.last_written_text = None;
             ps.last_seen_text = text.to_string();
         });
+    }
+
+    /// 加工成功時に取り消し用の元テキストを記録する
+    pub fn record_undo_source(&self, text: &str) {
+        *self.undo_text.lock_ignore_poison() = Some(text.to_string());
+    }
+
+    /// 取り消し用の元テキストを取り出す
+    ///
+    /// # Returns
+    /// * `Option<String>` - 取り消し可能な加工があれば `Some(元テキスト)`
+    pub fn take_undo_source(&self) -> Option<String> {
+        self.undo_text.lock_ignore_poison().take()
     }
 
     /// 履歴を復号してすべて取得する
@@ -256,6 +272,7 @@ pub(crate) fn test_app_state() -> AppState {
         config: RwLock::new(config),
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
+        undo_text: Mutex::new(None),
         history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
     }
@@ -429,5 +446,17 @@ mod tests {
         let ps = state.with_processed_state(|s| s.clone());
         assert_eq!(ps.last_seen_text, "restored");
         assert_eq!(ps.last_written_text, None);
+    }
+
+    /// 加工取り消し用テキストの記録と取得
+    #[test]
+    fn test_undo_source_record_and_take() {
+        let state = test_app_state();
+
+        assert!(state.take_undo_source().is_none());
+
+        state.record_undo_source("original");
+        assert_eq!(state.take_undo_source().as_deref(), Some("original"));
+        assert!(state.take_undo_source().is_none());
     }
 }

@@ -135,6 +135,7 @@ pub(crate) fn record_clipboard_outcome(
 ) -> bool {
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            state.record_undo_source(observed_text);
             state.record_processing_success(processed);
             if snap.history_enabled {
                 state.add_to_history(processed.clone());
@@ -302,6 +303,7 @@ mod tests {
         assert_eq!(ps.last_seen_text, "trimmed");
         assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
         assert_eq!(state.get_history(), vec!["trimmed".to_string()]);
+        assert_eq!(state.take_undo_source().as_deref(), Some("  trimmed  "));
     }
 
     /// 変更なし時は観測のみ記録し、履歴に元テキストを追加すること

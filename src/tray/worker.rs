@@ -24,6 +24,8 @@ pub enum ClipboardCommand {
     SetText(String),
     /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
+    /// 直近の加工を取り消し、加工前のテキストをクリップボードへ復元する
+    Undo,
 }
 
 impl std::fmt::Debug for ClipboardCommand {
@@ -31,6 +33,7 @@ impl std::fmt::Debug for ClipboardCommand {
         match self {
             Self::SetText(_) => f.debug_tuple("SetText").field(&"...").finish(),
             Self::ProcessMode(mode) => f.debug_tuple("ProcessMode").field(mode).finish(),
+            Self::Undo => f.write_str("Undo"),
         }
     }
 }
@@ -314,21 +317,52 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
                 }
             }
         }
-        ClipboardCommand::ProcessMode(mode) => match process_clipboard(clipboard, mode) {
-            Ok(ClipboardProcessOutcome::Processed(processed)) => {
-                state.record_processing_success(&processed);
-                notifier::show_process_notification(state, mode, &processed);
-            }
-            Ok(ClipboardProcessOutcome::Unchanged) => {
-                if state.with_config(|c| c.notification_settings.enabled) {
-                    notification::show_notification("加工結果", "テキストに変更はありませんでした");
+        ClipboardCommand::ProcessMode(mode) => {
+            let pre_text = clipboard.get_text().ok();
+            match process_clipboard(clipboard, mode) {
+                Ok(ClipboardProcessOutcome::Processed(processed)) => {
+                    if let Some(ref pre) = pre_text {
+                        state.record_undo_source(pre);
+                    }
+                    state.record_processing_success(&processed);
+                    notifier::show_process_notification(state, mode, &processed);
+                }
+                Ok(ClipboardProcessOutcome::Unchanged) => {
+                    if state.with_config(|c| c.notification_settings.enabled) {
+                        notification::show_notification(
+                            "加工結果",
+                            "テキストに変更はありませんでした",
+                        );
+                    }
+                }
+                Err(e) => {
+                    crate::log_error!("加工エラー: {} ({:?})", e.user_message(), e);
+                    notification::show_notification("加工エラー", e.user_message());
                 }
             }
-            Err(e) => {
-                crate::log_error!("加工エラー: {} ({:?})", e.user_message(), e);
-                notification::show_notification("加工エラー", e.user_message());
+        }
+        ClipboardCommand::Undo => {
+            if let Some(text) = state.take_undo_source() {
+                if let Err(e) = clipboard.set_text(text.clone()) {
+                    crate::log_error!("加工取り消しエラー: {:?}", e);
+                    state.record_undo_source(&text);
+                    notification::show_notification(
+                        "クリップボードエラー",
+                        "加工の取り消しに失敗しました",
+                    );
+                } else {
+                    state.record_processing_success(&text);
+                    if state.with_config(|c| c.notification_settings.enabled) {
+                        notification::show_notification(
+                            "加工の取り消し",
+                            "クリップボードを加工前の内容に戻しました",
+                        );
+                    }
+                }
+            } else if state.with_config(|c| c.notification_settings.enabled) {
+                notification::show_notification("加工の取り消し", "取り消せる加工がありません");
             }
-        },
+        }
     }
 }
 

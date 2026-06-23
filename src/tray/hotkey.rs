@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
@@ -6,6 +7,7 @@ use super::monitor::bump_monitor_generation;
 use super::notifier;
 use super::selector::SelectorWindow;
 use super::state::{AppEvent, AppState};
+use super::worker::ClipboardCommand;
 use crate::config::HotkeySettings;
 use crate::consts;
 use crate::hotkey_binding::resolve_hotkey;
@@ -33,6 +35,8 @@ pub struct HotkeyHandler {
     pause_hotkey: HotKey,
     /// アプリケーション終了用ホットキー
     quit_hotkey: HotKey,
+    /// 加工取り消し用ホットキー
+    undo_hotkey: HotKey,
 }
 
 // ======================================================================
@@ -61,6 +65,7 @@ impl HotkeyHandler {
         );
         let pause_hotkey = resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
         let quit_hotkey = resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
+        let undo_hotkey = resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
 
         let register = |hotkey| manager.register(hotkey).map_err(|e| anyhow::anyhow!(e));
 
@@ -68,6 +73,7 @@ impl HotkeyHandler {
         register(notification_hotkey)?;
         register(pause_hotkey)?;
         register(quit_hotkey)?;
+        register(undo_hotkey)?;
 
         Ok(Self {
             _manager: manager,
@@ -75,6 +81,7 @@ impl HotkeyHandler {
             notification_hotkey,
             pause_hotkey,
             quit_hotkey,
+            undo_hotkey,
         })
     }
 }
@@ -100,6 +107,25 @@ impl HotkeyHandler {
 }
 
 // ======================================================================
+// イベント処理コンテキスト
+// ======================================================================
+/// ホットキーイベント処理に必要な UI 状態の参照
+pub struct HotkeyEventContext<'a> {
+    /// アプリケーションの共有状態
+    pub state: &'a Arc<AppState>,
+    /// トレイメニュー構造体
+    pub menu: &'a TrayMenu,
+    /// セレクタウィンドウのインスタンス
+    pub selector: &'a SelectorWindow,
+    /// イベントループの制御フロー
+    pub control_flow: &'a mut ControlFlow,
+    /// セレクタが最後に表示された時刻(更新用)
+    pub last_selector_show: &'a mut Instant,
+    /// クリップボード・ワーカーへの送信チャネル
+    pub clipboard_tx: &'a Sender<ClipboardCommand>,
+}
+
+// ======================================================================
 // イベント処理
 // ======================================================================
 impl HotkeyHandler {
@@ -107,36 +133,24 @@ impl HotkeyHandler {
     ///
     /// # Arguments
     /// * `event` - 受信したホットキーイベント
-    /// * `state` - アプリケーションの共有状態
-    /// * `menu` - トレイメニュー構造体
-    /// * `selector` - セレクタウィンドウのインスタンス
-    /// * `control_flow` - イベントループの制御フロー
-    /// * `last_selector_show` - セレクタが最後に表示された時刻(更新用)
-    pub fn handle_event(
-        &self,
-        event: GlobalHotKeyEvent,
-        state: &Arc<AppState>,
-        menu: &TrayMenu,
-        selector: &SelectorWindow,
-        control_flow: &mut ControlFlow,
-        last_selector_show: &mut Instant,
-    ) {
+    /// * `ctx` - イベント処理に必要な UI 状態
+    pub fn handle_event(&self, event: GlobalHotKeyEvent, ctx: &mut HotkeyEventContext<'_>) {
         if event.state == global_hotkey::HotKeyState::Pressed {
             if event.id == self.selector_hotkey.id() {
-                if selector.is_visible() {
-                    selector.hide();
+                if ctx.selector.is_visible() {
+                    ctx.selector.hide();
                 } else {
-                    *last_selector_show = Instant::now();
-                    selector.show(state.with_config(|c| c.mode));
+                    *ctx.last_selector_show = Instant::now();
+                    ctx.selector.show(ctx.state.with_config(|c| c.mode));
                 }
             } else if event.id == self.notification_hotkey.id() {
-                let new_val = state.with_config_mut(|c| {
+                let new_val = ctx.state.with_config_mut(|c| {
                     c.notification_settings.enabled = !c.notification_settings.enabled;
                     c.notification_settings.enabled
                 });
-                menu.notification.enabled_item.set_checked(new_val);
-                menu.notification.content_submenu.set_enabled(new_val);
-                state.save_config();
+                ctx.menu.notification.enabled_item.set_checked(new_val);
+                ctx.menu.notification.content_submenu.set_enabled(new_val);
+                ctx.state.save_config();
                 notification::show_notification(
                     "ショートカット",
                     if new_val {
@@ -146,16 +160,18 @@ impl HotkeyHandler {
                     },
                 );
             } else if event.id == self.pause_hotkey.id() {
-                let new_paused = state.with_config_mut(|c| {
+                let new_paused = ctx.state.with_config_mut(|c| {
                     c.is_paused = !c.is_paused;
                     c.is_paused
                 });
-                menu.pause_item.set_checked(new_paused);
-                state.save_config();
-                notifier::show_pause_notification(state, new_paused, "ショートカット");
-                bump_monitor_generation(state);
+                ctx.menu.pause_item.set_checked(new_paused);
+                ctx.state.save_config();
+                notifier::show_pause_notification(ctx.state, new_paused, "ショートカット");
+                bump_monitor_generation(ctx.state);
             } else if event.id == self.quit_hotkey.id() {
-                *control_flow = ControlFlow::Exit;
+                *ctx.control_flow = ControlFlow::Exit;
+            } else if event.id == self.undo_hotkey.id() {
+                let _ = ctx.clipboard_tx.send(ClipboardCommand::Undo);
             }
         }
     }

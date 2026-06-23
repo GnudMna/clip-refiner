@@ -166,6 +166,7 @@ mod tests {
             consts::DEFAULT_HOTKEY_NOTIFICATION,
             consts::DEFAULT_HOTKEY_PAUSE,
             consts::DEFAULT_HOTKEY_QUIT,
+            consts::DEFAULT_HOTKEY_UNDO,
         ] {
             parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
         }
