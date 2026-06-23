@@ -30,7 +30,7 @@ pub fn detect_line_ending(text: &str) -> &str {
 ///
 /// # Returns
 /// * `Cow<'_, str>` - 少なくとも1行で変更があった場合は `Cow::Owned(結合後のテキスト)` を返し、そうでない場合は `Cow::Borrowed(text)` を返す
-pub fn process_lines<'a, F>(text: &'a str, f: F) -> Cow<'a, str>
+pub fn process_lines<F>(text: &str, f: F) -> Cow<'_, str>
 where
     F: Fn(&str) -> Option<Cow<'_, str>>,
 {
@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(detect_line_ending("no newline"), "\n");
     }
 
-    /// process_lines の行単位変換と Borrowed 返却
+    /// `process_lines` の行単位変換と Borrowed 返却
     #[test]
     fn test_process_lines() {
         let input = "a\nb\nc";

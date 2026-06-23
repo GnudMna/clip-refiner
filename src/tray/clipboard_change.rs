@@ -12,7 +12,7 @@ impl ChangeWatcher {
     pub fn new() -> Self {
         Self {
             #[cfg(target_os = "linux")]
-            linux: LinuxWatcher::new().ok(),
+            linux: LinuxWatcher::new(),
         }
     }
 
@@ -21,46 +21,60 @@ impl ChangeWatcher {
     /// # Returns
     /// * `bool` - 現在のプラットフォームでイベント監視が利用可能な場合は `true`
     pub fn is_supported(&self) -> bool {
-        #[cfg(windows)]
-        {
-            true
-        }
-        #[cfg(target_os = "macos")]
-        {
-            true
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.linux.is_some()
-        }
-        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        {
-            false
-        }
+        platform_is_supported(self)
     }
 
     /// クリップボード変更を表すトークンを取得する
     ///
     /// 本文を読み取らずに呼び出せる軽量な値。変更がない間は同じ値を返す。
     pub fn token(&self) -> Option<u64> {
-        #[cfg(windows)]
-        {
-            use clipboard_win::raw::seq_num;
-            seq_num().map(|s| s.get() as u64)
-        }
-        #[cfg(target_os = "macos")]
-        {
-            macos_change_count()
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.linux.as_ref()?.token()
-        }
-        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        {
-            None
-        }
+        platform_token(self)
     }
+}
+
+// ======================================================================
+// プラットフォーム別実装
+// ======================================================================
+#[cfg(windows)]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn platform_is_supported(watcher: &ChangeWatcher) -> bool {
+    watcher.linux.is_some()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    use clipboard_win::raw::seq_num;
+
+    seq_num().map(|s| u64::from(s.get()))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    macos_change_count()
+}
+
+#[cfg(target_os = "linux")]
+fn platform_token(watcher: &ChangeWatcher) -> Option<u64> {
+    watcher.linux.as_ref()?.token()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    None
 }
 
 // ======================================================================
@@ -83,16 +97,53 @@ fn macos_change_count() -> Option<u64> {
 }
 
 // ======================================================================
+// Linux
+// ======================================================================
+#[cfg(target_os = "linux")]
+enum LinuxWatcher {
+    X11(X11Watcher),
+    Wayland(WaylandWatcher),
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxWatcher {
+    /// 利用可能なバックエンドでウォッチャーを生成する
+    ///
+    /// `WAYLAND_DISPLAY` が設定されている場合は Wayland を優先し、
+    /// 失敗時は X11 へフォールバックする
+    fn new() -> Option<Self> {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some()
+            && let Some(watcher) = WaylandWatcher::new()
+        {
+            return Some(Self::Wayland(watcher));
+        }
+
+        if let Ok(watcher) = X11Watcher::new() {
+            return Some(Self::X11(watcher));
+        }
+
+        WaylandWatcher::new().map(Self::Wayland)
+    }
+
+    fn token(&self) -> Option<u64> {
+        match self {
+            Self::X11(watcher) => watcher.token(),
+            Self::Wayland(watcher) => watcher.token(),
+        }
+    }
+}
+
+// ======================================================================
 // Linux (X11)
 // ======================================================================
 #[cfg(target_os = "linux")]
-struct LinuxWatcher {
+struct X11Watcher {
     conn: x11rb::rust_connection::RustConnection,
     clipboard_atom: u32,
 }
 
 #[cfg(target_os = "linux")]
-impl LinuxWatcher {
+impl X11Watcher {
     /// X11 CLIPBOARD 選択オーナーを監視するウォッチャーを生成する
     ///
     /// # Returns
@@ -126,5 +177,111 @@ impl LinuxWatcher {
             .owner;
 
         Some(owner as u64)
+    }
+}
+
+// ======================================================================
+// Linux (Wayland)
+// ======================================================================
+#[cfg(target_os = "linux")]
+enum WaylandProtocol {
+    Ext,
+    Wlr,
+}
+
+#[cfg(target_os = "linux")]
+struct WaylandWatcher {
+    token: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    _thread: std::thread::JoinHandle<()>,
+}
+
+#[cfg(target_os = "linux")]
+impl WaylandWatcher {
+    /// Wayland data-control プロトコルでクリップボード変更を監視する
+    ///
+    /// `ext-data-control-v1` を優先し、未対応の compositor では `wlr-data-control` を試す
+    fn new() -> Option<Self> {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicU64;
+        use std::thread;
+
+        let protocol = probe_wayland_protocol()?;
+        let token = Arc::new(AtomicU64::new(0));
+        let token_for_thread = Arc::clone(&token);
+
+        let thread = thread::spawn(move || run_wayland_listener(token_for_thread, protocol));
+
+        Some(Self {
+            token,
+            _thread: thread,
+        })
+    }
+
+    /// 変更回数をトークンとして返す
+    fn token(&self) -> Option<u64> {
+        use std::sync::atomic::Ordering;
+
+        Some(self.token.load(Ordering::Relaxed))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn probe_wayland_protocol() -> Option<WaylandProtocol> {
+    use wayland_clipboard_listener::{
+        WlClipboardPasteStream, WlClipboardPasteStreamWlr, WlListenType,
+    };
+
+    if WlClipboardPasteStream::init(WlListenType::ListenOnSelect).is_ok() {
+        return Some(WaylandProtocol::Ext);
+    }
+
+    if WlClipboardPasteStreamWlr::init(WlListenType::ListenOnSelect).is_ok() {
+        return Some(WaylandProtocol::Wlr);
+    }
+
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn run_wayland_listener(
+    token: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    protocol: WaylandProtocol,
+) {
+    use wayland_clipboard_listener::{
+        WlClipboardPasteStream, WlClipboardPasteStreamWlr, WlListenType,
+    };
+
+    match protocol {
+        WaylandProtocol::Ext => {
+            let Ok(mut stream) = WlClipboardPasteStream::init(WlListenType::ListenOnSelect) else {
+                return;
+            };
+            bump_token_on_clipboard_events(stream.paste_stream(), &token);
+        }
+        WaylandProtocol::Wlr => {
+            let Ok(mut stream) = WlClipboardPasteStreamWlr::init(WlListenType::ListenOnSelect)
+            else {
+                return;
+            };
+            bump_token_on_clipboard_events(stream.paste_stream(), &token);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn bump_token_on_clipboard_events<I>(iter: I, token: &std::sync::Arc<std::sync::atomic::AtomicU64>)
+where
+    I: Iterator<
+        Item = Result<
+            wayland_clipboard_listener::ClipBoardListenMessage,
+            wayland_clipboard_listener::WlClipboardListenerError,
+        >,
+    >,
+{
+    use std::sync::atomic::Ordering;
+
+    for result in iter.flatten() {
+        let _ = result;
+        token.fetch_add(1, Ordering::Relaxed);
     }
 }

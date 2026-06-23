@@ -76,6 +76,20 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 // ======================================================================
 // 一時停止通知
 // ======================================================================
+/// 一時停止通知を表示すべきか判定する
+pub(crate) fn should_show_pause_notification(settings: &NotificationSettings) -> bool {
+    settings.enabled && settings.notify_pause
+}
+
+/// 一時停止状態に応じた通知本文を返す
+pub(crate) fn pause_notification_body(paused: bool) -> &'static str {
+    if paused {
+        "クリップボード監視を一時停止しました"
+    } else {
+        "クリップボード監視を再開しました"
+    }
+}
+
 /// 監視の一時停止または再開時のデスクトップ通知を表示する
 ///
 /// # Arguments
@@ -84,15 +98,8 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
 /// * `source` - 通知のタイトル(操作元を示す文字列、例: "ショートカット", "設定変更")
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
-    if settings.enabled && settings.notify_pause {
-        notification::show_notification(
-            source,
-            if paused {
-                "クリップボード監視を一時停止しました"
-            } else {
-                "クリップボード監視を再開しました"
-            },
-        );
+    if should_show_pause_notification(&settings) {
+        notification::show_notification(source, pause_notification_body(paused));
     }
 }
 
@@ -131,7 +138,7 @@ mod tests {
         assert!(body.contains("内容: hello"));
     }
 
-    /// notify_mode のみ ON の場合はモード行だけ含むこと
+    /// `notify_mode` のみ ON の場合はモード行だけ含むこと
     #[test]
     fn format_body_mode_only() {
         let settings = NotificationSettings {
@@ -145,7 +152,7 @@ mod tests {
         assert!(!body.contains("内容:"));
     }
 
-    /// notify_result のみ ON の場合は内容行だけ含むこと
+    /// `notify_result` のみ ON の場合は内容行だけ含むこと
     #[test]
     fn format_body_result_only() {
         let settings = NotificationSettings {
@@ -173,5 +180,40 @@ mod tests {
     fn truncate_snippet_within_limit() {
         let input = "あ".repeat(50);
         assert_eq!(truncate_notification_snippet(&input), input);
+    }
+
+    /// 通知無効時は一時停止通知を表示しないこと
+    #[test]
+    fn pause_notification_disabled_when_settings_off() {
+        let settings = NotificationSettings::default();
+        assert!(!should_show_pause_notification(&settings));
+    }
+
+    /// `notify_pause` のみ OFF の場合は一時停止通知を表示しないこと
+    #[test]
+    fn pause_notification_disabled_when_notify_pause_off() {
+        let settings = NotificationSettings {
+            notify_pause: false,
+            ..enabled_settings()
+        };
+        assert!(!should_show_pause_notification(&settings));
+    }
+
+    /// 一時停止時の通知本文
+    #[test]
+    fn pause_notification_body_when_paused() {
+        assert_eq!(
+            pause_notification_body(true),
+            "クリップボード監視を一時停止しました"
+        );
+    }
+
+    /// 再開時の通知本文
+    #[test]
+    fn pause_notification_body_when_resumed() {
+        assert_eq!(
+            pause_notification_body(false),
+            "クリップボード監視を再開しました"
+        );
     }
 }

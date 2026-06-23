@@ -19,7 +19,7 @@ use arboard::Clipboard;
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
-pub fn bump_monitor_generation(state: Arc<AppState>) {
+pub fn bump_monitor_generation(state: &Arc<AppState>) {
     if state.with_config(|c| c.is_paused) {
         return;
     }
@@ -107,8 +107,7 @@ pub(crate) fn handle_clipboard_update(
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
             notifier::show_process_notification(state, snap.mode, processed);
         }
-        Ok(ClipboardProcessOutcome::Unchanged) => {}
-        Err(ClipboardProcessError::NoText) => {}
+        Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
         Err(e) => {
             crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
             notification::show_notification("加工エラー", e.user_message());
@@ -136,28 +135,23 @@ pub(crate) fn record_clipboard_outcome(
 ) -> bool {
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            state.record_undo_source(observed_text);
             state.record_processing_success(processed);
             if snap.history_enabled {
                 state.add_to_history(processed.clone());
             }
             true
         }
-        Ok(ClipboardProcessOutcome::Unchanged) => {
+        Ok(ClipboardProcessOutcome::Unchanged)
+        | Err(ClipboardProcessError::ReadFailed(_) | ClipboardProcessError::WriteFailed(_)) => {
             state.record_clipboard_observed(observed_text);
             if snap.history_enabled {
-                state.add_to_history(observed_text.to_string());
+                state.add_to_history(observed_text);
             }
             false
         }
         Err(ClipboardProcessError::NoText) => {
             state.record_clipboard_observed(observed_text);
-            false
-        }
-        Err(_) => {
-            state.record_clipboard_observed(observed_text);
-            if snap.history_enabled {
-                state.add_to_history(observed_text.to_string());
-            }
             false
         }
     }
@@ -255,7 +249,7 @@ mod tests {
         assert!(should_process_clipboard(&mut ps, "  source  ", true));
     }
 
-    /// 一時停止中は bump_monitor_generation が世代を進めないこと
+    /// 一時停止中は `bump_monitor_generation` が世代を進めないこと
     #[test]
     fn bump_monitor_generation_skips_when_paused() {
         use std::sync::atomic::Ordering;
@@ -263,11 +257,11 @@ mod tests {
         let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.is_paused = true);
 
-        bump_monitor_generation(Arc::clone(&state));
+        bump_monitor_generation(&state);
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 監視中は bump_monitor_generation が世代カウンタをインクリメントすること
+    /// 監視中は `bump_monitor_generation` が世代カウンタをインクリメントすること
     #[test]
     fn bump_monitor_generation_increments_when_active() {
         use std::sync::atomic::Ordering;
@@ -275,10 +269,10 @@ mod tests {
         let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.is_paused = false);
 
-        bump_monitor_generation(Arc::clone(&state));
+        bump_monitor_generation(&state);
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 1);
 
-        bump_monitor_generation(Arc::clone(&state));
+        bump_monitor_generation(&state);
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 
@@ -291,7 +285,7 @@ mod tests {
         }
     }
 
-    /// 加工成功時に processed_state と履歴が更新されること
+    /// 加工成功時に `processed_state` と履歴が更新されること
     #[test]
     fn record_outcome_processed_updates_state_and_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -309,6 +303,7 @@ mod tests {
         assert_eq!(ps.last_seen_text, "trimmed");
         assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
         assert_eq!(state.get_history(), vec!["trimmed".to_string()]);
+        assert_eq!(state.take_undo_source().as_deref(), Some("  trimmed  "));
     }
 
     /// 変更なし時は観測のみ記録し、履歴に元テキストを追加すること
@@ -342,7 +337,7 @@ mod tests {
         assert!(state.get_history().is_empty());
     }
 
-    /// NoText エラー時は観測のみ記録し履歴に追加しないこと
+    /// `NoText` エラー時は観測のみ記録し履歴に追加しないこと
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());

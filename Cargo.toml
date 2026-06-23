@@ -1,9 +1,21 @@
 [package]
 name = "clip-refiner"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
+rust-version = "1.96"
 authors = ["y_hirata"]
 description = "クリップボードのテキストを加工するツール"
+readme = "README.md"
+build = "build.rs"
+
+[package.metadata.wix]
+upgrade-guid = "A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D"
+path-guid = "B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D"
+product-icon = "assets/icon.ico"
+eula = true
+culture = "ja-JP"
+# perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
+linker-args = ["-sice:ICE91"]
 
 [dependencies]
 anyhow = "1.0"
@@ -37,12 +49,24 @@ windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 wry = "0.55.1"
 zeroize = "1.8"
 
-[build-dependencies]
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56.0"
+
+[target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+[lib]
+name = "clip_refiner"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ClipRefiner"
 path = "src/main.rs"
+
+# Windows / macOS のプラットフォーム API で unsafe が必要なため unsafe_code = forbid は適用しない
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 
 [profile.release]
 opt-level = 3
@@ -57,4 +81,5 @@ objc2 = "0.6"
 objc2-app-kit = "0.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+wayland-clipboard-listener = { version = "0.6.1", features = ["wlr-data-control"] }
 x11rb = "0.13"

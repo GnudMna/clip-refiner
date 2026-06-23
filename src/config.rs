@@ -31,6 +31,7 @@ pub enum MonitorMode {
 /// 通知の内容に関する設定
 ///
 /// どのタイミングでどのような通知を表示するかを制御する
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// 成功通知機能全体の有効/無効スイッチ
@@ -82,6 +83,9 @@ pub struct HotkeySettings {
     /// アプリケーションの終了
     #[serde(default = "default_hotkey_quit")]
     pub quit: String,
+    /// 直近の加工を取り消す
+    #[serde(default = "default_hotkey_undo")]
+    pub undo: String,
 }
 
 impl Default for HotkeySettings {
@@ -91,6 +95,7 @@ impl Default for HotkeySettings {
             notification: default_hotkey_notification(),
             pause: default_hotkey_pause(),
             quit: default_hotkey_quit(),
+            undo: default_hotkey_undo(),
         }
     }
 }
@@ -99,8 +104,8 @@ impl HotkeySettings {
     /// ショートカット一覧表示用の文字列を生成する
     pub fn shortcut_list_text(&self) -> String {
         format!(
-            "{}: クイックセレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 終了",
-            self.selector, self.notification, self.pause, self.quit
+            "{}: クイックセレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 加工の取り消し\n{}: 終了",
+            self.selector, self.notification, self.pause, self.undo, self.quit
         )
     }
 
@@ -118,6 +123,7 @@ impl HotkeySettings {
         );
         fix_hotkey_field(&mut self.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
         fix_hotkey_field(&mut self.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
+        fix_hotkey_field(&mut self.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
     }
 }
 
@@ -166,6 +172,14 @@ fn default_hotkey_pause() -> String {
 /// * `String` - 終了のデフォルトホットキー
 fn default_hotkey_quit() -> String {
     consts::DEFAULT_HOTKEY_QUIT.to_string()
+}
+
+/// 加工取り消しのデフォルトホットキーを返す
+///
+/// # Returns
+/// * `String` - 加工取り消しのデフォルトホットキー
+fn default_hotkey_undo() -> String {
+    consts::DEFAULT_HOTKEY_UNDO.to_string()
 }
 
 /// 設定ファイルのバージョンを返す
@@ -259,9 +273,7 @@ impl AppConfig {
     /// # Returns
     /// * `Result<PathBuf>` - 設定ファイルの完全なパス
     fn config_path() -> Result<PathBuf> {
-        let config_dir = get_config_dir()?;
-        fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
-        Ok(config_dir.join("config.json"))
+        get_config_file_path()
     }
 
     /// 設定ファイルを読み込む
@@ -363,13 +375,87 @@ pub fn get_config_dir() -> Result<PathBuf> {
     let base_dirs =
         directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
 
-    #[cfg(windows)]
-    let dir_name = consts::APP_NAME;
+    Ok(base_dirs.config_dir().join(config_dir_name()))
+}
 
-    #[cfg(not(windows))]
-    let dir_name = consts::APP_NAME_KEBAB;
+/// OS ごとの設定ディレクトリ名を返す
+#[cfg(windows)]
+fn config_dir_name() -> &'static str {
+    consts::APP_NAME
+}
 
-    Ok(base_dirs.config_dir().join(dir_name))
+/// OS ごとの設定ディレクトリ名を返す
+#[cfg(not(windows))]
+fn config_dir_name() -> &'static str {
+    consts::APP_NAME_KEBAB
+}
+
+/// 設定ファイルのパスを取得する
+///
+/// 設定ディレクトリが存在しない場合は作成する
+///
+/// # Returns
+/// * `Result<PathBuf>` - `config.json` の完全なパス
+pub fn get_config_file_path() -> Result<PathBuf> {
+    let config_dir = get_config_dir()?;
+    fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+    Ok(config_dir.join("config.json"))
+}
+
+/// 設定ファイルを既定のアプリケーションで開く
+///
+/// 呼び出し前に `AppConfig::save` などでファイルを書き出しておくこと
+///
+/// # Returns
+/// * `Result<()>` - 起動に成功した場合は `Ok(())`、失敗した場合は `Err` を返す
+pub fn open_config_file() -> Result<()> {
+    let path = get_config_file_path()?;
+    open_path_in_default_application(&path)
+}
+
+/// パスを OS の既定アプリケーションで開く
+fn open_path_in_default_application(path: &Path) -> Result<()> {
+    let path_str = path
+        .to_str()
+        .context("設定ファイルのパスを文字列に変換できませんでした")?;
+
+    platform_open_path(path_str)
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(windows)]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", path_str])
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(target_os = "macos")]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("open")
+        .arg(path_str)
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("xdg-open")
+        .arg(path_str)
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(not(any(windows, target_os = "macos", unix)))]
+fn platform_open_path(_path_str: &str) -> Result<()> {
+    anyhow::bail!("このプラットフォームではファイルを開けません")
 }
 
 // ======================================================================
@@ -379,7 +465,7 @@ pub fn get_config_dir() -> Result<PathBuf> {
 mod tests {
     use super::*;
 
-    /// AppConfig のデフォルト値が正しいこと
+    /// `AppConfig` のデフォルト値が正しいこと
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
@@ -390,7 +476,7 @@ mod tests {
         assert_eq!(config.hotkeys, HotkeySettings::default());
     }
 
-    /// AppConfig のシリアライズ/デシリアライズ往復
+    /// `AppConfig` のシリアライズ/デシリアライズ往復
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();
@@ -403,7 +489,7 @@ mod tests {
         assert_eq!(config.hotkeys, decoded.hotkeys);
     }
 
-    /// NotificationSettings のデフォルト値が正しいこと
+    /// `NotificationSettings` のデフォルト値が正しいこと
     #[test]
     fn test_notification_settings_default() {
         let ns = NotificationSettings::default();
@@ -413,7 +499,7 @@ mod tests {
         assert!(ns.notify_pause);
     }
 
-    /// 古い設定 JSON (show_success_notification フィールドあり) を読んでも
+    /// 古い設定 JSON (`show_success_notification` フィールドあり) を読んでも
     /// デフォルト値でデシリアライズできること
     #[test]
     fn test_app_config_backward_compat_old_field() {
@@ -430,7 +516,7 @@ mod tests {
         assert_eq!(config.hotkeys.selector, consts::DEFAULT_HOTKEY_SELECTOR);
     }
 
-    /// notification_settings.enabled が JSON に保存・復元されること
+    /// `notification_settings.enabled` が JSON に保存・復元されること
     #[test]
     fn test_notification_settings_serde_roundtrip() {
         let mut config = AppConfig::default();
@@ -447,9 +533,11 @@ mod tests {
     /// normalize が範囲外の値をクランプすること
     #[test]
     fn test_app_config_normalize_clamps() {
-        let mut config = AppConfig::default();
-        config.history_limit = 999;
-        config.interval_ms = 10;
+        let mut config = AppConfig {
+            history_limit: 999,
+            interval_ms: 10,
+            ..Default::default()
+        };
 
         config.normalize();
 
@@ -457,7 +545,7 @@ mod tests {
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
     }
 
-    /// fix_invalid が不正なホットキーをデフォルトへ置き換えること
+    /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えること
     #[test]
     fn test_hotkey_settings_fix_invalid() {
         let mut hotkeys = HotkeySettings {

@@ -144,11 +144,11 @@ pub enum RefineMode {
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     #[strum(message = "JSON→YAML(キー順序保持)")]
     JsonToYamlPreserveOrder,
-    /// Markdown形式のテキストをHTML形式へ変換する
+    /// `Markdown形式のテキストをHTML形式へ変換する`
     #[value(help = "MarkdownをHTML形式へ変換")]
     #[strum(message = "Markdown→HTML")]
     MarkdownToHtml,
-    /// ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する
+    /// `ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する`
     #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
     #[strum(message = "Excel→Markdown")]
     ExcelToMarkdown,
@@ -221,7 +221,7 @@ impl RefineCategory {
     ///
     /// # Returns
     /// * `&'static str` - UIに表示するためのカテゴリ名
-    pub fn label(&self) -> &'static str {
+    pub fn label(self) -> &'static str {
         self.get_message().unwrap_or("")
     }
 
@@ -250,7 +250,7 @@ impl RefineMode {
     ///
     /// # Returns
     /// * `&'static str` - モードに対応する静的な文字列ラベル
-    pub fn label(&self) -> &'static str {
+    pub fn label(self) -> &'static str {
         self.get_message().unwrap_or("")
     }
 
@@ -258,7 +258,7 @@ impl RefineMode {
     ///
     /// # Returns
     /// * `RefineCategory` - モードが属するカテゴリ
-    pub fn category(&self) -> RefineCategory {
+    pub fn category(self) -> RefineCategory {
         use RefineCategory as C;
         match self {
             Self::UrlEncode | Self::UrlDecode | Self::RemoveUtm => C::UrlActions,
@@ -363,9 +363,9 @@ impl Refiner for RefineMode {
     fn refine<'a>(&self, text: &'a str) -> Cow<'a, str> {
         match self {
             RefineMode::UrlEncode => url::url_encode(text),
-            RefineMode::UrlDecode => url::url_decode(text)
-                .map(Cow::Owned)
-                .unwrap_or_else(|_| Cow::Borrowed(text)),
+            RefineMode::UrlDecode => {
+                url::url_decode(text).map_or_else(|_| Cow::Borrowed(text), Cow::Owned)
+            }
             RefineMode::RemoveUtm => url::remove_utm_params(text),
             RefineMode::ExtractBasename => path::extract_basename(text),
             RefineMode::ExtractBasenameQuoted => path::extract_basename_quoted(text),
@@ -433,6 +433,35 @@ impl ClipboardProcessError {
     }
 }
 
+/// テキストに加工モードを適用する
+///
+/// クリップボード I/O は行わない
+///
+/// # Arguments
+/// * `text` - 加工前のテキスト
+/// * `mode` - 適用する加工モード (`RefineMode`)
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError::NoText)` - テキストが空
+pub(crate) fn apply_refinement_to_text(
+    text: &str,
+    mode: RefineMode,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    if text.is_empty() {
+        return Err(ClipboardProcessError::NoText);
+    }
+
+    let refined = mode.refine(text);
+
+    if refined == text {
+        Ok(ClipboardProcessOutcome::Unchanged)
+    } else {
+        Ok(ClipboardProcessOutcome::Processed(refined.into_owned()))
+    }
+}
+
 /// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
 ///
 /// テキストが変更された場合のみクリップボードを更新する
@@ -453,21 +482,15 @@ pub fn process_clipboard(
         .get_text()
         .map_err(|e| ClipboardProcessError::ReadFailed(e.to_string()))?;
 
-    if text.is_empty() {
-        return Err(ClipboardProcessError::NoText);
+    match apply_refinement_to_text(&text, mode)? {
+        ClipboardProcessOutcome::Unchanged => Ok(ClipboardProcessOutcome::Unchanged),
+        ClipboardProcessOutcome::Processed(result) => {
+            clipboard
+                .set_text(result.clone())
+                .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
+            Ok(ClipboardProcessOutcome::Processed(result))
+        }
     }
-
-    let refined = mode.refine(&text);
-
-    if refined == text {
-        return Ok(ClipboardProcessOutcome::Unchanged);
-    }
-
-    let result = refined.into_owned();
-    clipboard
-        .set_text(result.clone())
-        .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
-    Ok(ClipboardProcessOutcome::Processed(result))
 }
 
 // ======================================================================
@@ -478,7 +501,7 @@ mod tests {
     use super::*;
     use arboard::Clipboard;
 
-    /// RefineMode のラベルとカテゴリが期待どおりであること
+    /// `RefineMode` のラベルとカテゴリが期待どおりであること
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
@@ -506,13 +529,13 @@ mod tests {
         );
     }
 
-    /// 全モードのカテゴリが SUBMENU_ORDER で網羅されていること
+    /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されていること
     #[test]
     fn test_submenu_order_covers_all_categories() {
         use std::collections::HashSet;
 
         let used: HashSet<_> = RefineMode::iter()
-            .map(|m| m.category())
+            .map(super::RefineMode::category)
             .filter(|c| *c != RefineCategory::Normal)
             .collect();
         let ordered: HashSet<_> = RefineCategory::SUBMENU_ORDER.into_iter().collect();
@@ -523,7 +546,7 @@ mod tests {
         );
     }
 
-    /// 全 RefineMode の label が空でないこと
+    /// 全 `RefineMode` の label が空でないこと
     #[test]
     fn test_all_refine_modes_have_nonempty_labels() {
         for mode in RefineMode::iter() {
@@ -531,7 +554,7 @@ mod tests {
         }
     }
 
-    /// is_deferred_in_menu が Datetime / Number のみ true であること
+    /// `is_deferred_in_menu` が Datetime / Number のみ true であること
     #[test]
     fn test_refine_category_is_deferred_in_menu() {
         use RefineCategory::*;
@@ -550,7 +573,7 @@ mod tests {
         }
     }
 
-    /// to_json_list が全モード分の有効な JSON を返すこと
+    /// `to_json_list` が全モード分の有効な JSON を返すこと
     #[test]
     fn test_to_json_list() {
         let json = RefineMode::to_json_list();
@@ -567,7 +590,7 @@ mod tests {
         }
     }
 
-    /// selector_modes が全モードをトレイメニュー相当の順序で返すこと
+    /// `selector_modes` が全モードをトレイメニュー相当の順序で返すこと
     #[test]
     fn test_selector_modes_order() {
         let ordered = RefineMode::selector_modes();
@@ -591,7 +614,7 @@ mod tests {
         assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
     }
 
-    /// RefineMode のバリアント数と主要バリアントの存在を確認すること
+    /// `RefineMode` のバリアント数と主要バリアントの存在を確認すること
     #[test]
     fn test_refine_mode_variants() {
         let variants: Vec<_> = RefineMode::iter().collect();
@@ -616,6 +639,33 @@ mod tests {
         assert_eq!(
             ClipboardProcessError::WriteFailed("detail".to_string()).user_message(),
             "クリップボードへの書き込みに失敗しました"
+        );
+    }
+
+    /// 空文字列は `NoText` エラーになること
+    #[test]
+    fn apply_refinement_to_text_rejects_empty() {
+        assert_eq!(
+            apply_refinement_to_text("", RefineMode::Trim),
+            Err(ClipboardProcessError::NoText)
+        );
+    }
+
+    /// 変更がある場合は `Processed` を返すこと
+    #[test]
+    fn apply_refinement_to_text_returns_processed() {
+        assert_eq!(
+            apply_refinement_to_text("  hello  ", RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
+        );
+    }
+
+    /// 変更がない場合は `Unchanged` を返すこと
+    #[test]
+    fn apply_refinement_to_text_returns_unchanged() {
+        assert_eq!(
+            apply_refinement_to_text("hello", RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Unchanged)
         );
     }
 
@@ -655,9 +705,10 @@ mod tests {
         );
     }
 
-    /// 全てのRefineModeバリアントを網羅するテーブル駆動テスト
+    /// `全てのRefineModeバリアントを網羅するテーブル駆動テスト`
     /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_all_refine_modes() {
         const CASES: &[(RefineMode, &str, &str)] = &[
             (
@@ -772,16 +823,14 @@ mod tests {
                     assert_eq!(actual, "1672531200");
                 }
                 other => {
-                    let (input, expected) = CASES
-                        .iter()
-                        .find(|(m, _, _)| *m == other)
-                        .map(|(_, input, expected)| (*input, *expected))
-                        .unwrap_or_else(|| panic!("TestCase missing for {:?}", other));
+                    let (input, expected) = CASES.iter().find(|(m, _, _)| *m == other).map_or_else(
+                        || panic!("TestCase missing for {other:?}"),
+                        |(_, input, expected)| (*input, *expected),
+                    );
                     let actual = other.refine(input);
                     assert_eq!(
                         actual, expected,
-                        "Failed at mode: {:?}\nInput: {}\nExpected: {}\nActual: {}",
-                        other, input, expected, actual
+                        "Failed at mode: {other:?}\nInput: {input}\nExpected: {expected}\nActual: {actual}"
                     );
                 }
             }

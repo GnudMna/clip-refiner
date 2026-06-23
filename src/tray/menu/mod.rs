@@ -5,6 +5,7 @@
 use std::sync::Mutex;
 
 use super::state::AppState;
+use crate::autostart;
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
 
@@ -46,7 +47,7 @@ pub struct RefineMenu {
 }
 
 impl RefineMenu {
-    /// すべてのモードアイテム(CheckMenuItem と RefineMode のペア)を平坦化したイテレータとして返す
+    /// すべてのモードアイテム(CheckMenuItem と `RefineMode` のペア)を平坦化したイテレータとして返す
     ///
     /// # Returns
     /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ
@@ -119,8 +120,12 @@ pub struct TrayMenu {
     pub history: HistoryMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
+    /// 設定ファイルを開く項目
+    pub open_config_item: MenuItem,
     /// ショートカット一覧表示項目
     pub shortcut_list_item: MenuItem,
+    /// ログイン時の自動起動を切り替える項目
+    pub launch_at_login_item: CheckMenuItem,
 }
 
 // ======================================================================
@@ -138,7 +143,7 @@ impl TrayMenu {
     /// # Returns
     /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す
     pub fn build(state: &AppState) -> Result<Self> {
-        let config = state.with_config(|c| c.clone());
+        let config = state.with_config(std::clone::Clone::clone);
 
         let refine = Self::build_refine_menu(config.mode)?;
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
@@ -156,6 +161,9 @@ impl TrayMenu {
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
+        let launch_at_login_item =
+            CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
+        let open_config_item = MenuItem::new("設定を開く", true, None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -169,8 +177,10 @@ impl TrayMenu {
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &open_config_item as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &quit_item as &dyn tray_icon::menu::IsMenuItem,
@@ -179,7 +189,7 @@ impl TrayMenu {
 
         // アイコン設定
         let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
-        let _tray_icon = TrayIconBuilder::new()
+        let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(tray_menu))
             .with_tooltip("ClipRefiner")
             .with_icon(icon)
@@ -187,7 +197,7 @@ impl TrayMenu {
             .context("トレイアイコンのビルドに失敗しました")?;
 
         let this = Self {
-            _tray_icon,
+            _tray_icon: tray_icon,
             quit_item,
             pause_item,
             refine,
@@ -195,12 +205,114 @@ impl TrayMenu {
             interval,
             history,
             notification,
+            open_config_item,
             shortcut_list_item,
+            launch_at_login_item,
         };
 
         // カテゴリラベルの初期更新
         this.refresh_category_labels(config.mode);
 
         Ok(this)
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::MonitorMode;
+    use crate::refiner::{RefineCategory, RefineMode};
+    use strum::IntoEnumIterator;
+
+    /// 変換モードメニューに全 31 モードが含まれること
+    #[test]
+    fn build_refine_menu_contains_all_modes() {
+        let refine =
+            TrayMenu::build_refine_menu(RefineMode::Trim).expect("変換モードメニューの構築に失敗");
+        let modes: Vec<_> = refine.all_items().map(|(_, mode)| *mode).collect();
+        assert_eq!(modes.len(), RefineMode::iter().count());
+        assert!(
+            refine
+                .all_items()
+                .any(|(item, mode)| *mode == RefineMode::Trim && item.is_checked())
+        );
+    }
+
+    /// 選択カテゴリのサブメニューにチェックプレフィックスが付くこと
+    #[test]
+    fn refresh_category_labels_marks_current_category() {
+        let refine = TrayMenu::build_refine_menu(RefineMode::UrlEncode)
+            .expect("変換モードメニューの構築に失敗");
+        let tray = TrayMenu {
+            _tray_icon: TrayIconBuilder::new()
+                .with_icon(create_icon().expect("アイコンの作成に失敗"))
+                .build()
+                .expect("トレイアイコンのビルドに失敗"),
+            quit_item: MenuItem::new("終了", true, None),
+            pause_item: CheckMenuItem::new("一時停止", true, false, None),
+            refine,
+            monitor: TrayMenu::build_monitor_menu(MonitorMode::Polling)
+                .expect("監視方式メニューの構築に失敗"),
+            interval: TrayMenu::build_interval_menu(1000, MonitorMode::Polling)
+                .expect("監視周期メニューの構築に失敗"),
+            history: TrayMenu::build_history_menu(false).expect("履歴メニューの構築に失敗"),
+            notification: TrayMenu::build_notification_menu(false, true, true, true)
+                .expect("通知メニューの構築に失敗"),
+            open_config_item: MenuItem::new("設定を開く", true, None),
+            shortcut_list_item: MenuItem::new("ショートカット一覧", true, None),
+            launch_at_login_item: CheckMenuItem::new("ログイン時に起動", true, false, None),
+        };
+
+        tray.refresh_category_labels(RefineMode::UrlEncode);
+
+        let url_group = tray
+            .refine
+            .groups
+            .iter()
+            .find(|g| g.category == RefineCategory::UrlActions)
+            .expect("URL カテゴリが存在する");
+        assert!(url_group.submenu.text().starts_with('✓'));
+    }
+
+    /// イベント監視時は監視周期メニューが無効になること
+    #[test]
+    fn build_interval_menu_disabled_for_event_mode() {
+        let interval = TrayMenu::build_interval_menu(1000, MonitorMode::Event)
+            .expect("監視周期メニューの構築に失敗");
+        assert!(!interval.main_submenu.is_enabled());
+    }
+
+    /// ポーリング監視時は現在の間隔だけがチェックされること
+    #[test]
+    fn build_interval_menu_checks_current_interval() {
+        let interval = TrayMenu::build_interval_menu(2000, MonitorMode::Polling)
+            .expect("監視周期メニューの構築に失敗");
+        assert!(interval.main_submenu.is_enabled());
+        assert!(
+            interval
+                .items
+                .iter()
+                .any(|(item, ms)| *ms == 2000 && item.is_checked())
+        );
+        assert!(
+            interval
+                .items
+                .iter()
+                .any(|(item, ms)| *ms == 1000 && !item.is_checked())
+        );
+    }
+
+    /// 通知メニューの有効状態が初期値を反映すること
+    #[test]
+    fn build_notification_menu_reflects_settings() {
+        let notification = TrayMenu::build_notification_menu(true, false, true, false)
+            .expect("通知メニューの構築に失敗");
+        assert!(notification.enabled_item.is_checked());
+        assert!(!notification.notify_mode_item.is_checked());
+        assert!(notification.notify_result_item.is_checked());
+        assert!(!notification.notify_pause_item.is_checked());
     }
 }
