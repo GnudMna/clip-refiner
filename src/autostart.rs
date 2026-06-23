@@ -39,7 +39,7 @@ fn normalize_path(path: PathBuf) -> PathBuf {
 }
 
 /// 2 つのパスが同一の実行ファイルを指すかどうかを判定する
-fn paths_match(a: &Path, b: &Path) -> bool {
+pub(crate) fn paths_match(a: &Path, b: &Path) -> bool {
     #[cfg(windows)]
     {
         a.to_string_lossy()
@@ -48,6 +48,71 @@ fn paths_match(a: &Path, b: &Path) -> bool {
     #[cfg(not(windows))]
     {
         a == b
+    }
+}
+
+/// XML 属性値向けに特殊文字をエスケープする
+#[allow(dead_code)]
+pub(crate) fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// Windows ではパス比較が大文字小文字を区別しないこと
+    #[test]
+    fn paths_match_ignore_case_on_windows() {
+        #[cfg(windows)]
+        {
+            assert!(paths_match(
+                Path::new(r"C:\Apps\ClipRefiner.exe"),
+                Path::new(r"c:\apps\cliprefiner.exe")
+            ));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(!paths_match(
+                Path::new("/usr/bin/ClipRefiner"),
+                Path::new("/usr/bin/cliprefiner")
+            ));
+        }
+    }
+
+    /// 同一パスは一致すること
+    #[test]
+    fn paths_match_same_path() {
+        let path = Path::new("/usr/bin/clip-refiner");
+        assert!(paths_match(path, path));
+    }
+
+    /// 異なるパスは一致しないこと
+    #[test]
+    fn paths_match_different_paths() {
+        assert!(!paths_match(
+            Path::new("/usr/bin/clip-refiner"),
+            Path::new("/opt/clip-refiner/bin")
+        ));
+    }
+
+    /// XML 特殊文字をエスケープすること
+    #[test]
+    fn xml_escape_special_chars() {
+        assert_eq!(
+            xml_escape(r#"<exec path="C:\Apps\Clip&Refiner.exe">"#),
+            "&lt;exec path=&quot;C:\\Apps\\Clip&amp;Refiner.exe&quot;&gt;"
+        );
     }
 }
 
@@ -120,7 +185,7 @@ mod platform {
 
     use anyhow::{Context, Result};
 
-    use super::current_exe_path;
+    use super::{current_exe_path, xml_escape};
     use crate::consts;
 
     /// LaunchAgent が配置されているかどうかを返す
@@ -179,16 +244,6 @@ mod platform {
             .join("Library")
             .join("LaunchAgents")
             .join(format!("{}.plist", consts::APP_ID)))
-    }
-
-    /// XML 属性値向けに特殊文字をエスケープする
-    fn xml_escape(value: &str) -> String {
-        value
-            .replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-            .replace('"', "&quot;")
-            .replace('\'', "&apos;")
     }
 }
 

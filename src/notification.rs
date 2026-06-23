@@ -4,9 +4,6 @@ use crate::consts;
 
 use notify_rust::Notification;
 
-// ======================================================================
-// 通知表示
-// ======================================================================
 /// システム通知を表示する
 ///
 /// OSの通知機能を使用して、デスクトップ上にメッセージを表示する
@@ -18,11 +15,33 @@ use notify_rust::Notification;
 /// * `body` - 通知の本文
 pub fn show_notification(summary: &str, body: &str) {
     if let Err(e) = Notification::new()
-        .summary(&format!("{} - {}", consts::APP_NAME, summary))
+        .summary(&format_notification_summary(summary))
         .body(body)
         .timeout(Duration::from_secs(3))
         .show()
     {
         crate::log_warn!("通知の表示に失敗: {:?}", e);
+    }
+}
+
+/// 通知タイトル用のサマリー文字列を組み立てる
+pub(crate) fn format_notification_summary(summary: &str) -> String {
+    format!("{} - {}", consts::APP_NAME, summary)
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// サマリーにアプリ名プレフィックスが付くこと
+    #[test]
+    fn format_notification_summary_includes_app_name() {
+        assert_eq!(
+            format_notification_summary("変換完了"),
+            "ClipRefiner - 変換完了"
+        );
     }
 }
