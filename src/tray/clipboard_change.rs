@@ -20,49 +20,61 @@ impl ChangeWatcher {
     ///
     /// # Returns
     /// * `bool` - 現在のプラットフォームでイベント監視が利用可能な場合は `true`
-    #[allow(clippy::unused_self)]
     pub fn is_supported(&self) -> bool {
-        #[cfg(windows)]
-        {
-            true
-        }
-        #[cfg(target_os = "macos")]
-        {
-            true
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.linux.is_some()
-        }
-        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        {
-            false
-        }
+        platform_is_supported(self)
     }
 
     /// クリップボード変更を表すトークンを取得する
     ///
     /// 本文を読み取らずに呼び出せる軽量な値。変更がない間は同じ値を返す。
-    #[allow(clippy::unused_self)]
     pub fn token(&self) -> Option<u64> {
-        #[cfg(windows)]
-        {
-            use clipboard_win::raw::seq_num;
-            seq_num().map(|s| u64::from(s.get()))
-        }
-        #[cfg(target_os = "macos")]
-        {
-            macos_change_count()
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.linux.as_ref()?.token()
-        }
-        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-        {
-            None
-        }
+        platform_token(self)
     }
+}
+
+// ======================================================================
+// プラットフォーム別実装
+// ======================================================================
+#[cfg(windows)]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn platform_is_supported(watcher: &ChangeWatcher) -> bool {
+    watcher.linux.is_some()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn platform_is_supported(_watcher: &ChangeWatcher) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    use clipboard_win::raw::seq_num;
+
+    seq_num().map(|s| u64::from(s.get()))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    macos_change_count()
+}
+
+#[cfg(target_os = "linux")]
+fn platform_token(watcher: &ChangeWatcher) -> Option<u64> {
+    watcher.linux.as_ref()?.token()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn platform_token(_watcher: &ChangeWatcher) -> Option<u64> {
+    None
 }
 
 // ======================================================================
