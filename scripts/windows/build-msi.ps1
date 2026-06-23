@@ -7,7 +7,8 @@
 # 前提:
 #   - cargo install cargo-wix --locked
 #   - winget install WiXToolset.WiXToolset  (WiX v3。コード署名は不要)
-#   - wix/main.wxs が存在すること (cargo wix init で生成)
+#   - wix/main.wxs, wix/Banner.bmp, wix/Dialog.bmp, wix/Eula.rtf が存在すること
+#     (画像・Eula.rtf は scripts/windows/generate-wix-assets.ps1 で再生成可能)
 #   - Cargo.toml の culture = "ja-JP" でインストーラー UI を日本語化
 #
 # 出力:
@@ -84,6 +85,13 @@ Invoke-ScriptMain {
     # 依存ツールを検証
     $null = Assert-CargoWixInstalled
     $null = Assert-WixToolsetInstalled
+
+    # WiX UI 用ブランド画像 (未生成時やデザイン更新時に再作成)
+    $GenerateAssetsScript = Join-Path $PSScriptRoot 'generate-wix-assets.ps1'
+    & $GenerateAssetsScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "エラー: WiX ブランド画像の生成に失敗しました (終了コード $LASTEXITCODE)"
+    }
 
     Write-Host 'MSI インストーラーの作成を開始します...'
     Write-Host ''
