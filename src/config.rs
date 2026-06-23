@@ -273,9 +273,7 @@ impl AppConfig {
     /// # Returns
     /// * `Result<PathBuf>` - 設定ファイルの完全なパス
     fn config_path() -> Result<PathBuf> {
-        let config_dir = get_config_dir()?;
-        fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
-        Ok(config_dir.join("config.json"))
+        get_config_file_path()
     }
 
     /// 設定ファイルを読み込む
@@ -384,6 +382,62 @@ pub fn get_config_dir() -> Result<PathBuf> {
     let dir_name = consts::APP_NAME_KEBAB;
 
     Ok(base_dirs.config_dir().join(dir_name))
+}
+
+/// 設定ファイルのパスを取得する
+///
+/// 設定ディレクトリが存在しない場合は作成する
+///
+/// # Returns
+/// * `Result<PathBuf>` - `config.json` の完全なパス
+pub fn get_config_file_path() -> Result<PathBuf> {
+    let config_dir = get_config_dir()?;
+    fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+    Ok(config_dir.join("config.json"))
+}
+
+/// 設定ファイルを既定のアプリケーションで開く
+///
+/// 呼び出し前に `AppConfig::save` などでファイルを書き出しておくこと
+///
+/// # Returns
+/// * `Result<()>` - 起動に成功した場合は `Ok(())`、失敗した場合は `Err` を返す
+pub fn open_config_file() -> Result<()> {
+    let path = get_config_file_path()?;
+    open_path_in_default_application(&path)
+}
+
+/// パスを OS の既定アプリケーションで開く
+fn open_path_in_default_application(path: &Path) -> Result<()> {
+    let path_str = path
+        .to_str()
+        .context("設定ファイルのパスを文字列に変換できませんでした")?;
+
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", path_str])
+            .spawn()
+            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path_str)
+            .spawn()
+            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path_str)
+            .spawn()
+            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    }
+
+    Ok(())
 }
 
 // ======================================================================

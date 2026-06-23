@@ -120,6 +120,8 @@ pub struct TrayMenu {
     pub history: HistoryMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
+    /// 設定ファイルを開く項目
+    pub open_config_item: MenuItem,
     /// ショートカット一覧表示項目
     pub shortcut_list_item: MenuItem,
     /// ログイン時の自動起動を切り替える項目
@@ -161,6 +163,7 @@ impl TrayMenu {
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
         let launch_at_login_item =
             CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
+        let open_config_item = MenuItem::new("設定を開く", true, None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -174,6 +177,7 @@ impl TrayMenu {
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &open_config_item as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
@@ -201,6 +205,7 @@ impl TrayMenu {
             interval,
             history,
             notification,
+            open_config_item,
             shortcut_list_item,
             launch_at_login_item,
         };
