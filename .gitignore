@@ -17,6 +17,9 @@ target/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# WiX (main.wxs はリポジトリで管理)
+# WiX (main.wxs とブランド画像はリポジトリで管理)
 wix/*
 !wix/main.wxs
+!wix/Banner.bmp
+!wix/Dialog.bmp
+!wix/Eula.rtf

@@ -52,12 +52,18 @@ function Invoke-ScriptMain {
         [scriptblock]$Body
     )
 
+    if (-not (Get-Variable -Name ClipRefinerScriptMainDepth -Scope Global -ErrorAction SilentlyContinue)) {
+        $global:ClipRefinerScriptMainDepth = 0
+    }
+
+    $global:ClipRefinerScriptMainDepth++
+    $isOuterInvocation = $global:ClipRefinerScriptMainDepth -eq 1
     $exitCode = 0
 
     try {
         & $Body
 
-        if ($LASTEXITCODE -ne 0) {
+        if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0) {
             $exitCode = $LASTEXITCODE
         }
     } catch {
@@ -70,8 +76,12 @@ function Invoke-ScriptMain {
             Write-Host $_
         }
     } finally {
-        # catch でエラーを処理済みのため、finally 後の再スローを避けてここで待機する
-        Wait-IfDoubleClicked
+        $global:ClipRefinerScriptMainDepth--
+
+        # 他スクリプトから呼ばれた場合は Enter 待ちしない (最外の直接実行時のみ)
+        if ($isOuterInvocation) {
+            Wait-IfDoubleClicked
+        }
     }
 
     if ($exitCode -ne 0) {
