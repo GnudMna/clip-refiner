@@ -30,7 +30,7 @@ use tray_icon::menu::MenuEvent;
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
 /// * `control_flow` - イベントループの制御フロー
 pub fn handle_menu_event(
-    event: MenuEvent,
+    event: &MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
     clipboard_tx: &Sender<ClipboardCommand>,
@@ -60,7 +60,7 @@ pub fn handle_menu_event(
 /// * `selector` - セレクタウィンドウのインスタンス
 /// * `last_selector_show` - セレクタが最後に表示された時刻
 pub fn handle_window_event(
-    event: WindowEvent,
+    event: &WindowEvent,
     selector: &super::selector::SelectorWindow,
     last_selector_show: &Instant,
 ) {
@@ -102,7 +102,7 @@ fn handle_app_control(
         state.with_config_mut(|c| c.is_paused = paused);
         notifier::show_pause_notification(state, paused, "設定変更");
         state.save_config();
-        bump_monitor_generation(Arc::clone(state));
+        bump_monitor_generation(state);
         true
     } else if id == menu.shortcut_list_item.id() {
         let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
@@ -315,5 +315,5 @@ pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode:
     super::monitor::update_monitor_mode_impl(menu, monitor_mode);
 
     state.save_config();
-    super::monitor::bump_monitor_generation(Arc::clone(state));
+    super::monitor::bump_monitor_generation(state);
 }

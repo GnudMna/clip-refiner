@@ -20,6 +20,7 @@ impl ChangeWatcher {
     ///
     /// # Returns
     /// * `bool` - 現在のプラットフォームでイベント監視が利用可能な場合は `true`
+    #[allow(clippy::unused_self)]
     pub fn is_supported(&self) -> bool {
         #[cfg(windows)]
         {
@@ -42,11 +43,12 @@ impl ChangeWatcher {
     /// クリップボード変更を表すトークンを取得する
     ///
     /// 本文を読み取らずに呼び出せる軽量な値。変更がない間は同じ値を返す。
+    #[allow(clippy::unused_self)]
     pub fn token(&self) -> Option<u64> {
         #[cfg(windows)]
         {
             use clipboard_win::raw::seq_num;
-            seq_num().map(|s| s.get() as u64)
+            seq_num().map(|s| u64::from(s.get()))
         }
         #[cfg(target_os = "macos")]
         {

@@ -55,10 +55,10 @@ pub fn add_commas(text: &str) -> Cow<'_, str> {
     }
 
     let final_result = if !decimal_part.is_empty() {
-        format!("{}.{}", formatted_int, decimal_part)
+        format!("{formatted_int}.{decimal_part}")
     } else if pure_numeric.contains('.') {
         // 元々小数点が末尾にあった場合
-        format!("{}.", formatted_int)
+        format!("{formatted_int}.")
     } else {
         formatted_int
     };
@@ -104,6 +104,14 @@ pub fn remove_commas(text: &str) -> Cow<'_, str> {
 // ======================================================================
 // 数値判定
 // ======================================================================
+#[derive(PartialEq, Clone, Copy)]
+enum NumericPrev {
+    Start,
+    Digit,
+    Comma,
+    Dot,
+}
+
 /// 入力が数値として妥当な形式か判定する
 ///
 /// 数字、カンマ、小数点、および先頭のマイナス記号のみで構成されているかチェックする
@@ -133,46 +141,35 @@ fn is_numeric_input(text: &str) -> bool {
     }
 
     // 直前の文字種を追跡する
-    #[derive(PartialEq, Clone, Copy)]
-    enum Prev {
-        Start,
-        Digit,
-        Comma,
-        Dot,
-    }
-    let mut prev = Prev::Start;
+    let mut prev = NumericPrev::Start;
     let mut has_dot = false;
 
     for c in chars {
         match c {
             '0'..='9' => {
-                prev = Prev::Digit;
+                prev = NumericPrev::Digit;
             }
             ',' => {
                 // 先頭カンマ・連続カンマ・小数部のカンマはすべて不正
-                if prev != Prev::Digit || has_dot {
+                if prev != NumericPrev::Digit || has_dot {
                     return false;
                 }
-                prev = Prev::Comma;
+                prev = NumericPrev::Comma;
             }
             '.' => {
                 // 複数の小数点・カンマ直後の小数点は不正
-                if has_dot || prev == Prev::Comma {
+                if has_dot || prev == NumericPrev::Comma {
                     return false;
                 }
                 has_dot = true;
-                prev = Prev::Dot;
+                prev = NumericPrev::Dot;
             }
             _ => return false,
         }
     }
 
     // 末尾カンマは不正
-    if prev == Prev::Comma {
-        return false;
-    }
-
-    true
+    prev != NumericPrev::Comma
 }
 
 // ======================================================================
@@ -271,14 +268,14 @@ mod tests {
         assert_eq!(add_commas("  5678  "), "5,678");
     }
 
-    /// remove_commas: カンマがない場合は Borrowed を返すこと
+    /// `remove_commas`: カンマがない場合は Borrowed を返すこと
     #[test]
     fn test_remove_commas_no_comma_returns_borrowed() {
         let input = "1234";
         assert!(matches!(remove_commas(input), Cow::Borrowed(_)));
     }
 
-    /// remove_commas: 空文字列は Borrowed を返すこと
+    /// `remove_commas`: 空文字列は Borrowed を返すこと
     #[test]
     fn test_remove_commas_empty() {
         assert!(matches!(remove_commas(""), Cow::Borrowed(_)));

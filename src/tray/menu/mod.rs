@@ -46,7 +46,7 @@ pub struct RefineMenu {
 }
 
 impl RefineMenu {
-    /// すべてのモードアイテム(CheckMenuItem と RefineMode のペア)を平坦化したイテレータとして返す
+    /// すべてのモードアイテム(CheckMenuItem と `RefineMode` のペア)を平坦化したイテレータとして返す
     ///
     /// # Returns
     /// すべての `(CheckMenuItem, RefineMode)` ペアを巡回するイテレータ
@@ -138,7 +138,7 @@ impl TrayMenu {
     /// # Returns
     /// メニューの構築に成功した場合は`Ok(Self)`、失敗した場合は`Err`を返す
     pub fn build(state: &AppState) -> Result<Self> {
-        let config = state.with_config(|c| c.clone());
+        let config = state.with_config(std::clone::Clone::clone);
 
         let refine = Self::build_refine_menu(config.mode)?;
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
@@ -179,7 +179,7 @@ impl TrayMenu {
 
         // アイコン設定
         let icon = create_icon().context("トレイアイコンの読み込みに失敗しました")?;
-        let _tray_icon = TrayIconBuilder::new()
+        let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(tray_menu))
             .with_tooltip("ClipRefiner")
             .with_icon(icon)
@@ -187,7 +187,7 @@ impl TrayMenu {
             .context("トレイアイコンのビルドに失敗しました")?;
 
         let this = Self {
-            _tray_icon,
+            _tray_icon: tray_icon,
             quit_item,
             pause_item,
             refine,

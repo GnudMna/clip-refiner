@@ -89,7 +89,7 @@ impl HotkeyHandler {
     ///
     /// # Arguments
     /// * `proxy` - UIスレッド(イベントループ)へイベントを送信するためのプロキシ
-    pub fn start_event_listener(&self, proxy: EventLoopProxy<AppEvent>) {
+    pub fn start_event_listener(proxy: EventLoopProxy<AppEvent>) {
         std::thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
             while let Ok(event) = receiver.recv() {
@@ -153,7 +153,7 @@ impl HotkeyHandler {
                 menu.pause_item.set_checked(new_paused);
                 state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
-                bump_monitor_generation(Arc::clone(state));
+                bump_monitor_generation(state);
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;
             }

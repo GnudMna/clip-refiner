@@ -31,6 +31,7 @@ pub enum MonitorMode {
 /// 通知の内容に関する設定
 ///
 /// どのタイミングでどのような通知を表示するかを制御する
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// 成功通知機能全体の有効/無効スイッチ
@@ -379,7 +380,7 @@ pub fn get_config_dir() -> Result<PathBuf> {
 mod tests {
     use super::*;
 
-    /// AppConfig のデフォルト値が正しいこと
+    /// `AppConfig` のデフォルト値が正しいこと
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
@@ -390,7 +391,7 @@ mod tests {
         assert_eq!(config.hotkeys, HotkeySettings::default());
     }
 
-    /// AppConfig のシリアライズ/デシリアライズ往復
+    /// `AppConfig` のシリアライズ/デシリアライズ往復
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();
@@ -403,7 +404,7 @@ mod tests {
         assert_eq!(config.hotkeys, decoded.hotkeys);
     }
 
-    /// NotificationSettings のデフォルト値が正しいこと
+    /// `NotificationSettings` のデフォルト値が正しいこと
     #[test]
     fn test_notification_settings_default() {
         let ns = NotificationSettings::default();
@@ -413,7 +414,7 @@ mod tests {
         assert!(ns.notify_pause);
     }
 
-    /// 古い設定 JSON (show_success_notification フィールドあり) を読んでも
+    /// 古い設定 JSON (`show_success_notification` フィールドあり) を読んでも
     /// デフォルト値でデシリアライズできること
     #[test]
     fn test_app_config_backward_compat_old_field() {
@@ -430,7 +431,7 @@ mod tests {
         assert_eq!(config.hotkeys.selector, consts::DEFAULT_HOTKEY_SELECTOR);
     }
 
-    /// notification_settings.enabled が JSON に保存・復元されること
+    /// `notification_settings.enabled` が JSON に保存・復元されること
     #[test]
     fn test_notification_settings_serde_roundtrip() {
         let mut config = AppConfig::default();
@@ -447,9 +448,11 @@ mod tests {
     /// normalize が範囲外の値をクランプすること
     #[test]
     fn test_app_config_normalize_clamps() {
-        let mut config = AppConfig::default();
-        config.history_limit = 999;
-        config.interval_ms = 10;
+        let mut config = AppConfig {
+            history_limit: 999,
+            interval_ms: 10,
+            ..Default::default()
+        };
 
         config.normalize();
 
@@ -457,7 +460,7 @@ mod tests {
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
     }
 
-    /// fix_invalid が不正なホットキーをデフォルトへ置き換えること
+    /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えること
     #[test]
     fn test_hotkey_settings_fix_invalid() {
         let mut hotkeys = HotkeySettings {
