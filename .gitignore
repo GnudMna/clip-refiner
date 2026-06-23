@@ -17,5 +17,6 @@ target/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# WiX
-wix
+# WiX (main.wxs はリポジトリで管理)
+wix/*
+!wix/main.wxs

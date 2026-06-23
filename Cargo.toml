@@ -13,6 +13,7 @@ upgrade-guid = "A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D"
 path-guid = "B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D"
 product-icon = "assets/icon.ico"
 eula = false
+culture = "ja-JP"
 
 [dependencies]
 anyhow = "1.0"

@@ -8,6 +8,7 @@
 #   - cargo install cargo-wix --locked
 #   - winget install WiXToolset.WiXToolset  (WiX v3。コード署名は不要)
 #   - wix/main.wxs が存在すること (cargo wix init で生成)
+#   - Cargo.toml の culture = "ja-JP" でインストーラー UI を日本語化
 #
 # 出力:
 #   target/wix/{パッケージ名}-{バージョン}-{アーキテクチャ}.msi
@@ -48,11 +49,13 @@ function Assert-WixToolsetInstalled {
         return
     }
 
-    # WiX インストーラーが設定する WIX 環境変数を参照する
+    # WiX インストーラーが設定する WIX 環境変数を参照する (値は bin の親ディレクトリ)
     if ($env:WIX) {
-        $candlePath = Join-Path $env:WIX 'candle.exe'
-        if (Test-Path -LiteralPath $candlePath) {
-            return
+        foreach ($relativePath in @('bin\candle.exe', 'candle.exe')) {
+            $candlePath = Join-Path $env:WIX $relativePath
+            if (Test-Path -LiteralPath $candlePath) {
+                return
+            }
         }
     }
 
@@ -86,14 +89,25 @@ Invoke-ScriptMain {
     Write-Host ''
 
     # cargo wix: リリースビルド + WiX コンパイル/リンク (MSI 生成)
+    # --nocapture: cargo build の rustc エラーを表示する (省略時は exit 101 だけになる)
+    $wixArgs = @('--nocapture')
     if ($SkipBuild) {
-        cargo wix --no-build
-    } else {
-        cargo wix
+        $wixArgs += '--no-build'
     }
+    cargo wix @wixArgs
 
     if ($LASTEXITCODE -ne 0) {
-        throw "エラー: cargo wix が終了コード $LASTEXITCODE で失敗しました"
+        throw @"
+エラー: cargo wix が終了コード $LASTEXITCODE で失敗しました
+
+cargo の終了コード 101 はリリースビルド (cargo build --release) の失敗を示すことが多い。
+上記の rustc / linker のメッセージを確認するか、次を手動で実行してください:
+
+  rustc --version
+  cargo build --release
+
+Rust 1.96 以上 (rust-toolchain.toml) と Visual Studio Build Tools (C++ ワークロード) が必要です。
+"@
     }
 
     Write-Host ''
