@@ -55,6 +55,10 @@ winreg = "0.56.0"
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
+[lib]
+name = "clip_refiner"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ClipRefiner"
 path = "src/main.rs"

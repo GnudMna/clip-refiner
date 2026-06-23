@@ -433,6 +433,35 @@ impl ClipboardProcessError {
     }
 }
 
+/// テキストに加工モードを適用する
+///
+/// クリップボード I/O は行わない
+///
+/// # Arguments
+/// * `text` - 加工前のテキスト
+/// * `mode` - 適用する加工モード (`RefineMode`)
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError::NoText)` - テキストが空
+pub(crate) fn apply_refinement_to_text(
+    text: &str,
+    mode: RefineMode,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    if text.is_empty() {
+        return Err(ClipboardProcessError::NoText);
+    }
+
+    let refined = mode.refine(text);
+
+    if refined == text {
+        Ok(ClipboardProcessOutcome::Unchanged)
+    } else {
+        Ok(ClipboardProcessOutcome::Processed(refined.into_owned()))
+    }
+}
+
 /// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
 ///
 /// テキストが変更された場合のみクリップボードを更新する
@@ -453,21 +482,15 @@ pub fn process_clipboard(
         .get_text()
         .map_err(|e| ClipboardProcessError::ReadFailed(e.to_string()))?;
 
-    if text.is_empty() {
-        return Err(ClipboardProcessError::NoText);
+    match apply_refinement_to_text(&text, mode)? {
+        ClipboardProcessOutcome::Unchanged => Ok(ClipboardProcessOutcome::Unchanged),
+        ClipboardProcessOutcome::Processed(result) => {
+            clipboard
+                .set_text(result.clone())
+                .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
+            Ok(ClipboardProcessOutcome::Processed(result))
+        }
     }
-
-    let refined = mode.refine(&text);
-
-    if refined == text {
-        return Ok(ClipboardProcessOutcome::Unchanged);
-    }
-
-    let result = refined.into_owned();
-    clipboard
-        .set_text(result.clone())
-        .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
-    Ok(ClipboardProcessOutcome::Processed(result))
 }
 
 // ======================================================================
@@ -616,6 +639,33 @@ mod tests {
         assert_eq!(
             ClipboardProcessError::WriteFailed("detail".to_string()).user_message(),
             "クリップボードへの書き込みに失敗しました"
+        );
+    }
+
+    /// 空文字列は `NoText` エラーになること
+    #[test]
+    fn apply_refinement_to_text_rejects_empty() {
+        assert_eq!(
+            apply_refinement_to_text("", RefineMode::Trim),
+            Err(ClipboardProcessError::NoText)
+        );
+    }
+
+    /// 変更がある場合は `Processed` を返すこと
+    #[test]
+    fn apply_refinement_to_text_returns_processed() {
+        assert_eq!(
+            apply_refinement_to_text("  hello  ", RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
+        );
+    }
+
+    /// 変更がない場合は `Unchanged` を返すこと
+    #[test]
+    fn apply_refinement_to_text_returns_unchanged() {
+        assert_eq!(
+            apply_refinement_to_text("hello", RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Unchanged)
         );
     }
 
