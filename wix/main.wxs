@@ -72,6 +72,7 @@
 
         <MajorUpgrade
             Schedule='afterInstallInitialize'
+            AllowSameVersionUpgrades='yes'
             DowngradeErrorMessage='[ProductName] の新しいバージョンが既にインストールされています。セットアップを終了します。'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
@@ -131,8 +132,20 @@
             </Directory>
         </Directory>
 
+        <DirectoryRef Id='APPLICATIONFOLDER'>
+            <Component Id='Autostart' Guid='D2E8A1F3-5C7B-4D9E-A6F2-8B1C0D4E5F6A'>
+                <RegistryValue
+                    Root='HKCU'
+                    Key='Software\Microsoft\Windows\CurrentVersion\Run'
+                    Name='ClipRefiner'
+                    Type='string'
+                    Value='[Bin]ClipRefiner.exe'
+                    KeyPath='yes'/>
+            </Component>
+        </DirectoryRef>
+
         <DirectoryRef Id='ApplicationProgramsFolder'>
-            <Component Id='StartMenuShortcut' Guid='*'>
+            <Component Id='StartMenuShortcut' Guid='E1F2A3B4-5C6D-4E7F-8A9B-0C1D2E3F4A5B'>
                 <Shortcut
                     Id='ClipRefinerStartMenuShortcut'
                     Name='ClipRefiner'
@@ -171,6 +184,15 @@
                 Level='1'
                 Absent='allow'>
                 <ComponentRef Id='Path'/>
+            </Feature>
+
+            <Feature
+                Id='Autostart'
+                Title='ログイン時に自動起動'
+                Description='Windows にログインしたときに [ProductName] を自動的に起動する'
+                Level='1'
+                Absent='allow'>
+                <ComponentRef Id='Autostart'/>
             </Feature>
         </Feature>
 

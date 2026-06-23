@@ -1,5 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")] // Windowsでコンソールを出さないための設定
 
+mod autostart;
 mod config;
 mod consts;
 mod history_store;

@@ -9,7 +9,7 @@ pub const APP_NAME: &str = "ClipRefiner";
 /// アプリケーションの識別子 (kebab-case)
 ///
 /// 設定フォルダ名やデータ保存パスの生成に使用される
-#[allow(dead_code)]
+#[cfg_attr(windows, allow(dead_code))]
 pub const APP_NAME_KEBAB: &str = "clip-refiner";
 
 // ======================================================================

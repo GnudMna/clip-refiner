@@ -5,6 +5,7 @@
 use std::sync::Mutex;
 
 use super::state::AppState;
+use crate::autostart;
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
 
@@ -121,6 +122,8 @@ pub struct TrayMenu {
     pub notification: NotificationMenu,
     /// ショートカット一覧表示項目
     pub shortcut_list_item: MenuItem,
+    /// ログイン時の自動起動を切り替える項目
+    pub launch_at_login_item: CheckMenuItem,
 }
 
 // ======================================================================
@@ -156,6 +159,8 @@ impl TrayMenu {
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
+        let launch_at_login_item =
+            CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -171,6 +176,7 @@ impl TrayMenu {
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &quit_item as &dyn tray_icon::menu::IsMenuItem,
@@ -196,6 +202,7 @@ impl TrayMenu {
             history,
             notification,
             shortcut_list_item,
+            launch_at_login_item,
         };
 
         // カテゴリラベルの初期更新
