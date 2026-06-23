@@ -375,13 +375,19 @@ pub fn get_config_dir() -> Result<PathBuf> {
     let base_dirs =
         directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
 
-    #[cfg(windows)]
-    let dir_name = consts::APP_NAME;
+    Ok(base_dirs.config_dir().join(config_dir_name()))
+}
 
-    #[cfg(not(windows))]
-    let dir_name = consts::APP_NAME_KEBAB;
+/// OS ごとの設定ディレクトリ名を返す
+#[cfg(windows)]
+fn config_dir_name() -> &'static str {
+    consts::APP_NAME
+}
 
-    Ok(base_dirs.config_dir().join(dir_name))
+/// OS ごとの設定ディレクトリ名を返す
+#[cfg(not(windows))]
+fn config_dir_name() -> &'static str {
+    consts::APP_NAME_KEBAB
 }
 
 /// 設定ファイルのパスを取得する
@@ -413,31 +419,43 @@ fn open_path_in_default_application(path: &Path) -> Result<()> {
         .to_str()
         .context("設定ファイルのパスを文字列に変換できませんでした")?;
 
-    #[cfg(windows)]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", path_str])
-            .spawn()
-            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
-    }
+    platform_open_path(path_str)
+}
 
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(path_str)
-            .spawn()
-            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(path_str)
-            .spawn()
-            .context("設定ファイルの起動コマンドの実行に失敗しました")?;
-    }
-
+/// パスを OS の既定アプリケーションで開く
+#[cfg(windows)]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", path_str])
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
     Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(target_os = "macos")]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("open")
+        .arg(path_str)
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_open_path(path_str: &str) -> Result<()> {
+    std::process::Command::new("xdg-open")
+        .arg(path_str)
+        .spawn()
+        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+    Ok(())
+}
+
+/// パスを OS の既定アプリケーションで開く
+#[cfg(not(any(windows, target_os = "macos", unix)))]
+fn platform_open_path(_path_str: &str) -> Result<()> {
+    anyhow::bail!("このプラットフォームではファイルを開けません")
 }
 
 // ======================================================================
