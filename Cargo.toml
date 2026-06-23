@@ -14,6 +14,8 @@ path-guid = "B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D"
 product-icon = "assets/icon.ico"
 eula = false
 culture = "ja-JP"
+# perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
+linker-args = ["-sice:ICE91"]
 
 [dependencies]
 anyhow = "1.0"
@@ -46,6 +48,9 @@ tray-icon = "0.24.1"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 wry = "0.55.1"
 zeroize = "1.8"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
