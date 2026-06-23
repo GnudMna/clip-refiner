@@ -131,7 +131,7 @@ mod tests {
         assert!(body.contains("内容: hello"));
     }
 
-    /// notify_mode のみ ON の場合はモード行だけ含むこと
+    /// `notify_mode` のみ ON の場合はモード行だけ含むこと
     #[test]
     fn format_body_mode_only() {
         let settings = NotificationSettings {
@@ -145,7 +145,7 @@ mod tests {
         assert!(!body.contains("内容:"));
     }
 
-    /// notify_result のみ ON の場合は内容行だけ含むこと
+    /// `notify_result` のみ ON の場合は内容行だけ含むこと
     #[test]
     fn format_body_result_only() {
         let settings = NotificationSettings {

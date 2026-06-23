@@ -17,6 +17,7 @@ impl TrayMenu {
     ///
     /// # Returns
     /// 成功した場合は `NotificationMenu` インスタンスを返し、失敗した場合は `Err` を返す
+    #[allow(clippy::fn_params_excessive_bools)]
     pub(super) fn build_notification_menu(
         enabled: bool,
         notify_mode: bool,

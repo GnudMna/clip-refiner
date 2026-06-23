@@ -55,12 +55,12 @@ impl App {
         let menu = TrayMenu::build(&state)?;
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
         let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
-        let selector = init_selector(event_loop, proxy.clone())?;
+        let selector = init_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 
-        hotkey_handler.start_event_listener(proxy);
+        HotkeyHandler::start_event_listener(proxy);
         menu.refresh_history(&state)?;
-        bump_monitor_generation(Arc::clone(&state));
+        bump_monitor_generation(&state);
 
         Ok(Self {
             state,
@@ -94,12 +94,12 @@ impl App {
             Event::WindowEvent {
                 window_id, event, ..
             } if window_id == self.selector.id() => {
-                event::handle_window_event(event, &self.selector, &self.last_selector_show);
+                event::handle_window_event(&event, &self.selector, &self.last_selector_show);
             }
             _ => {
                 if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
                     event::handle_menu_event(
-                        menu_event,
+                        &menu_event,
                         &self.menu,
                         &self.state,
                         &self.clipboard_tx,

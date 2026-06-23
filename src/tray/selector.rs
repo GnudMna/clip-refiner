@@ -15,11 +15,11 @@ use wry::{WebContext, WebViewBuilder};
 ///
 /// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画する
 pub struct SelectorWindow {
-    /// WebView インスタンス
+    /// `WebView` インスタンス
     webview: wry::WebView,
     /// 描画先のウィンドウ
     window: Arc<Window>,
-    /// WebView のコンテキスト
+    /// `WebView` のコンテキスト
     _context: wry::WebContext,
 }
 
@@ -27,7 +27,7 @@ pub struct SelectorWindow {
 // 初期化
 // ======================================================================
 impl SelectorWindow {
-    /// セレクタウィンドウと WebView を初期化して生成する
+    /// セレクタウィンドウと `WebView` を初期化して生成する
     ///
     /// # Arguments
     /// * `window` - ベースとなる `tao` ウィンドウ
@@ -35,7 +35,7 @@ impl SelectorWindow {
     ///
     /// # Returns
     /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返す
-    pub fn new(window: Window, proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
+    pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let window = Arc::new(window);
         let modes_json = RefineMode::to_json_list();
 
@@ -65,8 +65,7 @@ impl SelectorWindow {
                 if msg.starts_with("select:") {
                     let mode_str = msg.trim_start_matches("select:");
                     // IPC メッセージから RefineMode を復元
-                    if let Ok(mode) =
-                        serde_json::from_str::<RefineMode>(&format!("\"{}\"", mode_str))
+                    if let Ok(mode) = serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
                     {
                         let _ = proxy_clone.send_event(AppEvent::RequestModeChange(mode));
                     }
@@ -99,7 +98,7 @@ impl SelectorWindow {
         self.window.set_focus();
         // UI側の初期化(入力フォーカスと現在のモードの反映)
         let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
-        let script = format!("focusInput({});", mode_id);
+        let script = format!("focusInput({mode_id});");
         let _ = self.webview.evaluate_script(&script);
     }
 
@@ -140,7 +139,7 @@ impl SelectorWindow {
 /// * `anyhow::Result<SelectorWindow>` - 初期化に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返す
 pub fn init_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
-    proxy: EventLoopProxy<AppEvent>,
+    proxy: &EventLoopProxy<AppEvent>,
 ) -> anyhow::Result<SelectorWindow> {
     use tao::window::WindowBuilder;
 
@@ -158,8 +157,8 @@ pub fn init_selector(
     if let Some(monitor) = window.current_monitor() {
         let screen_size = monitor.size();
         let window_size = window.outer_size();
-        let x = (screen_size.width as i32 - window_size.width as i32) / 2;
-        let y = (screen_size.height as i32 - window_size.height as i32) / 3; // やや上寄り
+        let x = (screen_size.width.cast_signed() - window_size.width.cast_signed()) / 2;
+        let y = (screen_size.height.cast_signed() - window_size.height.cast_signed()) / 3; // やや上寄り
         window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
     }
 

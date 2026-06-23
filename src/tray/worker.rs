@@ -94,11 +94,10 @@ impl MonitorLoopState {
     ///
     /// # Returns
     /// * `MonitorMode` - 実際に使用する監視方式
-    fn effective_mode(&self, watcher: &ChangeWatcher, state: &Arc<AppState>) -> MonitorMode {
+    fn effective_mode(watcher: &ChangeWatcher, state: &Arc<AppState>) -> MonitorMode {
         match state.with_config(|c| c.monitor_mode) {
             MonitorMode::Event if watcher.is_supported() => MonitorMode::Event,
-            MonitorMode::Event => MonitorMode::Polling,
-            MonitorMode::Polling => MonitorMode::Polling,
+            MonitorMode::Event | MonitorMode::Polling => MonitorMode::Polling,
         }
     }
 
@@ -122,10 +121,11 @@ impl MonitorLoopState {
             return Duration::from_millis(100);
         }
 
-        match self.effective_mode(watcher, state) {
+        match Self::effective_mode(watcher, state) {
             MonitorMode::Polling => {
                 let snap = state.monitor_snapshot();
-                let elapsed = self.last_poll_at.elapsed().as_millis() as u64;
+                let elapsed =
+                    u64::try_from(self.last_poll_at.elapsed().as_millis()).unwrap_or(u64::MAX);
                 let remaining = snap.interval_ms.saturating_sub(elapsed);
                 Duration::from_millis(POLL_TICK_MS.min(remaining.max(1)))
             }
@@ -158,7 +158,7 @@ impl MonitorLoopState {
             self.event_fallback_warned = true;
         }
 
-        match self.effective_mode(watcher, state) {
+        match Self::effective_mode(watcher, state) {
             MonitorMode::Event => {
                 if let Some(token) = watcher.token()
                     && token != self.last_token
@@ -195,7 +195,7 @@ impl MonitorLoopState {
 pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> {
     let (tx, rx): (Sender<ClipboardCommand>, Receiver<ClipboardCommand>) = mpsc::channel();
 
-    thread::spawn(move || run_worker_loop(state, rx));
+    thread::spawn(move || run_worker_loop(&state, &rx));
 
     tx
 }
@@ -208,7 +208,7 @@ pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> 
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `rx` - ワーカーに操作を依頼するためのチャネル受信端
-fn run_worker_loop(state: Arc<AppState>, rx: Receiver<ClipboardCommand>) {
+fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
     let mut clipboard = match Clipboard::new() {
         Ok(cb) => cb,
         Err(e) => {
@@ -225,17 +225,17 @@ fn run_worker_loop(state: Arc<AppState>, rx: Receiver<ClipboardCommand>) {
     let mut monitor = MonitorLoopState::new();
 
     loop {
-        sync_monitor_generation(&mut monitor, &mut clipboard, &state, &watcher);
+        sync_monitor_generation(&mut monitor, &mut clipboard, state, &watcher);
 
-        let timeout = monitor.recv_timeout(&state, &watcher);
+        let timeout = monitor.recv_timeout(state, &watcher);
         match rx.recv_timeout(timeout) {
-            Ok(cmd) => handle_command(&mut clipboard, &state, cmd),
+            Ok(cmd) => handle_command(&mut clipboard, state, cmd),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
 
-        if should_run_monitor_tick(&state, &monitor) {
-            monitor.tick(&mut clipboard, &state, &watcher);
+        if should_run_monitor_tick(state, &monitor) {
+            monitor.tick(&mut clipboard, state, &watcher);
         }
     }
 }
@@ -393,7 +393,7 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中は recv_timeout が短い間隔を返すこと
+    /// 一時停止中は `recv_timeout` が短い間隔を返すこと
     #[test]
     fn recv_timeout_is_short_when_paused() {
         let state = Arc::new(test_app_state());
@@ -418,10 +418,9 @@ mod tests {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
 
-        let monitor = MonitorLoopState::new();
         let watcher = ChangeWatcher::new();
         assert_eq!(
-            monitor.effective_mode(&watcher, &state),
+            MonitorLoopState::effective_mode(&watcher, &state),
             MonitorMode::Polling
         );
     }
@@ -432,9 +431,8 @@ mod tests {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
 
-        let monitor = MonitorLoopState::new();
         let watcher = ChangeWatcher::new();
-        let effective = monitor.effective_mode(&watcher, &state);
+        let effective = MonitorLoopState::effective_mode(&watcher, &state);
 
         if watcher.is_supported() {
             assert_eq!(effective, MonitorMode::Event);

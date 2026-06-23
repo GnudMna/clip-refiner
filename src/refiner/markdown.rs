@@ -1,11 +1,12 @@
 use std::borrow::Cow;
+use std::fmt::Write;
 
 use pulldown_cmark::{Options, Parser, html};
 
 // ======================================================================
 // Markdown → HTML
 // ======================================================================
-/// MarkdownをHTMLへ変換する
+/// `Markdown` を `HTML` へ変換する
 ///
 /// 入力されたMarkdownテキストを解析し、HTML形式の文字列に変換する
 /// テーブル、脚注、取り消し線、タスクリスト、スマートパンクチュエーションなどの拡張機能をサポートしている
@@ -73,7 +74,11 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
 
-    let max_cols = records.iter().map(|r| r.len()).max().unwrap_or(0);
+    let max_cols = records
+        .iter()
+        .map(csv::StringRecord::len)
+        .max()
+        .unwrap_or(0);
     if max_cols == 0 {
         return Cow::Borrowed(text);
     }
@@ -89,7 +94,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
             .replace("\r\n", "<br>")
             .replace(['\r', '\n'], "<br>")
             .replace('|', "\\|");
-        markdown.push_str(&format!(" {} |", processed));
+        let _ = write!(markdown, " {processed} |");
     }
     markdown.push('\n');
 
@@ -109,7 +114,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
                 .replace("\r\n", "<br>")
                 .replace(['\r', '\n'], "<br>")
                 .replace('|', "\\|");
-            markdown.push_str(&format!(" {} |", processed));
+            let _ = write!(markdown, " {processed} |");
         }
         markdown.push('\n');
     }
@@ -145,14 +150,14 @@ mod tests {
         assert!(output.contains("<em>italic</em>"));
     }
 
-    /// 取り消し線の変換(ENABLE_STRIKETHROUGH)
+    /// `取り消し線の変換(ENABLE_STRIKETHROUGH)`
     #[test]
     fn test_markdown_to_html_strikethrough() {
         let output = markdown_to_html("~~strike~~");
         assert!(output.contains("<del>strike</del>"));
     }
 
-    /// テーブルの変換(ENABLE_TABLES)
+    /// `テーブルの変換(ENABLE_TABLES)`
     #[test]
     fn test_markdown_to_html_table() {
         let input = "| A | B |\n|---|---|\n| 1 | 2 |";
@@ -162,7 +167,7 @@ mod tests {
         assert!(output.contains("<td>"));
     }
 
-    /// excel_to_markdown_table: 基本的な TSV 変換
+    /// `excel_to_markdown_table`: 基本的な TSV 変換
     #[test]
     fn test_excel_to_markdown_table_basic() {
         let input = "Name\tAge\nAlice\t30\nBob\t25";
@@ -173,7 +178,7 @@ mod tests {
         assert!(output.contains("| Bob | 25 |"));
     }
 
-    /// excel_to_markdown_table: セル内の `|` がエスケープされること
+    /// `excel_to_markdown_table`: セル内の `|` がエスケープされること
     #[test]
     fn test_excel_to_markdown_table_pipe_escape() {
         let input = "A|B\tC";
@@ -181,14 +186,14 @@ mod tests {
         assert!(output.contains("A\\|B"));
     }
 
-    /// excel_to_markdown_table: 空入力は元の文字列を返すこと
+    /// `excel_to_markdown_table`: 空入力は元の文字列を返すこと
     #[test]
     fn test_excel_to_markdown_table_empty() {
         let input = "";
         assert_eq!(excel_to_markdown_table(input), input);
     }
 
-    /// excel_to_markdown_table: ヘッダーのみ (データ行なし) も動作すること
+    /// `excel_to_markdown_table`: ヘッダーのみ (データ行なし) も動作すること
     #[test]
     fn test_excel_to_markdown_table_header_only() {
         let input = "Col1\tCol2\tCol3";
