@@ -227,7 +227,7 @@ mod tests {
     use crate::refiner::{RefineCategory, RefineMode};
     use strum::IntoEnumIterator;
 
-    /// 変換モードメニューに全 31 モードが含まれること
+    /// 変換モードメニューに全モードが含まれること
     #[test]
     fn build_refine_menu_contains_all_modes() {
         let refine =

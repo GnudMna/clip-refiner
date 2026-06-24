@@ -60,22 +60,22 @@ impl TrayMenu {
         // メインの変換モードメニュー組み立て
         let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
 
-        // カテゴリグループの追加
+        // カテゴリグループの追加 (遅延配置を除く)
         for group in &groups {
             if !group.category.is_deferred_in_menu() {
                 mode_menu_items.push(&group.submenu);
             }
         }
 
-        // 通常アイテムと遅延追加カテゴリの配置
-        for (item, mode) in &normal_items {
+        // ルート直下の通常項目
+        for (item, _) in &normal_items {
             mode_menu_items.push(item);
-            if *mode == RefineMode::ExcelToMarkdown {
-                for group in &groups {
-                    if group.category.is_deferred_in_menu() {
-                        mode_menu_items.push(&group.submenu);
-                    }
-                }
+        }
+
+        // 遅延配置カテゴリ (日時変換・数値変換)
+        for group in &groups {
+            if group.category.is_deferred_in_menu() {
+                mode_menu_items.push(&group.submenu);
             }
         }
 
