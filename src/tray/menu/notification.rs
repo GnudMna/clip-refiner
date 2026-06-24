@@ -59,3 +59,22 @@ impl TrayMenu {
         })
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 成功通知 OFF 時は通知内容サブメニューが有効のまま構築されること
+    ///
+    /// 有効/無効の切替は `TrayMenu::build` 側で `content_submenu.set_enabled` する
+    #[test]
+    fn build_notification_menu_creates_content_submenu() {
+        let notification = TrayMenu::build_notification_menu(false, true, true, true)
+            .expect("通知メニューの構築に失敗");
+        assert!(!notification.enabled_item.is_checked());
+        assert_eq!(notification.content_submenu.text(), "通知内容");
+    }
+}
