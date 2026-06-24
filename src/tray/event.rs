@@ -541,4 +541,97 @@ mod tests {
             other => panic!("unexpected command: {other:?}"),
         }
     }
+
+    /// 通知 ON で設定とサブメニューが更新されること
+    #[test]
+    fn handle_menu_event_notification_enabled() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        menu.notification.enabled_item.set_checked(true);
+        handle_menu_event(
+            &menu_event(menu.notification.enabled_item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert!(state.with_config(|c| c.notification_settings.enabled));
+        assert!(menu.notification.content_submenu.is_enabled());
+    }
+
+    /// 監視周期選択で `interval_ms` が更新されること
+    #[test]
+    fn handle_menu_event_interval_change() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (item, _) = menu
+            .interval
+            .items
+            .iter()
+            .find(|(_, ms)| *ms == 500)
+            .expect("0.5秒の監視周期項目が存在する");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        handle_menu_event(
+            &menu_event(item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert_eq!(state.with_config(|c| c.interval_ms), 500);
+        assert!(item.is_checked());
+    }
+
+    /// 監視方式メニューで Event モードへ切り替わること
+    #[test]
+    fn handle_menu_event_monitor_mode_change() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (item, _) = menu
+            .monitor
+            .items
+            .iter()
+            .find(|(_, mode)| *mode == MonitorMode::Event)
+            .expect("イベント監視項目が存在する");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        handle_menu_event(
+            &menu_event(item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Event);
+        assert!(!menu.interval.main_submenu.is_enabled());
+    }
+
+    /// 履歴有効化で設定が更新されること
+    #[test]
+    fn handle_menu_event_history_enabled() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        menu.history.enabled_item.set_checked(true);
+        handle_menu_event(
+            &menu_event(menu.history.enabled_item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert!(state.with_config(|c| c.history_enabled));
+    }
 }

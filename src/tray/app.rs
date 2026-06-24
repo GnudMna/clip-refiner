@@ -133,7 +133,7 @@ impl App {
                 let mut ctx = HotkeyEventContext {
                     state: &self.state,
                     menu: &self.menu,
-                    selector: &self.selector,
+                    selector: Some(&self.selector),
                     control_flow,
                     last_selector_show: &mut self.last_selector_show,
                     clipboard_tx: &self.clipboard_tx,

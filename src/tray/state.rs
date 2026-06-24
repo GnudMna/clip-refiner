@@ -100,6 +100,8 @@ pub struct AppState {
     history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
+    /// 設定をディスクへ保存するかどうか
+    persist_config: bool,
 }
 
 // ======================================================================
@@ -119,11 +121,17 @@ impl AppState {
             undo_text: Mutex::new(None),
             history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
+            persist_config: true,
         }
     }
 
     /// 現在の設定をファイルへ保存する
+    ///
+    /// `persist_config` が `false` の場合はメモリ上の変更のみとし、ディスクへは書き込まない
     pub fn save_config(&self) {
+        if !self.persist_config {
+            return;
+        }
         if let Err(e) = self.with_config(super::super::config::AppConfig::save) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
         }
@@ -137,6 +145,12 @@ impl AppState {
     /// 設定を変更する
     pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
         f(&mut self.config.write_ignore_poison())
+    }
+
+    /// 設定のディスク保存が有効かどうかを返す
+    #[cfg(test)]
+    pub(crate) fn is_config_persistence_enabled(&self) -> bool {
+        self.persist_config
     }
 }
 
@@ -275,6 +289,7 @@ pub(crate) fn test_app_state() -> AppState {
         undo_text: Mutex::new(None),
         history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
+        persist_config: false,
     }
 }
 
@@ -458,5 +473,12 @@ mod tests {
         state.record_undo_source("original");
         assert_eq!(state.take_undo_source().as_deref(), Some("original"));
         assert!(state.take_undo_source().is_none());
+    }
+
+    /// テスト用 `AppState` は実行中アプリの `config.json` を上書きしないこと
+    #[test]
+    fn test_app_state_disables_config_persistence() {
+        let state = test_app_state();
+        assert!(!state.is_config_persistence_enabled());
     }
 }

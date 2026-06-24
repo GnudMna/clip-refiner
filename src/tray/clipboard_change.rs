@@ -285,3 +285,67 @@ where
         token.fetch_add(1, Ordering::Relaxed);
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ウォッチャーを生成してトークンを読み取れること
+    #[test]
+    fn change_watcher_new_and_token() {
+        let watcher = ChangeWatcher::new();
+        let _ = watcher.token();
+    }
+
+    /// 連続呼び出しでトークンが安定すること (変更がなければ同値)
+    #[test]
+    fn consecutive_tokens_are_stable_when_unchanged() {
+        let watcher = ChangeWatcher::new();
+        if let (Some(first), Some(second)) = (watcher.token(), watcher.token()) {
+            assert_eq!(first, second);
+        }
+    }
+
+    /// Windows / macOS ではイベント監視がサポートされること
+    #[test]
+    fn is_supported_on_desktop_platforms() {
+        let watcher = ChangeWatcher::new();
+        #[cfg(any(windows, target_os = "macos"))]
+        assert!(watcher.is_supported());
+        #[cfg(not(any(windows, target_os = "macos")))]
+        let _ = watcher.is_supported();
+    }
+
+    #[cfg(target_os = "linux")]
+    mod linux {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        use super::super::bump_token_on_clipboard_events;
+
+        /// 空イテレータではトークンが増えないこと
+        #[test]
+        fn bump_token_on_empty_iterator() {
+            let token = Arc::new(AtomicU64::new(3));
+            bump_token_on_clipboard_events(std::iter::empty(), &token);
+            assert_eq!(token.load(Ordering::Relaxed), 3);
+        }
+
+        /// イベント 1 件ごとにトークンが増えること
+        #[test]
+        fn bump_token_on_each_event() {
+            use wayland_clipboard_listener::ClipBoardListenMessage;
+
+            let token = Arc::new(AtomicU64::new(0));
+            let events = vec![
+                Ok(ClipBoardListenMessage::OnSelect),
+                Ok(ClipBoardListenMessage::OnFinished),
+            ];
+            bump_token_on_clipboard_events(events.into_iter(), &token);
+            assert_eq!(token.load(Ordering::Relaxed), 2);
+        }
+    }
+}
