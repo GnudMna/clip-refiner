@@ -152,6 +152,10 @@ pub enum RefineMode {
     #[value(help = "Excel(TSV)をMarkdown形式へ変換")]
     #[strum(message = "Excel→Markdown")]
     ExcelToMarkdown,
+    /// `Markdown形式の表をExcel(TSV)形式へ変換する`
+    #[value(help = "Markdown表をExcel(TSV)形式へ変換")]
+    #[strum(message = "Markdown→Excel")]
+    MarkdownToExcel,
     /// Unixタイムスタンプを日時文字列へ変換する
     #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
     #[strum(message = "Unixタイムスタンプ→日時文字列")]
@@ -205,6 +209,9 @@ pub enum RefineCategory {
     /// YAML to JSONサブメニュー内
     #[strum(message = "JSONへ変換")]
     ToJson,
+    /// Markdown関連サブメニュー内
+    #[strum(message = "マークダウン")]
+    Markdown,
     /// 日時変換サブメニュー内
     #[strum(message = "日時変換")]
     Datetime,
@@ -226,10 +233,11 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 10] = [
+    pub const SUBMENU_ORDER: [Self; 11] = [
         Self::LineActions,
         Self::UrlActions,
         Self::Path,
+        Self::Markdown,
         Self::Trim,
         Self::Escape,
         Self::JsonFormat,
@@ -277,7 +285,7 @@ impl RefineMode {
             Self::JsonFormat | Self::JsonFormatPreserveOrder => C::JsonFormat,
             Self::YamlToJson | Self::YamlToJsonPreserveOrder => C::ToJson,
             Self::JsonToYaml | Self::JsonToYamlPreserveOrder => C::ToYaml,
-            Self::MarkdownToHtml | Self::ExcelToMarkdown => C::Normal,
+            Self::MarkdownToHtml | Self::ExcelToMarkdown | Self::MarkdownToExcel => C::Markdown,
             Self::TimestampToDatetime | Self::DatetimeToTimestamp => C::Datetime,
             Self::AddComma | Self::RemoveComma => C::Number,
         }
@@ -391,6 +399,7 @@ impl Refiner for RefineMode {
             RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(text),
             RefineMode::MarkdownToHtml => markdown::markdown_to_html(text),
             RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(text),
+            RefineMode::MarkdownToExcel => markdown::markdown_table_to_excel(text),
             RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(text),
             RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
             RefineMode::AddComma => number::add_commas(text),
@@ -525,7 +534,7 @@ mod tests {
 
         assert_eq!(
             RefineMode::MarkdownToHtml.category(),
-            RefineCategory::Normal
+            RefineCategory::Markdown
         );
     }
 
@@ -599,7 +608,6 @@ mod tests {
         let normal_count = RefineMode::iter()
             .filter(|m| m.category() == RefineCategory::Normal)
             .count();
-        assert!(normal_count > 0);
         for mode in &ordered[..normal_count] {
             assert_eq!(mode.category(), RefineCategory::Normal);
         }
@@ -622,7 +630,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 31);
+        assert_eq!(variants.len(), 32);
     }
 
     /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
@@ -797,6 +805,11 @@ mod tests {
                 RefineMode::ExcelToMarkdown,
                 "A\tB\n1\t2",
                 "| A | B |\n|---|---|\n| 1 | 2 |",
+            ),
+            (
+                RefineMode::MarkdownToExcel,
+                "| A | B |\n|---|---|\n| 1 | 2 |",
+                "A\tB\n1\t2",
             ),
             (RefineMode::AddComma, "1000", "1,000"),
             (RefineMode::RemoveComma, "1,000", "1000"),
