@@ -14,7 +14,7 @@
         Id='*'
         Name='ClipRefiner'
         UpgradeCode='A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D'
-        Manufacturer='y_hirata'
+        Manufacturer='Yuto Hirata'
         Language='1041'
         Codepage='932'
         Version='$(var.Version)'>
@@ -22,7 +22,7 @@
         <Package Id='*'
             Keywords='Installer'
             Description='クリップボードのテキストを加工するツール'
-            Manufacturer='y_hirata'
+            Manufacturer='Yuto Hirata'
             InstallerVersion='450'
             Languages='1041'
             Compressed='yes'
@@ -44,7 +44,7 @@
 
                     <Component Id='License' Guid='A8C3E1F2-4B5D-4E6A-9C1F-2D5E6A9B0C4E'>
                         <File Id='LicenseFile' Name='LICENSE' DiskId='1' Source='LICENSE'/>
-                        <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='license' Type='integer' Value='1' KeyPath='yes'/>
+                        <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='license' Type='integer' Value='1' KeyPath='yes'/>
                     </Component>
 
                     <Directory Id='Bin' Name='bin'>
@@ -57,7 +57,7 @@
                                 Part='last'
                                 Action='set'
                                 System='no'/>
-                            <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='path' Type='integer' Value='1' KeyPath='yes'/>
+                            <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='path' Type='integer' Value='1' KeyPath='yes'/>
                         </Component>
                         <Component Id='binary0' Guid='C4E8F2A1-7D3B-4F9E-B2C5-6A8D0E3F1B7C'>
                             <File
@@ -67,7 +67,7 @@
                                 Source='$(var.CargoTargetBinDir)\ClipRefiner.exe'/>
                             <RemoveFolder Id='RemoveBinFolder' Directory='Bin' On='uninstall'/>
                             <RemoveFolder Id='RemoveApplicationFolder' Directory='APPLICATIONFOLDER' On='uninstall'/>
-                            <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='main' Type='integer' Value='1' KeyPath='yes'/>
+                            <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='main' Type='integer' Value='1' KeyPath='yes'/>
                         </Component>
                     </Directory>
                 </Directory>
@@ -99,7 +99,7 @@
                     WorkingDirectory='Bin'
                     Icon='ProductICO'/>
                 <RemoveFolder Id='RemoveApplicationProgramsFolder' Directory='ApplicationProgramsFolder' On='uninstall'/>
-                <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
+                <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
             </Component>
         </DirectoryRef>
 
