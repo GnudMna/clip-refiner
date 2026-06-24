@@ -1,7 +1,6 @@
-use arboard::Clipboard;
-
 use super::dispatch::Refiner;
 use super::mode::RefineMode;
+use super::text_clipboard::TextClipboard;
 
 // ======================================================================
 // クリップボード処理
@@ -79,19 +78,36 @@ pub(crate) fn apply_refinement_to_text(
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
 pub fn process_clipboard(
-    clipboard: &mut Clipboard,
+    clipboard: &mut arboard::Clipboard,
+    mode: RefineMode,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    process_text_clipboard(clipboard, mode)
+}
+
+/// テキストクリップボード実装に対して加工を適用する
+///
+/// # Arguments
+/// * `clipboard` - テキストクリップボード実装
+/// * `mode` - 適用する加工モード (`RefineMode`)
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+pub(crate) fn process_text_clipboard<C: TextClipboard>(
+    clipboard: &mut C,
     mode: RefineMode,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     let text = clipboard
         .get_text()
-        .map_err(|e| ClipboardProcessError::ReadFailed(e.to_string()))?;
+        .map_err(ClipboardProcessError::ReadFailed)?;
 
     match apply_refinement_to_text(&text, mode)? {
         ClipboardProcessOutcome::Unchanged => Ok(ClipboardProcessOutcome::Unchanged),
         ClipboardProcessOutcome::Processed(result) => {
             clipboard
                 .set_text(result.clone())
-                .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
+                .map_err(ClipboardProcessError::WriteFailed)?;
             Ok(ClipboardProcessOutcome::Processed(result))
         }
     }
@@ -103,7 +119,7 @@ pub fn process_clipboard(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arboard::Clipboard;
+    use crate::refiner::text_clipboard::InMemoryTextClipboard;
 
     /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
     #[test]
@@ -149,39 +165,52 @@ mod tests {
         );
     }
 
-    /// クリップボード処理の統合テスト
-    ///
-    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
-    /// 手動実行: `cargo test test_process_clipboard_integration -- --ignored`
+    /// 加工してクリップボードへ書き戻すこと
     #[test]
-    #[ignore = "システムクリップボードへのアクセスが必要"]
-    fn test_process_clipboard_integration() {
-        let mut cb = Clipboard::new().expect("クリップボードの初期化に失敗");
+    fn process_clipboard_trims_and_writes_back() {
+        let mut cb = InMemoryTextClipboard::with_text("  hello  ");
 
-        let unique_str_1 = "  clip_refiner_test_1  ";
-        cb.set_text(unique_str_1.to_string())
-            .expect("クリップボードへの書き込みに失敗");
         assert_eq!(
-            cb.get_text().expect("クリップボードの読み取りに失敗"),
-            unique_str_1
+            process_text_clipboard(&mut cb, RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
         );
-        assert_eq!(
-            process_clipboard(&mut cb, RefineMode::Trim),
-            Ok(ClipboardProcessOutcome::Processed(
-                "clip_refiner_test_1".to_string()
-            ))
-        );
+        assert_eq!(cb.text(), "hello");
+    }
 
-        let unique_str_2 = "clip_refiner_test_2";
-        cb.set_text(unique_str_2.to_string())
-            .expect("クリップボードへの書き込みに失敗");
+    /// 変更がない場合はクリップボードを更新しないこと
+    #[test]
+    fn process_clipboard_leaves_unchanged_text() {
+        let mut cb = InMemoryTextClipboard::with_text("hello");
+
         assert_eq!(
-            cb.get_text().expect("クリップボードの読み取りに失敗"),
-            unique_str_2
-        );
-        assert_eq!(
-            process_clipboard(&mut cb, RefineMode::Trim),
+            process_text_clipboard(&mut cb, RefineMode::Trim),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
+        assert_eq!(cb.text(), "hello");
+    }
+
+    /// 読み取り失敗時は `ReadFailed` を返すこと
+    #[test]
+    fn process_clipboard_read_failure() {
+        let mut cb = InMemoryTextClipboard::with_text("x").fail_on_read();
+
+        assert_eq!(
+            process_text_clipboard(&mut cb, RefineMode::Trim),
+            Err(ClipboardProcessError::ReadFailed("read failed".to_string()))
+        );
+    }
+
+    /// 書き込み失敗時は `WriteFailed` を返し、元の内容を維持すること
+    #[test]
+    fn process_clipboard_write_failure() {
+        let mut cb = InMemoryTextClipboard::with_text("  x  ").fail_on_write();
+
+        assert_eq!(
+            process_text_clipboard(&mut cb, RefineMode::Trim),
+            Err(ClipboardProcessError::WriteFailed(
+                "write failed".to_string()
+            ))
+        );
+        assert_eq!(cb.text(), "  x  ");
     }
 }

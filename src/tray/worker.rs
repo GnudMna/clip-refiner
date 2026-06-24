@@ -10,7 +10,7 @@ use super::notify;
 use super::state::AppState;
 use crate::config::MonitorMode;
 use crate::platform;
-use crate::refiner::{ClipboardProcessOutcome, RefineMode, process_clipboard};
+use crate::refiner::{ClipboardProcessOutcome, RefineMode, TextClipboard, process_text_clipboard};
 
 use arboard::Clipboard;
 
@@ -298,7 +298,11 @@ fn sync_monitor_generation(
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
 /// * `cmd` - 受信したコマンド
-fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: ClipboardCommand) {
+fn handle_command<C: TextClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    cmd: ClipboardCommand,
+) {
     match cmd {
         ClipboardCommand::SetText(text) => {
             if let Err(e) = clipboard.set_text(text.clone()) {
@@ -316,7 +320,7 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
         }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
-            match process_clipboard(clipboard, mode) {
+            match process_text_clipboard(clipboard, mode) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
@@ -467,5 +471,60 @@ mod tests {
         } else {
             assert_eq!(effective, MonitorMode::Polling);
         }
+    }
+
+    /// `ProcessMode` コマンドで加工して状態を更新すること
+    #[test]
+    fn handle_command_process_mode_updates_clipboard_and_state() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("  hello  ");
+        let state = Arc::new(test_app_state());
+
+        handle_command(
+            &mut clipboard,
+            &state,
+            ClipboardCommand::ProcessMode(RefineMode::Trim),
+        );
+
+        assert_eq!(clipboard.text(), "hello");
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "hello");
+        assert_eq!(state.take_undo_source().as_deref(), Some("  hello  "));
+    }
+
+    /// `SetText` コマンドでクリップボードと観測状態を更新すること
+    #[test]
+    fn handle_command_set_text_records_observation() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("");
+        let state = Arc::new(test_app_state());
+
+        handle_command(
+            &mut clipboard,
+            &state,
+            ClipboardCommand::SetText("restored".to_string()),
+        );
+
+        assert_eq!(clipboard.text(), "restored");
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "restored");
+    }
+
+    /// `Undo` コマンドで加工前テキストを復元すること
+    #[test]
+    fn handle_command_undo_restores_source_text() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("processed");
+        let state = Arc::new(test_app_state());
+        state.record_undo_source("original");
+
+        handle_command(&mut clipboard, &state, ClipboardCommand::Undo);
+
+        assert_eq!(clipboard.text(), "original");
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "original");
     }
 }

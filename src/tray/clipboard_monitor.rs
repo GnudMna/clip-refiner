@@ -5,9 +5,9 @@ use super::notify;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::platform;
-use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
-
-use arboard::Clipboard;
+use crate::refiner::{
+    ClipboardProcessError, ClipboardProcessOutcome, TextClipboard, process_text_clipboard,
+};
 
 // ======================================================================
 // 監視スレッド管理
@@ -83,8 +83,8 @@ pub(crate) fn should_process_clipboard(
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
-pub(crate) fn handle_clipboard_update(
-    clipboard: &mut Clipboard,
+pub(crate) fn handle_clipboard_update<C: TextClipboard>(
+    clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
     event_driven: bool,
@@ -100,12 +100,12 @@ pub(crate) fn handle_clipboard_update(
         return false;
     }
 
-    let outcome = process_clipboard(clipboard, snap.mode);
+    let outcome = process_text_clipboard(clipboard, snap.mode);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            notify::show_process_notification(state, snap.mode, processed);
+            notify::show_process_notification(state, snap.mode, processed.as_str());
         }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
         Err(e) => {
@@ -363,23 +363,15 @@ mod tests {
         assert_eq!(state.get_history(), vec!["source".to_string()]);
     }
 
-    /// クリップボード更新の統合テスト
-    ///
-    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
-    /// 手動実行: `cargo test test_handle_clipboard_update_integration -- --ignored`
+    /// クリップボード更新時に加工して状態を更新すること
     #[test]
-    #[ignore = "システムクリップボードへのアクセスが必要"]
-    fn test_handle_clipboard_update_integration() {
-        let mut clipboard = Clipboard::new().expect("クリップボードの初期化に失敗");
+    fn handle_clipboard_update_processes_with_mock() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("  trimmed  ");
         let state = Arc::new(crate::tray::state::test_app_state());
-        state.with_config_mut(|c| c.mode = RefineMode::Trim);
-
-        let input = "  clip_refiner_monitor_test  ";
-        clipboard
-            .set_text(input.to_string())
-            .expect("クリップボードへの書き込みに失敗");
-
         let snap = test_snapshot(RefineMode::Trim, false);
+
         assert!(handle_clipboard_update(
             &mut clipboard,
             &state,
@@ -387,13 +379,51 @@ mod tests {
             false
         ));
 
-        assert_eq!(
-            clipboard
-                .get_text()
-                .expect("クリップボードの読み取りに失敗"),
-            "clip_refiner_monitor_test"
-        );
+        assert_eq!(clipboard.text(), "trimmed");
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "clip_refiner_monitor_test");
+        assert_eq!(ps.last_seen_text, "trimmed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
+    }
+
+    /// 読み取り失敗時は false を返し状態を更新しないこと
+    #[test]
+    fn handle_clipboard_update_read_failure_is_noop() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("x").fail_on_read();
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, false);
+
+        assert!(!handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            false
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps, ProcessedState::default());
+    }
+
+    /// 書き込み失敗時は false を返し `processed_state` を更新しないこと
+    #[test]
+    fn handle_clipboard_update_write_failure_leaves_state() {
+        use crate::refiner::text_clipboard::InMemoryTextClipboard;
+
+        let mut clipboard = InMemoryTextClipboard::with_text("  x  ").fail_on_write();
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, false);
+
+        assert!(!handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            false
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "  x  ");
+        assert_eq!(ps.last_written_text, None);
+        assert_eq!(clipboard.text(), "  x  ");
     }
 }

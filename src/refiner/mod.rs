@@ -6,8 +6,12 @@ mod clipboard;
 mod dispatch;
 mod mode;
 mod ordered_value;
+pub(crate) mod text_clipboard;
 mod transform;
 
+pub(crate) use text_clipboard::TextClipboard;
+
+pub(crate) use clipboard::process_text_clipboard;
 pub use clipboard::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
