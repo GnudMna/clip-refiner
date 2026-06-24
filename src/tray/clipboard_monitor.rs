@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use super::notifier;
+use super::notify;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
-use crate::notification;
+use crate::platform;
 use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
 
 use arboard::Clipboard;
@@ -105,12 +105,12 @@ pub(crate) fn handle_clipboard_update(
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            notifier::show_process_notification(state, snap.mode, processed);
+            notify::show_process_notification(state, snap.mode, processed);
         }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
         Err(e) => {
             crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
-            notification::show_notification("加工エラー", e.user_message());
+            platform::show_notification("加工エラー", e.user_message());
         }
     }
 

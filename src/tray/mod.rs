@@ -4,11 +4,12 @@
 
 pub mod app;
 mod clipboard_change;
+mod clipboard_monitor;
 pub mod event;
+pub mod history;
 pub mod hotkey;
 pub mod menu;
-pub mod monitor;
-pub mod notifier;
+mod notify;
 mod runner;
 pub mod selector;
 pub mod state;

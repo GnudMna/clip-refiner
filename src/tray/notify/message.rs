@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use super::super::state::AppState;
 use crate::config::NotificationSettings;
-use crate::notification;
+use crate::platform;
 use crate::refiner::RefineMode;
-use crate::tray::state::AppState;
 
 // ======================================================================
 // 加工完了通知
@@ -70,7 +70,7 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
     let Some(body) = format_process_notification_body(&settings, mode, processed) else {
         return;
     };
-    notification::show_notification("変換完了", &body);
+    platform::show_notification("変換完了", &body);
 }
 
 // ======================================================================
@@ -99,7 +99,7 @@ pub(crate) fn pause_notification_body(paused: bool) -> &'static str {
 pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
     if should_show_pause_notification(&settings) {
-        notification::show_notification(source, pause_notification_body(paused));
+        platform::show_notification(source, pause_notification_body(paused));
     }
 }
 

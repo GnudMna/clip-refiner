@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
+use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
-use super::monitor::bump_monitor_generation;
 use super::selector::{SelectorWindow, init_selector};
 use super::state::{AppEvent, AppState};
 
