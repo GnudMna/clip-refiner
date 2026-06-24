@@ -18,7 +18,7 @@ pub const APP_NAME_KEBAB: &str = "clip-refiner";
 /// アプリケーションの一意な識別子
 ///
 /// 多重起動防止やレジストリ、設定のスコープ分離に使用される
-pub const APP_ID: &str = "com.y_hirata.clip-refiner";
+pub const APP_ID: &str = "com.Yuto Hirata.clip-refiner";
 
 // ======================================================================
 // 設定
