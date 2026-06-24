@@ -2,16 +2,16 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
+use super::clipboard_monitor::bump_monitor_generation;
 use super::menu::TrayMenu;
-use super::monitor::bump_monitor_generation;
-use super::notifier;
+use super::notify;
 use super::selector::SelectorWindow;
 use super::state::{AppEvent, AppState};
 use super::worker::ClipboardCommand;
 use crate::config::HotkeySettings;
 use crate::consts;
 use crate::hotkey_binding::resolve_hotkey;
-use crate::notification;
+use crate::platform;
 
 use anyhow::Result;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::HotKey};
@@ -175,7 +175,7 @@ impl HotkeyHandler {
         ctx.menu.notification.enabled_item.set_checked(new_val);
         ctx.menu.notification.content_submenu.set_enabled(new_val);
         ctx.state.save_config();
-        notification::show_notification(
+        platform::show_notification(
             "ショートカット",
             if new_val {
                 "成功通知を有効にしました"
@@ -193,7 +193,7 @@ impl HotkeyHandler {
         });
         ctx.menu.pause_item.set_checked(new_paused);
         ctx.state.save_config();
-        notifier::show_pause_notification(ctx.state, new_paused, "ショートカット");
+        notify::show_pause_notification(ctx.state, new_paused, "ショートカット");
         bump_monitor_generation(ctx.state);
     }
 }

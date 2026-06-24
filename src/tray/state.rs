@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
+use super::history::EncryptedHistoryStore;
 use crate::config::AppConfig;
-use crate::history_store::EncryptedHistoryStore;
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;

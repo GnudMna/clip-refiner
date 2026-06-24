@@ -9,7 +9,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::config;
 use crate::consts;
 use crate::logger;
-use crate::notification;
+use crate::platform;
 use crate::refiner::{self, ClipboardProcessError, ClipboardProcessOutcome, RefineMode};
 use crate::tray;
 use crate::{log_error, log_info, log_warn};
@@ -144,7 +144,7 @@ fn ensure_single_instance() -> Result<SingleInstance> {
     if !instance.is_single() {
         let msg = format!("{}は既に実行されています。", consts::APP_NAME);
         log_warn!("{}", msg);
-        notification::show_notification("多重起動", &msg);
+        platform::show_notification("多重起動", &msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
     }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use super::super::clipboard_monitor::{self, bump_monitor_generation};
 use super::super::menu::TrayMenu;
-use super::super::monitor::{self, bump_monitor_generation};
 use super::super::state::AppState;
 use crate::config::MonitorMode;
 
@@ -22,7 +22,7 @@ pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode:
         item.set_checked(*m == monitor_mode);
     }
 
-    monitor::update_monitor_mode_impl(menu, monitor_mode);
+    clipboard_monitor::update_monitor_mode_impl(menu, monitor_mode);
 
     state.save_config();
     bump_monitor_generation(state);

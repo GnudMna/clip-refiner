@@ -5,11 +5,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::clipboard_change::ChangeWatcher;
-use super::monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
-use super::notifier;
+use super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
+use super::notify;
 use super::state::AppState;
 use crate::config::MonitorMode;
-use crate::notification;
+use crate::platform;
 use crate::refiner::{ClipboardProcessOutcome, RefineMode, process_clipboard};
 
 use arboard::Clipboard;
@@ -167,14 +167,14 @@ impl MonitorLoopState {
                     && token != self.last_token
                 {
                     self.last_token = token;
-                    if monitor::handle_clipboard_update(clipboard, state, &snap, true) {
+                    if clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, true) {
                         self.last_token = watcher.token().unwrap_or(self.last_token);
                     }
                 }
             }
             MonitorMode::Polling => {
                 if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
-                    monitor::handle_clipboard_update(clipboard, state, &snap, false);
+                    clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, false);
                     self.last_poll_at = Instant::now();
                 }
             }
@@ -216,7 +216,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
         Ok(cb) => cb,
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
-            notification::show_notification(
+            platform::show_notification(
                 "クリップボードエラー",
                 "クリップボードの初期化に失敗しました。監視処理は停止します。",
             );
@@ -303,17 +303,14 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
         ClipboardCommand::SetText(text) => {
             if let Err(e) = clipboard.set_text(text.clone()) {
                 crate::log_error!("クリップボード設定エラー: {:?}", e);
-                notification::show_notification(
+                platform::show_notification(
                     "クリップボードエラー",
                     "履歴からの復元処理に失敗しました。",
                 );
             } else {
                 state.record_clipboard_set(&text);
                 if state.with_config(|c| c.notification_settings.enabled) {
-                    notification::show_notification(
-                        "履歴から復元",
-                        "クリップボードにコピーしました",
-                    );
+                    platform::show_notification("履歴から復元", "クリップボードにコピーしました");
                 }
             }
         }
@@ -325,19 +322,16 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
                         state.record_undo_source(pre);
                     }
                     state.record_processing_success(&processed);
-                    notifier::show_process_notification(state, mode, &processed);
+                    notify::show_process_notification(state, mode, &processed);
                 }
                 Ok(ClipboardProcessOutcome::Unchanged) => {
                     if state.with_config(|c| c.notification_settings.enabled) {
-                        notification::show_notification(
-                            "加工結果",
-                            "テキストに変更はありませんでした",
-                        );
+                        platform::show_notification("加工結果", "テキストに変更はありませんでした");
                     }
                 }
                 Err(e) => {
                     crate::log_error!("加工エラー: {} ({:?})", e.user_message(), e);
-                    notification::show_notification("加工エラー", e.user_message());
+                    platform::show_notification("加工エラー", e.user_message());
                 }
             }
         }
@@ -346,21 +340,21 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
                 if let Err(e) = clipboard.set_text(text.clone()) {
                     crate::log_error!("加工取り消しエラー: {:?}", e);
                     state.record_undo_source(&text);
-                    notification::show_notification(
+                    platform::show_notification(
                         "クリップボードエラー",
                         "加工の取り消しに失敗しました",
                     );
                 } else {
                     state.record_processing_success(&text);
                     if state.with_config(|c| c.notification_settings.enabled) {
-                        notification::show_notification(
+                        platform::show_notification(
                             "加工の取り消し",
                             "クリップボードを加工前の内容に戻しました",
                         );
                     }
                 }
             } else if state.with_config(|c| c.notification_settings.enabled) {
-                notification::show_notification("加工の取り消し", "取り消せる加工がありません");
+                platform::show_notification("加工の取り消し", "取り消せる加工がありません");
             }
         }
     }
