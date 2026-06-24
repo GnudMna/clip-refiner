@@ -3,17 +3,20 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
-use super::monitor::bump_monitor_generation;
-use super::notifier;
-use super::state::{AppState, LockExt};
+use super::state::AppState;
 use super::worker::ClipboardCommand;
-use crate::config::MonitorMode;
-use crate::notification;
-use crate::refiner::RefineMode;
 
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
+
+mod app_control;
+mod history;
+mod monitor;
+mod notification;
+mod refine;
+
+pub use refine::update_refine;
 
 /// セレクタのフォーカス喪失時に非表示へ遷移すべきか判定する
 ///
@@ -43,19 +46,19 @@ pub fn handle_menu_event(
     clipboard_tx: &Sender<ClipboardCommand>,
     control_flow: &mut ControlFlow,
 ) {
-    if handle_app_control(&event.id, menu, state, control_flow) {
+    if app_control::handle_app_control(&event.id, menu, state, control_flow) {
         return;
     }
-    if handle_history_event(&event.id, menu, state, clipboard_tx) {
+    if history::handle_history_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
-    if handle_notification_event(&event.id, menu, state) {
+    if notification::handle_notification_event(&event.id, menu, state) {
         return;
     }
-    if handle_refine_mode_event(&event.id, menu, state, clipboard_tx) {
+    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
-    handle_monitor_event(&event.id, menu, state);
+    monitor::handle_monitor_event(&event.id, menu, state);
 }
 
 /// UIウィンドウ(セレクタ)に関連するイベントを処理する
@@ -81,273 +84,15 @@ pub fn handle_window_event(
 }
 
 // ======================================================================
-// アプリケーション制御
-// ======================================================================
-/// アプリケーションの基本操作(終了、一時停止、設定ファイルの起動、ショートカット一覧表示)を処理する
-///
-/// # Arguments
-/// * `id` - クリックされたメニュー項目の ID
-/// * `menu` - トレイメニュー構造体
-/// * `state` - アプリケーションの共有状態
-/// * `control_flow` - イベントループの制御フロー
-///
-/// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
-fn handle_app_control(
-    id: &tray_icon::menu::MenuId,
-    menu: &TrayMenu,
-    state: &Arc<AppState>,
-    control_flow: &mut ControlFlow,
-) -> bool {
-    if id == menu.quit_item.id() {
-        *control_flow = ControlFlow::Exit;
-        true
-    } else if id == menu.pause_item.id() {
-        let paused = menu.pause_item.is_checked();
-        state.with_config_mut(|c| c.is_paused = paused);
-        notifier::show_pause_notification(state, paused, "設定変更");
-        state.save_config();
-        bump_monitor_generation(state);
-        true
-    } else if id == menu.open_config_item.id() {
-        state.save_config();
-        if let Err(e) = crate::config::open_config_file() {
-            crate::log_error!("設定ファイルの起動に失敗: {:?}", e);
-            notification::show_notification("エラー", "設定ファイルを開けませんでした");
-        }
-        true
-    } else if id == menu.shortcut_list_item.id() {
-        let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
-        notification::show_notification("ショートカット一覧", &body);
-        true
-    } else if id == menu.launch_at_login_item.id() {
-        let enabled = menu.launch_at_login_item.is_checked();
-        if let Err(e) = crate::autostart::set_enabled(enabled) {
-            crate::log_error!("ログイン時自動起動の設定に失敗: {:?}", e);
-            menu.launch_at_login_item.set_checked(!enabled);
-            notification::show_notification("エラー", "ログイン時自動起動の設定に失敗しました");
-        }
-        true
-    } else {
-        false
-    }
-}
-
-// ======================================================================
-// 履歴
-// ======================================================================
-/// クリップボード履歴に関連するメニューイベント(有効化切替、消去、過去項目の選択)を処理する
-///
-/// # Arguments
-/// * `id` - クリックされたメニュー項目の ID
-/// * `menu` - トレイメニュー構造体
-/// * `state` - アプリケーションの共有状態
-/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
-///
-/// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
-fn handle_history_event(
-    id: &tray_icon::menu::MenuId,
-    menu: &TrayMenu,
-    state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
-) -> bool {
-    if id == menu.history.enabled_item.id() {
-        let enabled = menu.history.enabled_item.is_checked();
-        state.with_config_mut(|c| c.history_enabled = enabled);
-        state.save_config();
-        let _ = menu.refresh_history(state);
-        return true;
-    }
-    if id == menu.history.clear_item.id() {
-        state.clear_history();
-        state.save_config();
-        let _ = menu.refresh_history(state);
-        return true;
-    }
-
-    let menu_records = menu.history.records.lock_ignore_poison();
-
-    if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
-        if let Some(text) = state.get_history_entry(*index) {
-            let _ = clipboard_tx.send(ClipboardCommand::SetText(text));
-        }
-        return true;
-    }
-
-    false
-}
-
-// ======================================================================
-// 通知設定
-// ======================================================================
-/// 通知設定に関連するメニューイベントを処理する
-///
-/// # Arguments
-/// * `id` - クリックされたメニュー項目の ID
-/// * `menu` - トレイメニュー構造体
-/// * `state` - アプリケーションの共有状態
-///
-/// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
-fn handle_notification_event(
-    id: &tray_icon::menu::MenuId,
-    menu: &TrayMenu,
-    state: &Arc<AppState>,
-) -> bool {
-    if id == menu.notification.enabled_item.id() {
-        let enabled = menu.notification.enabled_item.is_checked();
-        state.with_config_mut(|c| c.notification_settings.enabled = enabled);
-        menu.notification.content_submenu.set_enabled(enabled);
-        state.save_config();
-        return true;
-    }
-    if id == menu.notification.notify_mode_item.id() {
-        let enabled = menu.notification.notify_mode_item.is_checked();
-        state.with_config_mut(|c| c.notification_settings.notify_mode = enabled);
-        state.save_config();
-        return true;
-    }
-    if id == menu.notification.notify_result_item.id() {
-        let enabled = menu.notification.notify_result_item.is_checked();
-        state.with_config_mut(|c| c.notification_settings.notify_result = enabled);
-        state.save_config();
-        return true;
-    }
-    if id == menu.notification.notify_pause_item.id() {
-        let enabled = menu.notification.notify_pause_item.is_checked();
-        state.with_config_mut(|c| c.notification_settings.notify_pause = enabled);
-        state.save_config();
-        return true;
-    }
-    false
-}
-
-// ======================================================================
-// 加工モード
-// ======================================================================
-/// 加工モードの選択メニューイベントを処理する
-///
-/// # Arguments
-/// * `id` - クリックされたメニュー項目の ID
-/// * `menu` - トレイメニュー構造体
-/// * `state` - アプリケーションの共有状態
-/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
-///
-/// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
-fn handle_refine_mode_event(
-    id: &tray_icon::menu::MenuId,
-    menu: &TrayMenu,
-    state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
-) -> bool {
-    if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
-        update_refine(state, menu, clipboard_tx, *mode);
-        true
-    } else {
-        false
-    }
-}
-
-// ======================================================================
-// 監視設定
-// ======================================================================
-/// 監視設定(監視モード、ポーリング間隔)に関連するメニューイベントを処理する
-///
-/// # Arguments
-/// * `id` - クリックされたメニュー項目の ID
-/// * `menu` - トレイメニュー構造体
-/// * `state` - アプリケーションの共有状態
-///
-/// # Returns
-/// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す
-fn handle_monitor_event(
-    id: &tray_icon::menu::MenuId,
-    menu: &TrayMenu,
-    state: &Arc<AppState>,
-) -> bool {
-    if let Some((_, monitor_mode)) = menu.monitor.items.iter().find(|(item, _)| item.id() == id) {
-        update_monitor_mode(state, menu, *monitor_mode);
-        return true;
-    }
-
-    for (item, ms) in &menu.interval.items {
-        if item.id() == id {
-            state.with_config_mut(|c| c.interval_ms = *ms);
-            for (it, _) in &menu.interval.items {
-                it.set_checked(false);
-            }
-            item.set_checked(true);
-            state.save_config();
-            return true;
-        }
-    }
-    false
-}
-
-// ======================================================================
-// モード・監視更新
-// ======================================================================
-/// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
-///
-/// 必要に応じてクリップボードワーカーに加工命令を送信する
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `menu` - トレイメニュー構造体
-/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
-/// * `mode` - 設定する新しい加工モード
-pub fn update_refine(
-    state: &Arc<AppState>,
-    menu: &TrayMenu,
-    clipboard_tx: &Sender<ClipboardCommand>,
-    mode: RefineMode,
-) {
-    state.with_config_mut(|c| c.mode = mode);
-
-    menu.refine
-        .all_items()
-        .for_each(|(item, m)| item.set_checked(*m == mode));
-    menu.refresh_category_labels(mode);
-
-    state.save_config();
-    let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
-}
-
-/// 監視モードを更新し、必要に応じて監視用スレッドのリセットを行う
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `menu` - トレイメニュー構造体
-/// * `monitor_mode` - 設定する新しい監視モード
-pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode: MonitorMode) {
-    if state.with_config(|c| c.monitor_mode) == monitor_mode {
-        return;
-    }
-
-    state.with_config_mut(|c| c.monitor_mode = monitor_mode);
-
-    for (item, m) in &menu.monitor.items {
-        item.set_checked(*m == monitor_mode);
-    }
-
-    super::monitor::update_monitor_mode_impl(menu, monitor_mode);
-
-    state.save_config();
-    super::monitor::bump_monitor_generation(state);
-}
-
-// ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use std::sync::mpsc;
 
     use crate::config::MonitorMode;
+    use crate::refiner::RefineMode;
     use crate::tray::menu::TrayMenu;
     use crate::tray::state::{LockExt, test_app_state};
     use crate::tray::worker::ClipboardCommand;
@@ -392,7 +137,7 @@ mod tests {
         let state = Arc::new(test_app_state());
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
 
-        update_monitor_mode(&state, &menu, MonitorMode::Event);
+        monitor::update_monitor_mode(&state, &menu, MonitorMode::Event);
 
         assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Event);
         assert!(
@@ -411,7 +156,7 @@ mod tests {
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
 
-        update_monitor_mode(&state, &menu, MonitorMode::Polling);
+        monitor::update_monitor_mode(&state, &menu, MonitorMode::Polling);
 
         assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
         assert!(menu.interval.main_submenu.is_enabled());
