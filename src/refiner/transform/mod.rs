@@ -7,6 +7,7 @@ pub(crate) mod line_actions;
 pub(crate) mod markdown;
 pub(crate) mod number;
 pub(crate) mod path;
+pub(crate) mod regex;
 pub(crate) mod trim;
 pub(crate) mod url;
 pub(crate) mod utils;

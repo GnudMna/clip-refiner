@@ -10,7 +10,9 @@ use super::notify;
 use super::state::AppState;
 use crate::config::MonitorMode;
 use crate::platform;
-use crate::refiner::{ClipboardProcessOutcome, RefineMode, TextClipboard, process_text_clipboard};
+use crate::refiner::{
+    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_text_clipboard,
+};
 use crate::security::SecretString;
 
 use arboard::Clipboard;
@@ -321,7 +323,8 @@ pub(crate) fn handle_command<C: TextClipboard>(
         }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
-            match process_text_clipboard(clipboard, mode) {
+            let ctx = state.with_config(RefineContext::from_config);
+            match process_text_clipboard(clipboard, mode, &ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);

@@ -4,7 +4,7 @@ mod persistence;
 mod types;
 
 pub use paths::{get_config_dir, open_config_file};
-pub use types::{AppConfig, HotkeySettings, MonitorMode, NotificationSettings};
+pub use types::{AppConfig, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings};
 
 // ======================================================================
 // テスト

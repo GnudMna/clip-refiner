@@ -100,6 +100,22 @@ pub enum RefineMode {
     #[value(help = "正規表現のアンエスケープ")]
     #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
+    /// 正規表現に一致する部分を置換文字列へ変換する (`config.json` の `regex` 設定を使用)
+    #[value(help = "正規表現で置換")]
+    #[strum(message = "正規表現置換")]
+    RegexReplace,
+    /// 正規表現に一致する部分を行単位で抽出する
+    #[value(help = "正規表現で抽出")]
+    #[strum(message = "正規表現抽出")]
+    RegexExtract,
+    /// 正規表現に一致する部分を削除する
+    #[value(help = "正規表現で削除")]
+    #[strum(message = "正規表現削除")]
+    RegexDelete,
+    /// 正規表現で分割し改行で結合する
+    #[value(help = "正規表現で分割")]
+    #[strum(message = "正規表現分割")]
+    RegexSplit,
     /// JSON形式をインデント整形する(キーの順序はパース時に不定となる)
     #[value(help = "JSON形式を整形(キー順序不同)")]
     #[strum(message = "JSON整形(キー順序不同)")]
@@ -180,6 +196,9 @@ pub enum RefineCategory {
     /// エスケープサブメニュー内
     #[strum(message = "エスケープ")]
     Escape,
+    /// 正規表現操作サブメニュー内
+    #[strum(message = "正規表現")]
+    Regex,
     /// JSON整形サブメニュー内
     #[strum(message = "JSON整形")]
     JsonFormat,

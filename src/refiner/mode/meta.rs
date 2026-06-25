@@ -16,13 +16,14 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 11] = [
+    pub const SUBMENU_ORDER: [Self; 12] = [
         Self::LineActions,
         Self::UrlActions,
         Self::Path,
         Self::Markdown,
         Self::Trim,
         Self::Escape,
+        Self::Regex,
         Self::JsonFormat,
         Self::ToJson,
         Self::ToYaml,
@@ -65,6 +66,9 @@ impl RefineMode {
             | Self::RemoveDuplicateLines => C::LineActions,
             Self::Trim | Self::TrimLines => C::Trim,
             Self::Escape | Self::Unescape | Self::RegexEscape | Self::RegexUnescape => C::Escape,
+            Self::RegexReplace | Self::RegexExtract | Self::RegexDelete | Self::RegexSplit => {
+                C::Regex
+            }
             Self::JsonFormat | Self::JsonFormatPreserveOrder => C::JsonFormat,
             Self::YamlToJson | Self::YamlToJsonPreserveOrder => C::ToJson,
             Self::JsonToYaml | Self::JsonToYamlPreserveOrder => C::ToYaml,
@@ -240,6 +244,6 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 32);
+        assert_eq!(variants.len(), 36);
     }
 }
