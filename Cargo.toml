@@ -17,22 +17,29 @@ culture = "ja-JP"
 # perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
 linker-args = ["-sice:ICE91"]
 
+[lib]
+name = "clip_refiner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ClipRefiner"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0"
 arboard = "3.6.1"
 blake3 = "1.8"
 chacha20poly1305 = "0.10.1"
-getrandom = "0.4.2"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.1", features = ["derive"] }
-clipboard-win = { version = "5.0", features = ["std"] }
 csv = "1.3"
 directories = "6.0.0"
+getrandom = "0.4.2"
 global-hotkey = "0.8.0"
-png = "0.18.1"
 indexmap = { version = "2.14.0", features = ["serde"] }
 notify-rust = "4.18.0"
 percent-encoding = "2.3.2"
+png = "0.18.1"
 pulldown-cmark = "0.13.4"
 regex = "1.12.4"
 serde = { version = "1.0", features = ["derive"] }
@@ -45,23 +52,31 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tray-icon = "0.24.1"
-windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 wry = "0.55.1"
 zeroize = "1.8"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-clipboard-listener = { version = "0.6.1", features = ["wlr-data-control"] }
+x11rb = "0.13"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+
 [target.'cfg(windows)'.dependencies]
+clipboard-win = { version = "5.0", features = ["std"] }
 winreg = "0.56.0"
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Console",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
-
-[lib]
-name = "clip_refiner"
-path = "src/lib.rs"
-
-[[bin]]
-name = "ClipRefiner"
-path = "src/main.rs"
 
 # Windows / macOS のプラットフォーム API で unsafe が必要なため unsafe_code = forbid は適用しない
 [lints.clippy]
@@ -75,11 +90,3 @@ strip = true
 lto = "fat"
 incremental = false
 codegen-units = 1
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = "0.3"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-wayland-clipboard-listener = { version = "0.6.1", features = ["wlr-data-control"] }
-x11rb = "0.13"

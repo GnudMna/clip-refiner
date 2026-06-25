@@ -1,4 +1,5 @@
 mod paths;
+pub(crate) mod permissions;
 mod persistence;
 mod types;
 
