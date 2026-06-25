@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::paths::{get_config_file_path, restrict_private_file_permissions};
+use super::paths::get_config_file_path;
+use super::permissions::restrict_private_file_permissions;
 use super::types::AppConfig;
 
 use anyhow::Result;
@@ -80,12 +81,9 @@ impl AppConfig {
             e
         })?;
 
-        #[cfg(unix)]
         if let Err(e) = restrict_private_file_permissions(&config_path) {
             crate::log_warn!("設定ファイルのパーミッション設定に失敗: {:?}", e);
         }
-        #[cfg(not(unix))]
-        restrict_private_file_permissions(&config_path);
 
         Ok(())
     }
@@ -96,6 +94,9 @@ fn backup_corrupted_config(config_path: &Path) {
     let backup_path = config_path.with_file_name("config.json.bak");
     match fs::copy(config_path, &backup_path) {
         Ok(_) => {
+            if let Err(e) = restrict_private_file_permissions(&backup_path) {
+                crate::log_warn!("設定バックアップのパーミッション設定に失敗: {:?}", e);
+            }
             crate::log_info!(
                 "破損した設定をバックアップしました: {}",
                 backup_path.display()
