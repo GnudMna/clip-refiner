@@ -84,7 +84,7 @@ impl RefineMode {
     ///
     /// # Returns
     /// * `Vec<RefineMode>` - 表示順に並んだモード一覧
-    pub fn selector_modes() -> Vec<Self> {
+    pub fn quick_selector_modes() -> Vec<Self> {
         let mut ordered = Vec::new();
         ordered.extend(Self::iter().filter(|m| m.category() == RefineCategory::Normal));
         for category in RefineCategory::SUBMENU_ORDER {
@@ -98,7 +98,7 @@ impl RefineMode {
     /// # Returns
     /// * `String` - モード ID・ラベル・カテゴリ・CLI 名を含む JSON 配列文字列
     pub fn to_json_list() -> String {
-        let list: Vec<serde_json::Value> = Self::selector_modes()
+        let list: Vec<serde_json::Value> = Self::quick_selector_modes()
             .iter()
             .map(|m| {
                 serde_json::json!({
@@ -213,10 +213,10 @@ mod tests {
         }
     }
 
-    /// `selector_modes` が全モードをトレイメニュー相当の順序で返すこと
+    /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すこと
     #[test]
-    fn test_selector_modes_order() {
-        let ordered = RefineMode::selector_modes();
+    fn test_quick_selector_modes_order() {
+        let ordered = RefineMode::quick_selector_modes();
         assert_eq!(ordered.len(), RefineMode::iter().count());
 
         let normal_count = RefineMode::iter()

@@ -3,7 +3,9 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
+use super::quick_selector::QuickSelectorWindow;
 use super::state::AppState;
+use super::text_selector::TextSelectorWindow;
 use super::worker::ClipboardCommand;
 
 use tao::event::WindowEvent;
@@ -15,14 +17,43 @@ mod history;
 mod monitor;
 mod notification;
 mod refine;
+mod texts;
 
 pub use refine::update_refine;
 
-/// セレクタのフォーカス喪失時に非表示へ遷移すべきか判定する
+/// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する
 ///
 /// 表示直後のフォーカスロスト (Windows の Alt キーイベント等) は無視する
 pub(crate) fn should_hide_selector_on_focus_loss(elapsed_ms: u128) -> bool {
     elapsed_ms > 200
+}
+
+/// フォーカス喪失で自動非表示する UI ウィンドウ
+pub(crate) trait FocusDismissibleSelector {
+    /// ウィンドウを非表示にする
+    fn hide(&self);
+    /// ウィンドウが表示中かどうか
+    fn is_visible(&self) -> bool;
+}
+
+impl FocusDismissibleSelector for super::quick_selector::QuickSelectorWindow {
+    fn hide(&self) {
+        QuickSelectorWindow::hide(self);
+    }
+
+    fn is_visible(&self) -> bool {
+        QuickSelectorWindow::is_visible(self)
+    }
+}
+
+impl FocusDismissibleSelector for super::text_selector::TextSelectorWindow {
+    fn hide(&self) {
+        TextSelectorWindow::hide(self);
+    }
+
+    fn is_visible(&self) -> bool {
+        TextSelectorWindow::is_visible(self)
+    }
 }
 
 // ======================================================================
@@ -52,6 +83,9 @@ pub fn handle_menu_event(
     if history::handle_history_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
+    if texts::handle_texts_event(&event.id, menu, state, clipboard_tx) {
+        return;
+    }
     if notification::handle_notification_event(&event.id, menu, state) {
         return;
     }
@@ -61,17 +95,45 @@ pub fn handle_menu_event(
     monitor::handle_monitor_event(&event.id, menu, state);
 }
 
-/// UIウィンドウ(セレクタ)に関連するイベントを処理する
+/// 登録文字列をクリップボードへコピーする
+pub(crate) fn copy_registered_text(
+    state: &Arc<AppState>,
+    clipboard_tx: &Sender<ClipboardCommand>,
+    index: usize,
+) {
+    texts::copy_registered_text(state, clipboard_tx, index);
+}
+
+/// 登録文字列を削除し、メニューとセレクターを更新する
+pub(crate) fn delete_registered_text(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    text_selector: &TextSelectorWindow,
+    index: usize,
+) {
+    texts::delete_registered_text(state, menu, text_selector, index);
+}
+
+/// 登録文字列メニューとセレクター表示を設定内容に合わせて更新する
+pub(crate) fn refresh_texts_views(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    text_selector: &TextSelectorWindow,
+) {
+    texts::refresh_texts_views(state, menu, text_selector);
+}
+
+/// UIウィンドウ (クイックセレクター / テキストセレクター) に関連するイベントを処理する
 ///
 /// 主にフォーカス喪失時の自動非表示処理などを行う
 ///
 /// # Arguments
 /// * `event` - 受信したウィンドウイベント
-/// * `selector` - セレクタウィンドウのインスタンス
-/// * `last_selector_show` - セレクタが最後に表示された時刻
-pub fn handle_window_event(
+/// * `selector` - セレクターウィンドウのインスタンス
+/// * `last_selector_show` - セレクターが最後に表示された時刻
+pub fn handle_window_event<S: FocusDismissibleSelector>(
     event: &WindowEvent,
-    selector: &super::selector::SelectorWindow,
+    selector: &S,
     last_selector_show: &Instant,
 ) {
     if let WindowEvent::Focused(focused) = event
@@ -226,6 +288,28 @@ mod tests {
         );
 
         assert_eq!(state.history_len(), 0);
+    }
+
+    /// 登録文字列の「クリップボードを登録」でワーカーコマンドが送信されること
+    #[test]
+    fn handle_menu_event_texts_register_sends_command() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, rx) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        handle_menu_event(
+            &menu_event(menu.texts.register_item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert!(matches!(
+            rx.recv().expect("ワーカーコマンドが送信される"),
+            ClipboardCommand::RegisterFromClipboard
+        ));
     }
 
     /// 履歴項目選択でクリップボードへテキスト送信すること

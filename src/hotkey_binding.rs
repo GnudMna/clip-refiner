@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn test_parse_default_hotkeys() {
         for binding in [
-            consts::DEFAULT_HOTKEY_SELECTOR,
+            consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
             consts::DEFAULT_HOTKEY_NOTIFICATION,
             consts::DEFAULT_HOTKEY_PAUSE,
             consts::DEFAULT_HOTKEY_QUIT,

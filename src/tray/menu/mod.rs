@@ -1,6 +1,6 @@
 //! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
 //!
-//! 変換モード、履歴、監視設定、通知などのサブメニューを組み立てる
+//! 変換モード、監視設定、登録文字列、履歴、通知などのサブメニューを組み立てる
 
 use std::sync::Mutex;
 
@@ -20,6 +20,7 @@ mod icon;
 mod monitor;
 mod notification;
 mod refine;
+mod texts;
 
 pub use icon::create_icon;
 
@@ -86,6 +87,18 @@ pub struct HistoryMenu {
     pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
 }
 
+/// 登録文字列メニューの構成
+pub struct TextsMenu {
+    /// 「登録文字列」サブメニュー
+    pub main_submenu: Submenu,
+    /// 登録文字列項目 (表示用 ID と設定内インデックス) のリスト
+    pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
+    /// 未登録時に表示するプレースホルダ項目
+    pub empty_hint_item: MenuItem,
+    /// クリップボードの内容を登録する項目
+    pub register_item: MenuItem,
+}
+
 /// 通知設定に関連するメニューの構成
 pub struct NotificationMenu {
     /// 「通知」サブメニュー
@@ -116,6 +129,8 @@ pub struct TrayMenu {
     pub interval: IntervalMenu,
     /// クリップボード履歴メニュー
     pub history: HistoryMenu,
+    /// 登録文字列メニュー
+    pub texts: TextsMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
     /// 設定ファイルを開く項目
@@ -147,6 +162,7 @@ impl TrayMenu {
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
         let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
         let history = Self::build_history_menu(config.history_enabled)?;
+        let texts = Self::build_texts_menu(state)?;
         let notification = Self::build_notification_menu(
             config.notification_settings.enabled,
             config.notification_settings.notify_mode,
@@ -163,12 +179,16 @@ impl TrayMenu {
         let quit_item = MenuItem::new("終了", true, None);
 
         // メインメニューの組み立て
+        // クリップボード加工: 変換モード / 監視 / 登録文字列
+        // 補助機能: 履歴 / 通知
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
                 &refine.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &texts.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -199,6 +219,7 @@ impl TrayMenu {
             monitor,
             interval,
             history,
+            texts,
             notification,
             open_config_item,
             shortcut_list_item,
@@ -254,6 +275,12 @@ mod tests {
             interval: TrayMenu::build_interval_menu(1000, MonitorMode::Polling)
                 .expect("監視周期メニューの構築に失敗"),
             history: TrayMenu::build_history_menu(false).expect("履歴メニューの構築に失敗"),
+            texts: TextsMenu {
+                main_submenu: Submenu::new("登録文字列", true),
+                records: Mutex::new(Vec::new()),
+                empty_hint_item: MenuItem::new("(未登録)", false, None),
+                register_item: MenuItem::new("クリップボードを登録", true, None),
+            },
             notification: TrayMenu::build_notification_menu(false, true, true, true)
                 .expect("通知メニューの構築に失敗"),
             open_config_item: MenuItem::new("設定を開く", true, None),
