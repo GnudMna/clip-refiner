@@ -370,9 +370,9 @@ mod tests {
         state.with_config_mut(|c| c.notification_settings.notify_mode = false);
         assert!(!state.with_config(|c| c.notification_settings.notify_mode));
 
-        assert!(state.with_config(|c| c.notification_settings.notify_result));
-        state.with_config_mut(|c| c.notification_settings.notify_result = false);
         assert!(!state.with_config(|c| c.notification_settings.notify_result));
+        state.with_config_mut(|c| c.notification_settings.notify_result = true);
+        assert!(state.with_config(|c| c.notification_settings.notify_result));
 
         assert!(state.with_config(|c| c.notification_settings.notify_pause));
         state.with_config_mut(|c| c.notification_settings.notify_pause = false);

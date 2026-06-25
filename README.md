@@ -137,7 +137,7 @@
 | **監視方式**           | `ポーリング` / `イベント` を切り替え                                             |
 | **監視周期**           | `0.5秒` / `1秒` / `2秒` / `5秒` から選択（イベント方式では無効）                 |
 | **履歴**               | 履歴機能の有効化・クリア、過去の加工結果の呼び出し                               |
-| **通知**               | デスクトップ通知の有効化と、通知内容（モード変更・加工結果・一時停止）の個別設定 |
+| **通知**               | デスクトップ通知の有効化と、通知内容（モード変更・クリップボードの内容・一時停止）の個別設定 |
 | **設定を開く**         | `config.json` を既定のアプリケーションで開く                                     |
 | **ショートカット一覧** | 現在のグローバルホットキー割り当てを通知で表示                                   |
 | **ログイン時に起動**   | OS のログイン時自動起動を有効化・無効化                                          |
@@ -315,7 +315,7 @@ cargo build --release
 | `history_limit`                       | number | `10`            | 履歴の最大保持件数（1〜100）                         |
 | `notification_settings.enabled`       | bool   | `false`         | デスクトップ通知の有効・無効                         |
 | `notification_settings.notify_mode`   | bool   | `true`          | モード変更時の通知                                   |
-| `notification_settings.notify_result` | bool   | `true`          | 加工結果の通知                                       |
+| `notification_settings.notify_result` | bool   | `false`         | 通知にクリップボードの内容を表示するかどうか         |
 | `notification_settings.notify_pause`  | bool   | `true`          | 一時停止切替時の通知                                 |
 | `hotkeys.selector`                    | string | `"Alt+Shift+S"` | クイックセレクタ表示                                 |
 | `hotkeys.notification`                | string | `"Alt+Shift+N"` | 成功通知のON/OFF                                     |
