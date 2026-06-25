@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use super::paths::get_config_file_path;
 use super::permissions::restrict_private_file_permissions;
+use super::serialize::config_to_toml;
 use super::types::AppConfig;
 
 use anyhow::Result;
@@ -19,7 +20,7 @@ impl AppConfig {
     /// 設定ファイルを読み込む
     ///
     /// 存在しない場合や失敗した場合はデフォルト設定を返す
-    /// 解析に失敗した場合は元ファイルを `config.json.bak` へ退避する
+    /// 解析に失敗した場合は元ファイルを `config.toml.bak` へ退避する
     ///
     /// # Returns
     /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`
@@ -44,7 +45,7 @@ impl AppConfig {
             }
         };
 
-        match serde_json::from_str::<AppConfig>(&content) {
+        match toml::from_str::<AppConfig>(&content) {
             Ok(mut config) => {
                 config.normalize();
                 config.hotkeys.fix_invalid();
@@ -71,7 +72,13 @@ impl AppConfig {
         let mut to_save = self.clone();
         to_save.normalize();
 
-        let content = serde_json::to_string_pretty(&to_save).map_err(|e| {
+        let existing = if config_path.exists() {
+            fs::read_to_string(&config_path).ok()
+        } else {
+            None
+        };
+
+        let content = config_to_toml(&to_save, existing.as_deref()).map_err(|e| {
             crate::log_error!("設定のシリアライズに失敗: {:?}", e);
             e
         })?;
@@ -91,7 +98,7 @@ impl AppConfig {
 
 /// 破損した設定ファイルをバックアップする
 fn backup_corrupted_config(config_path: &Path) {
-    let backup_path = config_path.with_file_name("config.json.bak");
+    let backup_path = config_path.with_file_name("config.toml.bak");
     match fs::copy(config_path, &backup_path) {
         Ok(_) => {
             if let Err(e) = restrict_private_file_permissions(&backup_path) {

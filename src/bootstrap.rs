@@ -65,10 +65,10 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<RefineMode>,
-    /// 正規表現パターン (`config.json` の `regex.pattern` を上書き)
+    /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
     #[arg(long = "regex-pattern")]
     regex_pattern: Option<String>,
-    /// 正規表現の置換文字列 (`config.json` の `regex.replacement` を上書き)
+    /// 正規表現の置換文字列 (`config.toml` の `regex.replacement` を上書き)
     #[arg(long = "regex-replacement")]
     regex_replacement: Option<String>,
     /// 正規表現で大文字小文字を無視する

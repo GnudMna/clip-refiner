@@ -24,7 +24,7 @@ pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 // 設定
 // ======================================================================
 /// 設定ファイルのスキーマバージョン
-pub const CONFIG_VERSION: u32 = 3;
+pub const CONFIG_VERSION: u32 = 1;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
