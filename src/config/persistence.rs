@@ -19,7 +19,8 @@ impl AppConfig {
 
     /// 設定ファイルを読み込む
     ///
-    /// 存在しない場合や失敗した場合はデフォルト設定を返す
+    /// 存在しない場合はデフォルト設定を生成し、説明コメント付きの `config.toml` を保存する
+    /// 読み込みや解析に失敗した場合はデフォルト設定を返す
     /// 解析に失敗した場合は元ファイルを `config.toml.bak` へ退避する
     ///
     /// # Returns
@@ -34,7 +35,7 @@ impl AppConfig {
         };
 
         if !config_path.exists() {
-            return Self::default();
+            return Self::create_initial_config(&config_path);
         }
 
         let content = match fs::read_to_string(&config_path) {
@@ -95,6 +96,22 @@ impl AppConfig {
         }
 
         Ok(())
+    }
+
+    /// 初回起動用のデフォルト設定を生成し、説明コメント付きで保存する
+    ///
+    /// 保存に失敗してもデフォルト設定は返す
+    fn create_initial_config(config_path: &Path) -> Self {
+        let config = Self::default();
+        match config.save() {
+            Ok(()) => {
+                crate::log_info!("初回設定ファイルを作成しました: {}", config_path.display());
+            }
+            Err(e) => {
+                crate::log_warn!("初回設定ファイルの作成に失敗: {:?}", e);
+            }
+        }
+        config
     }
 }
 
