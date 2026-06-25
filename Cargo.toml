@@ -17,6 +17,33 @@ culture = "ja-JP"
 # perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
 linker-args = ["-sice:ICE91"]
 
+[package.metadata.deb]
+maintainer = "Yuto Hirata"
+copyright = "2026, Yuto Hirata"
+license-file = ["LICENSE", "0"]
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+    ["target/release/ClipRefiner", "usr/bin/", "755"],
+    ["packaging/linux/clip-refiner.desktop", "usr/share/applications/clip-refiner.desktop", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/256x256/apps/clip-refiner.png", "644"],
+    ["LICENSE", "usr/share/doc/clip-refiner/LICENSE", "644"],
+]
+
+[package.metadata.bundle.bin.ClipRefiner]
+name = "ClipRefiner"
+identifier = "com.y_hirata.clip-refiner"
+icon = ["assets/icon.png"]
+copyright = "Copyright (c) 2026 Yuto Hirata"
+category = "Utility"
+short_description = "クリップボードのテキストを加工するツール"
+long_description = """
+クリップボードのテキストをリアルタイムで監視し、\
+指定した形式に自動加工するツール。
+"""
+osx_minimum_system_version = "11.0"
+
 [lib]
 name = "clip_refiner"
 path = "src/lib.rs"
