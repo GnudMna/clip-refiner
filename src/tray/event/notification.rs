@@ -20,7 +20,6 @@ pub(super) fn handle_notification_event(
     if id == menu.notification.enabled_item.id() {
         let enabled = menu.notification.enabled_item.is_checked();
         state.with_config_mut(|c| c.notification_settings.enabled = enabled);
-        menu.notification.content_submenu.set_enabled(enabled);
         state.save_config();
         return true;
     }

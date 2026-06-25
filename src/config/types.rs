@@ -36,8 +36,8 @@ pub struct NotificationSettings {
     /// 実行されたモード名を通知するかどうか
     #[serde(default = "consts::default_true")]
     pub notify_mode: bool,
-    /// 加工結果を通知するかどうか
-    #[serde(default = "consts::default_true")]
+    /// 通知にクリップボードの内容 (加工結果) を含めるかどうか
+    #[serde(default)]
     pub notify_result: bool,
     /// 一時停止の切り替えを通知するかどうか
     #[serde(default = "consts::default_true")]
@@ -48,12 +48,12 @@ impl Default for NotificationSettings {
     /// デフォルトの通知設定を生成する
     ///
     /// # Returns
-    /// * `Self` - 通知オフ・各サブ設定はオンのデフォルト設定
+    /// * `Self` - 通知オフ・内容表示オフ・その他サブ設定はオンのデフォルト設定
     fn default() -> Self {
         Self {
             enabled: false,
             notify_mode: true,
-            notify_result: true,
+            notify_result: false,
             notify_pause: true,
         }
     }

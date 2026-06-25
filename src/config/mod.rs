@@ -45,7 +45,7 @@ mod tests {
         let ns = NotificationSettings::default();
         assert!(!ns.enabled, "enabled のデフォルトは false");
         assert!(ns.notify_mode);
-        assert!(ns.notify_result);
+        assert!(!ns.notify_result, "notify_result のデフォルトは false");
         assert!(ns.notify_pause);
     }
 

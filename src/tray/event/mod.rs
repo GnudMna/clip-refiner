@@ -287,7 +287,7 @@ mod tests {
         }
     }
 
-    /// 通知 ON で設定とサブメニューが更新されること
+    /// 通知 ON で設定が更新されること
     #[test]
     fn handle_menu_event_notification_enabled() {
         let state = Arc::new(test_app_state());
@@ -305,7 +305,26 @@ mod tests {
         );
 
         assert!(state.with_config(|c| c.notification_settings.enabled));
-        assert!(menu.notification.content_submenu.is_enabled());
+    }
+
+    /// クリップボード内容表示の切替で `notify_result` が更新されること
+    #[test]
+    fn handle_menu_event_notification_clipboard_content_toggle() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        menu.notification.notify_result_item.set_checked(true);
+        handle_menu_event(
+            &menu_event(menu.notification.notify_result_item.id()),
+            &menu,
+            &state,
+            &tx,
+            &mut control_flow,
+        );
+
+        assert!(state.with_config(|c| c.notification_settings.notify_result));
     }
 
     /// 監視周期選択で `interval_ms` が更新されること

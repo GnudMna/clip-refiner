@@ -173,7 +173,6 @@ impl HotkeyHandler {
             c.notification_settings.enabled
         });
         ctx.menu.notification.enabled_item.set_checked(new_val);
-        ctx.menu.notification.content_submenu.set_enabled(new_val);
         ctx.state.save_config();
         platform::show_notification(
             "ショートカット",
@@ -324,7 +323,7 @@ mod tests {
             &mut ctx.ctx(),
         );
         assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
-        assert!(ctx.menu.notification.content_submenu.is_enabled());
+        assert!(ctx.menu.notification.enabled_item.is_checked());
 
         // 取り消し
         let (tx, rx) = mpsc::channel();
@@ -367,6 +366,6 @@ mod tests {
         let mut ctx = HotkeyTestContext::new();
         HotkeyHandler::toggle_notification(&mut ctx.ctx());
         assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
-        assert!(ctx.menu.notification.content_submenu.is_enabled());
+        assert!(ctx.menu.notification.enabled_item.is_checked());
     }
 }

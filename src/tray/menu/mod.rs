@@ -92,11 +92,9 @@ pub struct NotificationMenu {
     pub main_submenu: Submenu,
     /// 成功通知の有効/無効を切り替える項目
     pub enabled_item: CheckMenuItem,
-    /// 通知の内容を詳細設定するためのサブメニュー
-    pub content_submenu: Submenu,
     /// モード変更を通知するかどうかの項目
     pub notify_mode_item: CheckMenuItem,
-    /// 変換結果を通知するかどうかの項目
+    /// クリップボードの内容を通知に含めるかどうかの項目
     pub notify_result_item: CheckMenuItem,
     /// 一時停止の切替を通知するかどうかの項目
     pub notify_pause_item: CheckMenuItem,
@@ -155,9 +153,6 @@ impl TrayMenu {
             config.notification_settings.notify_result,
             config.notification_settings.notify_pause,
         )?;
-        notification
-            .content_submenu
-            .set_enabled(config.notification_settings.enabled);
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
