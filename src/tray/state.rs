@@ -274,7 +274,7 @@ impl AppState {
 // テスト用ヘルパー
 // ======================================================================
 /// ユニットテスト用の `AppState` を生成する
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 pub(crate) fn test_app_state() -> AppState {
     use crate::config::AppConfig;
     use tao::event_loop::EventLoopBuilder;

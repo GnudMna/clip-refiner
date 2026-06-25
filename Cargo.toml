@@ -25,6 +25,24 @@ path = "src/lib.rs"
 name = "ClipRefiner"
 path = "src/main.rs"
 
+[features]
+test-helpers = []
+
+[[test]]
+name = "monitor_flow"
+path = "tests/monitor_flow.rs"
+required-features = ["test-helpers"]
+
+[[test]]
+name = "worker_flow"
+path = "tests/worker_flow.rs"
+required-features = ["test-helpers"]
+
+[[test]]
+name = "history_flow"
+path = "tests/history_flow.rs"
+required-features = ["test-helpers"]
+
 [dependencies]
 anyhow = "1.0"
 arboard = "3.6.1"

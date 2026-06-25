@@ -32,7 +32,7 @@ Invoke-ScriptMain {
 
     # Clippy を実行
     Write-Host 'Clippy を実行中...'
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --all-targets --features test-helpers -- -D warnings
     if ($LASTEXITCODE -ne 0) {
         throw "エラー: cargo clippy が終了コード $LASTEXITCODE で失敗しました"
     }
@@ -40,12 +40,12 @@ Invoke-ScriptMain {
 
     # テストを実行
     Write-Host 'テストを実行中...'
-    cargo test --all-targets
+    cargo test --all-targets --features test-helpers
     if ($LASTEXITCODE -ne 0) {
         throw "エラー: cargo test が終了コード $LASTEXITCODE で失敗しました"
     }
 
-    cargo test --doc
+    cargo test --doc --features test-helpers
     if ($LASTEXITCODE -ne 0) {
         throw "エラー: cargo test --doc が終了コード $LASTEXITCODE で失敗しました"
     }

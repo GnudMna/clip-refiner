@@ -67,12 +67,14 @@ impl TrayMenu {
 mod tests {
     use super::*;
 
-    /// 成功通知 OFF 時も通知内容サブメニューは操作可能であること
+    /// 成功通知 OFF 時も通知内容サブメニューは構築でき、各チェック状態が引数どおり反映されること
     #[test]
     fn build_notification_menu_creates_content_submenu() {
         let notification = TrayMenu::build_notification_menu(false, true, true, true)
             .expect("通知メニューの構築に失敗");
         assert!(!notification.enabled_item.is_checked());
-        assert!(!notification.notify_result_item.is_checked());
+        assert!(notification.notify_mode_item.is_checked());
+        assert!(notification.notify_result_item.is_checked());
+        assert!(notification.notify_pause_item.is_checked());
     }
 }

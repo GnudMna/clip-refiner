@@ -27,13 +27,13 @@ echo
 
 # Clippy を実行
 echo "Clippy を実行中..."
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --features test-helpers -- -D warnings
 echo
 
 # テストを実行
 echo "テストを実行中..."
-cargo test --all-targets
-cargo test --doc
+cargo test --all-targets --features test-helpers
+cargo test --doc --features test-helpers
 echo
 
 # 完了メッセージを表示
