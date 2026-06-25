@@ -8,7 +8,7 @@ use crate::platform;
 use crate::refiner::{
     ClipboardProcessError, ClipboardProcessOutcome, TextClipboard, process_text_clipboard,
 };
-use crate::security::is_within_clipboard_limit;
+use crate::security::{ContentFingerprint, is_within_clipboard_limit};
 
 // ======================================================================
 // 監視スレッド管理
@@ -57,14 +57,14 @@ pub(crate) fn should_process_clipboard(
     }
 
     // 自身の書き戻しによるクリップボード変更イベントを1回無視
-    if ps.last_written_text.as_deref() == Some(text) {
-        ps.last_written_text = None;
-        ps.last_seen_text = text.to_string();
+    if ps.matches_last_written(text) {
+        ps.last_written = None;
+        ps.last_seen = ContentFingerprint::from_text(text);
         return false;
     }
 
     // ポーリング: 前回と同じ内容なら加工しない
-    if !event_driven && text == ps.last_seen_text {
+    if !event_driven && ps.matches_last_seen(text) {
         return false;
     }
 
@@ -103,9 +103,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
 
     if !is_within_clipboard_limit(&text) {
         crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
-        state.with_processed_state(|ps| {
-            ps.last_seen_text = text;
-        });
+        state.record_clipboard_observed(&text);
         return false;
     }
 
@@ -162,11 +160,7 @@ pub(crate) fn record_clipboard_outcome(
             }
             false
         }
-        Err(ClipboardProcessError::NoText) => {
-            state.record_clipboard_observed(observed_text);
-            false
-        }
-        Err(ClipboardProcessError::TextTooLarge) => {
+        Err(ClipboardProcessError::NoText | ClipboardProcessError::TextTooLarge) => {
             state.record_clipboard_observed(observed_text);
             false
         }
@@ -197,6 +191,7 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 mod tests {
     use super::*;
     use crate::refiner::RefineMode;
+    use crate::security::ContentFingerprint;
 
     /// 空文字列は加工対象外とすること
     #[test]
@@ -206,12 +201,18 @@ mod tests {
         assert!(!should_process_clipboard(&mut ps, "", true));
     }
 
+    fn collect_history(state: &std::sync::Arc<crate::tray::state::AppState>) -> Vec<String> {
+        (0..state.history_len())
+            .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
+            .collect()
+    }
+
     /// ポーリング時は新しいテキストを加工対象とすること
     #[test]
     fn polling_processes_new_text() {
         let mut ps = ProcessedState {
-            last_seen_text: "old".to_string(),
-            last_written_text: None,
+            last_seen: ContentFingerprint::from_text("old"),
+            last_written: None,
         };
 
         assert!(should_process_clipboard(&mut ps, "new", false));
@@ -221,21 +222,21 @@ mod tests {
     #[test]
     fn should_skip_own_write_back_echo() {
         let mut ps = ProcessedState {
-            last_seen_text: "input".to_string(),
-            last_written_text: Some("output".to_string()),
+            last_seen: ContentFingerprint::from_text("input"),
+            last_written: Some(ContentFingerprint::from_text("output")),
         };
 
         assert!(!should_process_clipboard(&mut ps, "output", true));
-        assert_eq!(ps.last_written_text, None);
-        assert_eq!(ps.last_seen_text, "output");
+        assert_eq!(ps.last_written, None);
+        assert!(ps.matches_last_seen("output"));
     }
 
     /// ポーリング時は同一テキストをスキップし、イベント時は再処理すること
     #[test]
     fn polling_skips_unchanged_text() {
         let mut ps = ProcessedState {
-            last_seen_text: "same".to_string(),
-            last_written_text: None,
+            last_seen: ContentFingerprint::from_text("same"),
+            last_written: None,
         };
 
         assert!(!should_process_clipboard(&mut ps, "same", false));
@@ -246,8 +247,8 @@ mod tests {
     #[test]
     fn event_mode_allows_recopy_of_processed_output() {
         let mut ps = ProcessedState {
-            last_seen_text: "processed".to_string(),
-            last_written_text: None,
+            last_seen: ContentFingerprint::from_text("processed"),
+            last_written: None,
         };
 
         // 加工結果と同じ文字列の再コピー(イベント駆動)も加工対象とする
@@ -258,8 +259,8 @@ mod tests {
     #[test]
     fn event_mode_allows_recopy_of_source_text() {
         let mut ps = ProcessedState {
-            last_seen_text: "processed".to_string(),
-            last_written_text: None,
+            last_seen: ContentFingerprint::from_text("processed"),
+            last_written: None,
         };
 
         assert!(should_process_clipboard(&mut ps, "  source  ", true));
@@ -316,10 +317,13 @@ mod tests {
         ));
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "trimmed");
-        assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
-        assert_eq!(state.get_history(), vec!["trimmed".to_string()]);
-        assert_eq!(state.take_undo_source().as_deref(), Some("  trimmed  "));
+        assert!(ps.matches_last_seen("trimmed"));
+        assert!(ps.matches_last_written("trimmed"));
+        assert_eq!(collect_history(&state), vec!["trimmed".to_string()]);
+        assert_eq!(
+            state.take_undo_source().as_ref().map(|s| s.as_str()),
+            Some("  trimmed  ")
+        );
     }
 
     /// 変更なし時は観測のみ記録し、履歴に元テキストを追加すること
@@ -337,9 +341,9 @@ mod tests {
         ));
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "unchanged");
-        assert_eq!(ps.last_written_text, None);
-        assert_eq!(state.get_history(), vec!["unchanged".to_string()]);
+        assert!(ps.matches_last_seen("unchanged"));
+        assert!(!ps.matches_last_written("unchanged"));
+        assert_eq!(collect_history(&state), vec!["unchanged".to_string()]);
     }
 
     /// 履歴無効時は履歴に追加しないこと
@@ -350,7 +354,7 @@ mod tests {
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
         record_clipboard_outcome(&state, &snap, &outcome, "x");
-        assert!(state.get_history().is_empty());
+        assert_eq!(state.history_len(), 0);
     }
 
     /// `NoText` エラー時は観測のみ記録し履歴に追加しないこと
@@ -363,8 +367,8 @@ mod tests {
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "");
-        assert!(state.get_history().is_empty());
+        assert!(ps.matches_last_seen(""));
+        assert_eq!(state.history_len(), 0);
     }
 
     /// 読み取り失敗時は観測を記録し履歴に追加すること
@@ -376,7 +380,7 @@ mod tests {
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
 
-        assert_eq!(state.get_history(), vec!["source".to_string()]);
+        assert_eq!(collect_history(&state), vec!["source".to_string()]);
     }
 
     /// クリップボード更新時に加工して状態を更新すること
@@ -397,8 +401,8 @@ mod tests {
 
         assert_eq!(clipboard.text(), "trimmed");
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "trimmed");
-        assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
+        assert!(ps.matches_last_seen("trimmed"));
+        assert!(ps.matches_last_written("trimmed"));
     }
 
     /// 読み取り失敗時は false を返し状態を更新しないこと
@@ -438,8 +442,8 @@ mod tests {
         ));
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "  x  ");
-        assert_eq!(ps.last_written_text, None);
+        assert!(ps.matches_last_seen("  x  "));
+        assert!(!ps.matches_last_written("  x  "));
         assert_eq!(clipboard.text(), "  x  ");
     }
 }

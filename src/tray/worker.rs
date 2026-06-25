@@ -11,6 +11,7 @@ use super::state::AppState;
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{ClipboardProcessOutcome, RefineMode, TextClipboard, process_text_clipboard};
+use crate::security::SecretString;
 
 use arboard::Clipboard;
 
@@ -21,7 +22,7 @@ use arboard::Clipboard;
 #[derive(Clone)]
 pub enum ClipboardCommand {
     /// 指定されたテキストをクリップボードにセットする(履歴からの復元用など)
-    SetText(String),
+    SetText(SecretString),
     /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
     /// 直近の加工を取り消し、加工前のテキストをクリップボードへ復元する
@@ -305,7 +306,7 @@ fn handle_command<C: TextClipboard>(
 ) {
     match cmd {
         ClipboardCommand::SetText(text) => {
-            if let Err(e) = clipboard.set_text(text.clone()) {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
                 crate::log_error!("クリップボード設定エラー: {:?}", e);
                 platform::show_notification(
                     "クリップボードエラー",
@@ -341,7 +342,7 @@ fn handle_command<C: TextClipboard>(
         }
         ClipboardCommand::Undo => {
             if let Some(text) = state.take_undo_source() {
-                if let Err(e) = clipboard.set_text(text.clone()) {
+                if let Err(e) = clipboard.set_text(text.to_string()) {
                     crate::log_error!("加工取り消しエラー: {:?}", e);
                     state.record_undo_source(&text);
                     platform::show_notification(
@@ -371,6 +372,7 @@ fn handle_command<C: TextClipboard>(
 mod tests {
     use super::*;
     use crate::config::MonitorMode;
+    use crate::security::secret_from;
     use crate::tray::clipboard_change::ChangeWatcher;
     use crate::tray::state::test_app_state;
     use std::sync::Arc;
@@ -489,8 +491,11 @@ mod tests {
 
         assert_eq!(clipboard.text(), "hello");
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "hello");
-        assert_eq!(state.take_undo_source().as_deref(), Some("  hello  "));
+        assert!(ps.matches_last_seen("hello"));
+        assert_eq!(
+            state.take_undo_source().as_ref().map(|s| s.as_str()),
+            Some("  hello  ")
+        );
     }
 
     /// `SetText` コマンドでクリップボードと観測状態を更新すること
@@ -504,12 +509,12 @@ mod tests {
         handle_command(
             &mut clipboard,
             &state,
-            ClipboardCommand::SetText("restored".to_string()),
+            ClipboardCommand::SetText(secret_from("restored")),
         );
 
         assert_eq!(clipboard.text(), "restored");
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "restored");
+        assert!(ps.matches_last_seen("restored"));
     }
 
     /// `Undo` コマンドで加工前テキストを復元すること
@@ -525,6 +530,6 @@ mod tests {
 
         assert_eq!(clipboard.text(), "original");
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "original");
+        assert!(ps.matches_last_seen("original"));
     }
 }

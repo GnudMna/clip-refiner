@@ -61,7 +61,7 @@ impl TrayMenu {
     /// # Returns
     /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
-        let history = state.get_history();
+        let history_len = state.history_len();
         let mut records = self.history.records.lock_ignore_poison();
         records.clear();
 
@@ -77,8 +77,11 @@ impl TrayMenu {
         ])?;
 
         // 履歴が空でない場合は、履歴アイテムを追加
-        if !history.is_empty() {
-            for (index, text) in history.into_iter().enumerate() {
+        if history_len > 0 {
+            for index in 0..history_len {
+                let Some(text) = state.get_history_entry(index) else {
+                    continue;
+                };
                 let label = format_history_menu_label(&text);
                 let item = MenuItem::new(label, true, None);
                 records.push((item.id().clone(), index));
@@ -154,7 +157,10 @@ mod tests {
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].1, 0);
         assert_eq!(records[1].1, 1);
-        assert_eq!(state.get_history_entry(0).as_deref(), Some("second entry"));
+        assert_eq!(
+            state.get_history_entry(0).as_ref().map(|s| s.as_str()),
+            Some("second entry")
+        );
     }
 
     /// 履歴クリア後の `refresh_history` でレコードが空になること
