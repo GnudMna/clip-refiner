@@ -1,10 +1,16 @@
 /// Windows リソースの著作権表記。`LICENSE` と揃えて更新してください。
-const LEGAL_COPYRIGHT: &str = "Copyright (c) 2026 y_hirata";
+const LEGAL_COPYRIGHT: &str = "Copyright (c) 2026 Yuto Hirata";
 
 // PascalCase の場合は定数として直接記述してください
 const APP_NAME: &str = "ClipRefiner";
 
 fn main() {
+    // macOS の最小サポートバージョン (cargo-bundle の osx_minimum_system_version と揃える)
+    #[cfg(target_os = "macos")]
+    {
+        println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
+    }
+
     // Windows の場合は exe にリソース情報を埋め込む
     #[cfg(windows)]
     {

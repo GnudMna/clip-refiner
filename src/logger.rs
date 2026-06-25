@@ -105,9 +105,10 @@ macro_rules! log_debug {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
 
     /// 保持期間を超えたログファイルが削除されること
     #[test]

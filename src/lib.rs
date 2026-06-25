@@ -5,16 +5,19 @@
 // アプリケーション本体を lib 化しているため、bin では出ない pedantic (must_use / Errors 節) を抑制する
 #![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
-mod app;
 mod autostart;
+mod bootstrap;
 mod config;
 mod consts;
-mod history_store;
 mod hotkey_binding;
 mod logger;
-mod notification;
+mod platform;
 pub mod refiner;
+mod security;
 mod tray;
+
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
 
 pub use refiner::RefineMode;
 
@@ -28,5 +31,5 @@ pub use refiner::RefineMode;
 /// # Returns
 /// * `anyhow::Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す
 pub fn run() -> anyhow::Result<()> {
-    app::run()
+    bootstrap::run()
 }
