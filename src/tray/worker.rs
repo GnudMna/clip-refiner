@@ -432,12 +432,14 @@ fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
     use super::*;
+
     use crate::config::MonitorMode;
     use crate::tray::clipboard_change::ChangeWatcher;
     use crate::tray::state::test_app_state;
-    use std::sync::Arc;
-    use std::sync::atomic::Ordering;
 
     fn active_monitor(generation: u64) -> MonitorLoopState {
         let mut monitor = MonitorLoopState::new();

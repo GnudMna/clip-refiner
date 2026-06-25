@@ -2,11 +2,10 @@
 //!
 //! 起動時に生成した鍵で履歴を暗号化し、プロセス終了時に鍵とデータを破棄する
 
-use chacha20poly1305::aead::{Aead, KeyInit};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-
 use crate::security::SecretString;
 
+use chacha20poly1305::aead::{Aead, KeyInit};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use zeroize::Zeroize;
 
 // ======================================================================

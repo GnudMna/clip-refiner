@@ -239,8 +239,10 @@ impl TrayMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::MonitorMode;
     use crate::refiner::{RefineCategory, RefineMode};
+
     use strum::IntoEnumIterator;
 
     /// 変換モードメニューに全モードが含まれること

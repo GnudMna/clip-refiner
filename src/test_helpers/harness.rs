@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use super::clipboard::InMemoryTextClipboard;
+
 use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::RefineMode;
 use crate::refiner::text_clipboard::TextClipboard;
@@ -9,8 +11,6 @@ use crate::security::secret_from;
 use crate::tray::clipboard_monitor::handle_clipboard_update;
 use crate::tray::state::test_app_state;
 use crate::tray::worker::{ClipboardCommand, handle_command};
-
-use super::clipboard::InMemoryTextClipboard;
 
 // ======================================================================
 // 統合テスト用ハーネス

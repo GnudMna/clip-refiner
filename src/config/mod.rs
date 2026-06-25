@@ -16,10 +16,10 @@ pub use types::{
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::consts;
     use crate::refiner::RefineMode;
-
-    use super::*;
 
     /// `AppConfig` のデフォルト値が正しいこと
     #[test]

@@ -1,7 +1,7 @@
+use super::defs::{RefineCategory, RefineMode};
+
 use clap::ValueEnum;
 use strum::{EnumMessage, IntoEnumIterator};
-
-use super::defs::{RefineCategory, RefineMode};
 
 // ======================================================================
 // メタデータ取得
@@ -120,9 +120,9 @@ impl RefineMode {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use strum::IntoEnumIterator;
-
     use super::super::defs::{RefineCategory, RefineMode};
+
+    use strum::IntoEnumIterator;
 
     /// `RefineMode` のラベルとカテゴリが期待どおりであること
     #[test]

@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
-use regex::Regex;
-
 use crate::consts::SENSITIVE_SNIPPET_LABEL;
+
+use regex::Regex;
 
 // ======================================================================
 // 機密情報の検出

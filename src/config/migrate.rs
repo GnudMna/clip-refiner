@@ -73,10 +73,10 @@ fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::consts;
     use crate::refiner::RefineMode;
-
-    use super::*;
 
     /// 現行バージョンの設定は移行不要
     #[test]

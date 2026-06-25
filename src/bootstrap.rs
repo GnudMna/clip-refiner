@@ -1,11 +1,3 @@
-use anyhow::{Context, Result};
-use arboard::Clipboard;
-use clap::Parser;
-use single_instance::SingleInstance;
-use tracing_subscriber::filter::EnvFilter;
-use tracing_subscriber::fmt as ts_fmt;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
 use crate::config::{self, AppConfig};
 use crate::consts;
 use crate::logger;
@@ -15,6 +7,14 @@ use crate::refiner::{
 };
 use crate::tray;
 use crate::{log_error, log_info, log_warn};
+
+use anyhow::{Context, Result};
+use arboard::Clipboard;
+use clap::Parser;
+use single_instance::SingleInstance;
+use tracing_subscriber::filter::EnvFilter;
+use tracing_subscriber::fmt as ts_fmt;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // ======================================================================
 // エントリポイント

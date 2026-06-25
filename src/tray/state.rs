@@ -322,9 +322,11 @@ pub(crate) fn test_app_state() -> AppState {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
+
+    use super::*;
+
+    use crate::config::MonitorMode;
 
     /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作
     #[test]
