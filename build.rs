@@ -5,6 +5,12 @@ const LEGAL_COPYRIGHT: &str = "Copyright (c) 2026 Yuto Hirata";
 const APP_NAME: &str = "ClipRefiner";
 
 fn main() {
+    // macOS の最小サポートバージョン (cargo-bundle の osx_minimum_system_version と揃える)
+    #[cfg(target_os = "macos")]
+    {
+        println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
+    }
+
     // Windows の場合は exe にリソース情報を埋め込む
     #[cfg(windows)]
     {

@@ -37,6 +37,8 @@
     - [Linux の追加パッケージ](#linux-の追加パッケージ)
   - [ビルド](#ビルド)
     - [Windows MSI インストーラー（任意）](#windows-msi-インストーラー任意)
+    - [Linux deb パッケージ（任意）](#linux-deb-パッケージ任意)
+    - [macOS DMG インストーラー（任意）](#macos-dmg-インストーラー任意)
 - [⚙️ 設定](#️-設定)
   - [設定項目](#設定項目)
   - [ホットキー形式](#ホットキー形式)
@@ -288,6 +290,35 @@ cargo build --release
 ```
 
 出力先: `target/wix/clip-refiner-{version}-{arch}.msi`（per-user インストール、日本語 UI）
+
+#### Linux deb パッケージ（任意）
+
+`cargo-deb` を使って Debian/Ubuntu 向け `.deb` を作成できます。
+
+```bash
+# 前提: cargo install cargo-deb --locked
+#       ビルド用パッケージは「Linux の追加パッケージ」を参照
+./scripts/linux/build-deb.sh
+```
+
+出力先: `target/debian/clip-refiner_{version}-1_{arch}.deb`（`/usr/bin/ClipRefiner`、デスクトップエントリ付き）
+
+インストール例: `sudo dpkg -i target/debian/clip-refiner_*.deb`
+
+#### macOS DMG インストーラー（任意）
+
+`cargo-bundle` と `hdiutil` を使って `.app` バンドルと DMG を作成できます。
+
+```bash
+# 前提: cargo install cargo-bundle --locked
+#       Xcode Command Line Tools
+./scripts/macos/build-dmg.sh
+```
+
+出力先:
+
+- `target/release/bundle/osx/ClipRefiner.app`
+- `target/bundle/clip-refiner-{version}-{arch}.dmg`（Applications へのショートカット付き）
 
 ---
 
