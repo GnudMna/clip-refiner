@@ -101,6 +101,13 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         std::fs::create_dir_all(&log_dir).context("ログディレクトリの作成に失敗")?;
     }
 
+    if let Err(e) = config::permissions::restrict_private_dir_permissions(&log_dir) {
+        log_warn!("ログディレクトリのパーミッション設定に失敗: {:?}", e);
+    }
+    if let Err(e) = config::permissions::restrict_private_files_in_dir(&log_dir) {
+        log_warn!("ログファイルのパーミッション設定に失敗: {:?}", e);
+    }
+
     let file_appender = tracing_appender::rolling::daily(&log_dir, "clip-refiner.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
