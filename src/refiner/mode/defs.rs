@@ -100,7 +100,7 @@ pub enum RefineMode {
     #[value(help = "正規表現のアンエスケープ")]
     #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
-    /// 正規表現に一致する部分を置換文字列へ変換する (`config.json` の `regex` 設定を使用)
+    /// 正規表現に一致する部分を置換文字列へ変換する (`config.toml` の `regex` 設定を使用)
     #[value(help = "正規表現で置換")]
     #[strum(message = "正規表現置換")]
     RegexReplace,

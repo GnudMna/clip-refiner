@@ -1,6 +1,7 @@
 mod paths;
 pub(crate) mod permissions;
 mod persistence;
+mod serialize;
 mod types;
 
 pub use paths::{get_config_dir, open_config_file};
@@ -31,9 +32,9 @@ mod tests {
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();
-        let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
+        let toml_str = toml::to_string(&config).expect("AppConfig のシリアライズに失敗");
         let decoded: AppConfig =
-            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
+            toml::from_str(&toml_str).expect("AppConfig のデシリアライズに失敗");
         assert_eq!(config.interval_ms, decoded.interval_ms);
         assert_eq!(config.mode, decoded.mode);
         assert_eq!(config.history_limit, decoded.history_limit);
@@ -50,33 +51,16 @@ mod tests {
         assert!(ns.notify_pause);
     }
 
-    /// 古い設定 JSON (`show_success_notification` フィールドあり) を読んでも
-    /// デフォルト値でデシリアライズできること
-    #[test]
-    fn test_app_config_backward_compat_old_field() {
-        let old_json = r#"{
-            "mode": "UrlDecode",
-            "interval_ms": 1000,
-            "show_success_notification": true
-        }"#;
-        let config: AppConfig =
-            serde_json::from_str(old_json).expect("後方互換 JSON のデシリアライズに失敗");
-        assert_eq!(config.interval_ms, 1000);
-        assert!(!config.notification_settings.enabled);
-        assert_eq!(config.history_limit, consts::DEFAULT_HISTORY_LIMIT);
-        assert_eq!(config.hotkeys.selector, consts::DEFAULT_HOTKEY_SELECTOR);
-    }
-
-    /// `notification_settings.enabled` が JSON に保存・復元されること
+    /// `notification_settings.enabled` が TOML に保存・復元されること
     #[test]
     fn test_notification_settings_serde_roundtrip() {
         let mut config = AppConfig::default();
         config.notification_settings.enabled = true;
         config.notification_settings.notify_result = false;
 
-        let json = serde_json::to_string(&config).expect("AppConfig のシリアライズに失敗");
+        let toml_str = toml::to_string(&config).expect("AppConfig のシリアライズに失敗");
         let decoded: AppConfig =
-            serde_json::from_str(&json).expect("AppConfig のデシリアライズに失敗");
+            toml::from_str(&toml_str).expect("AppConfig のデシリアライズに失敗");
         assert!(decoded.notification_settings.enabled);
         assert!(!decoded.notification_settings.notify_result);
     }

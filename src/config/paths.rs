@@ -40,12 +40,12 @@ fn config_dir_name() -> &'static str {
 /// 設定ディレクトリが存在しない場合は作成する
 ///
 /// # Returns
-/// * `Result<PathBuf>` - `config.json` の完全なパス
+/// * `Result<PathBuf>` - `config.toml` の完全なパス
 pub fn get_config_file_path() -> Result<PathBuf> {
     let config_dir = get_config_dir()?;
     fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
     restrict_private_dir_permissions(&config_dir)?;
-    Ok(config_dir.join("config.json"))
+    Ok(config_dir.join("config.toml"))
 }
 
 /// 設定ファイルを既定のアプリケーションで開く

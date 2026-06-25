@@ -199,7 +199,7 @@ fn default_history_limit() -> usize {
 // ======================================================================
 /// 正規表現加工モード用のパターンと置換文字列
 ///
-/// `config.json` の `regex` セクションとして保存される
+/// `config.toml` の `[regex]` セクションとして保存される
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RegexSettings {
     /// 正規表現パターン
@@ -221,7 +221,7 @@ pub struct RegexSettings {
 // ======================================================================
 /// アプリケーションの設定情報
 ///
-/// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定
+/// TOML ファイルとして保存・読み込みされるアプリケーション全体の構成設定
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// 設定ファイルのスキーマバージョン

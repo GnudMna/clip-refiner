@@ -495,7 +495,7 @@ mod tests {
         assert!(state.take_undo_source().is_none());
     }
 
-    /// テスト用 `AppState` は実行中アプリの `config.json` を上書きしないこと
+    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
     #[test]
     fn test_app_state_disables_config_persistence() {
         let state = test_app_state();
