@@ -5,6 +5,8 @@
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 
+use crate::security::SecretString;
+
 use zeroize::Zeroize;
 
 // ======================================================================
@@ -54,17 +56,9 @@ impl EncryptedHistoryStore {
 // 参照
 // ======================================================================
 impl EncryptedHistoryStore {
-    /// 履歴をすべて復号して返す
-    ///
-    /// メニュー表示など、一時的に平文が必要な場合に使用する
-    ///
-    /// # Returns
-    /// * `Vec<String>` - 新しい順に並んだ復号済み履歴
-    pub fn entries_decrypted(&self) -> Vec<String> {
-        self.entries
-            .iter()
-            .filter_map(|entry| self.decrypt_entry(entry).ok())
-            .collect()
+    /// 保持している履歴件数を返す
+    pub fn len(&self) -> usize {
+        self.entries.len()
     }
 
     /// 指定インデックスの履歴を復号して返す
@@ -73,8 +67,8 @@ impl EncryptedHistoryStore {
     /// * `index` - 履歴ストア内のインデックス (0 が最新)
     ///
     /// # Returns
-    /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
-    pub fn entry_at(&self, index: usize) -> Option<String> {
+    /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
+    pub fn entry_at(&self, index: usize) -> Option<SecretString> {
         let entry = self.entries.get(index)?;
         self.decrypt_entry(entry).ok()
     }
@@ -171,13 +165,15 @@ impl EncryptedHistoryStore {
     /// * `entry` - 復号対象の暗号化エントリ
     ///
     /// # Returns
-    /// * `Result<String, String>` - 成功時は復号済みテキスト、失敗時はエラーメッセージ
-    fn decrypt_entry(&self, entry: &EncryptedEntry) -> Result<String, String> {
+    /// * `Result<SecretString, String>` - 成功時は復号済みテキスト、失敗時はエラーメッセージ
+    fn decrypt_entry(&self, entry: &EncryptedEntry) -> Result<SecretString, String> {
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
         let plaintext = cipher
             .decrypt(Nonce::from_slice(&entry.nonce), entry.ciphertext.as_ref())
             .map_err(|e| format!("履歴の復号に失敗: {e:?}"))?;
-        String::from_utf8(plaintext).map_err(|e| format!("履歴の UTF-8 変換に失敗: {e:?}"))
+        String::from_utf8(plaintext)
+            .map(SecretString::from)
+            .map_err(|e| format!("履歴の UTF-8 変換に失敗: {e:?}"))
     }
 }
 
@@ -207,7 +203,7 @@ mod tests {
 
         assert_eq!(store.entries.len(), 1);
         assert_ne!(store.entries[0].ciphertext.as_slice(), secret.as_bytes());
-        assert_eq!(store.entries_decrypted(), vec![secret.to_string()]);
+        assert_eq!(store.entry_at(0).as_ref().map(|s| s.as_str()), Some(secret));
     }
 
     /// 追加・復号・重複移動・上限が正しく動作すること
@@ -217,29 +213,40 @@ mod tests {
 
         // 空白は無視
         store.add("   ", 10);
-        assert!(store.entries_decrypted().is_empty());
+        assert_eq!(store.len(), 0);
 
         // 重複するエントリは先頭に移動する
         store.add("first", 10);
         store.add("second", 10);
         store.add("first", 10);
 
-        let entries = store.entries_decrypted();
-        assert_eq!(entries, vec!["first", "second"]);
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            store.entry_at(1).as_ref().map(|s| s.as_str()),
+            Some("second")
+        );
 
         // 上限を超えた分は切り捨てられる
         for i in 0..7 {
             store.add(&format!("item-{i}"), 5);
         }
-        let entries = store.entries_decrypted();
-        assert_eq!(entries.len(), 5);
-        assert_eq!(entries[0], "item-6");
+        assert_eq!(store.len(), 5);
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("item-6")
+        );
 
-        assert_eq!(store.entry_at(0).as_deref(), Some("item-6"));
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("item-6")
+        );
         assert_eq!(store.entry_at(99), None);
 
         // clear で履歴が空になること
         store.clear();
-        assert!(store.entries_decrypted().is_empty());
+        assert_eq!(store.len(), 0);
     }
 }

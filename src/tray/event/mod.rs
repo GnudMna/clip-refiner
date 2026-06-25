@@ -225,7 +225,7 @@ mod tests {
             &mut control_flow,
         );
 
-        assert!(state.get_history().is_empty());
+        assert_eq!(state.history_len(), 0);
     }
 
     /// 履歴項目選択でクリップボードへテキスト送信すること
@@ -253,7 +253,7 @@ mod tests {
         );
 
         match rx.recv().expect("ワーカーコマンドが送信される") {
-            ClipboardCommand::SetText(text) => assert_eq!(text, "copied text"),
+            ClipboardCommand::SetText(text) => assert_eq!(text.as_str(), "copied text"),
             other => panic!("unexpected command: {other:?}"),
         }
     }

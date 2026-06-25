@@ -43,7 +43,10 @@ fn config_dir_name() -> &'static str {
 pub fn get_config_file_path() -> Result<PathBuf> {
     let config_dir = get_config_dir()?;
     fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+    #[cfg(unix)]
     restrict_private_dir_permissions(&config_dir)?;
+    #[cfg(not(unix))]
+    restrict_private_dir_permissions(&config_dir);
     Ok(config_dir.join("config.json"))
 }
 
@@ -122,9 +125,7 @@ fn restrict_private_dir_permissions(path: &Path) -> Result<()> {
 
 /// 設定ディレクトリを所有者のみアクセス可能にする (非 Unix)
 #[cfg(not(unix))]
-fn restrict_private_dir_permissions(_path: &Path) -> Result<()> {
-    Ok(())
-}
+fn restrict_private_dir_permissions(_path: &Path) {}
 
 /// 設定ファイルを所有者のみ読み書き可能にする (Unix)
 #[cfg(unix)]
@@ -141,6 +142,4 @@ pub(crate) fn restrict_private_file_permissions(path: &Path) -> Result<()> {
 
 /// 設定ファイルを所有者のみ読み書き可能にする (非 Unix)
 #[cfg(not(unix))]
-pub(crate) fn restrict_private_file_permissions(_path: &Path) -> Result<()> {
-    Ok(())
-}
+pub(crate) fn restrict_private_file_permissions(_path: &Path) {}

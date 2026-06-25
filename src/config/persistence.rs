@@ -80,9 +80,12 @@ impl AppConfig {
             e
         })?;
 
+        #[cfg(unix)]
         if let Err(e) = restrict_private_file_permissions(&config_path) {
             crate::log_warn!("設定ファイルのパーミッション設定に失敗: {:?}", e);
         }
+        #[cfg(not(unix))]
+        restrict_private_file_permissions(&config_path);
 
         Ok(())
     }
