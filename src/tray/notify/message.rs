@@ -4,10 +4,14 @@ use super::super::state::AppState;
 use crate::config::NotificationSettings;
 use crate::platform;
 use crate::refiner::RefineMode;
+use crate::security::format_public_snippet;
 
 // ======================================================================
 // 加工完了通知
 // ======================================================================
+/// 通知本文に含める加工結果スニペットの最大文字数
+const NOTIFICATION_SNIPPET_MAX_CHARS: usize = 50;
+
 /// 加工完了通知の本文を組み立てる
 ///
 /// 通知が無効、または表示する行がない場合は `None` を返す
@@ -35,7 +39,7 @@ pub(crate) fn format_process_notification_body(
     if settings.notify_result {
         lines.push(format!(
             "内容: {}",
-            truncate_notification_snippet(processed)
+            format_public_snippet(processed, NOTIFICATION_SNIPPET_MAX_CHARS)
         ));
     }
 
@@ -44,17 +48,6 @@ pub(crate) fn format_process_notification_body(
     }
 
     Some(lines.join("\n"))
-}
-
-/// 通知用に加工結果テキストを切り詰める
-///
-/// 50 文字を超える場合は先頭 47 文字に `...` を付与する
-fn truncate_notification_snippet(processed: &str) -> String {
-    if processed.chars().count() > 50 {
-        format!("{}...", processed.chars().take(47).collect::<String>())
-    } else {
-        processed.to_string()
-    }
 }
 
 /// 加工完了時のデスクトップ通知を表示する
@@ -110,6 +103,7 @@ pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str
 mod tests {
     use super::*;
     use crate::config::NotificationSettings;
+    use crate::consts::SENSITIVE_SNIPPET_LABEL;
 
     fn enabled_settings() -> NotificationSettings {
         NotificationSettings {
@@ -170,7 +164,7 @@ mod tests {
     #[test]
     fn truncate_snippet_multibyte_over_limit() {
         let input = "あ".repeat(51);
-        let snippet = truncate_notification_snippet(&input);
+        let snippet = format_public_snippet(&input, NOTIFICATION_SNIPPET_MAX_CHARS);
         assert!(snippet.ends_with("..."));
         assert_eq!(snippet.chars().count(), 50);
     }
@@ -179,7 +173,24 @@ mod tests {
     #[test]
     fn truncate_snippet_within_limit() {
         let input = "あ".repeat(50);
-        assert_eq!(truncate_notification_snippet(&input), input);
+        assert_eq!(
+            format_public_snippet(&input, NOTIFICATION_SNIPPET_MAX_CHARS),
+            input
+        );
+    }
+
+    /// 機密らしい内容はマスクすること
+    #[test]
+    fn format_body_masks_sensitive_result() {
+        let body = format_process_notification_body(
+            &enabled_settings(),
+            RefineMode::Trim,
+            "api_key=supersecretvalue",
+        )
+        .expect("通知本文が生成される");
+
+        assert!(body.contains(SENSITIVE_SNIPPET_LABEL));
+        assert!(!body.contains("supersecretvalue"));
     }
 
     /// 通知無効時は一時停止通知を表示しないこと

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::paths::get_config_file_path;
+use super::paths::{get_config_file_path, restrict_private_file_permissions};
 use super::types::AppConfig;
 
 use anyhow::Result;
@@ -79,6 +79,10 @@ impl AppConfig {
             crate::log_error!("設定ファイルの書き込みに失敗: {:?}", e);
             e
         })?;
+
+        if let Err(e) = restrict_private_file_permissions(&config_path) {
+            crate::log_warn!("設定ファイルのパーミッション設定に失敗: {:?}", e);
+        }
 
         Ok(())
     }
