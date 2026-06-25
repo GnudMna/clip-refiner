@@ -46,9 +46,11 @@ impl AppConfig {
         };
 
         match toml::from_str::<AppConfig>(&content) {
-            Ok(mut config) => {
-                config.normalize();
-                config.hotkeys.fix_invalid();
+            Ok(config) => {
+                let (config, migrated) = config.prepare_loaded();
+                if migrated && let Err(e) = config.save() {
+                    crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
+                }
                 config
             }
             Err(e) => {

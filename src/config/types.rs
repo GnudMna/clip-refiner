@@ -178,12 +178,11 @@ fn default_hotkey_undo() -> String {
     consts::DEFAULT_HOTKEY_UNDO.to_string()
 }
 
-/// 設定ファイルのバージョンを返す
+/// 設定ファイルに `version` が無い場合のデシリアライズ用デフォルト
 ///
-/// # Returns
-/// * `u32` - 設定ファイルのバージョン
+/// 未指定は legacy v0 として扱い、読み込み時に `migrate_config` で現行へ移行する
 fn default_config_version() -> u32 {
-    consts::CONFIG_VERSION
+    0
 }
 
 /// 履歴の最大保持数を返す
@@ -276,9 +275,26 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    /// 数値項目を許容範囲内に収め、スキーマバージョンを更新する
+    /// 読み込み直後の後処理: スキーマ移行・値クランプ・ホットキー検証
+    ///
+    /// # Returns
+    /// * `(Self, bool)` - 後処理済み設定と、スキーマ移行が実行されたかどうか
+    pub fn prepare_loaded(self) -> (Self, bool) {
+        let migration = super::migrate::migrate_config(self);
+        let mut config = migration.config;
+        config.clamp_values();
+        config.hotkeys.fix_invalid();
+        (config, migration.migrated)
+    }
+
+    /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新
     pub fn normalize(&mut self) {
+        self.clamp_values();
         self.version = consts::CONFIG_VERSION;
+    }
+
+    /// 数値項目を許容範囲内に収める
+    pub(crate) fn clamp_values(&mut self) {
         self.history_limit = self
             .history_limit
             .clamp(consts::MIN_HISTORY_LIMIT, consts::MAX_HISTORY_LIMIT);
