@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 
+use super::context::RefineContext;
 use super::mode::RefineMode;
 use super::transform::{
-    datetime, escape, json, line_actions, markdown, number, path, trim, url, yaml,
+    datetime, escape, json, line_actions, markdown, number, path, regex, trim, url, yaml,
 };
 
 // ======================================================================
@@ -14,14 +15,15 @@ pub trait Refiner {
     ///
     /// # Arguments
     /// * `text` - 加工前のテキスト
+    /// * `ctx` - 設定依存の加工パラメータ
     ///
     /// # Returns
     /// * `Cow<'a, str>` - 加工後のテキスト(変更がない場合は元のテキストを借用)
-    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str>;
+    fn refine<'a>(&self, text: &'a str, ctx: &RefineContext) -> Cow<'a, str>;
 }
 
 impl Refiner for RefineMode {
-    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str> {
+    fn refine<'a>(&self, text: &'a str, ctx: &RefineContext) -> Cow<'a, str> {
         match self {
             RefineMode::UrlEncode => url::url_encode(text),
             RefineMode::UrlDecode => {
@@ -44,6 +46,10 @@ impl Refiner for RefineMode {
             RefineMode::Unescape => escape::unescape_string(text),
             RefineMode::RegexEscape => escape::regex_escape(text),
             RefineMode::RegexUnescape => escape::regex_unescape(text),
+            RefineMode::RegexReplace => regex::regex_replace(text, &ctx.regex),
+            RefineMode::RegexExtract => regex::regex_extract(text, &ctx.regex),
+            RefineMode::RegexDelete => regex::regex_delete(text, &ctx.regex),
+            RefineMode::RegexSplit => regex::regex_split(text, &ctx.regex),
             RefineMode::JsonFormat => json::format_json(text),
             RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(text),
             RefineMode::YamlToJson => yaml::yaml_to_json(text),
@@ -67,7 +73,18 @@ impl Refiner for RefineMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RegexSettings;
     use strum::IntoEnumIterator;
+
+    fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
+        RefineContext {
+            regex: RegexSettings {
+                pattern: pattern.to_string(),
+                replacement: replacement.to_string(),
+                ..RegexSettings::default()
+            },
+        }
+    }
 
     /// `全てのRefineModeバリアントを網羅するテーブル駆動テスト`
     /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
@@ -172,31 +189,49 @@ mod tests {
         ];
 
         assert_eq!(
-            CASES.len() + 2,
+            CASES.len() + 6,
             RefineMode::iter().count(),
-            "固定ケースと日時モード2件の合計が RefineMode バリアント数と一致しません"
+            "固定ケースと日時・正規表現モードの合計が RefineMode バリアント数と一致しません"
         );
+
+        let empty_ctx = RefineContext::default();
 
         for mode in RefineMode::iter() {
             match mode {
                 RefineMode::TimestampToDatetime => {
                     let input = "1672531200";
-                    let actual = mode.refine(input);
+                    let actual = mode.refine(input, &empty_ctx);
                     let expected = datetime::timestamp_to_datetime_string(input);
                     assert_eq!(actual, expected);
                     assert_ne!(actual.as_ref(), input);
                 }
                 RefineMode::DatetimeToTimestamp => {
                     let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
-                    let actual = mode.refine(&datetime_input);
+                    let actual = mode.refine(&datetime_input, &empty_ctx);
                     assert_eq!(actual, "1672531200");
+                }
+                RefineMode::RegexReplace => {
+                    let ctx = regex_ctx(r"\d", "X");
+                    assert_eq!(mode.refine("a1b2", &ctx), "aXbX");
+                }
+                RefineMode::RegexExtract => {
+                    let ctx = regex_ctx(r"\d+", "");
+                    assert_eq!(mode.refine("a1b22", &ctx), "1\n22");
+                }
+                RefineMode::RegexDelete => {
+                    let ctx = regex_ctx(r"\d", "");
+                    assert_eq!(mode.refine("a1b2", &ctx), "ab");
+                }
+                RefineMode::RegexSplit => {
+                    let ctx = regex_ctx(",", "");
+                    assert_eq!(mode.refine("a,b,c", &ctx), "a\nb\nc");
                 }
                 other => {
                     let (input, expected) = CASES.iter().find(|(m, _, _)| *m == other).map_or_else(
                         || panic!("TestCase missing for {other:?}"),
                         |(_, input, expected)| (*input, *expected),
                     );
-                    let actual = other.refine(input);
+                    let actual = other.refine(input, &empty_ctx);
                     assert_eq!(
                         actual, expected,
                         "Failed at mode: {other:?}\nInput: {input}\nExpected: {expected}\nActual: {actual}"

@@ -6,11 +6,13 @@ use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::config;
+use crate::config::{self, AppConfig};
 use crate::consts;
 use crate::logger;
 use crate::platform;
-use crate::refiner::{self, ClipboardProcessError, ClipboardProcessOutcome, RefineMode};
+use crate::refiner::{
+    self, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
+};
 use crate::tray;
 use crate::{log_error, log_info, log_warn};
 
@@ -31,7 +33,7 @@ pub fn run() -> Result<()> {
     let _instance = ensure_single_instance()?;
 
     if let Some(mode) = args.mode {
-        run_once(mode)?;
+        run_once(mode, &args)?;
     } else {
         tray::run_loop()?;
     }
@@ -63,6 +65,18 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<RefineMode>,
+    /// 正規表現パターン (`config.json` の `regex.pattern` を上書き)
+    #[arg(long = "regex-pattern")]
+    regex_pattern: Option<String>,
+    /// 正規表現の置換文字列 (`config.json` の `regex.replacement` を上書き)
+    #[arg(long = "regex-replacement")]
+    regex_replacement: Option<String>,
+    /// 正規表現で大文字小文字を無視する
+    #[arg(long = "regex-case-insensitive")]
+    regex_case_insensitive: bool,
+    /// 正規表現で複数行モードを有効にする
+    #[arg(long = "regex-multiline")]
+    regex_multiline: bool,
 }
 
 // ======================================================================
@@ -172,11 +186,13 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 ///
 /// # Returns
 /// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
-fn run_once(mode: RefineMode) -> Result<()> {
+fn run_once(mode: RefineMode, args: &Args) -> Result<()> {
     log_info!("ワンショットモードで実行: {:?}", mode);
+    let config = AppConfig::load();
+    let ctx = build_refinement_context(&config, args);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
-    match refiner::process_clipboard(&mut clipboard, mode) {
+    match refiner::process_clipboard(&mut clipboard, mode, &ctx) {
         Ok(ClipboardProcessOutcome::Processed(_)) => {
             log_info!("ワンショット処理が完了しました");
             eprintln!("加工が完了しました");
@@ -198,4 +214,24 @@ fn run_once(mode: RefineMode) -> Result<()> {
             Err(anyhow::anyhow!(e.user_message().to_string()))
         }
     }
+}
+
+/// 設定と CLI 引数から加工コンテキストを組み立てる
+fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
+    let mut ctx = RefineContext::from_config(config);
+
+    if let Some(pattern) = &args.regex_pattern {
+        ctx.regex.pattern.clone_from(pattern);
+    }
+    if let Some(replacement) = &args.regex_replacement {
+        ctx.regex.replacement.clone_from(replacement);
+    }
+    if args.regex_case_insensitive {
+        ctx.regex.case_insensitive = true;
+    }
+    if args.regex_multiline {
+        ctx.regex.multiline = true;
+    }
+
+    ctx
 }

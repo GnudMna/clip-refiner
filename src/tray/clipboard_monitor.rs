@@ -6,7 +6,8 @@ use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, TextClipboard, process_text_clipboard,
+    ClipboardProcessError, ClipboardProcessOutcome, RefineContext, TextClipboard,
+    process_text_clipboard,
 };
 use crate::security::{ContentFingerprint, is_within_clipboard_limit};
 
@@ -107,7 +108,10 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
         return false;
     }
 
-    let outcome = process_text_clipboard(clipboard, snap.mode);
+    let ctx = RefineContext {
+        regex: snap.regex_settings.clone(),
+    };
+    let outcome = process_text_clipboard(clipboard, snap.mode, &ctx);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
@@ -190,6 +194,7 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RegexSettings;
     use crate::refiner::RefineMode;
     use crate::security::ContentFingerprint;
 
@@ -299,6 +304,7 @@ mod tests {
             interval_ms: 1000,
             is_paused: false,
             history_enabled,
+            regex_settings: RegexSettings::default(),
         }
     }
 

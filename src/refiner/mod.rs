@@ -3,6 +3,7 @@
 //! `RefineMode` による加工処理の統合と、クリップボードへの読み書きを担当する
 
 mod clipboard;
+mod context;
 mod dispatch;
 mod mode;
 mod ordered_value;
@@ -13,6 +14,7 @@ pub(crate) use text_clipboard::TextClipboard;
 
 pub(crate) use clipboard::process_text_clipboard;
 pub use clipboard::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
+pub use context::RefineContext;
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;

@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
 use super::history::EncryptedHistoryStore;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, RegexSettings};
 use crate::refiner::RefineMode;
 use crate::security::{ContentFingerprint, SecretString, secret_from};
 
@@ -35,6 +35,8 @@ pub struct MonitorSnapshot {
     pub is_paused: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
+    /// 正規表現加工用の設定
+    pub regex_settings: RegexSettings,
 }
 
 /// 監視ループにおける二重加工防止用の状態
@@ -182,6 +184,7 @@ impl AppState {
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
+            regex_settings: config.regex.clone(),
         })
     }
 

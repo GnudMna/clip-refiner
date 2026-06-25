@@ -24,7 +24,7 @@ pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 // 設定
 // ======================================================================
 /// 設定ファイルのスキーマバージョン
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
@@ -43,6 +43,9 @@ pub const MAX_INTERVAL_MS: u64 = 60_000;
 
 /// クリップボード本文の最大バイト数 (2 MiB)
 pub const MAX_CLIPBOARD_TEXT_BYTES: usize = 2 * 1024 * 1024;
+
+/// 正規表現パターンの最大バイト数 (8 KiB)
+pub const MAX_REGEX_PATTERN_BYTES: usize = 8 * 1024;
 
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;

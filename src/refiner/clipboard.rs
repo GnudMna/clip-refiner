@@ -1,3 +1,4 @@
+use super::context::RefineContext;
 use super::dispatch::Refiner;
 use super::mode::RefineMode;
 use super::text_clipboard::TextClipboard;
@@ -48,6 +49,7 @@ impl ClipboardProcessError {
 /// # Arguments
 /// * `text` - 加工前のテキスト
 /// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
@@ -56,6 +58,7 @@ impl ClipboardProcessError {
 pub(crate) fn apply_refinement_to_text(
     text: &str,
     mode: RefineMode,
+    ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     if text.is_empty() {
         return Err(ClipboardProcessError::NoText);
@@ -64,7 +67,7 @@ pub(crate) fn apply_refinement_to_text(
         return Err(ClipboardProcessError::TextTooLarge);
     }
 
-    let refined = mode.refine(text);
+    let refined = mode.refine(text, ctx);
 
     if refined == text {
         Ok(ClipboardProcessOutcome::Unchanged)
@@ -80,6 +83,7 @@ pub(crate) fn apply_refinement_to_text(
 /// # Arguments
 /// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
 /// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
@@ -88,8 +92,9 @@ pub(crate) fn apply_refinement_to_text(
 pub fn process_clipboard(
     clipboard: &mut arboard::Clipboard,
     mode: RefineMode,
+    ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    process_text_clipboard(clipboard, mode)
+    process_text_clipboard(clipboard, mode, ctx)
 }
 
 /// テキストクリップボード実装に対して加工を適用する
@@ -97,6 +102,7 @@ pub fn process_clipboard(
 /// # Arguments
 /// * `clipboard` - テキストクリップボード実装
 /// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
@@ -105,12 +111,13 @@ pub fn process_clipboard(
 pub(crate) fn process_text_clipboard<C: TextClipboard>(
     clipboard: &mut C,
     mode: RefineMode,
+    ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     let text = clipboard
         .get_text()
         .map_err(ClipboardProcessError::ReadFailed)?;
 
-    match apply_refinement_to_text(&text, mode)? {
+    match apply_refinement_to_text(&text, mode, ctx)? {
         ClipboardProcessOutcome::Unchanged => Ok(ClipboardProcessOutcome::Unchanged),
         ClipboardProcessOutcome::Processed(result) => {
             clipboard
@@ -128,6 +135,10 @@ pub(crate) fn process_text_clipboard<C: TextClipboard>(
 mod tests {
     use super::*;
     use crate::test_helpers::InMemoryTextClipboard;
+
+    fn empty_ctx() -> RefineContext {
+        RefineContext::default()
+    }
 
     /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
     #[test]
@@ -154,7 +165,7 @@ mod tests {
     #[test]
     fn apply_refinement_to_text_rejects_empty() {
         assert_eq!(
-            apply_refinement_to_text("", RefineMode::Trim),
+            apply_refinement_to_text("", RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::NoText)
         );
     }
@@ -164,7 +175,7 @@ mod tests {
     fn apply_refinement_to_text_rejects_oversized() {
         let oversized = "a".repeat(crate::consts::MAX_CLIPBOARD_TEXT_BYTES + 1);
         assert_eq!(
-            apply_refinement_to_text(&oversized, RefineMode::Trim),
+            apply_refinement_to_text(&oversized, RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::TextTooLarge)
         );
     }
@@ -173,7 +184,7 @@ mod tests {
     #[test]
     fn apply_refinement_to_text_returns_processed() {
         assert_eq!(
-            apply_refinement_to_text("  hello  ", RefineMode::Trim),
+            apply_refinement_to_text("  hello  ", RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
         );
     }
@@ -182,7 +193,7 @@ mod tests {
     #[test]
     fn apply_refinement_to_text_returns_unchanged() {
         assert_eq!(
-            apply_refinement_to_text("hello", RefineMode::Trim),
+            apply_refinement_to_text("hello", RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
     }
@@ -193,7 +204,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("  hello  ");
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim),
+            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
         );
         assert_eq!(cb.text(), "hello");
@@ -205,7 +216,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("hello");
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim),
+            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
         assert_eq!(cb.text(), "hello");
@@ -217,7 +228,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("x").fail_on_read();
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim),
+            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::ReadFailed("read failed".to_string()))
         );
     }
@@ -228,7 +239,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("  x  ").fail_on_write();
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim),
+            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::WriteFailed(
                 "write failed".to_string()
             ))
