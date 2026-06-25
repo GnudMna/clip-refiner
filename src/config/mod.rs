@@ -1,3 +1,4 @@
+mod migrate;
 mod paths;
 pub(crate) mod permissions;
 mod persistence;
@@ -65,10 +66,11 @@ mod tests {
         assert!(!decoded.notification_settings.notify_result);
     }
 
-    /// normalize が範囲外の値をクランプすること
+    /// normalize が範囲外の値をクランプし version を現行へ更新すること
     #[test]
     fn test_app_config_normalize_clamps() {
         let mut config = AppConfig {
+            version: 0,
             history_limit: 999,
             interval_ms: 10,
             ..Default::default()
@@ -76,8 +78,26 @@ mod tests {
 
         config.normalize();
 
+        assert_eq!(config.version, consts::CONFIG_VERSION);
         assert_eq!(config.history_limit, consts::MAX_HISTORY_LIMIT);
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
+    }
+
+    /// version 未指定の TOML が v0 として読み込まれ v1 へ移行されること
+    #[test]
+    fn test_prepare_loaded_migrates_missing_version() {
+        let toml_str = r#"
+mode = "Trim"
+interval_ms = 500
+"#;
+        let config: AppConfig = toml::from_str(toml_str).expect("デシリアライズに失敗");
+        assert_eq!(config.version, 0);
+
+        let (prepared, migrated) = config.prepare_loaded();
+        assert!(migrated);
+        assert_eq!(prepared.version, consts::CONFIG_VERSION);
+        assert_eq!(prepared.mode, RefineMode::Trim);
+        assert_eq!(prepared.interval_ms, 500);
     }
 
     /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えること
