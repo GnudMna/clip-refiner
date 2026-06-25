@@ -21,7 +21,7 @@ echo "テストを実行しています..."
 echo
 
 echo "テストを実行中..."
-cargo test --all-targets
+cargo test --all-targets --features test-helpers
 echo
 
 # 完了メッセージを表示

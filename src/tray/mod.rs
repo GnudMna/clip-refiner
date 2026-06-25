@@ -4,7 +4,7 @@
 
 pub mod app;
 mod clipboard_change;
-mod clipboard_monitor;
+pub(crate) mod clipboard_monitor;
 pub mod event;
 pub mod history;
 pub mod hotkey;

@@ -16,6 +16,9 @@ pub mod refiner;
 mod security;
 mod tray;
 
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
+
 pub use refiner::RefineMode;
 
 // ======================================================================

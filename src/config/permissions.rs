@@ -144,9 +144,8 @@ mod platform {
         };
 
         let mut new_dacl = ptr::null_mut();
-        let set_acl_result = unsafe {
-            SetEntriesInAclW(1, &raw const explicit, ptr::null(), &raw mut new_dacl)
-        };
+        let set_acl_result =
+            unsafe { SetEntriesInAclW(1, &raw const explicit, ptr::null(), &raw mut new_dacl) };
         if set_acl_result != 0 {
             return Err(anyhow::anyhow!(
                 "DACL の構築に失敗しました (code={set_acl_result})"
@@ -192,13 +191,7 @@ mod platform {
             }
 
             let mut buffer_len = 0u32;
-            let _ = GetTokenInformation(
-                token,
-                TokenUser,
-                ptr::null_mut(),
-                0,
-                &raw mut buffer_len,
-            );
+            let _ = GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &raw mut buffer_len);
 
             let mut buffer = vec![0u8; buffer_len as usize];
             if GetTokenInformation(

@@ -127,7 +127,7 @@ pub(crate) fn process_text_clipboard<C: TextClipboard>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::refiner::text_clipboard::InMemoryTextClipboard;
+    use crate::test_helpers::InMemoryTextClipboard;
 
     /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
     #[test]
