@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::refiner::OrderedValue;
+use crate::security::is_within_parser_limit;
 
 use serde_json::Value;
 
@@ -18,6 +19,11 @@ use serde_json::Value;
 /// # Returns
 /// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn format_json(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("JSON 入力が上限を超えているためスキップ (format_json)");
+        return Cow::Borrowed(text);
+    }
+
     let v: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -52,6 +58,11 @@ pub fn format_json(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("JSON 入力が上限を超えているためスキップ (format_json_preserve_order)");
+        return Cow::Borrowed(text);
+    }
+
     let v: OrderedValue = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -92,6 +103,11 @@ pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のYAML文字列。パースに失敗した場合は元の文字列を返す。
 pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml)");
+        return Cow::Borrowed(text);
+    }
+
     let v: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -120,6 +136,11 @@ pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のYAML文字列。パースに失敗した場合は元の文字列を返す。
 pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml_preserve_order)");
+        return Cow::Borrowed(text);
+    }
+
     let v: OrderedValue = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {

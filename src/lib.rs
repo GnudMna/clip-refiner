@@ -13,6 +13,7 @@ mod hotkey_binding;
 mod logger;
 mod platform;
 pub mod refiner;
+mod security;
 mod tray;
 
 pub use refiner::RefineMode;

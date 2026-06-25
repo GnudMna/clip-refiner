@@ -43,6 +43,7 @@ fn config_dir_name() -> &'static str {
 pub fn get_config_file_path() -> Result<PathBuf> {
     let config_dir = get_config_dir()?;
     fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+    restrict_private_dir_permissions(&config_dir)?;
     Ok(config_dir.join("config.json"))
 }
 
@@ -100,4 +101,46 @@ fn platform_open_path(path_str: &str) -> Result<()> {
 #[cfg(not(any(windows, target_os = "macos", unix)))]
 fn platform_open_path(_path_str: &str) -> Result<()> {
     anyhow::bail!("このプラットフォームではファイルを開けません")
+}
+
+// ======================================================================
+// ファイルパーミッション
+// ======================================================================
+/// 設定ディレクトリを所有者のみアクセス可能にする (Unix)
+#[cfg(unix)]
+fn restrict_private_dir_permissions(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut perms = fs::metadata(path)
+        .context("設定ディレクトリのメタデータ取得に失敗しました")?
+        .permissions();
+    perms.set_mode(0o700);
+    fs::set_permissions(path, perms)
+        .context("設定ディレクトリのパーミッション設定に失敗しました")?;
+    Ok(())
+}
+
+/// 設定ディレクトリを所有者のみアクセス可能にする (非 Unix)
+#[cfg(not(unix))]
+fn restrict_private_dir_permissions(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+/// 設定ファイルを所有者のみ読み書き可能にする (Unix)
+#[cfg(unix)]
+pub(crate) fn restrict_private_file_permissions(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut perms = fs::metadata(path)
+        .context("設定ファイルのメタデータ取得に失敗しました")?
+        .permissions();
+    perms.set_mode(0o600);
+    fs::set_permissions(path, perms).context("設定ファイルのパーミッション設定に失敗しました")?;
+    Ok(())
+}
+
+/// 設定ファイルを所有者のみ読み書き可能にする (非 Unix)
+#[cfg(not(unix))]
+pub(crate) fn restrict_private_file_permissions(_path: &Path) -> Result<()> {
+    Ok(())
 }

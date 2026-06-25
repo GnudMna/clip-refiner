@@ -8,6 +8,7 @@ use crate::platform;
 use crate::refiner::{
     ClipboardProcessError, ClipboardProcessOutcome, TextClipboard, process_text_clipboard,
 };
+use crate::security::is_within_clipboard_limit;
 
 // ======================================================================
 // 監視スレッド管理
@@ -100,6 +101,14 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
         return false;
     }
 
+    if !is_within_clipboard_limit(&text) {
+        crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
+        state.with_processed_state(|ps| {
+            ps.last_seen_text = text;
+        });
+        return false;
+    }
+
     let outcome = process_text_clipboard(clipboard, snap.mode);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
@@ -108,6 +117,9 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
             notify::show_process_notification(state, snap.mode, processed.as_str());
         }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
+        Err(ClipboardProcessError::TextTooLarge) => {
+            crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
+        }
         Err(e) => {
             crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
             platform::show_notification("加工エラー", e.user_message());
@@ -151,6 +163,10 @@ pub(crate) fn record_clipboard_outcome(
             false
         }
         Err(ClipboardProcessError::NoText) => {
+            state.record_clipboard_observed(observed_text);
+            false
+        }
+        Err(ClipboardProcessError::TextTooLarge) => {
             state.record_clipboard_observed(observed_text);
             false
         }

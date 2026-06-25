@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 
+use crate::security::is_within_parser_limit;
+
 use pulldown_cmark::{Options, Parser, html};
 
 // ======================================================================
@@ -17,6 +19,11 @@ use pulldown_cmark::{Options, Parser, html};
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合は元の文字列への参照を返す。
 pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("Markdown 入力が上限を超えているためスキップ (markdown_to_html)");
+        return Cow::Borrowed(text);
+    }
+
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);

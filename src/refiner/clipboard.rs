@@ -2,6 +2,8 @@ use super::dispatch::Refiner;
 use super::mode::RefineMode;
 use super::text_clipboard::TextClipboard;
 
+use crate::security::is_within_clipboard_limit;
+
 // ======================================================================
 // クリップボード処理
 // ======================================================================
@@ -19,6 +21,8 @@ pub enum ClipboardProcessOutcome {
 pub enum ClipboardProcessError {
     /// クリップボードが空、またはテキスト形式ではない
     NoText,
+    /// クリップボード本文が処理上限を超えている
+    TextTooLarge,
     /// クリップボードの読み取りに失敗
     ReadFailed(String),
     /// クリップボードへの書き込みに失敗
@@ -30,6 +34,7 @@ impl ClipboardProcessError {
     pub fn user_message(&self) -> &str {
         match self {
             Self::NoText => "クリップボードにテキストがありません",
+            Self::TextTooLarge => "クリップボードのテキストが大きすぎます",
             Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
             Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
         }
@@ -54,6 +59,9 @@ pub(crate) fn apply_refinement_to_text(
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     if text.is_empty() {
         return Err(ClipboardProcessError::NoText);
+    }
+    if !is_within_clipboard_limit(text) {
+        return Err(ClipboardProcessError::TextTooLarge);
     }
 
     let refined = mode.refine(text);
@@ -129,6 +137,10 @@ mod tests {
             "クリップボードにテキストがありません"
         );
         assert_eq!(
+            ClipboardProcessError::TextTooLarge.user_message(),
+            "クリップボードのテキストが大きすぎます"
+        );
+        assert_eq!(
             ClipboardProcessError::ReadFailed("detail".to_string()).user_message(),
             "クリップボードの読み取りに失敗しました"
         );
@@ -144,6 +156,16 @@ mod tests {
         assert_eq!(
             apply_refinement_to_text("", RefineMode::Trim),
             Err(ClipboardProcessError::NoText)
+        );
+    }
+
+    /// 上限超過は `TextTooLarge` エラーになること
+    #[test]
+    fn apply_refinement_to_text_rejects_oversized() {
+        let oversized = "a".repeat(crate::consts::MAX_CLIPBOARD_TEXT_BYTES + 1);
+        assert_eq!(
+            apply_refinement_to_text(&oversized, RefineMode::Trim),
+            Err(ClipboardProcessError::TextTooLarge)
         );
     }
 

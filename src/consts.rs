@@ -41,6 +41,15 @@ pub const MIN_INTERVAL_MS: u64 = 100;
 /// ポーリング間隔の最大値(ミリ秒)
 pub const MAX_INTERVAL_MS: u64 = 60_000;
 
+/// クリップボード本文の最大バイト数 (2 MiB)
+pub const MAX_CLIPBOARD_TEXT_BYTES: usize = 2 * 1024 * 1024;
+
+/// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
+pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;
+
+/// 機密情報と判定した場合の通知・メニュー表示用ラベル
+pub const SENSITIVE_SNIPPET_LABEL: &str = "[機密情報のため非表示]";
+
 /// クイックセレクター表示のデフォルトホットキー
 pub const DEFAULT_HOTKEY_SELECTOR: &str = "Alt+Shift+S";
 

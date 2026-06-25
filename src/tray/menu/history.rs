@@ -2,18 +2,18 @@ use std::sync::Mutex;
 
 use super::{HistoryMenu, TrayMenu};
 
+use crate::security::format_public_snippet;
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
+/// 履歴メニュー表示用スニペットの最大文字数
+const HISTORY_MENU_SNIPPET_MAX_CHARS: usize = 30;
+
 /// 履歴メニュー表示用にテキストを短縮する
 pub(crate) fn format_history_menu_label(text: &str) -> String {
-    if text.chars().count() > 30 {
-        format!("{}...", text.chars().take(27).collect::<String>())
-    } else {
-        text.to_string()
-    }
+    format_public_snippet(text, HISTORY_MENU_SNIPPET_MAX_CHARS)
 }
 
 // ======================================================================
@@ -107,6 +107,7 @@ impl TrayMenu {
 mod tests {
     use super::*;
 
+    use crate::consts::SENSITIVE_SNIPPET_LABEL;
     use crate::tray::state::LockExt;
 
     /// 30 文字以下はそのまま返すこと
@@ -123,6 +124,13 @@ mod tests {
         let label = format_history_menu_label(&text);
         assert!(label.ends_with("..."));
         assert_eq!(label.chars().count(), 30);
+    }
+
+    /// 機密らしい内容はマスクすること
+    #[test]
+    fn format_history_menu_label_masks_sensitive() {
+        let label = format_history_menu_label("password=hunter2");
+        assert_eq!(label, SENSITIVE_SNIPPET_LABEL);
     }
 
     fn build_menu_and_state() -> (TrayMenu, std::sync::Arc<AppState>) {
