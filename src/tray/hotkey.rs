@@ -5,10 +5,11 @@ use std::time::Instant;
 use super::clipboard_monitor::bump_monitor_generation;
 use super::menu::TrayMenu;
 use super::notify;
-use super::selector::SelectorWindow;
+use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
+use super::text_selector::TextSelectorWindow;
 use super::worker::ClipboardCommand;
-use crate::config::HotkeySettings;
+use crate::config::{AppConfig, HotkeySettings};
 use crate::consts;
 use crate::hotkey_binding::resolve_hotkey;
 use crate::platform;
@@ -27,8 +28,8 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 pub struct HotkeyHandler {
     /// ホットキーマネージャーのインスタンス保持用
     _manager: GlobalHotKeyManager,
-    /// セレクタ表示・非表示用ホットキー
-    selector_hotkey: HotKey,
+    /// クイックセレクター表示・非表示用ホットキー
+    quick_selector_hotkey: HotKey,
     /// 通知有効・無効切替用ホットキー
     notification_hotkey: HotKey,
     /// 一時停止・再開用ホットキー
@@ -37,6 +38,8 @@ pub struct HotkeyHandler {
     quit_hotkey: HotKey,
     /// 加工取り消し用ホットキー
     undo_hotkey: HotKey,
+    /// 登録文字列セレクタ表示・非表示用ホットキー
+    text_selector_hotkey: HotKey,
 }
 
 // ======================================================================
@@ -53,10 +56,10 @@ impl HotkeyHandler {
     pub fn new(hotkeys: &HotkeySettings) -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
 
-        let selector_hotkey = resolve_hotkey(
-            &hotkeys.selector,
-            consts::DEFAULT_HOTKEY_SELECTOR,
-            "selector",
+        let quick_selector_hotkey = resolve_hotkey(
+            &hotkeys.quick_selector,
+            consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
+            "quick_selector",
         );
         let notification_hotkey = resolve_hotkey(
             &hotkeys.notification,
@@ -66,22 +69,29 @@ impl HotkeyHandler {
         let pause_hotkey = resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
         let quit_hotkey = resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
         let undo_hotkey = resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
+        let text_selector_hotkey = resolve_hotkey(
+            &hotkeys.text_selector,
+            consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
+            "text_selector",
+        );
 
         let register = |hotkey| manager.register(hotkey).map_err(|e| anyhow::anyhow!(e));
 
-        register(selector_hotkey)?;
+        register(quick_selector_hotkey)?;
         register(notification_hotkey)?;
         register(pause_hotkey)?;
         register(quit_hotkey)?;
         register(undo_hotkey)?;
+        register(text_selector_hotkey)?;
 
         Ok(Self {
             _manager: manager,
-            selector_hotkey,
+            quick_selector_hotkey,
             notification_hotkey,
             pause_hotkey,
             quit_hotkey,
             undo_hotkey,
+            text_selector_hotkey,
         })
     }
 }
@@ -115,12 +125,16 @@ pub struct HotkeyEventContext<'a> {
     pub state: &'a Arc<AppState>,
     /// トレイメニュー構造体
     pub menu: &'a TrayMenu,
-    /// セレクタウィンドウのインスタンス (セレクタ操作時のみ必要)
-    pub selector: Option<&'a SelectorWindow>,
+    /// クイックセレクターウィンドウのインスタンス (クイックセレクター操作時のみ必要)
+    pub quick_selector: Option<&'a QuickSelectorWindow>,
+    /// テキストセレクターウィンドウのインスタンス (テキストセレクター操作時のみ必要)
+    pub text_selector: Option<&'a TextSelectorWindow>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
-    /// セレクタが最後に表示された時刻(更新用)
-    pub last_selector_show: &'a mut Instant,
+    /// クイックセレクターが最後に表示された時刻(更新用)
+    pub last_quick_selector_show: &'a mut Instant,
+    /// テキストセレクターが最後に表示された時刻(更新用)
+    pub last_text_selector_show: &'a mut Instant,
     /// クリップボード・ワーカーへの送信チャネル
     pub clipboard_tx: &'a Sender<ClipboardCommand>,
 }
@@ -139,8 +153,8 @@ impl HotkeyHandler {
             return;
         }
 
-        if event.id == self.selector_hotkey.id() {
-            Self::handle_selector_hotkey(ctx);
+        if event.id == self.quick_selector_hotkey.id() {
+            Self::handle_quick_selector_hotkey(ctx);
         } else if event.id == self.notification_hotkey.id() {
             Self::toggle_notification(ctx);
         } else if event.id == self.pause_hotkey.id() {
@@ -149,20 +163,47 @@ impl HotkeyHandler {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
             let _ = ctx.clipboard_tx.send(ClipboardCommand::Undo);
+        } else if event.id == self.text_selector_hotkey.id() {
+            Self::handle_text_selector_hotkey(ctx);
         }
     }
 
-    /// セレクタ表示ホットキーを処理する
-    fn handle_selector_hotkey(ctx: &mut HotkeyEventContext<'_>) {
-        let Some(selector) = ctx.selector else {
+    /// クイックセレクター表示ホットキーを処理する
+    fn handle_quick_selector_hotkey(ctx: &mut HotkeyEventContext<'_>) {
+        let Some(quick_selector) = ctx.quick_selector else {
             return;
         };
 
-        if selector.is_visible() {
-            selector.hide();
+        if quick_selector.is_visible() {
+            quick_selector.hide();
         } else {
-            *ctx.last_selector_show = Instant::now();
-            selector.show(ctx.state.with_config(|c| c.mode));
+            if let Some(text_selector) = ctx.text_selector
+                && text_selector.is_visible()
+            {
+                text_selector.hide();
+            }
+            *ctx.last_quick_selector_show = Instant::now();
+            quick_selector.show(ctx.state.with_config(|c| c.mode));
+        }
+    }
+
+    /// テキストセレクター表示ホットキーを処理する
+    fn handle_text_selector_hotkey(ctx: &mut HotkeyEventContext<'_>) {
+        let Some(text_selector) = ctx.text_selector else {
+            return;
+        };
+
+        if text_selector.is_visible() {
+            text_selector.hide();
+        } else {
+            if let Some(quick_selector) = ctx.quick_selector
+                && quick_selector.is_visible()
+            {
+                quick_selector.hide();
+            }
+            *ctx.last_text_selector_show = Instant::now();
+            let texts_json = ctx.state.with_config(AppConfig::texts_to_json_list);
+            text_selector.show(&texts_json);
         }
     }
 
@@ -241,7 +282,8 @@ mod tests {
         state: Arc<AppState>,
         menu: TrayMenu,
         control_flow: ControlFlow,
-        last_selector_show: Instant,
+        last_quick_selector_show: Instant,
+        last_text_selector_show: Instant,
         clipboard_tx: Sender<ClipboardCommand>,
     }
 
@@ -255,7 +297,8 @@ mod tests {
                 state,
                 menu,
                 control_flow: ControlFlow::Wait,
-                last_selector_show: Instant::now(),
+                last_quick_selector_show: Instant::now(),
+                last_text_selector_show: Instant::now(),
                 clipboard_tx,
             }
         }
@@ -264,9 +307,11 @@ mod tests {
             HotkeyEventContext {
                 state: &self.state,
                 menu: &self.menu,
-                selector: None,
+                quick_selector: None,
+                text_selector: None,
                 control_flow: &mut self.control_flow,
-                last_selector_show: &mut self.last_selector_show,
+                last_quick_selector_show: &mut self.last_quick_selector_show,
+                last_text_selector_show: &mut self.last_text_selector_show,
                 clipboard_tx: &self.clipboard_tx,
             }
         }
@@ -275,11 +320,12 @@ mod tests {
     /// テスト間でホットキー登録が衝突しないよう F キーを割り当てる
     fn test_hotkeys() -> HotkeySettings {
         HotkeySettings {
-            selector: "Alt+Shift+F1".to_string(),
+            quick_selector: "Alt+Shift+F1".to_string(),
             notification: "Alt+Shift+F2".to_string(),
             pause: "Alt+Shift+F3".to_string(),
             quit: "Alt+Shift+F4".to_string(),
             undo: "Alt+Shift+F5".to_string(),
+            text_selector: "Alt+Shift+F6".to_string(),
         }
     }
 

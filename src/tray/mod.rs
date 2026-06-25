@@ -10,9 +10,10 @@ pub mod history;
 pub mod hotkey;
 pub mod menu;
 mod notify;
+pub mod quick_selector;
 mod runner;
-pub mod selector;
 pub mod state;
+pub mod text_selector;
 pub mod worker;
 
 pub use runner::run_loop;

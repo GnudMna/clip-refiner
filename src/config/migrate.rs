@@ -19,8 +19,8 @@ pub struct ConfigMigration {
 // ======================================================================
 /// 保存済み設定を現行スキーマ (`CONFIG_VERSION`) へ順次移行する
 ///
+/// 初回リリースは v0 のため移行ループは実行されない
 /// `version` が現行より新しい場合はデフォルト設定へフォールバックする
-/// 未対応の旧バージョンも同様にフォールバックする
 pub fn migrate_config(config: AppConfig) -> ConfigMigration {
     if config.version > consts::CONFIG_VERSION {
         crate::log_warn!(
@@ -37,7 +37,7 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
     let mut config = config;
     let mut migrated = false;
 
-    while config.version < consts::CONFIG_VERSION {
+    while config.version != consts::CONFIG_VERSION {
         let from = config.version;
         config = match from {
             0 => migrate_v0_to_v1(config),
@@ -57,14 +57,13 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
 }
 
 // ======================================================================
-// バージョン別移行
+// バージョン別移行 (空実装)
 // ======================================================================
-/// v0 (`version` 未指定または 0) から v1 へ移行
+/// v0 から v1 へ移行 (未実装)
 ///
-/// v1 で `[regex]` および `hotkeys.undo` 等が追加された。
-/// 各項目はデシリアライズ時の `serde(default)` で補完済みのため、version の更新と検証のみ行う
+/// `CONFIG_VERSION` を 1 に上げた際にここへ移行ロジックを追加する
+#[allow(dead_code)]
 fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
-    config.hotkeys.fix_invalid();
     config.version = 1;
     config
 }
@@ -88,9 +87,9 @@ mod tests {
         assert_eq!(result.config.version, consts::CONFIG_VERSION);
     }
 
-    /// v0 から v1 へ移行し、ユーザー設定を保持する
+    /// v0 指定時も現行が v0 なら移行不要
     #[test]
-    fn migrate_v0_to_v1_preserves_user_values() {
+    fn migrate_v0_is_noop_while_current_is_v0() {
         let config = AppConfig {
             version: 0,
             mode: RefineMode::Trim,
@@ -98,8 +97,8 @@ mod tests {
             ..Default::default()
         };
         let result = migrate_config(config);
-        assert!(result.migrated);
-        assert_eq!(result.config.version, 1);
+        assert!(!result.migrated);
+        assert_eq!(result.config.version, 0);
         assert_eq!(result.config.mode, RefineMode::Trim);
         assert_eq!(result.config.interval_ms, 500);
     }
@@ -119,7 +118,7 @@ mod tests {
         assert_eq!(result.config.mode, default.mode);
     }
 
-    /// 連鎖移行: 将来 v1→v2 を追加した際はステップごとのテストを足す
+    /// 現行 version 指定時は `migrated` にならないこと
     #[test]
     fn migrate_at_current_version_does_not_mark_migrated() {
         let config = AppConfig {

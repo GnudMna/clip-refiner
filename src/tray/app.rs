@@ -6,8 +6,9 @@ use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
-use super::selector::{SelectorWindow, init_selector};
+use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
+use super::text_selector::{TextSelectorWindow, init_text_selector};
 
 use anyhow::Result;
 use tao::event::Event;
@@ -26,14 +27,18 @@ pub struct App {
     pub state: Arc<AppState>,
     /// システムトレイメニュー
     pub menu: TrayMenu,
-    /// モード選択用のUIウィンドウ
-    pub selector: SelectorWindow,
+    /// 加工モード選択用クイックセレクター
+    pub quick_selector: QuickSelectorWindow,
+    /// 登録文字列選択用の UI ウィンドウ
+    pub text_selector: TextSelectorWindow,
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
     pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
-    /// 最後にセレクタを表示した時刻(連打防止用)
-    pub last_selector_show: Instant,
+    /// 最後にクイックセレクターを表示した時刻(連打防止用)
+    pub last_quick_selector_show: Instant,
+    /// 最後にテキストセレクターを表示した時刻(連打防止用)
+    pub last_text_selector_show: Instant,
 }
 
 // ======================================================================
@@ -55,7 +60,8 @@ impl App {
         let menu = TrayMenu::build(&state)?;
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
         let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
-        let selector = init_selector(event_loop, &proxy)?;
+        let quick_selector = init_quick_selector(event_loop, &proxy)?;
+        let text_selector = init_text_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 
         HotkeyHandler::start_event_listener(proxy);
@@ -65,10 +71,12 @@ impl App {
         Ok(Self {
             state,
             menu,
-            selector,
+            quick_selector,
+            text_selector,
             hotkey_handler,
             clipboard_tx,
-            last_selector_show: Instant::now(),
+            last_quick_selector_show: Instant::now(),
+            last_text_selector_show: Instant::now(),
         })
     }
 }
@@ -93,8 +101,21 @@ impl App {
             }
             Event::WindowEvent {
                 window_id, event, ..
-            } if window_id == self.selector.id() => {
-                event::handle_window_event(&event, &self.selector, &self.last_selector_show);
+            } if window_id == self.quick_selector.id() => {
+                event::handle_window_event(
+                    &event,
+                    &self.quick_selector,
+                    &self.last_quick_selector_show,
+                );
+            }
+            Event::WindowEvent {
+                window_id, event, ..
+            } if window_id == self.text_selector.id() => {
+                event::handle_window_event(
+                    &event,
+                    &self.text_selector,
+                    &self.last_text_selector_show,
+                );
             }
             _ => {
                 if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
@@ -120,22 +141,42 @@ impl App {
     fn handle_user_event(&mut self, event: AppEvent, control_flow: &mut ControlFlow) {
         match event {
             AppEvent::RequestModeChange(mode) => {
-                self.selector.hide();
+                self.quick_selector.hide();
                 event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode);
             }
-            AppEvent::HideSelector => {
-                self.selector.hide();
+            AppEvent::HideQuickSelector => {
+                self.quick_selector.hide();
+            }
+            AppEvent::HideTextSelector => {
+                self.text_selector.hide();
+            }
+            AppEvent::RequestTextCopy(index) => {
+                self.text_selector.hide();
+                event::copy_registered_text(&self.state, &self.clipboard_tx, index);
+            }
+            AppEvent::RequestTextRegister => {
+                let _ = self
+                    .clipboard_tx
+                    .send(super::worker::ClipboardCommand::RegisterFromClipboard);
+            }
+            AppEvent::RequestTextDelete(index) => {
+                event::delete_registered_text(&self.state, &self.menu, &self.text_selector, index);
             }
             AppEvent::RefreshHistory => {
                 let _ = self.menu.refresh_history(&self.state);
+            }
+            AppEvent::RefreshTexts => {
+                event::refresh_texts_views(&self.state, &self.menu, &self.text_selector);
             }
             AppEvent::Hotkey(hotkey_event) => {
                 let mut ctx = HotkeyEventContext {
                     state: &self.state,
                     menu: &self.menu,
-                    selector: Some(&self.selector),
+                    quick_selector: Some(&self.quick_selector),
+                    text_selector: Some(&self.text_selector),
                     control_flow,
-                    last_selector_show: &mut self.last_selector_show,
+                    last_quick_selector_show: &mut self.last_quick_selector_show,
+                    last_text_selector_show: &mut self.last_text_selector_show,
                     clipboard_tx: &self.clipboard_tx,
                 };
                 self.hotkey_handler.handle_event(hotkey_event, &mut ctx);

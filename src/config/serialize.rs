@@ -26,6 +26,7 @@ const DOC_HOTKEY_SELECTOR: &str = "クイックセレクタ表示";
 const DOC_HOTKEY_NOTIFICATION: &str = "成功通知の ON/OFF";
 const DOC_HOTKEY_PAUSE: &str = "監視の一時停止・再開";
 const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
+const DOC_HOTKEY_TEXT_SELECTOR: &str = "登録文字列セレクター表示";
 const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 const DOC_REGEX_PATTERN: &str = "正規表現パターン";
 const DOC_REGEX_REPLACEMENT: &str =
@@ -40,6 +41,9 @@ const SECTION_NOTIFICATION: &str = "通知";
 const SECTION_HOTKEYS: &str =
     "グローバルホットキー (\"Alt+Shift+S\" 形式。変更反映には再起動が必要)";
 const SECTION_REGEX: &str = "正規表現加工モード用のパターンと置換文字列";
+const SECTION_TEXTS: &str = "クリップボードへコピーする登録文字列 (`[[texts]]` 形式)";
+const DOC_TEXT_LABEL: &str = "一覧表示用のラベル";
+const DOC_TEXT_BODY: &str = "クリップボードへコピーする本文";
 
 // ======================================================================
 // コメント付き TOML 出力
@@ -63,6 +67,7 @@ fn apply_config_to_document(doc: &mut DocumentMut, config: &AppConfig) {
     apply_notification_table(doc, config);
     apply_hotkeys_table(doc, config);
     apply_regex_table(doc, config);
+    apply_texts_tables(doc, config);
 }
 
 /// ルートレベルの設定値を更新する
@@ -143,11 +148,12 @@ fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) {
     let hotkeys = doc["hotkeys"].as_table_mut().expect("hotkeys テーブル");
     set_table_value(
         hotkeys,
-        "selector",
+        "quick_selector",
         DOC_HOTKEY_SELECTOR,
         TABLE_INDENT,
-        &config.hotkeys.selector,
+        &config.hotkeys.quick_selector,
     );
+    hotkeys.remove("selector");
     set_table_value(
         hotkeys,
         "notification",
@@ -168,6 +174,13 @@ fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) {
         DOC_HOTKEY_UNDO,
         TABLE_INDENT,
         &config.hotkeys.undo,
+    );
+    set_table_value(
+        hotkeys,
+        "text_selector",
+        DOC_HOTKEY_TEXT_SELECTOR,
+        TABLE_INDENT,
+        &config.hotkeys.text_selector,
     );
     set_table_value(
         hotkeys,
@@ -210,6 +223,26 @@ fn apply_regex_table(doc: &mut DocumentMut, config: &AppConfig) {
         TABLE_INDENT,
         &config.regex.multiline,
     );
+}
+
+/// `[[texts]]` の配列を更新する
+fn apply_texts_tables(doc: &mut DocumentMut, config: &AppConfig) {
+    use toml_edit::ArrayOfTables;
+
+    if config.texts.is_empty() {
+        doc.as_table_mut().remove("texts");
+        return;
+    }
+
+    let mut array = ArrayOfTables::new();
+    for entry in &config.texts {
+        let mut table = Table::new();
+        table.insert("label", Item::Value(serde_to_toml_value(&entry.label)));
+        table.insert("text", Item::Value(serde_to_toml_value(&entry.text)));
+        array.push(table);
+    }
+
+    doc["texts"] = Item::ArrayOfTables(array);
 }
 
 /// テーブルがなければセクション見出し付きで挿入する
@@ -343,8 +376,8 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
         &mut out,
         TABLE_INDENT,
         DOC_HOTKEY_SELECTOR,
-        "selector",
-        &config.hotkeys.selector,
+        "quick_selector",
+        &config.hotkeys.quick_selector,
     )?;
     write_field(
         &mut out,
@@ -366,6 +399,13 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
         DOC_HOTKEY_UNDO,
         "undo",
         &config.hotkeys.undo,
+    )?;
+    write_field(
+        &mut out,
+        TABLE_INDENT,
+        DOC_HOTKEY_TEXT_SELECTOR,
+        "text_selector",
+        &config.hotkeys.text_selector,
     )?;
     write_field(
         &mut out,
@@ -404,6 +444,16 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
         "multiline",
         &config.regex.multiline,
     )?;
+
+    if !config.texts.is_empty() {
+        write_section(&mut out, SECTION_TEXTS)?;
+        for entry in &config.texts {
+            writeln!(out, "[[texts]]")?;
+            writeln!(out)?;
+            write_field(&mut out, "", DOC_TEXT_LABEL, "label", &entry.label)?;
+            write_field(&mut out, "", DOC_TEXT_BODY, "text", &entry.text)?;
+        }
+    }
 
     Ok(out)
 }

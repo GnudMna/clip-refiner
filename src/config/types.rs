@@ -68,8 +68,8 @@ impl Default for NotificationSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HotkeySettings {
     /// クイックセレクターの表示・非表示
-    #[serde(default = "default_hotkey_selector")]
-    pub selector: String,
+    #[serde(default = "default_hotkey_quick_selector", alias = "selector")]
+    pub quick_selector: String,
     /// 成功通知のON/OFF切替
     #[serde(default = "default_hotkey_notification")]
     pub notification: String,
@@ -82,16 +82,20 @@ pub struct HotkeySettings {
     /// 直近の加工を取り消す
     #[serde(default = "default_hotkey_undo")]
     pub undo: String,
+    /// 登録文字列セレクターの表示・非表示
+    #[serde(default = "default_hotkey_text_selector")]
+    pub text_selector: String,
 }
 
 impl Default for HotkeySettings {
     fn default() -> Self {
         Self {
-            selector: default_hotkey_selector(),
+            quick_selector: default_hotkey_quick_selector(),
             notification: default_hotkey_notification(),
             pause: default_hotkey_pause(),
             quit: default_hotkey_quit(),
             undo: default_hotkey_undo(),
+            text_selector: default_hotkey_text_selector(),
         }
     }
 }
@@ -100,17 +104,22 @@ impl HotkeySettings {
     /// ショートカット一覧表示用の文字列を生成する
     pub fn shortcut_list_text(&self) -> String {
         format!(
-            "{}: クイックセレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 加工の取り消し\n{}: 終了",
-            self.selector, self.notification, self.pause, self.undo, self.quit
+            "{}: クイックセレクター\n{}: 登録文字列セレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 加工の取り消し\n{}: 終了",
+            self.quick_selector,
+            self.text_selector,
+            self.notification,
+            self.pause,
+            self.undo,
+            self.quit
         )
     }
 
     /// 不正なホットキー文字列をデフォルト値へ置き換える
     pub fn fix_invalid(&mut self) {
         fix_hotkey_field(
-            &mut self.selector,
-            consts::DEFAULT_HOTKEY_SELECTOR,
-            "selector",
+            &mut self.quick_selector,
+            consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
+            "quick_selector",
         );
         fix_hotkey_field(
             &mut self.notification,
@@ -120,6 +129,11 @@ impl HotkeySettings {
         fix_hotkey_field(&mut self.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
         fix_hotkey_field(&mut self.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
         fix_hotkey_field(&mut self.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
+        fix_hotkey_field(
+            &mut self.text_selector,
+            consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
+            "text_selector",
+        );
     }
 }
 
@@ -139,11 +153,8 @@ fn fix_hotkey_field(field: &mut String, default: &str, label: &str) {
 }
 
 /// クイックセレクターのデフォルトホットキーを返す
-///
-/// # Returns
-/// * `String` - クイックセレクターのデフォルトホットキー
-fn default_hotkey_selector() -> String {
-    consts::DEFAULT_HOTKEY_SELECTOR.to_string()
+fn default_hotkey_quick_selector() -> String {
+    consts::DEFAULT_HOTKEY_QUICK_SELECTOR.to_string()
 }
 
 /// 成功通知のデフォルトホットキーを返す
@@ -178,11 +189,14 @@ fn default_hotkey_undo() -> String {
     consts::DEFAULT_HOTKEY_UNDO.to_string()
 }
 
+/// 登録文字列セレクターのデフォルトホットキーを返す
+fn default_hotkey_text_selector() -> String {
+    consts::DEFAULT_HOTKEY_TEXT_SELECTOR.to_string()
+}
+
 /// 設定ファイルに `version` が無い場合のデシリアライズ用デフォルト
-///
-/// 未指定は legacy v0 として扱い、読み込み時に `migrate_config` で現行へ移行する
 fn default_config_version() -> u32 {
-    0
+    consts::CONFIG_VERSION
 }
 
 /// 履歴の最大保持数を返す
@@ -191,6 +205,31 @@ fn default_config_version() -> u32 {
 /// * `usize` - 履歴の最大保持数
 fn default_history_limit() -> usize {
     consts::DEFAULT_HISTORY_LIMIT
+}
+
+// ======================================================================
+// 登録文字列
+// ======================================================================
+/// クリップボードへコピーするための登録文字列
+///
+/// `config.toml` の `[[texts]]` セクションとして保存される
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RegisteredText {
+    /// 一覧表示用のラベル
+    pub label: String,
+    /// クリップボードへコピーする本文
+    pub text: String,
+}
+
+impl RegisteredText {
+    /// テキストセレクター向けの JSON オブジェクトを生成する
+    pub fn to_text_selector_json(&self, index: usize, preview: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": index.to_string(),
+            "label": self.label,
+            "preview": preview,
+        })
+    }
 }
 
 // ======================================================================
@@ -251,6 +290,9 @@ pub struct AppConfig {
     /// 正規表現加工用のパターンと置換文字列
     #[serde(default)]
     pub regex: RegexSettings,
+    /// クリップボードへコピーする登録文字列
+    #[serde(default)]
+    pub texts: Vec<RegisteredText>,
 }
 
 impl Default for AppConfig {
@@ -270,6 +312,7 @@ impl Default for AppConfig {
             notification_settings: NotificationSettings::default(),
             hotkeys: HotkeySettings::default(),
             regex: RegexSettings::default(),
+            texts: Vec::new(),
         }
     }
 }
@@ -283,6 +326,7 @@ impl AppConfig {
         let migration = super::migrate::migrate_config(self);
         let mut config = migration.config;
         config.clamp_values();
+        config.normalize_texts();
         config.hotkeys.fix_invalid();
         (config, migration.migrated)
     }
@@ -290,6 +334,7 @@ impl AppConfig {
     /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新
     pub fn normalize(&mut self) {
         self.clamp_values();
+        self.normalize_texts();
         self.version = consts::CONFIG_VERSION;
     }
 
@@ -302,4 +347,113 @@ impl AppConfig {
             .interval_ms
             .clamp(consts::MIN_INTERVAL_MS, consts::MAX_INTERVAL_MS);
     }
+
+    /// 登録文字列を許容範囲内に正規化する
+    pub(crate) fn normalize_texts(&mut self) {
+        use crate::security::{format_public_snippet, is_within_clipboard_limit};
+
+        self.texts.retain(|entry| {
+            !entry.text.trim().is_empty() && is_within_clipboard_limit(&entry.text)
+        });
+        if self.texts.len() > consts::MAX_REGISTERED_TEXTS {
+            self.texts.truncate(consts::MAX_REGISTERED_TEXTS);
+        }
+        for entry in &mut self.texts {
+            if entry.label.trim().is_empty() {
+                let preview = format_public_snippet(&entry.text, 20);
+                entry.label = if preview.is_empty() {
+                    "登録文字列".to_string()
+                } else {
+                    preview
+                };
+            }
+            let char_count = entry.label.chars().count();
+            if char_count > consts::MAX_REGISTERED_TEXT_LABEL_CHARS {
+                entry.label = entry
+                    .label
+                    .chars()
+                    .take(consts::MAX_REGISTERED_TEXT_LABEL_CHARS)
+                    .collect();
+            }
+        }
+    }
+
+    /// 登録文字列をクイックセレクター向け JSON 配列へ変換する
+    pub fn texts_to_json_list(&self) -> String {
+        use crate::security::format_public_snippet;
+
+        let list: Vec<serde_json::Value> = self
+            .texts
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| {
+                let preview =
+                    format_public_snippet(&entry.text, consts::REGISTERED_TEXT_PREVIEW_MAX_CHARS);
+                entry.to_text_selector_json(index, &preview)
+            })
+            .collect();
+        serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
+    }
+
+    /// 指定インデックスの登録文字列本文を返す
+    pub fn registered_text_at(&self, index: usize) -> Option<&str> {
+        self.texts.get(index).map(|entry| entry.text.as_str())
+    }
+
+    /// クリップボードの内容を登録文字列として追加する
+    ///
+    /// # Returns
+    /// * `Ok(())` - 追加成功
+    /// * `Err(AddRegisteredTextError)` - 空文字・サイズ超過・件数上限
+    pub fn add_registered_text(
+        &mut self,
+        text: impl Into<String>,
+    ) -> Result<(), AddRegisteredTextError> {
+        use crate::security::is_within_clipboard_limit;
+
+        let text = text.into();
+        if text.trim().is_empty() {
+            return Err(AddRegisteredTextError::Empty);
+        }
+        if !is_within_clipboard_limit(&text) {
+            return Err(AddRegisteredTextError::TooLarge);
+        }
+        if self.texts.len() >= consts::MAX_REGISTERED_TEXTS {
+            return Err(AddRegisteredTextError::LimitReached);
+        }
+
+        self.texts.push(RegisteredText {
+            label: String::new(),
+            text,
+        });
+        self.normalize_texts();
+        Ok(())
+    }
+
+    /// 指定インデックスの登録文字列を削除する
+    ///
+    /// # Returns
+    /// * `bool` - 削除できた場合は `true`
+    pub fn remove_registered_text(&mut self, index: usize) -> bool {
+        if index >= self.texts.len() {
+            return false;
+        }
+        self.texts.remove(index);
+        self.normalize_texts();
+        true
+    }
+}
+
+// ======================================================================
+// 登録文字列の追加
+// ======================================================================
+/// 登録文字列の追加に失敗した理由
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddRegisteredTextError {
+    /// 空文字または空白のみ
+    Empty,
+    /// クリップボード上限を超える
+    TooLarge,
+    /// 登録件数の上限に達している
+    LimitReached,
 }

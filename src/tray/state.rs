@@ -15,10 +15,20 @@ use tao::event_loop::EventLoopProxy;
 pub enum AppEvent {
     /// クリップボード加工モードの変更要求
     RequestModeChange(RefineMode),
-    /// モード選択用セレクタウィンドウの非表示要求
-    HideSelector,
+    /// クイックセレクター (加工モード選択) の非表示要求
+    HideQuickSelector,
+    /// 登録文字列セレクターの非表示要求
+    HideTextSelector,
+    /// 登録文字列のクリップボードコピー要求
+    RequestTextCopy(usize),
+    /// クリップボードの内容を登録文字列として保存する要求
+    RequestTextRegister,
+    /// 登録文字列の削除要求
+    RequestTextDelete(usize),
     /// 履歴メニューの内容再構築要求
     RefreshHistory,
+    /// 登録文字列メニューの内容再構築要求
+    RefreshTexts,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
