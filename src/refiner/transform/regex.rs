@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
-use regex::{Regex, RegexBuilder};
-
 use crate::config::RegexSettings;
 use crate::consts::MAX_REGEX_PATTERN_BYTES;
+
+use regex::{Regex, RegexBuilder};
 
 // ======================================================================
 // 正規表現コンパイル

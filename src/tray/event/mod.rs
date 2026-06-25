@@ -150,8 +150,9 @@ pub fn handle_window_event<S: FocusDismissibleSelector>(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::mpsc;
+
+    use super::*;
 
     use crate::config::MonitorMode;
     use crate::refiner::RefineMode;

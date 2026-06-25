@@ -271,10 +271,12 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
+
     use crate::config::HotkeySettings;
     use crate::tray::menu::TrayMenu;
     use crate::tray::state::test_app_state;
     use crate::tray::worker::ClipboardCommand;
+
     use global_hotkey::HotKeyState;
     use tao::event_loop::ControlFlow;
 

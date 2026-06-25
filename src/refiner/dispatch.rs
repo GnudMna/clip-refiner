@@ -73,7 +73,9 @@ impl Refiner for RefineMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::RegexSettings;
+
     use strum::IntoEnumIterator;
 
     fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
