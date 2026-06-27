@@ -168,6 +168,14 @@ impl App {
             AppEvent::RefreshTexts => {
                 event::refresh_texts_views(&self.state, &self.menu, &self.text_selector);
             }
+            AppEvent::ReloadConfig => {
+                event::reload_config_with_notification(
+                    &self.state,
+                    &self.menu,
+                    &mut self.hotkey_handler,
+                    &self.text_selector,
+                );
+            }
             AppEvent::Hotkey(hotkey_event) => {
                 let mut ctx = HotkeyEventContext {
                     state: &self.state,

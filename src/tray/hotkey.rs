@@ -26,8 +26,8 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 /// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
 /// モード選択UIの表示や設定の切り替えなどを実行する
 pub struct HotkeyHandler {
-    /// ホットキーマネージャーのインスタンス保持用
-    _manager: GlobalHotKeyManager,
+    /// ホットキーマネージャーのインスタンス
+    manager: GlobalHotKeyManager,
     /// クイックセレクター表示・非表示用ホットキー
     quick_selector_hotkey: HotKey,
     /// 通知有効・無効切替用ホットキー
@@ -45,6 +45,54 @@ pub struct HotkeyHandler {
 // ======================================================================
 // 初期化・登録
 // ======================================================================
+/// 解決済みホットキー割り当て
+struct ResolvedHotkeys {
+    quick_selector: HotKey,
+    notification: HotKey,
+    pause: HotKey,
+    quit: HotKey,
+    undo: HotKey,
+    text_selector: HotKey,
+}
+
+impl ResolvedHotkeys {
+    /// 設定から各ホットキーを解決する
+    fn from_settings(hotkeys: &HotkeySettings) -> Self {
+        Self {
+            quick_selector: resolve_hotkey(
+                &hotkeys.quick_selector,
+                consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
+                "quick_selector",
+            ),
+            notification: resolve_hotkey(
+                &hotkeys.notification,
+                consts::DEFAULT_HOTKEY_NOTIFICATION,
+                "notification",
+            ),
+            pause: resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause"),
+            quit: resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit"),
+            undo: resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo"),
+            text_selector: resolve_hotkey(
+                &hotkeys.text_selector,
+                consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
+                "text_selector",
+            ),
+        }
+    }
+
+    /// 登録済みホットキーを配列として返す
+    fn as_slice(&self) -> [HotKey; 6] {
+        [
+            self.quick_selector,
+            self.notification,
+            self.pause,
+            self.quit,
+            self.undo,
+            self.text_selector,
+        ]
+    }
+}
+
 impl HotkeyHandler {
     /// ホットキーハンドラを初期化し、各種ショートカットをシステムに登録する
     ///
@@ -55,44 +103,66 @@ impl HotkeyHandler {
     /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返す
     pub fn new(hotkeys: &HotkeySettings) -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
+        let resolved = ResolvedHotkeys::from_settings(hotkeys);
 
-        let quick_selector_hotkey = resolve_hotkey(
-            &hotkeys.quick_selector,
-            consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
-            "quick_selector",
-        );
-        let notification_hotkey = resolve_hotkey(
-            &hotkeys.notification,
-            consts::DEFAULT_HOTKEY_NOTIFICATION,
-            "notification",
-        );
-        let pause_hotkey = resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
-        let quit_hotkey = resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
-        let undo_hotkey = resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
-        let text_selector_hotkey = resolve_hotkey(
-            &hotkeys.text_selector,
-            consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
-            "text_selector",
-        );
-
-        let register = |hotkey| manager.register(hotkey).map_err(|e| anyhow::anyhow!(e));
-
-        register(quick_selector_hotkey)?;
-        register(notification_hotkey)?;
-        register(pause_hotkey)?;
-        register(quit_hotkey)?;
-        register(undo_hotkey)?;
-        register(text_selector_hotkey)?;
+        for hotkey in resolved.as_slice() {
+            manager.register(hotkey).map_err(|e| anyhow::anyhow!(e))?;
+        }
 
         Ok(Self {
-            _manager: manager,
-            quick_selector_hotkey,
-            notification_hotkey,
-            pause_hotkey,
-            quit_hotkey,
-            undo_hotkey,
-            text_selector_hotkey,
+            manager,
+            quick_selector_hotkey: resolved.quick_selector,
+            notification_hotkey: resolved.notification,
+            pause_hotkey: resolved.pause,
+            quit_hotkey: resolved.quit,
+            undo_hotkey: resolved.undo,
+            text_selector_hotkey: resolved.text_selector,
         })
+    }
+
+    /// ホットキー割り当てを再登録する
+    ///
+    /// 設定ファイルの再読み込み後など、再起動なしでショートカットを反映する
+    ///
+    /// # Arguments
+    /// * `hotkeys` - 新しいホットキー割り当て
+    ///
+    /// # Returns
+    /// * `Result<()>` - 再登録成功時は `Ok(())`、失敗時は `Err`
+    pub fn reload(&mut self, hotkeys: &HotkeySettings) -> Result<()> {
+        for hotkey in self.registered_hotkeys() {
+            self.manager
+                .unregister(hotkey)
+                .map_err(|e| anyhow::anyhow!(e))?;
+        }
+
+        let resolved = ResolvedHotkeys::from_settings(hotkeys);
+        for hotkey in resolved.as_slice() {
+            self.manager
+                .register(hotkey)
+                .map_err(|e| anyhow::anyhow!(e))?;
+        }
+
+        self.quick_selector_hotkey = resolved.quick_selector;
+        self.notification_hotkey = resolved.notification;
+        self.pause_hotkey = resolved.pause;
+        self.quit_hotkey = resolved.quit;
+        self.undo_hotkey = resolved.undo;
+        self.text_selector_hotkey = resolved.text_selector;
+
+        Ok(())
+    }
+
+    /// 登録済みホットキーを配列として返す
+    fn registered_hotkeys(&self) -> [HotKey; 6] {
+        [
+            self.quick_selector_hotkey,
+            self.notification_hotkey,
+            self.pause_hotkey,
+            self.quit_hotkey,
+            self.undo_hotkey,
+            self.text_selector_hotkey,
+        ]
     }
 }
 
@@ -415,5 +485,26 @@ mod tests {
         HotkeyHandler::toggle_notification(&mut ctx.ctx());
         assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
         assert!(ctx.menu.notification.enabled_item.is_checked());
+    }
+
+    /// `reload` でホットキー ID が更新されること
+    #[test]
+    fn reload_updates_registered_hotkey_ids() {
+        let initial = HotkeySettings {
+            quick_selector: "Alt+Ctrl+F1".to_string(),
+            notification: "Alt+Ctrl+F2".to_string(),
+            pause: "Alt+Ctrl+F3".to_string(),
+            quit: "Alt+Ctrl+F4".to_string(),
+            undo: "Alt+Ctrl+F5".to_string(),
+            text_selector: "Alt+Ctrl+F6".to_string(),
+        };
+        let mut handler = HotkeyHandler::new(&initial).expect("テスト用ホットキーの登録に失敗");
+        let quit_before = handler.quit_hotkey_id();
+
+        let mut updated = initial.clone();
+        updated.quit = "Alt+Ctrl+F12".to_string();
+        handler.reload(&updated).expect("ホットキーの再登録に失敗");
+
+        assert_ne!(handler.quit_hotkey_id(), quit_before);
     }
 }

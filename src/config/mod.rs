@@ -6,6 +6,7 @@ mod serialize;
 mod types;
 
 pub use paths::{get_config_dir, open_config_file};
+pub use persistence::{ConfigReloadError, disk_config_modified_time};
 pub use types::{
     AddRegisteredTextError, AppConfig, HotkeySettings, MonitorMode, NotificationSettings,
     RegexSettings,

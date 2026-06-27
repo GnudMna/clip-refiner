@@ -1,4 +1,5 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
+use std::time::{Duration, Instant, SystemTime};
 
 use super::history::EncryptedHistoryStore;
 use crate::config::{AppConfig, RegexSettings};
@@ -29,6 +30,8 @@ pub enum AppEvent {
     RefreshHistory,
     /// 登録文字列メニューの内容再構築要求
     RefreshTexts,
+    /// ディスク上の設定ファイルを再読み込みする要求
+    ReloadConfig,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
@@ -129,6 +132,10 @@ pub struct AppState {
     pub proxy: EventLoopProxy<AppEvent>,
     /// 設定をディスクへ保存するかどうか
     persist_config: bool,
+    /// ディスク上の設定ファイルと同期済みの最終更新時刻
+    config_disk_mtime: Mutex<Option<SystemTime>>,
+    /// 自身の保存直後に外部変更検知を抑制する期限
+    config_save_grace_until: Mutex<Option<Instant>>,
 }
 
 // ======================================================================
@@ -141,6 +148,7 @@ impl AppState {
     /// * `Self` - 新しく生成された `AppState` インスタンス
     pub fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
         let config = AppConfig::load();
+        let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
         Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
@@ -149,7 +157,45 @@ impl AppState {
             history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
             persist_config: true,
+            config_disk_mtime: Mutex::new(disk_mtime),
+            config_save_grace_until: Mutex::new(None),
         }
+    }
+
+    /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
+    pub fn record_config_disk_sync(&self) {
+        if let Ok(mtime) = crate::config::disk_config_modified_time() {
+            *self.config_disk_mtime.lock_ignore_poison() = mtime;
+        }
+    }
+
+    /// 外部編集による設定ファイルの変更を検知する
+    ///
+    /// アプリ自身の保存直後は同期済み時刻と一致するため `false` を返す
+    pub fn has_external_config_change(&self) -> bool {
+        if self.is_config_save_grace_active() {
+            return false;
+        }
+        let Ok(Some(file_mtime)) = crate::config::disk_config_modified_time() else {
+            return false;
+        };
+        match *self.config_disk_mtime.lock_ignore_poison() {
+            Some(known) => file_mtime > known,
+            None => true,
+        }
+    }
+
+    /// 自身の保存直後のグレース期間中かどうか
+    fn is_config_save_grace_active(&self) -> bool {
+        self.config_save_grace_until
+            .lock_ignore_poison()
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    /// 自身の保存直後に外部変更検知を一時抑制する
+    fn begin_config_save_grace(&self) {
+        *self.config_save_grace_until.lock_ignore_poison() =
+            Some(Instant::now() + Duration::from_secs(2));
     }
 
     /// 現在の設定をファイルへ保存する
@@ -161,7 +207,10 @@ impl AppState {
         }
         if let Err(e) = self.with_config(super::super::config::AppConfig::save) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
+            return;
         }
+        self.begin_config_save_grace();
+        self.record_config_disk_sync();
     }
 
     /// 設定を読み取り専用で参照する
@@ -314,6 +363,8 @@ pub(crate) fn test_app_state() -> AppState {
         history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
         persist_config: false,
+        config_disk_mtime: Mutex::new(None),
+        config_save_grace_until: Mutex::new(None),
     }
 }
 
