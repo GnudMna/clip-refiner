@@ -65,6 +65,8 @@ struct MonitorLoopState {
     last_token: u64,
     /// イベント監視フォールバック警告を既に出力したか
     event_fallback_warned: bool,
+    /// 加工コンテキスト (正規表現コンパイルキャッシュを保持)
+    refine_ctx: RefineContext,
 }
 
 impl MonitorLoopState {
@@ -78,6 +80,7 @@ impl MonitorLoopState {
             last_poll_at: Instant::now(),
             last_token: 0,
             event_fallback_warned: false,
+            refine_ctx: RefineContext::default(),
         }
     }
 
@@ -173,20 +176,34 @@ impl MonitorLoopState {
             self.event_fallback_warned = true;
         }
 
+        self.refine_ctx.regex = snap.regex_settings.clone();
+
         match Self::effective_mode(watcher, state) {
             MonitorMode::Event => {
                 if let Some(token) = watcher.token()
                     && token != self.last_token
                 {
                     self.last_token = token;
-                    if clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, true) {
+                    if clipboard_monitor::handle_clipboard_update(
+                        clipboard,
+                        state,
+                        &snap,
+                        true,
+                        &self.refine_ctx,
+                    ) {
                         self.last_token = watcher.token().unwrap_or(self.last_token);
                     }
                 }
             }
             MonitorMode::Polling => {
                 if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
-                    clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, false);
+                    clipboard_monitor::handle_clipboard_update(
+                        clipboard,
+                        state,
+                        &snap,
+                        false,
+                        &self.refine_ctx,
+                    );
                     self.last_poll_at = Instant::now();
                 }
             }
@@ -244,7 +261,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
 
         let timeout = monitor.recv_timeout(state, &watcher);
         match rx.recv_timeout(timeout) {
-            Ok(cmd) => handle_command(&mut clipboard, state, cmd),
+            Ok(cmd) => handle_command(&mut clipboard, state, &mut monitor.refine_ctx, cmd),
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
         }
@@ -309,10 +326,12 @@ fn sync_monitor_generation(
 /// # Arguments
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
+/// * `refine_ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 /// * `cmd` - 受信したコマンド
 pub(crate) fn handle_command<C: TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
+    refine_ctx: &mut RefineContext,
     cmd: ClipboardCommand,
 ) {
     match cmd {
@@ -346,8 +365,8 @@ pub(crate) fn handle_command<C: TextClipboard>(
         }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
-            let ctx = state.with_config(RefineContext::from_config);
-            match process_text_clipboard(clipboard, mode, &ctx) {
+            refine_ctx.regex = state.with_config(|c| c.regex.clone());
+            match process_text_clipboard(clipboard, mode, refine_ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
