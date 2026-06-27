@@ -13,12 +13,14 @@ use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
 mod app_control;
+mod config_reload;
 mod history;
 mod monitor;
 mod notification;
 mod refine;
 mod texts;
 
+pub(crate) use config_reload::reload_config_with_notification;
 pub use refine::update_refine;
 
 /// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する

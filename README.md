@@ -359,6 +359,10 @@ Windows / macOS / Linux 対応。多重起動防止付き
 <td><code>config.toml</code> を既定のアプリケーションで開く</td>
 </tr>
 <tr>
+<td><strong>設定を再読み込み</strong></td>
+<td>ディスク上の <code>config.toml</code> を読み直し、ホットキー・監視設定などを再起動なしで反映</td>
+</tr>
+<tr>
 <td><strong>ショートカット一覧</strong></td>
 <td>現在のグローバルホットキー割り当てを通知で表示</td>
 </tr>
@@ -428,7 +432,7 @@ text = "お疲れ様です。よろしくお願いいたします。"
 
 ## ⌨️ グローバルホットキー
 
-<p>監視モード常駐時に、アクティブなウィンドウを問わず以下のホットキーが使用できます (<code>config.toml</code> の <code>hotkeys</code> で変更可能。反映には再起動が必要)。</p>
+<p>監視モード常駐時に、アクティブなウィンドウを問わず以下のホットキーが使用できます (<code>config.toml</code> の <code>hotkeys</code> で変更可能。<code>config.toml</code> を編集した場合は自動反映、トレイの「設定を再読み込み」でも即時反映)。</p>
 
 <table>
 <thead>
@@ -790,7 +794,7 @@ cargo build --release
 <li><strong>キー</strong>: <code>A</code>〜<code>Z</code>, <code>F1</code>〜<code>F12</code></li>
 </ul>
 
-<p>不正な値は起動時にデフォルトへ置き換えられます。変更を反映するにはアプリの再起動が必要です。</p>
+<p>不正な値は読み込み時にデフォルトへ置き換えられます。<code>config.toml</code> を外部エディタで編集した場合は、保存後に自動反映されます (最大約 2 秒)。すぐに反映したい場合はトレイの「設定を再読み込み」を使用してください。</p>
 
 ### 監視方式 (<code>monitor_mode</code>)
 

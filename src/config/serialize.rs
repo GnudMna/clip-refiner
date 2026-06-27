@@ -41,7 +41,7 @@ const SECTION_MONITOR: &str = "監視";
 const SECTION_HISTORY: &str = "履歴";
 const SECTION_NOTIFICATION: &str = "通知";
 const SECTION_HOTKEYS: &str =
-    "グローバルホットキー (\"Alt+Shift+S\" 形式。変更反映には再起動が必要)";
+    "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は自動または「設定を再読み込み」で反映)";
 const SECTION_REGEX: &str = "正規表現加工モード用のパターンと置換文字列";
 const SECTION_TEXTS: &str = "クリップボードへコピーする登録文字列 (`[[texts]]` 形式)";
 const DOC_TEXT_LABEL: &str = "一覧表示用のラベル";

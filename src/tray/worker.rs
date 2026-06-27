@@ -18,6 +18,9 @@ use crate::security::SecretString;
 
 use arboard::Clipboard;
 
+/// 設定ファイルの外部変更を検知するポーリング間隔
+const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
 // ======================================================================
 // コマンド定義
 // ======================================================================
@@ -238,9 +241,17 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
 
     let watcher = ChangeWatcher::new();
     let mut monitor = MonitorLoopState::new();
+    let mut last_config_poll = Instant::now();
 
     loop {
         sync_monitor_generation(&mut monitor, &mut clipboard, state, &watcher);
+
+        if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
+            last_config_poll = Instant::now();
+            if state.has_external_config_change() {
+                let _ = state.proxy.send_event(AppEvent::ReloadConfig);
+            }
+        }
 
         let timeout = monitor.recv_timeout(state, &watcher);
         match rx.recv_timeout(timeout) {
