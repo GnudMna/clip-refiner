@@ -58,17 +58,18 @@ test-helpers = []
 [[test]]
 name = "monitor_flow"
 path = "tests/monitor_flow.rs"
-required-features = ["test-helpers"]
 
 [[test]]
 name = "worker_flow"
 path = "tests/worker_flow.rs"
-required-features = ["test-helpers"]
 
 [[test]]
 name = "history_flow"
 path = "tests/history_flow.rs"
-required-features = ["test-helpers"]
+
+[[test]]
+name = "regex_flow"
+path = "tests/regex_flow.rs"
 
 [dependencies]
 anyhow = "1.0.103"
