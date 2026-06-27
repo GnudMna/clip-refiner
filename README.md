@@ -46,6 +46,7 @@
 - [🚀 ログイン時の自動起動](#-ログイン時の自動起動)
 - [📝 加工モードの使用例](#-加工モードの使用例)
 - [🛠️ インストール・ビルド](#️-インストールビルド)
+- [🧪 開発・テスト](#-開発テスト)
 - [⚙️ 設定](#️-設定)
 - [📋 ログ](#-ログ)
 - [📄 ライセンス](#-ライセンス)
@@ -132,6 +133,10 @@ Windows / macOS / Linux 対応。多重起動防止付き
 <code>--mode</code> に渡す値 (CLI 名) と、トレイメニュー・クイックセレクタでの表示は次のとおり。
 <strong>全 36 モード</strong>に対応しています。
 </p>
+
+<div style="border-left: 4px solid #7c5cff; padding: 10px 14px; margin: 12px 0; background: rgba(124, 92, 255, 0.08); border-radius: 0 6px 6px 0;">
+<strong><code>config.toml</code> の <code>mode</code>:</strong> CLI は kebab-case (<code>url-decode</code> など) だが、設定ファイルでは PascalCase (<code>UrlDecode</code> など) を指定する。初回保存時に生成される <code>config.toml</code> を参照するとよい
+</div>
 
 <table>
 <thead>
@@ -360,7 +365,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 </tr>
 <tr>
 <td><strong>設定を再読み込み</strong></td>
-<td>ディスク上の <code>config.toml</code> を読み直し、ホットキー・監視設定などを再起動なしで反映</td>
+<td>ディスク上の <code>config.toml</code> を即時に読み直し、ホットキー・監視設定・正規表現・登録文字列などを再起動なしで反映。履歴を無効化した場合はメモリ上の履歴もクリア。形式エラー時は通知で失敗理由を表示</td>
 </tr>
 <tr>
 <td><strong>ショートカット一覧</strong></td>
@@ -473,10 +478,10 @@ text = "お疲れ様です。よろしくお願いいたします。"
 
 ## ↩️ 加工の取り消し
 
-<p>監視モードで加工が成功した直後のみ、直近 1 件分の取り消しが可能です。ホットキー (既定で <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) またはトレイメニューの「ショートカット一覧」から割り当てを確認できます。</p>
+<p>監視モード常駐時に加工が成功した直後のみ、直近 1 件分の取り消しが可能です。ホットキー (既定で <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) またはトレイメニューの「ショートカット一覧」から割り当てを確認できます。ワンショットモード (<code>--mode</code>) では利用できません。</p>
 
 <ul>
-<li><strong>対象</strong>: 監視モードでの自動加工、または手動で実行した加工のうち、直前に成功した 1 件</li>
+<li><strong>対象</strong>: クリップボード監視による自動加工、またはトレイ・クイックセレクタでモードを選んで実行した手動加工のうち、直前に成功した 1 件</li>
 <li><strong>動作</strong>: 加工前のテキストをクリップボードへ書き戻す</li>
 <li><strong>制限</strong>: 新しい加工が成功すると取り消し対象は上書き。取り消し可能な加工がない場合は通知で知らせる (通知が有効な場合)</li>
 <li><strong>セキュリティ</strong>: 加工前テキストはメモリ上のみ保持し、<code>SecretString</code> により不要になった時点でゼロ化 ([クリップボード履歴のセキュリティ](#-クリップボード履歴) 参照)</li>
@@ -714,6 +719,39 @@ cargo build --release
 
 ---
 
+## 🧪 開発・テスト
+
+```bash
+# 単体テスト・統合テストを実行
+cargo test
+
+# ライブラリ API のドキュメントを生成
+cargo doc --no-deps --open
+```
+
+<p>加工ロジックは <code>clip_refiner</code> ライブラリクレートとしても利用できる。</p>
+
+```rust
+use clip_refiner::{RefineContext, RefineMode, Refiner};
+
+let ctx = RefineContext::default();
+let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
+assert_eq!(output, "hello world");
+```
+
+<p>統合テスト (<code>tests/</code>) では監視ループ・ワーカー・履歴・正規表現の主要経路を検証する。</p>
+
+| ファイル | 検証内容 |
+| :------- | :------- |
+| <code>monitor_flow.rs</code> | 監視加工、Undo、同一テキストの再加工抑制、自身の書き戻しスキップ |
+| <code>worker_flow.rs</code> | 手動加工 (<code>ProcessMode</code>)、履歴復元後の再加工抑制 |
+| <code>history_flow.rs</code> | 暗号化履歴の記録・重複処理・復号 |
+| <code>regex_flow.rs</code> | <code>config</code> の正規表現設定、コンパイルキャッシュ、Event 方式 |
+
+<p>テスト用ヘルパー (<code>test_helpers</code>) はデバッグビルド、<code>cargo test</code> 実行時、または <code>test-helpers</code> feature 有効時に利用可能。</p>
+
+---
+
 ## ⚙️ 設定
 
 <p>設定ファイル (<code>config.toml</code>) は設定変更のたびに自動保存され、以下の場所に配置されます。</p>
@@ -773,7 +811,7 @@ cargo build --release
 <tr><td><code>notification_settings.notify_pause</code></td><td>bool</td><td><code>true</code></td><td>一時停止切替時の通知</td></tr>
 <tr><td><code>hotkeys.quick_selector</code></td><td>string</td><td><code>"Alt+Shift+S"</code></td><td>クイックセレクター表示</td></tr>
 <tr><td><code>hotkeys.text_selector</code></td><td>string</td><td><code>"Alt+Shift+T"</code></td><td>登録文字列セレクター表示</td></tr>
-<tr><td><code>hotkeys.notification</code></td><td>string</td><td><code>"Alt+Shift+N"</code></td><td>成功通知の ON/OFF</td></tr>
+<tr><td><code>hotkeys.notification</code></td><td>string</td><td><code>"Alt+Shift+N"</code></td><td>デスクトップ通知の ON/OFF</td></tr>
 <tr><td><code>hotkeys.pause</code></td><td>string</td><td><code>"Alt+Shift+P"</code></td><td>監視の一時停止・再開</td></tr>
 <tr><td><code>hotkeys.undo</code></td><td>string</td><td><code>"Alt+Shift+Z"</code></td><td>直近の加工を取り消し</td></tr>
 <tr><td><code>hotkeys.quit</code></td><td>string</td><td><code>"Alt+Shift+Q"</code></td><td>アプリケーション終了</td></tr>
@@ -794,7 +832,9 @@ cargo build --release
 <li><strong>キー</strong>: <code>A</code>〜<code>Z</code>, <code>F1</code>〜<code>F12</code></li>
 </ul>
 
-<p>不正な値は読み込み時にデフォルトへ置き換えられます。<code>config.toml</code> を外部エディタで編集した場合は、保存後に自動反映されます (最大約 2 秒)。すぐに反映したい場合はトレイの「設定を再読み込み」を使用してください。</p>
+<p>不正な値は読み込み時にデフォルトへ置き換えられます。</p>
+
+<p>常駐中は監視ループが約 2 秒ごとに設定ファイルの更新時刻を確認し、外部編集を検知したら自動で再読み込みします (アプリ自身の保存直後は誤検知を避けるため約 2 秒間は抑制)。すぐに反映したい場合や形式の確認には、トレイの「設定を再読み込み」を使用してください。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。</p>
 
 ### 監視方式 (<code>monitor_mode</code>)
 
@@ -826,7 +866,7 @@ cargo build --release
 </tbody>
 </table>
 
-<p>ログレベルは環境変数 <code>RUST_LOG</code> で制御できます (例: <code>RUST_LOG=debug</code>)。</p>
+<p>ログレベルは環境変数 <code>RUST_LOG</code> で制御できます (例: <code>RUST_LOG=debug</code>)。デバッグビルド (<code>cargo build</code> / <code>cargo run</code>) では、ファイルに加えて標準出力にもログが出力されます。リリースビルドではファイルのみです。</p>
 
 ---
 
