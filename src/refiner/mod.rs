@@ -1,6 +1,17 @@
 //! クリップボード加工モードの定義と、各モードへのディスパッチを提供するモジュール
 //!
 //! `RefineMode` による加工処理の統合と、クリップボードへの読み書きを担当する
+//!
+//! # Examples
+//!
+//! [`RefineMode`] は [`Refiner`] トレイト経由でテキストへ適用できる
+//!
+//! ```
+//! use clip_refiner::refiner::{RefineContext, RefineMode, Refiner};
+//!
+//! let ctx = RefineContext::default();
+//! assert_eq!(RefineMode::Trim.refine("  a  ", &ctx), "a");
+//! ```
 
 mod clipboard;
 mod context;

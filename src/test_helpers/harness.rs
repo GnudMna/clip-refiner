@@ -111,6 +111,10 @@ impl ClipboardHarness {
     }
 
     /// 監視ループのクリップボード更新処理を実行する
+    ///
+    /// `event_driven` は OS イベント通知を受けたかどうかを表し、
+    /// `MonitorMode::Event` 設定時のワーカー挙動と一致させる場合は
+    /// [`Self::run_configured_monitor_update`] を使う
     pub fn run_monitor_update(&mut self, event_driven: bool) -> bool {
         let snap = self.state.monitor_snapshot();
         self.refine_ctx.regex = snap.regex_settings.clone();
@@ -121,6 +125,14 @@ impl ClipboardHarness {
             event_driven,
             &self.refine_ctx,
         )
+    }
+
+    /// 設定の `monitor_mode` に応じた `event_driven` フラグで監視更新を実行する
+    pub fn run_configured_monitor_update(&mut self) -> bool {
+        let event_driven = self
+            .state
+            .with_config(|c| c.monitor_mode == MonitorMode::Event);
+        self.run_monitor_update(event_driven)
     }
 
     /// ワーカーへ送られる `ProcessMode` コマンドを処理する

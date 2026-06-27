@@ -1,12 +1,13 @@
 //! 単体テスト・統合テストで共有するヘルパー
 //!
-//! ライブラリの `test-helpers` feature 有効時、または `cargo test` 実行時に利用可能
+//! デバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能
 
 #![allow(clippy::missing_panics_doc)]
 
 mod clipboard;
 mod harness;
 
+pub use crate::config::MonitorMode;
 pub use clipboard::InMemoryTextClipboard;
 pub use harness::ClipboardHarness;
 
