@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::clipboard::InMemoryTextClipboard;
 
 use crate::config::{AppConfig, MonitorMode};
+use crate::refiner::RefineContext;
 use crate::refiner::RefineMode;
 use crate::refiner::text_clipboard::TextClipboard;
 use crate::security::secret_from;
@@ -19,6 +20,7 @@ use crate::tray::worker::{ClipboardCommand, handle_command};
 pub struct ClipboardHarness {
     clipboard: InMemoryTextClipboard,
     state: Arc<crate::tray::state::AppState>,
+    refine_ctx: RefineContext,
 }
 
 impl ClipboardHarness {
@@ -28,6 +30,7 @@ impl ClipboardHarness {
         Self {
             clipboard: InMemoryTextClipboard::with_text(text),
             state: Arc::new(test_app_state()),
+            refine_ctx: RefineContext::default(),
         }
     }
 
@@ -108,16 +111,37 @@ impl ClipboardHarness {
     }
 
     /// 監視ループのクリップボード更新処理を実行する
+    ///
+    /// `event_driven` は OS イベント通知を受けたかどうかを表し、
+    /// `MonitorMode::Event` 設定時のワーカー挙動と一致させる場合は
+    /// [`Self::run_configured_monitor_update`] を使う
     pub fn run_monitor_update(&mut self, event_driven: bool) -> bool {
         let snap = self.state.monitor_snapshot();
-        handle_clipboard_update(&mut self.clipboard, &self.state, &snap, event_driven)
+        self.refine_ctx.regex = snap.regex_settings.clone();
+        handle_clipboard_update(
+            &mut self.clipboard,
+            &self.state,
+            &snap,
+            event_driven,
+            &self.refine_ctx,
+        )
+    }
+
+    /// 設定の `monitor_mode` に応じた `event_driven` フラグで監視更新を実行する
+    pub fn run_configured_monitor_update(&mut self) -> bool {
+        let event_driven = self
+            .state
+            .with_config(|c| c.monitor_mode == MonitorMode::Event);
+        self.run_monitor_update(event_driven)
     }
 
     /// ワーカーへ送られる `ProcessMode` コマンドを処理する
     pub fn process_mode(&mut self, mode: RefineMode) {
+        self.refine_ctx.regex = self.state.with_config(|c| c.regex.clone());
         handle_command(
             &mut self.clipboard,
             &self.state,
+            &mut self.refine_ctx,
             ClipboardCommand::ProcessMode(mode),
         );
     }
@@ -127,12 +151,18 @@ impl ClipboardHarness {
         handle_command(
             &mut self.clipboard,
             &self.state,
+            &mut self.refine_ctx,
             ClipboardCommand::SetText(secret_from(text.as_ref().to_string())),
         );
     }
 
     /// ワーカーへ送られる `Undo` コマンドを処理する
     pub fn undo(&mut self) {
-        handle_command(&mut self.clipboard, &self.state, ClipboardCommand::Undo);
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::Undo,
+        );
     }
 }

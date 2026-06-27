@@ -46,10 +46,18 @@ impl Refiner for RefineMode {
             RefineMode::Unescape => escape::unescape_string(text),
             RefineMode::RegexEscape => escape::regex_escape(text),
             RefineMode::RegexUnescape => escape::regex_unescape(text),
-            RefineMode::RegexReplace => regex::regex_replace(text, &ctx.regex),
-            RefineMode::RegexExtract => regex::regex_extract(text, &ctx.regex),
-            RefineMode::RegexDelete => regex::regex_delete(text, &ctx.regex),
-            RefineMode::RegexSplit => regex::regex_split(text, &ctx.regex),
+            RefineMode::RegexReplace => {
+                regex::regex_replace(text, &ctx.regex, &mut ctx.regex_cache_mut())
+            }
+            RefineMode::RegexExtract => {
+                regex::regex_extract(text, &ctx.regex, &mut ctx.regex_cache_mut())
+            }
+            RefineMode::RegexDelete => {
+                regex::regex_delete(text, &ctx.regex, &mut ctx.regex_cache_mut())
+            }
+            RefineMode::RegexSplit => {
+                regex::regex_split(text, &ctx.regex, &mut ctx.regex_cache_mut())
+            }
             RefineMode::JsonFormat => json::format_json(text),
             RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(text),
             RefineMode::YamlToJson => yaml::yaml_to_json(text),
@@ -79,13 +87,13 @@ mod tests {
     use strum::IntoEnumIterator;
 
     fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
-        RefineContext {
-            regex: RegexSettings {
-                pattern: pattern.to_string(),
-                replacement: replacement.to_string(),
-                ..RegexSettings::default()
-            },
-        }
+        let mut ctx = RefineContext::default();
+        ctx.regex = RegexSettings {
+            pattern: pattern.to_string(),
+            replacement: replacement.to_string(),
+            ..RegexSettings::default()
+        };
+        ctx
     }
 
     /// `全てのRefineModeバリアントを網羅するテーブル駆動テスト`

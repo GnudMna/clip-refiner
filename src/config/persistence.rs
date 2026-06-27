@@ -1,12 +1,49 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
-use super::paths::get_config_file_path;
+use super::paths::{config_file_modified_time, get_config_file_path};
 use super::permissions::restrict_private_file_permissions;
 use super::serialize::config_to_toml;
 use super::types::AppConfig;
 
 use anyhow::Result;
+
+// ======================================================================
+// 再読み込み
+// ======================================================================
+/// 設定ファイルの再読み込みエラー
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigReloadError {
+    /// 設定ファイルパスの取得に失敗
+    Path(String),
+    /// 設定ファイルが存在しない
+    NotFound,
+    /// ファイル読み取りに失敗
+    Read(String),
+    /// TOML 解析に失敗
+    Parse(String),
+}
+
+impl ConfigReloadError {
+    /// ユーザー向けのエラーメッセージを返す
+    pub fn user_message(&self) -> &str {
+        match self {
+            Self::Path(_) => "設定ファイルの場所を取得できませんでした",
+            Self::NotFound => "設定ファイルが見つかりません",
+            Self::Read(_) => "設定ファイルを読み取れませんでした",
+            Self::Parse(_) => "設定ファイルの形式が不正です",
+        }
+    }
+}
+
+/// ディスク上の設定ファイルの最終更新時刻を取得する
+///
+/// # Returns
+/// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
+pub fn disk_config_modified_time() -> Result<Option<SystemTime>> {
+    config_file_modified_time()
+}
 
 impl AppConfig {
     /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
@@ -60,6 +97,34 @@ impl AppConfig {
                 Self::default()
             }
         }
+    }
+
+    /// ディスク上の設定ファイルを再読み込みする
+    ///
+    /// スキーマ移行が必要な場合は移行後の内容を保存する
+    ///
+    /// # Returns
+    /// * `Result<(Self, bool), ConfigReloadError>` - 読み込んだ設定と、移行が実行されたかどうか
+    pub fn reload_from_disk() -> Result<(Self, bool), ConfigReloadError> {
+        let config_path =
+            Self::config_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
+
+        if !config_path.exists() {
+            return Err(ConfigReloadError::NotFound);
+        }
+
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| ConfigReloadError::Read(e.to_string()))?;
+
+        let config = toml::from_str::<AppConfig>(&content)
+            .map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
+
+        let (config, migrated) = config.prepare_loaded();
+        if migrated && let Err(e) = config.save() {
+            crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
+        }
+
+        Ok((config, migrated))
     }
 
     /// 現在の設定をファイルへ保存する
