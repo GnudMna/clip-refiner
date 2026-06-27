@@ -577,6 +577,7 @@ dependencies = [
  "tracing-subscriber",
  "tray-icon",
  "wayland-clipboard-listener",
+ "windows",
  "windows-sys 0.61.2",
  "winreg",
  "winres",

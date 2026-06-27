@@ -112,6 +112,10 @@ objc2-app-kit = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.0", features = ["std"] }
+windows = { version = "0.61.3", features = [
+    "Data_Xml_Dom",
+    "UI_Notifications",
+] }
 winreg = "0.56.0"
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
@@ -120,6 +124,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_System_Console",
     "Win32_System_Memory",
     "Win32_System_Threading",
+    "Win32_UI_Shell",
 ] }
 
 [target.'cfg(windows)'.build-dependencies]
