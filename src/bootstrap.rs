@@ -58,8 +58,8 @@ pub fn run() -> Result<()> {
 
 /// 引数に応じて常駐またはワンショット実行を行う
 fn run_application(args: &Args) -> Result<()> {
-    if let Some(mode) = args.mode {
-        run_once(mode, args)
+    if args.mode.is_some() || !args.pipeline.is_empty() {
+        run_once(args)
     } else {
         tray::run_loop()
     }
@@ -89,6 +89,9 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<RefineMode>,
+    /// ワンショットで順に適用する加工モード列 (`--mode` より優先)
+    #[arg(long = "pipeline", value_enum, num_args = 1..)]
+    pipeline: Vec<RefineMode>,
     /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
     #[arg(long = "regex-pattern")]
     regex_pattern: Option<String>,
@@ -210,13 +213,14 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 ///
 /// # Returns
 /// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
-fn run_once(mode: RefineMode, args: &Args) -> Result<()> {
-    log_info!("ワンショットモードで実行: {:?}", mode);
+fn run_once(args: &Args) -> Result<()> {
+    let pipeline = resolve_oneshot_pipeline(args)?;
+    log_info!("ワンショットモードで実行: {:?}", pipeline);
     let config = AppConfig::load();
     let ctx = build_refinement_context(&config, args);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
-    match refiner::process_clipboard(&mut clipboard, mode, &ctx) {
+    match refiner::process_clipboard_pipeline(&mut clipboard, &pipeline, &ctx) {
         Ok(
             ClipboardProcessOutcome::Processed(_) | ClipboardProcessOutcome::ImageProcessed { .. },
         ) => {
@@ -260,6 +264,16 @@ fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
     }
 
     ctx
+}
+
+/// ワンショット実行用の加工パイプラインを解決する
+fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
+    if !args.pipeline.is_empty() {
+        return Ok(args.pipeline.clone());
+    }
+    args.mode
+        .map(|mode| vec![mode])
+        .ok_or_else(|| anyhow::anyhow!("--mode または --pipeline を指定してください"))
 }
 
 // ======================================================================

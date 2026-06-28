@@ -14,7 +14,8 @@ const TABLE_INDENT: &str = "  ";
 // 各項目の説明コメント (テンプレート生成と新規キー挿入で共有)
 // ======================================================================
 const DOC_VERSION: &str = "設定スキーマのバージョン";
-const DOC_MODE: &str = "使用する加工モード";
+const DOC_MODE: &str = "使用する加工モード (`pipeline` が空の場合に監視で適用)";
+const DOC_PIPELINE: &str = "監視時に順に適用する加工モードの連鎖 (PascalCase の配列。空の場合は `mode` のみ。例: [\"UrlDecode\", \"Trim\"])";
 const DOC_FAVORITE_MODES: &str =
     "お気に入り変換モード (PascalCase の配列。例: [\"UrlDecode\", \"Trim\"])";
 const DOC_INTERVAL_MS: &str = "クリップボードのポーリング間隔 (ミリ秒、100〜60000)";
@@ -81,6 +82,7 @@ fn apply_root_fields(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     let root = doc.as_table_mut();
     set_table_value(root, "version", DOC_VERSION, "", &config.version)?;
     set_table_value(root, "mode", DOC_MODE, "", &config.mode)?;
+    set_table_value(root, "pipeline", DOC_PIPELINE, "", &config.pipeline)?;
     set_table_value(
         root,
         "favorite_modes",
@@ -344,6 +346,7 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
     write_section(&mut out, SECTION_BASIC)?;
     write_field(&mut out, "", DOC_VERSION, "version", &config.version)?;
     write_field(&mut out, "", DOC_MODE, "mode", &config.mode)?;
+    write_field(&mut out, "", DOC_PIPELINE, "pipeline", &config.pipeline)?;
     write_field(
         &mut out,
         "",

@@ -373,6 +373,9 @@ pub struct AppConfig {
     pub version: u32,
     /// 最後に使用した(または常駐時に使用する)加工モード
     pub mode: RefineMode,
+    /// 監視時に順に適用する加工モードの連鎖 (空の場合は `mode` のみを使用)
+    #[serde(default)]
+    pub pipeline: Vec<RefineMode>,
     /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
     pub interval_ms: u64,
     /// 使用する監視方式(Polling または Event)
@@ -413,6 +416,7 @@ impl Default for AppConfig {
         Self {
             version: consts::CONFIG_VERSION,
             mode: RefineMode::UrlDecode,
+            pipeline: Vec::new(),
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
@@ -438,6 +442,7 @@ impl AppConfig {
         config.clamp_values();
         config.normalize_texts();
         config.normalize_favorite_modes();
+        config.normalize_pipeline();
         config.hotkeys.fix_invalid();
         (config, migration.migrated)
     }
@@ -447,6 +452,7 @@ impl AppConfig {
         self.clamp_values();
         self.normalize_texts();
         self.normalize_favorite_modes();
+        self.normalize_pipeline();
         self.version = consts::CONFIG_VERSION;
     }
 
@@ -553,6 +559,46 @@ impl AppConfig {
         self.texts.remove(index);
         self.normalize_texts();
         true
+    }
+
+    /// 監視時に適用する加工モード列を返す
+    ///
+    /// `pipeline` が空の場合は `mode` のみ、それ以外は `pipeline` をそのまま返す
+    pub fn effective_pipeline(&self) -> Vec<RefineMode> {
+        if self.pipeline.is_empty() {
+            vec![self.mode]
+        } else {
+            self.pipeline.clone()
+        }
+    }
+
+    /// 加工パイプラインが有効かどうか (`pipeline` が空でない)
+    pub fn is_pipeline_active(&self) -> bool {
+        !self.pipeline.is_empty()
+    }
+
+    /// 加工パイプラインを許容範囲内に正規化する
+    ///
+    /// 画像出力モードは末尾1つのみ残し、それ以外の位置からは除去する
+    pub(crate) fn normalize_pipeline(&mut self) {
+        use std::collections::HashSet;
+
+        let valid: HashSet<RefineMode> = RefineMode::iter().collect();
+        self.pipeline.retain(|mode| valid.contains(mode));
+
+        let image_mode = self
+            .pipeline
+            .iter()
+            .rfind(|mode| mode.produces_image())
+            .copied();
+        self.pipeline.retain(|mode| !mode.produces_image());
+        if let Some(image_mode) = image_mode {
+            self.pipeline.push(image_mode);
+        }
+
+        if self.pipeline.len() > consts::MAX_PIPELINE_LENGTH {
+            self.pipeline.truncate(consts::MAX_PIPELINE_LENGTH);
+        }
     }
 
     /// お気に入り変換モードを許容範囲内に正規化する

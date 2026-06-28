@@ -85,6 +85,9 @@ pub const REGISTERED_TEXT_PREVIEW_MAX_CHARS: usize = 40;
 /// お気に入り変換モードの最大件数
 pub const MAX_FAVORITE_MODES: usize = 20;
 
+/// 加工パイプラインの最大段数
+pub const MAX_PIPELINE_LENGTH: usize = 10;
+
 // ======================================================================
 // ヘルパー関数
 // ======================================================================

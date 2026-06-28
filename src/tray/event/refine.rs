@@ -27,14 +27,19 @@ pub fn update_refine(
     mode: RefineMode,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
-    state.with_config_mut(|c| c.mode = mode);
+    state.with_config_mut(|c| {
+        c.mode = mode;
+        c.pipeline.clear();
+    });
+
+    let active_modes: std::collections::HashSet<RefineMode> = std::iter::once(mode).collect();
 
     menu.refine
         .favorite_records
         .lock_ignore_poison()
         .iter()
         .chain(menu.refine.all_mode_items())
-        .for_each(|(item, m)| item.set_checked(*m == mode));
+        .for_each(|(item, m)| item.set_checked(active_modes.contains(m)));
     menu.refresh_category_labels(mode);
 
     let favorite_modes = state.with_config(|config| config.favorite_modes.clone());

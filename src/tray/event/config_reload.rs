@@ -39,7 +39,8 @@ pub fn apply_config_reload(
         || previous.favorite_modes != loaded.favorite_modes;
     let monitor_changed = previous.monitor_mode != loaded.monitor_mode
         || previous.interval_ms != loaded.interval_ms
-        || previous.is_paused != loaded.is_paused;
+        || previous.is_paused != loaded.is_paused
+        || previous.effective_pipeline() != loaded.effective_pipeline();
     let history_disabled = previous.history_enabled && !loaded.history_enabled;
 
     state.with_config_mut(|config| *config = loaded);
