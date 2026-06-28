@@ -19,7 +19,7 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 13] = [
+    pub const SUBMENU_ORDER: [Self; 14] = [
         Self::LineActions,
         Self::UrlActions,
         Self::Path,
@@ -33,6 +33,7 @@ impl RefineCategory {
         Self::ToYaml,
         Self::Datetime,
         Self::Number,
+        Self::Case,
     ];
 
     /// ルート直下の通常項目の後ろにサブメニューを遅延配置するカテゴリかどうか
@@ -327,6 +328,6 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 37);
+        assert_eq!(variants.len(), 42);
     }
 }

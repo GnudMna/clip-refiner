@@ -3,7 +3,8 @@ use std::borrow::Cow;
 use super::context::RefineContext;
 use super::mode::RefineMode;
 use super::transform::{
-    datetime, escape, json, line_actions, markdown, number, path, regex, trim, url, yaml,
+    case_convert, datetime, escape, json, line_actions, markdown, number, path, regex, trim, url,
+    yaml,
 };
 
 // ======================================================================
@@ -72,6 +73,11 @@ impl Refiner for RefineMode {
             RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
             RefineMode::AddComma => number::add_commas(text),
             RefineMode::RemoveComma => number::remove_commas(text),
+            RefineMode::ToCamelCase => case_convert::to_camel_case(text),
+            RefineMode::ToSnakeCase => case_convert::to_snake_case(text),
+            RefineMode::ToPascalCase => case_convert::to_pascal_case(text),
+            RefineMode::ToKebabCase => case_convert::to_kebab_case(text),
+            RefineMode::ToScreamingSnakeCase => case_convert::to_screaming_snake_case(text),
         }
     }
 }
@@ -197,6 +203,11 @@ mod tests {
             ),
             (RefineMode::AddComma, "1000", "1,000"),
             (RefineMode::RemoveComma, "1,000", "1000"),
+            (RefineMode::ToCamelCase, "foo_bar", "fooBar"),
+            (RefineMode::ToSnakeCase, "fooBar", "foo_bar"),
+            (RefineMode::ToPascalCase, "foo_bar", "FooBar"),
+            (RefineMode::ToKebabCase, "fooBar", "foo-bar"),
+            (RefineMode::ToScreamingSnakeCase, "fooBar", "FOO_BAR"),
         ];
 
         assert_eq!(
