@@ -87,6 +87,48 @@ mod tests {
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
     }
 
+    /// v0 TOML は移行後に v1 へ更新され、設定値と `favorite_modes` が保持されること
+    #[test]
+    fn test_prepare_loaded_migrates_v0_toml() {
+        let v0_toml = r#"
+version = 0
+mode = "Trim"
+interval_ms = 500
+"#;
+        let config: AppConfig = toml::from_str(v0_toml).expect("デシリアライズに失敗");
+        assert_eq!(config.version, 0);
+
+        let (prepared, migrated) = config.prepare_loaded();
+        assert!(migrated);
+        assert_eq!(prepared.version, consts::CONFIG_VERSION);
+        assert_eq!(prepared.mode, RefineMode::Trim);
+        assert_eq!(prepared.interval_ms, 500);
+        assert!(prepared.favorite_modes.is_empty());
+    }
+
+    /// v0 TOML を保存すると v1 スキーマで書き出されること
+    #[test]
+    fn test_save_after_v0_migration_writes_current_version() {
+        use super::serialize::config_to_toml;
+
+        let v0_toml = r#"
+version = 0
+mode = "JsonFormat"
+interval_ms = 2000
+"#;
+        let config: AppConfig = toml::from_str(v0_toml).expect("デシリアライズに失敗");
+        let (mut prepared, migrated) = config.prepare_loaded();
+        assert!(migrated);
+
+        prepared.normalize();
+        let content = config_to_toml(&prepared, Some(v0_toml)).expect("移行後 TOML の生成に失敗");
+        let decoded: AppConfig = toml::from_str(&content).expect("保存後 TOML の解析に失敗");
+        assert_eq!(decoded.version, consts::CONFIG_VERSION);
+        assert_eq!(decoded.mode, RefineMode::JsonFormat);
+        assert_eq!(decoded.interval_ms, 2000);
+        assert!(content.contains("favorite_modes"));
+    }
+
     /// version 未指定の TOML は現行スキーマとして読み込まれ、移行不要であること
     #[test]
     fn test_prepare_loaded_without_version_is_current_schema() {

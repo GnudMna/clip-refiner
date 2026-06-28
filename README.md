@@ -798,7 +798,7 @@ assert_eq!(output, "hello world");
 </tr>
 </thead>
 <tbody>
-<tr><td><code>version</code></td><td>number</td><td><code>0</code></td><td>設定スキーマのバージョン</td></tr>
+<tr><td><code>version</code></td><td>number</td><td><code>1</code></td><td>設定スキーマのバージョン</td></tr>
 <tr><td><code>mode</code></td><td>string</td><td><code>"UrlDecode"</code></td><td>使用する加工モード</td></tr>
 <tr><td><code>interval_ms</code></td><td>number</td><td><code>1000</code></td><td>クリップボードのポーリング間隔 (ミリ秒、100〜60000)</td></tr>
 <tr><td><code>monitor_mode</code></td><td>string</td><td><code>"Polling"</code></td><td>監視方式。<code>"Polling"</code> または <code>"Event"</code></td></tr>
