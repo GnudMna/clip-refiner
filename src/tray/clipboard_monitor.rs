@@ -6,8 +6,8 @@ use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, TextClipboard,
-    process_clipboard_io,
+    ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode,
+    TextClipboard, process_clipboard_pipeline_io,
 };
 use crate::security::{ContentFingerprint, is_within_clipboard_limit};
 
@@ -95,12 +95,12 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
 ) -> bool {
     let text = match clipboard.get_text() {
         Ok(text) => text,
-        Err(_) if snap.mode.produces_image() => String::new(),
+        Err(_) if snap.produces_image() => String::new(),
         Err(_) => return false,
     };
 
     if text.is_empty() {
-        if !snap.mode.produces_image() {
+        if !snap.produces_image() {
             return false;
         }
     } else {
@@ -118,15 +118,23 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
         }
     }
 
-    let outcome = process_clipboard_io(clipboard, snap.mode, ctx);
+    let outcome = process_clipboard_pipeline_io(clipboard, &snap.pipeline, ctx);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            notify::show_process_notification(state, snap.mode, processed.as_str());
+            notify::show_process_notification(state, &snap.pipeline, processed.as_str());
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
-            notify::show_image_process_notification(state, snap.mode, *width, *height);
+            notify::show_image_process_notification(
+                state,
+                snap.pipeline
+                    .last()
+                    .copied()
+                    .unwrap_or(RefineMode::ExcelToImage),
+                *width,
+                *height,
+            );
         }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
         Err(ClipboardProcessError::NoImage) => {
@@ -321,9 +329,9 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 
-    fn test_snapshot(mode: RefineMode, history_enabled: bool) -> MonitorSnapshot {
+    fn test_snapshot(pipeline: Vec<RefineMode>, history_enabled: bool) -> MonitorSnapshot {
         MonitorSnapshot {
-            mode,
+            pipeline,
             interval_ms: 1000,
             is_paused: false,
             history_enabled,
@@ -335,7 +343,7 @@ mod tests {
     #[test]
     fn record_outcome_processed_updates_state_and_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Ok(ClipboardProcessOutcome::Processed("trimmed".to_string()));
 
         assert!(record_clipboard_outcome(
@@ -359,7 +367,7 @@ mod tests {
     #[test]
     fn record_outcome_unchanged_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Ok(ClipboardProcessOutcome::Unchanged);
 
         assert!(!record_clipboard_outcome(
@@ -379,7 +387,7 @@ mod tests {
     #[test]
     fn record_outcome_skips_history_when_disabled() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, false);
+        let snap = test_snapshot(vec![RefineMode::Trim], false);
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
         record_clipboard_outcome(&state, &snap, &outcome, "x");
@@ -390,7 +398,7 @@ mod tests {
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Err(ClipboardProcessError::NoText);
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
@@ -404,7 +412,7 @@ mod tests {
     #[test]
     fn record_outcome_read_error_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));

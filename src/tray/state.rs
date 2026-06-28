@@ -47,8 +47,8 @@ pub enum AppEvent {
 ///
 /// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
-    /// 現在の加工モード
-    pub mode: RefineMode,
+    /// 監視時に適用する加工モード列
+    pub pipeline: Vec<RefineMode>,
     /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,
     /// 一時停止中かどうか
@@ -57,6 +57,15 @@ pub struct MonitorSnapshot {
     pub history_enabled: bool,
     /// 正規表現加工用の設定
     pub regex_settings: RegexSettings,
+}
+
+impl MonitorSnapshot {
+    /// パイプライン末尾が画像出力モードかどうか
+    pub fn produces_image(&self) -> bool {
+        self.pipeline
+            .last()
+            .is_some_and(|mode| mode.produces_image())
+    }
 }
 
 /// 監視ループにおける二重加工防止用の状態
@@ -246,7 +255,7 @@ impl AppState {
     /// `config` `RwLock` の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
-            mode: config.mode,
+            pipeline: config.effective_pipeline(),
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
@@ -478,7 +487,7 @@ mod tests {
         });
 
         let snap = state.monitor_snapshot();
-        assert_eq!(snap.mode, RefineMode::UrlEncode);
+        assert_eq!(snap.pipeline, vec![RefineMode::UrlEncode]);
         assert_eq!(snap.interval_ms, 1500);
         assert!(snap.is_paused);
         assert!(snap.history_enabled);

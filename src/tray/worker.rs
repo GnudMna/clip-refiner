@@ -13,7 +13,8 @@ use crate::config::AddRegisteredTextError;
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_clipboard_io,
+    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard,
+    process_clipboard_pipeline_io,
 };
 use crate::security::SecretString;
 
@@ -378,13 +379,14 @@ pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
             refine_ctx.regex = state.with_config(|c| c.regex.clone());
-            match process_clipboard_io(clipboard, mode, refine_ctx) {
+            let pipeline = [mode];
+            match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
                     }
                     state.record_processing_success(&processed);
-                    notify::show_process_notification(state, mode, &processed);
+                    notify::show_process_notification(state, &pipeline, &processed);
                 }
                 Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
                     if let Some(ref pre) = pre_text {

@@ -170,7 +170,14 @@ impl TrayMenu {
     pub fn build(state: &AppState) -> Result<Self> {
         let config = state.with_config(std::clone::Clone::clone);
 
-        let refine = Self::build_refine_menu(config.mode, &config.favorite_modes, &config.hotkeys)?;
+        let active_modes: std::collections::HashSet<RefineMode> =
+            config.effective_pipeline().into_iter().collect();
+        let refine = Self::build_refine_menu(
+            config.mode,
+            &active_modes,
+            &config.favorite_modes,
+            &config.hotkeys,
+        )?;
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
         let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
         let history = Self::build_history_menu(config.history_enabled)?;
@@ -258,20 +265,22 @@ impl TrayMenu {
     /// * `Result<()>` - 同期成功時は `Ok(())`、失敗時は `Err`
     pub fn sync_from_config(&self, state: &AppState) -> Result<()> {
         let config = state.with_config(std::clone::Clone::clone);
+        let active_modes: std::collections::HashSet<RefineMode> =
+            config.effective_pipeline().into_iter().collect();
 
         self.refine
             .favorite_records
             .lock_ignore_poison()
             .iter()
             .chain(self.refine.all_mode_items())
-            .for_each(|(item, mode)| item.set_checked(*mode == config.mode));
+            .for_each(|(item, mode)| item.set_checked(active_modes.contains(mode)));
         self.refresh_category_labels(config.mode);
         self.refine
             .sync_favorite_actions(config.mode, &config.favorite_modes);
         self.refine.sync_mode_labels(&config.favorite_modes);
         if let Err(err) =
             self.refine
-                .rebuild_favorites(config.mode, &config.favorite_modes, &config.hotkeys)
+                .rebuild_favorites(&active_modes, &config.favorite_modes, &config.hotkeys)
         {
             dispatch::log_menu_operation_error("お気に入りメニューの再構築", err);
         }
@@ -324,8 +333,12 @@ mod tests {
     /// 変換モードメニューに全モードが含まれること
     #[test]
     fn build_refine_menu_contains_all_modes() {
-        let refine = TrayMenu::build_refine_menu(RefineMode::Trim, &[], &HotkeySettings::default())
-            .expect("変換モードメニューの構築に失敗");
+        use std::collections::HashSet;
+
+        let active = HashSet::from([RefineMode::Trim]);
+        let refine =
+            TrayMenu::build_refine_menu(RefineMode::Trim, &active, &[], &HotkeySettings::default())
+                .expect("変換モードメニューの構築に失敗");
         let modes: Vec<_> = refine.all_mode_items().map(|(_, mode)| *mode).collect();
         assert_eq!(modes.len(), RefineMode::iter().count());
         assert!(
@@ -338,9 +351,13 @@ mod tests {
     /// 選択カテゴリのサブメニューにチェックプレフィックスが付くこと
     #[test]
     fn refresh_category_labels_marks_current_category() {
+        use std::collections::HashSet;
+
+        let active = HashSet::from([RefineMode::UrlEncode]);
         let refine = TrayMenu::build_refine_menu(
             RefineMode::UrlEncode,
-            &[RefineMode::UrlEncode],
+            &active,
+            &[],
             &HotkeySettings::default(),
         )
         .expect("変換モードメニューの構築に失敗");

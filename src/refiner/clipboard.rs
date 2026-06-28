@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use super::context::RefineContext;
-use super::dispatch::Refiner;
 use super::mode::RefineMode;
+use super::pipeline::{apply_text_pipeline, split_pipeline};
 use super::text_clipboard::{ImageClipboard, TextClipboard};
 
 use crate::security::{is_within_clipboard_limit, is_within_parser_limit};
@@ -71,9 +71,31 @@ impl ClipboardProcessError {
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn apply_refinement_to_text(
     text: &str,
     mode: RefineMode,
+    ctx: &RefineContext,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    apply_refinement_pipeline_to_text(text, &[mode], ctx)
+}
+
+/// テキストに加工パイプラインを順に適用する
+///
+/// クリップボード I/O は行わない
+///
+/// # Arguments
+/// * `text` - 加工前のテキスト
+/// * `pipeline` - 適用する加工モード列
+/// * `ctx` - 設定依存の加工パラメータ
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError::NoText)` - テキストが空
+pub(crate) fn apply_refinement_pipeline_to_text(
+    text: &str,
+    pipeline: &[RefineMode],
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     if text.is_empty() {
@@ -83,12 +105,14 @@ pub(crate) fn apply_refinement_to_text(
         return Err(ClipboardProcessError::TextTooLarge);
     }
 
-    let refined = mode.refine(text, ctx);
+    let (text_modes, image_tail) = split_pipeline(pipeline);
+    if text_modes.is_empty() && image_tail.is_some() {
+        return Ok(ClipboardProcessOutcome::Unchanged);
+    }
 
-    if refined == text {
-        Ok(ClipboardProcessOutcome::Unchanged)
-    } else {
-        Ok(ClipboardProcessOutcome::Processed(refined.into_owned()))
+    match apply_text_pipeline(text, &text_modes, ctx) {
+        Some(result) => Ok(ClipboardProcessOutcome::Processed(result)),
+        None => Ok(ClipboardProcessOutcome::Unchanged),
     }
 }
 
@@ -110,11 +134,28 @@ pub fn process_clipboard(
     mode: RefineMode,
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    if mode.produces_image() {
-        process_image_clipboard(clipboard, mode, ctx)
-    } else {
-        process_text_clipboard(clipboard, mode, ctx)
-    }
+    process_clipboard_pipeline(clipboard, &[mode], ctx)
+}
+
+/// クリップボードのテキストを取得し、指定されたパイプラインで加工して書き戻す
+///
+/// テキストが変更された場合のみクリップボードを更新する
+///
+/// # Arguments
+/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
+/// * `pipeline` - 適用する加工モード列
+/// * `ctx` - 設定依存の加工パラメータ
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+pub fn process_clipboard_pipeline(
+    clipboard: &mut arboard::Clipboard,
+    pipeline: &[RefineMode],
+    ctx: &RefineContext,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    process_clipboard_pipeline_io(clipboard, pipeline, ctx)
 }
 
 /// テキストクリップボード実装に対して加工を適用する
@@ -128,16 +169,27 @@ pub fn process_clipboard(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn process_text_clipboard<C: TextClipboard>(
     clipboard: &mut C,
     mode: RefineMode,
+    ctx: &RefineContext,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    process_text_clipboard_pipeline(clipboard, &[mode], ctx)
+}
+
+/// テキストクリップボード実装に対して加工パイプラインを適用する
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn process_text_clipboard_pipeline<C: TextClipboard>(
+    clipboard: &mut C,
+    pipeline: &[RefineMode],
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     let text = clipboard
         .get_text()
         .map_err(ClipboardProcessError::ReadFailed)?;
 
-    match apply_refinement_to_text(&text, mode, ctx)? {
+    match apply_refinement_pipeline_to_text(&text, pipeline, ctx)? {
         ClipboardProcessOutcome::Processed(result) => {
             clipboard
                 .set_text(result.clone())
@@ -222,15 +274,58 @@ fn is_excel_tsv(text: &str) -> bool {
 }
 
 /// テキスト・画像クリップボード実装に対して加工を適用する
+#[expect(
+    dead_code,
+    reason = "単一モード用ラッパー。テストおよび後方互換のため維持"
+)]
 pub(crate) fn process_clipboard_io<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
     mode: RefineMode,
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    if mode.produces_image() {
-        process_image_clipboard(clipboard, mode, ctx)
-    } else {
-        process_text_clipboard(clipboard, mode, ctx)
+    process_clipboard_pipeline_io(clipboard, &[mode], ctx)
+}
+
+/// テキスト・画像クリップボード実装に対して加工パイプラインを適用する
+pub(crate) fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
+    pipeline: &[RefineMode],
+    ctx: &RefineContext,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    if pipeline.is_empty() {
+        return Err(ClipboardProcessError::NoText);
+    }
+
+    let (text_modes, image_tail) = split_pipeline(pipeline);
+
+    if text_modes.is_empty() {
+        return process_image_clipboard(clipboard, image_tail.expect("画像モードが存在する"), ctx);
+    }
+
+    let text = clipboard
+        .get_text()
+        .map_err(ClipboardProcessError::ReadFailed)?;
+
+    let text_outcome = apply_refinement_pipeline_to_text(&text, pipeline, ctx)?;
+
+    match text_outcome {
+        ClipboardProcessOutcome::Processed(result) => {
+            clipboard
+                .set_text(result.clone())
+                .map_err(ClipboardProcessError::WriteFailed)?;
+            if let Some(image_mode) = image_tail {
+                return process_image_clipboard(clipboard, image_mode, ctx);
+            }
+            Ok(ClipboardProcessOutcome::Processed(result))
+        }
+        ClipboardProcessOutcome::Unchanged => {
+            if let Some(image_mode) = image_tail {
+                process_image_clipboard(clipboard, image_mode, ctx)
+            } else {
+                Ok(ClipboardProcessOutcome::Unchanged)
+            }
+        }
+        ClipboardProcessOutcome::ImageProcessed { .. } => Ok(ClipboardProcessOutcome::Unchanged),
     }
 }
 
@@ -304,6 +399,29 @@ mod tests {
     fn apply_refinement_to_text_returns_unchanged() {
         assert_eq!(
             apply_refinement_to_text("hello", RefineMode::Trim, &empty_ctx()),
+            Ok(ClipboardProcessOutcome::Unchanged)
+        );
+    }
+
+    /// 加工パイプラインが順に適用されること
+    #[test]
+    fn apply_refinement_pipeline_to_text_chains_modes() {
+        let input = "  %E3%81%82  ";
+        assert_eq!(
+            apply_refinement_pipeline_to_text(
+                input,
+                &[RefineMode::UrlDecode, RefineMode::Trim],
+                &empty_ctx(),
+            ),
+            Ok(ClipboardProcessOutcome::Processed("あ".to_string()))
+        );
+    }
+
+    /// 加工パイプラインで変更がない場合は `Unchanged` を返すこと
+    #[test]
+    fn apply_refinement_pipeline_to_text_returns_unchanged() {
+        assert_eq!(
+            apply_refinement_pipeline_to_text("hello", &[RefineMode::Trim], &empty_ctx()),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
     }

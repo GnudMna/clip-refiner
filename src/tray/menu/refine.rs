@@ -25,6 +25,7 @@ impl TrayMenu {
     /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す
     pub(super) fn build_refine_menu(
         current_mode: RefineMode,
+        active_modes: &std::collections::HashSet<RefineMode>,
         favorite_modes: &[RefineMode],
         hotkeys: &HotkeySettings,
     ) -> Result<RefineMenu> {
@@ -38,7 +39,7 @@ impl TrayMenu {
             let item = CheckMenuItem::new(
                 mode_menu_label(mode, favorite_set.contains(&mode)),
                 true,
-                mode == current_mode,
+                active_modes.contains(&mode),
                 None,
             );
             items_by_category
@@ -113,7 +114,7 @@ impl TrayMenu {
             normal_items,
             groups,
         };
-        refine.rebuild_favorites(current_mode, favorite_modes, hotkeys)?;
+        refine.rebuild_favorites(active_modes, favorite_modes, hotkeys)?;
         refine.sync_favorite_actions(current_mode, favorite_modes);
         Ok(refine)
     }
@@ -142,15 +143,19 @@ impl TrayMenu {
 
     /// お気に入り変換モードの表示を設定内容に合わせて更新する
     pub fn refresh_favorites(&self, state: &AppState) -> Result<()> {
-        let (current_mode, favorite_modes, hotkeys) = state.with_config(|config| {
+        let (current_mode, active_modes, favorite_modes, hotkeys) = state.with_config(|config| {
             (
                 config.mode,
+                config
+                    .effective_pipeline()
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
                 config.favorite_modes.clone(),
                 config.hotkeys.clone(),
             )
         });
         self.refine
-            .rebuild_favorites(current_mode, &favorite_modes, &hotkeys)?;
+            .rebuild_favorites(&active_modes, &favorite_modes, &hotkeys)?;
         self.refine
             .sync_favorite_actions(current_mode, &favorite_modes);
         self.refine.sync_mode_labels(&favorite_modes);
@@ -165,7 +170,7 @@ impl RefineMenu {
     /// お気に入りサブメニューの内容を再構築する
     pub fn rebuild_favorites(
         &self,
-        current_mode: RefineMode,
+        active_modes: &HashSet<RefineMode>,
         favorite_modes: &[RefineMode],
         hotkeys: &HotkeySettings,
     ) -> Result<()> {
@@ -186,7 +191,7 @@ impl RefineMenu {
                     CheckMenuItem::new(
                         favorite_menu_label(*mode, hotkeys, index),
                         true,
-                        *mode == current_mode,
+                        active_modes.contains(mode),
                         None,
                     ),
                     *mode,

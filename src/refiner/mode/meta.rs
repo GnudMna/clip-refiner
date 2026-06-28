@@ -124,6 +124,21 @@ impl RefineMode {
             .collect();
         serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
     }
+
+    /// 加工パイプラインの表示用ラベルを生成する
+    ///
+    /// # Arguments
+    /// * `pipeline` - 適用順の加工モード列
+    ///
+    /// # Returns
+    /// * `String` - モード名を ` → ` で連結した文字列
+    pub fn pipeline_label(pipeline: &[Self]) -> String {
+        pipeline
+            .iter()
+            .map(|mode| mode.label())
+            .collect::<Vec<_>>()
+            .join(" → ")
+    }
 }
 
 // ======================================================================

@@ -314,4 +314,62 @@ interval_ms = 500
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].0, 1);
     }
+
+    /// `pipeline` 未設定時は `mode` のみが有効パイプラインになること
+    #[test]
+    fn test_effective_pipeline_falls_back_to_mode() {
+        let config = AppConfig::default();
+        assert_eq!(config.effective_pipeline(), vec![RefineMode::UrlDecode]);
+        assert!(!config.is_pipeline_active());
+    }
+
+    /// `pipeline` 設定時はその順序で有効パイプラインになること
+    #[test]
+    fn test_effective_pipeline_uses_configured_chain() {
+        let config = AppConfig {
+            pipeline: vec![RefineMode::UrlDecode, RefineMode::Trim],
+            ..Default::default()
+        };
+        assert_eq!(
+            config.effective_pipeline(),
+            vec![RefineMode::UrlDecode, RefineMode::Trim]
+        );
+        assert!(config.is_pipeline_active());
+    }
+
+    /// `pipeline` が TOML に保存・復元されること
+    #[test]
+    fn test_pipeline_serde_roundtrip() {
+        let config = AppConfig {
+            pipeline: vec![RefineMode::Trim, RefineMode::JsonFormat],
+            ..Default::default()
+        };
+
+        let toml_str = toml::to_string(&config).expect("AppConfig のシリアライズに失敗");
+        let decoded: AppConfig =
+            toml::from_str(&toml_str).expect("AppConfig のデシリアライズに失敗");
+        assert_eq!(decoded.pipeline, config.pipeline);
+    }
+
+    /// `normalize_pipeline` が画像モードを末尾へ移動し件数を制限すること
+    #[test]
+    fn test_normalize_pipeline_moves_image_mode_to_end() {
+        let mut config = AppConfig {
+            pipeline: vec![
+                RefineMode::ExcelToImage,
+                RefineMode::Trim,
+                RefineMode::UrlDecode,
+            ],
+            ..Default::default()
+        };
+        config.normalize_pipeline();
+        assert_eq!(
+            config.pipeline,
+            vec![
+                RefineMode::Trim,
+                RefineMode::UrlDecode,
+                RefineMode::ExcelToImage,
+            ]
+        );
+    }
 }
