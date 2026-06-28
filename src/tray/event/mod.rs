@@ -18,6 +18,7 @@ mod favorites;
 mod history;
 mod monitor;
 mod notification;
+mod ocr;
 mod refine;
 mod texts;
 
@@ -26,6 +27,7 @@ mod menu_event_tests;
 
 pub(crate) use config_reload::reload_config_with_notification;
 pub(crate) use favorites::{move_favorite_mode, toggle_favorite_mode};
+pub(crate) use ocr::run_ocr_on_image;
 pub use refine::update_refine;
 
 /// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する

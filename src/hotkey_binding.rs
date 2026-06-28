@@ -187,6 +187,7 @@ mod tests {
             consts::DEFAULT_HOTKEY_PAUSE,
             consts::DEFAULT_HOTKEY_QUIT,
             consts::DEFAULT_HOTKEY_UNDO,
+            consts::DEFAULT_HOTKEY_OCR,
         ] {
             parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
         }

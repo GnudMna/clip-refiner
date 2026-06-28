@@ -11,6 +11,8 @@ pub mod history;
 pub mod hotkey;
 pub mod menu;
 mod notify;
+#[cfg(windows)]
+pub mod ocr_capture;
 pub mod quick_selector;
 mod runner;
 mod selector_window;

@@ -1,6 +1,9 @@
-//! OS プラットフォーム連携 (デスクトップ通知など)
+//! OS プラットフォーム連携 (デスクトップ通知・画面キャプチャ・OCR など)
 
 mod notify;
+pub(crate) mod ocr;
+pub(crate) mod ocr_overlay;
+pub(crate) mod screen_capture;
 
 pub(crate) mod clipboard_image;
 

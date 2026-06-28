@@ -86,6 +86,9 @@ pub struct HotkeySettings {
     /// 登録文字列セレクターの表示・非表示
     #[serde(default = "default_hotkey_text_selector")]
     pub text_selector: String,
+    /// 画面範囲選択 OCR の開始
+    #[serde(default = "default_hotkey_ocr")]
+    pub ocr: String,
     /// お気に入り変換モード用ホットキー (登録順インデックスに対応。空文字で無効)
     #[serde(default)]
     pub favorite_mode_slots: Vec<String>,
@@ -100,6 +103,7 @@ impl Default for HotkeySettings {
             quit: default_hotkey_quit(),
             undo: default_hotkey_undo(),
             text_selector: default_hotkey_text_selector(),
+            ocr: default_hotkey_ocr(),
             favorite_mode_slots: Vec::new(),
         }
     }
@@ -111,6 +115,7 @@ impl HotkeySettings {
         let mut lines = vec![
             format!("{}: クイックセレクター", self.quick_selector),
             format!("{}: 登録文字列セレクター", self.text_selector),
+            format!("{}: 画面 OCR", self.ocr),
             format!("{}: 成功通知の切替", self.notification),
             format!("{}: 一時停止/再開", self.pause),
             format!("{}: 加工の取り消し", self.undo),
@@ -208,6 +213,7 @@ impl HotkeySettings {
             consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
             "text_selector",
         );
+        fix_hotkey_field(&mut self.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr");
         self.normalize_favorite_mode_slots();
     }
 
@@ -287,6 +293,11 @@ fn default_hotkey_undo() -> String {
 /// 登録文字列セレクターのデフォルトホットキーを返す
 fn default_hotkey_text_selector() -> String {
     consts::DEFAULT_HOTKEY_TEXT_SELECTOR.to_string()
+}
+
+/// 画面 OCR のデフォルトホットキーを返す
+fn default_hotkey_ocr() -> String {
+    consts::DEFAULT_HOTKEY_OCR.to_string()
 }
 
 /// お気に入りスロットのデフォルトホットキー文字列を返す

@@ -7,6 +7,8 @@ use super::dispatch;
 use super::event::update_refine;
 use super::menu::TrayMenu;
 use super::notify;
+#[cfg(windows)]
+use super::ocr_capture::OcrCaptureWindow;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
 use super::text_selector::TextSelectorWindow;
@@ -51,6 +53,9 @@ pub struct HotkeyHandler {
     undo_hotkey: HotKey,
     /// 登録文字列セレクタ表示・非表示用ホットキー
     text_selector_hotkey: HotKey,
+    /// 画面範囲選択 OCR 用ホットキー
+    #[cfg(windows)]
+    ocr_hotkey: HotKey,
     /// お気に入り変換モード用ホットキー
     favorite_hotkeys: Vec<FavoriteHotkeyBinding>,
 }
@@ -66,6 +71,8 @@ struct ResolvedHotkeys {
     quit: HotKey,
     undo: HotKey,
     text_selector: HotKey,
+    #[cfg(windows)]
+    ocr: HotKey,
 }
 
 impl ResolvedHotkeys {
@@ -90,19 +97,24 @@ impl ResolvedHotkeys {
                 consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
                 "text_selector",
             ),
+            #[cfg(windows)]
+            ocr: resolve_hotkey(&hotkeys.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr"),
         }
     }
 
     /// 登録済みホットキーを配列として返す
-    fn as_slice(&self) -> [HotKey; 6] {
-        [
+    fn registered_hotkeys(&self) -> Vec<HotKey> {
+        let mut hotkeys = vec![
             self.quick_selector,
             self.notification,
             self.pause,
             self.quit,
             self.undo,
             self.text_selector,
-        ]
+        ];
+        #[cfg(windows)]
+        hotkeys.push(self.ocr);
+        hotkeys
     }
 }
 
@@ -119,7 +131,7 @@ impl HotkeyHandler {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
 
-        for hotkey in resolved.as_slice() {
+        for hotkey in resolved.registered_hotkeys() {
             manager.register(hotkey).map_err(|e| anyhow::anyhow!(e))?;
         }
 
@@ -131,6 +143,8 @@ impl HotkeyHandler {
             quit_hotkey: resolved.quit,
             undo_hotkey: resolved.undo,
             text_selector_hotkey: resolved.text_selector,
+            #[cfg(windows)]
+            ocr_hotkey: resolved.ocr,
             favorite_hotkeys: Vec::new(),
         };
         handler.register_favorite_hotkeys(hotkeys, favorite_modes.len())?;
@@ -160,7 +174,7 @@ impl HotkeyHandler {
         self.unregister_favorite_hotkeys()?;
 
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
-        for hotkey in resolved.as_slice() {
+        for hotkey in resolved.registered_hotkeys() {
             self.manager
                 .register(hotkey)
                 .map_err(|e| anyhow::anyhow!(e))?;
@@ -172,6 +186,10 @@ impl HotkeyHandler {
         self.quit_hotkey = resolved.quit;
         self.undo_hotkey = resolved.undo;
         self.text_selector_hotkey = resolved.text_selector;
+        #[cfg(windows)]
+        {
+            self.ocr_hotkey = resolved.ocr;
+        }
 
         self.register_favorite_hotkeys(hotkeys, favorite_modes.len())
     }
@@ -187,15 +205,18 @@ impl HotkeyHandler {
     }
 
     /// 登録済みホットキーを配列として返す
-    fn registered_hotkeys(&self) -> [HotKey; 6] {
-        [
+    fn registered_hotkeys(&self) -> Vec<HotKey> {
+        let mut hotkeys = vec![
             self.quick_selector_hotkey,
             self.notification_hotkey,
             self.pause_hotkey,
             self.quit_hotkey,
             self.undo_hotkey,
             self.text_selector_hotkey,
-        ]
+        ];
+        #[cfg(windows)]
+        hotkeys.push(self.ocr_hotkey);
+        hotkeys
     }
 
     /// お気に入り変換モード用ホットキーを OS へ登録する
@@ -269,6 +290,9 @@ pub struct HotkeyEventContext<'a> {
     pub quick_selector: Option<&'a QuickSelectorWindow>,
     /// テキストセレクターウィンドウのインスタンス (テキストセレクター操作時のみ必要)
     pub text_selector: Option<&'a TextSelectorWindow>,
+    /// OCR キャプチャオーバーレイ (OCR 操作時のみ必要)
+    #[cfg(windows)]
+    pub ocr_capture: Option<&'a OcrCaptureWindow>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
     /// クイックセレクターが最後に表示された時刻(更新用)
@@ -305,6 +329,7 @@ impl HotkeyHandler {
             dispatch::send_clipboard_command(ctx.clipboard_tx, ClipboardCommand::Undo);
         } else if event.id == self.text_selector_hotkey.id() {
             Self::handle_text_selector_hotkey(ctx);
+        } else if self.handle_ocr_hotkey_if_pressed(event.id, ctx) {
         } else if let Some(slot_index) = self.favorite_slot_for_hotkey(event.id) {
             Self::handle_favorite_mode_hotkey(ctx, slot_index);
         }
@@ -375,6 +400,55 @@ impl HotkeyHandler {
             let texts_json = ctx.state.with_config(AppConfig::texts_to_json_list);
             text_selector.show(&texts_json);
         }
+    }
+
+    /// 画面 OCR キャプチャオーバーレイ表示ホットキーを処理する
+    #[cfg(windows)]
+    fn handle_ocr_hotkey(ctx: &mut HotkeyEventContext<'_>) {
+        let Some(ocr_capture) = ctx.ocr_capture else {
+            return;
+        };
+
+        if ocr_capture.is_visible() {
+            ocr_capture.hide();
+            return;
+        }
+
+        if let Some(quick_selector) = ctx.quick_selector
+            && quick_selector.is_visible()
+        {
+            quick_selector.hide();
+        }
+        if let Some(text_selector) = ctx.text_selector
+            && text_selector.is_visible()
+        {
+            text_selector.hide();
+        }
+
+        ocr_capture.show();
+    }
+
+    /// OCR ホットキーが押された場合に処理する
+    #[cfg(windows)]
+    fn handle_ocr_hotkey_if_pressed(
+        &self,
+        hotkey_id: u32,
+        ctx: &mut HotkeyEventContext<'_>,
+    ) -> bool {
+        if hotkey_id != self.ocr_hotkey.id() {
+            return false;
+        }
+        Self::handle_ocr_hotkey(ctx);
+        true
+    }
+
+    #[cfg(not(windows))]
+    fn handle_ocr_hotkey_if_pressed(
+        &self,
+        _hotkey_id: u32,
+        _ctx: &mut HotkeyEventContext<'_>,
+    ) -> bool {
+        false
     }
 
     /// 成功通知の有効/無効を切り替える
@@ -490,6 +564,8 @@ mod tests {
                 menu: &self.menu,
                 quick_selector: None,
                 text_selector: None,
+                #[cfg(windows)]
+                ocr_capture: None,
                 control_flow: &mut self.control_flow,
                 last_quick_selector_show: &mut self.last_quick_selector_show,
                 last_text_selector_show: &mut self.last_text_selector_show,
@@ -507,6 +583,7 @@ mod tests {
             quit: "Alt+Shift+F4".to_string(),
             undo: "Alt+Shift+F5".to_string(),
             text_selector: "Alt+Shift+F6".to_string(),
+            ocr: "Alt+Shift+F7".to_string(),
             favorite_mode_slots: Vec::new(),
         }
     }
@@ -635,6 +712,7 @@ mod tests {
             quit: "Alt+Ctrl+F4".to_string(),
             undo: "Alt+Ctrl+F5".to_string(),
             text_selector: "Alt+Ctrl+F6".to_string(),
+            ocr: "Alt+Ctrl+F7".to_string(),
             favorite_mode_slots: Vec::new(),
         };
         let mut handler =
