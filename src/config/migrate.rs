@@ -19,7 +19,6 @@ pub struct ConfigMigration {
 // ======================================================================
 /// 保存済み設定を現行スキーマ (`CONFIG_VERSION`) へ順次移行する
 ///
-/// 初回リリースは v0 のため移行ループは実行されない
 /// `version` が現行より新しい場合はデフォルト設定へフォールバックする
 pub fn migrate_config(config: AppConfig) -> ConfigMigration {
     if config.version > consts::CONFIG_VERSION {
@@ -57,12 +56,12 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
 }
 
 // ======================================================================
-// バージョン別移行 (空実装)
+// バージョン別移行
 // ======================================================================
-/// v0 から v1 へ移行 (未実装)
+/// v0 から v1 へ移行
 ///
-/// `CONFIG_VERSION` を 1 に上げた際にここへ移行ロジックを追加する
-#[allow(dead_code)]
+/// v1 で追加: `favorite_modes` (お気に入り変換モード)
+/// v0 設定に当フィールドが無い場合は空配列として扱う
 fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
     config.version = 1;
     config
@@ -87,20 +86,34 @@ mod tests {
         assert_eq!(result.config.version, consts::CONFIG_VERSION);
     }
 
-    /// v0 指定時も現行が v0 なら移行不要
+    /// v0 設定は v1 へ移行し、既存項目を保持すること
     #[test]
-    fn migrate_v0_is_noop_while_current_is_v0() {
+    fn migrate_v0_to_v1_preserves_settings() {
         let config = AppConfig {
             version: 0,
             mode: RefineMode::Trim,
             interval_ms: 500,
+            history_enabled: true,
             ..Default::default()
         };
         let result = migrate_config(config);
-        assert!(!result.migrated);
-        assert_eq!(result.config.version, 0);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, 1);
         assert_eq!(result.config.mode, RefineMode::Trim);
         assert_eq!(result.config.interval_ms, 500);
+        assert!(result.config.history_enabled);
+    }
+
+    /// v0 設定の移行後は `favorite_modes` が空配列であること
+    #[test]
+    fn migrate_v0_to_v1_initializes_favorite_modes() {
+        let config = AppConfig {
+            version: 0,
+            ..Default::default()
+        };
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert!(result.config.favorite_modes.is_empty());
     }
 
     /// 現行より新しい version はデフォルトへフォールバック

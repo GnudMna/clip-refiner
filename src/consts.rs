@@ -23,10 +23,10 @@ pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 // ======================================================================
 // 設定
 // ======================================================================
-/// 設定ファイルのスキーマバージョン (初回リリースは 0)
+/// 設定ファイルのスキーマバージョン
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
-pub const CONFIG_VERSION: u32 = 0;
+pub const CONFIG_VERSION: u32 = 1;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
