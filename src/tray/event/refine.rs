@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::quick_selector::QuickSelectorWindow;
 use super::super::state::AppState;
@@ -40,7 +41,7 @@ pub fn update_refine(
     menu.refine.sync_favorite_actions(mode, &favorite_modes);
 
     state.save_config();
-    let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
+    dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::ProcessMode(mode));
     refresh_quick_selector_modes(state, quick_selector);
 }
 

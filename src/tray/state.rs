@@ -1,6 +1,7 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 use std::time::{Duration, Instant, SystemTime};
 
+use super::dispatch;
 use super::history::EncryptedHistoryStore;
 use crate::config::{AppConfig, RegexSettings};
 use crate::refiner::RefineMode;
@@ -149,21 +150,21 @@ impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
     ///
     /// # Returns
-    /// * `Self` - 新しく生成された `AppState` インスタンス
-    pub fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
+    /// * `Result<Self>` - 新しく生成された `AppState` インスタンス
+    pub fn new(proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let config = AppConfig::load();
         let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
-        Self {
+        Ok(Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
             undo_text: Mutex::new(None),
-            history_store: Mutex::new(EncryptedHistoryStore::new()),
+            history_store: Mutex::new(EncryptedHistoryStore::new()?),
             proxy,
             persist_config: true,
             config_disk_mtime: Mutex::new(disk_mtime),
             config_save_grace_until: Mutex::new(None),
-        }
+        })
     }
 
     /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
@@ -343,7 +344,7 @@ impl AppState {
         let limit = self.with_config(|c| c.history_limit);
         self.history_store.lock_ignore_poison().add(text, limit);
 
-        let _ = self.proxy.send_event(AppEvent::RefreshHistory);
+        dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
     }
 }
 
@@ -352,6 +353,7 @@ impl AppState {
 // ======================================================================
 /// ユニットテスト用の `AppState` を生成する
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+#[allow(clippy::expect_used)]
 pub(crate) fn test_app_state() -> AppState {
     use crate::config::AppConfig;
     use tao::event_loop::EventLoopBuilder;
@@ -375,7 +377,9 @@ pub(crate) fn test_app_state() -> AppState {
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
         undo_text: Mutex::new(None),
-        history_store: Mutex::new(EncryptedHistoryStore::new()),
+        history_store: Mutex::new(
+            EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗"),
+        ),
         proxy: event_loop.create_proxy(),
         persist_config: false,
         config_disk_mtime: Mutex::new(None),

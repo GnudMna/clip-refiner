@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use super::types::AppConfig;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Serialize;
 use toml_edit::{DocumentMut, Item, Table, Value};
 
@@ -59,111 +59,116 @@ pub fn config_to_toml(config: &AppConfig, existing: Option<&str>) -> Result<Stri
     if let Some(content) = existing
         && let Ok(mut doc) = content.parse::<DocumentMut>()
     {
-        apply_config_to_document(&mut doc, config);
+        apply_config_to_document(&mut doc, config)?;
         return Ok(doc.to_string());
     }
     to_commented_toml(config)
 }
 
 /// 既存ドキュメントの値のみを `AppConfig` の内容で更新する (コメント・レイアウトは維持)
-fn apply_config_to_document(doc: &mut DocumentMut, config: &AppConfig) {
-    apply_root_fields(doc, config);
-    apply_notification_table(doc, config);
-    apply_hotkeys_table(doc, config);
-    apply_regex_table(doc, config);
-    apply_texts_tables(doc, config);
+fn apply_config_to_document(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
+    apply_root_fields(doc, config)?;
+    apply_notification_table(doc, config)?;
+    apply_hotkeys_table(doc, config)?;
+    apply_regex_table(doc, config)?;
+    apply_texts_tables(doc, config)?;
+    Ok(())
 }
 
 /// ルートレベルの設定値を更新する
-fn apply_root_fields(doc: &mut DocumentMut, config: &AppConfig) {
+fn apply_root_fields(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     let root = doc.as_table_mut();
-    set_table_value(root, "version", DOC_VERSION, "", &config.version);
-    set_table_value(root, "mode", DOC_MODE, "", &config.mode);
+    set_table_value(root, "version", DOC_VERSION, "", &config.version)?;
+    set_table_value(root, "mode", DOC_MODE, "", &config.mode)?;
     set_table_value(
         root,
         "favorite_modes",
         DOC_FAVORITE_MODES,
         "",
         &config.favorite_modes,
-    );
+    )?;
     set_table_value(
         root,
         "interval_ms",
         DOC_INTERVAL_MS,
         "",
         &config.interval_ms,
-    );
+    )?;
     set_table_value(
         root,
         "monitor_mode",
         DOC_MONITOR_MODE,
         "",
         &config.monitor_mode,
-    );
+    )?;
     set_table_value(
         root,
         "history_enabled",
         DOC_HISTORY_ENABLED,
         "",
         &config.history_enabled,
-    );
+    )?;
     set_table_value(
         root,
         "history_limit",
         DOC_HISTORY_LIMIT,
         "",
         &config.history_limit,
-    );
-    set_table_value(root, "is_paused", DOC_IS_PAUSED, "", &config.is_paused);
+    )?;
+    set_table_value(root, "is_paused", DOC_IS_PAUSED, "", &config.is_paused)?;
+    Ok(())
 }
 
 /// `[notification_settings]` の設定値を更新する
-fn apply_notification_table(doc: &mut DocumentMut, config: &AppConfig) {
+fn apply_notification_table(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "notification_settings", SECTION_NOTIFICATION);
     let notification = doc["notification_settings"]
         .as_table_mut()
-        .expect("notification_settings テーブル");
+        .context("notification_settings テーブルが存在しない")?;
     set_table_value(
         notification,
         "enabled",
         DOC_NS_ENABLED,
         TABLE_INDENT,
         &config.notification_settings.enabled,
-    );
+    )?;
     set_table_value(
         notification,
         "notify_mode",
         DOC_NS_NOTIFY_MODE,
         TABLE_INDENT,
         &config.notification_settings.notify_mode,
-    );
+    )?;
     set_table_value(
         notification,
         "notify_result",
         DOC_NS_NOTIFY_RESULT,
         TABLE_INDENT,
         &config.notification_settings.notify_result,
-    );
+    )?;
     set_table_value(
         notification,
         "notify_pause",
         DOC_NS_NOTIFY_PAUSE,
         TABLE_INDENT,
         &config.notification_settings.notify_pause,
-    );
+    )?;
+    Ok(())
 }
 
 /// `[hotkeys]` の設定値を更新する
-fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) {
+fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "hotkeys", SECTION_HOTKEYS);
-    let hotkeys = doc["hotkeys"].as_table_mut().expect("hotkeys テーブル");
+    let hotkeys = doc["hotkeys"]
+        .as_table_mut()
+        .context("hotkeys テーブルが存在しない")?;
     set_table_value(
         hotkeys,
         "quick_selector",
         DOC_HOTKEY_SELECTOR,
         TABLE_INDENT,
         &config.hotkeys.quick_selector,
-    );
+    )?;
     hotkeys.remove("selector");
     set_table_value(
         hotkeys,
@@ -171,89 +176,94 @@ fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) {
         DOC_HOTKEY_NOTIFICATION,
         TABLE_INDENT,
         &config.hotkeys.notification,
-    );
+    )?;
     set_table_value(
         hotkeys,
         "pause",
         DOC_HOTKEY_PAUSE,
         TABLE_INDENT,
         &config.hotkeys.pause,
-    );
+    )?;
     set_table_value(
         hotkeys,
         "undo",
         DOC_HOTKEY_UNDO,
         TABLE_INDENT,
         &config.hotkeys.undo,
-    );
+    )?;
     set_table_value(
         hotkeys,
         "text_selector",
         DOC_HOTKEY_TEXT_SELECTOR,
         TABLE_INDENT,
         &config.hotkeys.text_selector,
-    );
+    )?;
     set_table_value(
         hotkeys,
         "quit",
         DOC_HOTKEY_QUIT,
         TABLE_INDENT,
         &config.hotkeys.quit,
-    );
+    )?;
+    Ok(())
 }
 
 /// `[regex]` の設定値を更新する
-fn apply_regex_table(doc: &mut DocumentMut, config: &AppConfig) {
+fn apply_regex_table(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "regex", SECTION_REGEX);
-    let regex = doc["regex"].as_table_mut().expect("regex テーブル");
+    let regex = doc["regex"]
+        .as_table_mut()
+        .context("regex テーブルが存在しない")?;
     set_table_value(
         regex,
         "pattern",
         DOC_REGEX_PATTERN,
         TABLE_INDENT,
         &config.regex.pattern,
-    );
+    )?;
     set_table_value(
         regex,
         "replacement",
         DOC_REGEX_REPLACEMENT,
         TABLE_INDENT,
         &config.regex.replacement,
-    );
+    )?;
     set_table_value(
         regex,
         "case_insensitive",
         DOC_REGEX_CASE_INSENSITIVE,
         TABLE_INDENT,
         &config.regex.case_insensitive,
-    );
+    )?;
     set_table_value(
         regex,
         "multiline",
         DOC_REGEX_MULTILINE,
         TABLE_INDENT,
         &config.regex.multiline,
-    );
+    )?;
+    Ok(())
 }
 
 /// `[[texts]]` の配列を更新する
-fn apply_texts_tables(doc: &mut DocumentMut, config: &AppConfig) {
+fn apply_texts_tables(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     use toml_edit::ArrayOfTables;
 
     if config.texts.is_empty() {
         doc.as_table_mut().remove("texts");
-        return;
+        return Ok(());
     }
 
     let mut array = ArrayOfTables::new();
     for entry in &config.texts {
         let mut table = Table::new();
-        table.insert("label", Item::Value(serde_to_toml_value(&entry.label)));
-        table.insert("text", Item::Value(serde_to_toml_value(&entry.text)));
+        table.insert("label", Item::Value(serde_to_toml_value(&entry.label)?));
+        table.insert("text", Item::Value(serde_to_toml_value(&entry.text)?));
         array.push(table);
     }
 
     doc["texts"] = Item::ArrayOfTables(array);
+    Ok(())
 }
 
 /// テーブルがなければセクション見出し付きで挿入する
@@ -275,13 +285,13 @@ fn set_table_value<T: Serialize>(
     comment: &str,
     indent: &str,
     value: &T,
-) {
-    let new_value = serde_to_toml_value(value);
+) -> Result<()> {
+    let new_value = serde_to_toml_value(value)?;
     if let Some(item) = table.get_mut(key)
         && let Some(existing) = item.as_value_mut()
     {
         *existing = new_value;
-        return;
+        return Ok(());
     }
     table.insert(key, Item::Value(new_value));
     if let Some(mut key_mut) = table.key_mut(key) {
@@ -289,6 +299,7 @@ fn set_table_value<T: Serialize>(
             .leaf_decor_mut()
             .set_prefix(field_comment_prefix(indent, comment));
     }
+    Ok(())
 }
 
 /// セクション見出しの decor 用プレフィックスを返す
@@ -302,10 +313,13 @@ fn field_comment_prefix(indent: &str, comment: &str) -> String {
 }
 
 /// Serde 値を `toml_edit::Value` へ変換する
-fn serde_to_toml_value<T: Serialize>(value: &T) -> Value {
-    let line = format!("v={}", toml_scalar(value));
-    let doc: DocumentMut = line.parse().expect("TOML スカラー行のパースに失敗");
-    doc["v"].as_value().expect("スカラー値").clone()
+fn serde_to_toml_value<T: Serialize>(value: &T) -> Result<Value> {
+    let line = format!("v={}", toml_scalar(value)?);
+    let doc: DocumentMut = line.parse().context("TOML スカラー行のパースに失敗")?;
+    doc["v"]
+        .as_value()
+        .context("スカラー値が存在しない")
+        .cloned()
 }
 
 /// `AppConfig` を各項目の説明コメント付き TOML 文字列へ変換する
@@ -501,24 +515,22 @@ where
     T: Serialize,
 {
     writeln!(out, "{indent}# {comment}")?;
-    writeln!(out, "{indent}{key} = {}", toml_scalar(value))?;
+    writeln!(out, "{indent}{key} = {}", toml_scalar(value)?)?;
     writeln!(out)?;
     Ok(())
 }
 
 /// TOML のスカラー値をエスケープ済み文字列として返す
-fn toml_scalar<T: Serialize>(value: &T) -> String {
+fn toml_scalar<T: Serialize>(value: &T) -> Result<String> {
     #[derive(Serialize)]
     struct Row<'a, T: Serialize> {
         v: &'a T,
     }
 
-    let line = toml::to_string(&Row { v: value }).expect("TOML スカラーのエンコードに失敗");
+    let line = toml::to_string(&Row { v: value }).context("TOML スカラーのエンコードに失敗")?;
     line.split_once('=')
-        .expect("TOML スカラー行の解析に失敗")
-        .1
-        .trim()
-        .to_string()
+        .map(|(_, scalar)| scalar.trim().to_string())
+        .context("TOML スカラー行の解析に失敗")
 }
 
 // ======================================================================

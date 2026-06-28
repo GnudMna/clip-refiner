@@ -56,7 +56,7 @@ impl App {
     /// # Returns
     /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合はエラーを返す。
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
-        let state = Arc::new(AppState::new(proxy.clone()));
+        let state = Arc::new(AppState::new(proxy.clone())?);
         let menu = TrayMenu::build(&state)?;
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
         let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
@@ -156,9 +156,10 @@ impl App {
                 event::copy_registered_text(&self.state, &self.clipboard_tx, index);
             }
             AppEvent::RequestTextRegister => {
-                let _ = self
-                    .clipboard_tx
-                    .send(super::worker::ClipboardCommand::RegisterFromClipboard);
+                super::dispatch::send_clipboard_command(
+                    &self.clipboard_tx,
+                    super::worker::ClipboardCommand::RegisterFromClipboard,
+                );
             }
             AppEvent::RequestTextDelete(index) => {
                 event::delete_registered_text(&self.state, &self.menu, &self.text_selector, index);
@@ -181,7 +182,9 @@ impl App {
                 );
             }
             AppEvent::RefreshHistory => {
-                let _ = self.menu.refresh_history(&self.state);
+                if let Err(err) = self.menu.refresh_history(&self.state) {
+                    super::dispatch::log_menu_operation_error("履歴メニューの更新", err);
+                }
             }
             AppEvent::RefreshTexts => {
                 event::refresh_texts_views(&self.state, &self.menu, &self.text_selector);

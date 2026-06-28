@@ -1,3 +1,4 @@
+use super::dispatch;
 use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
 use super::state::AppEvent;
 use crate::consts;
@@ -79,16 +80,16 @@ impl TextSelectorWindow {
             let msg = req.body();
             match parse_text_selector_ipc_message(msg) {
                 Some(TextSelectorIpcAction::SelectText(index)) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestTextCopy(index));
+                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestTextCopy(index));
                 }
                 Some(TextSelectorIpcAction::Register) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestTextRegister);
+                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestTextRegister);
                 }
                 Some(TextSelectorIpcAction::DeleteText(index)) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestTextDelete(index));
+                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestTextDelete(index));
                 }
                 Some(TextSelectorIpcAction::Close) => {
-                    let _ = proxy_clone.send_event(AppEvent::HideTextSelector);
+                    dispatch::send_app_event(&proxy_clone, AppEvent::HideTextSelector);
                 }
                 None => {}
             }

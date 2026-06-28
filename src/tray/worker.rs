@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use super::clipboard_change::ChangeWatcher;
 use super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
+use super::dispatch;
 use super::notify;
 use super::state::{AppEvent, AppState};
 use crate::config::AddRegisteredTextError;
@@ -266,7 +267,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
         if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
             last_config_poll = Instant::now();
             if state.has_external_config_change() {
-                let _ = state.proxy.send_event(AppEvent::ReloadConfig);
+                dispatch::send_app_event(&state.proxy, AppEvent::ReloadConfig);
             }
         }
 
@@ -449,7 +450,7 @@ fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc
     match outcome {
         Ok(()) => {
             state.save_config();
-            let _ = state.proxy.send_event(AppEvent::RefreshTexts);
+            dispatch::send_app_event(&state.proxy, AppEvent::RefreshTexts);
             notify::show_when_enabled(state, "登録文字列", "クリップボードの内容を登録しました");
         }
         Err(AddRegisteredTextError::Empty) => {

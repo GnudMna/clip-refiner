@@ -68,12 +68,14 @@ impl WebSelectorWindow {
     pub fn show_with_script(&self, script: &str) {
         self.window.set_visible(true);
         self.window.set_focus();
-        let _ = self.webview.evaluate_script(script);
+        self.evaluate_script(script);
     }
 
     /// JavaScript を実行する
     pub fn evaluate_script(&self, script: &str) {
-        let _ = self.webview.evaluate_script(script);
+        if let Err(err) = self.webview.evaluate_script(script) {
+            crate::log_warn!("セレクターの JavaScript 実行に失敗: {:?}", err);
+        }
     }
 
     /// ウィンドウを非表示にする
