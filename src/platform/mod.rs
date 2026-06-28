@@ -14,3 +14,11 @@ mod notify_windows;
 pub use notify::show_notification;
 #[cfg(windows)]
 pub use notify_windows::{init_notifications, show_notification};
+
+// ======================================================================
+// 機能可否
+// ======================================================================
+/// 画面範囲選択 OCR が利用可能かどうか
+pub fn supports_screen_ocr() -> bool {
+    cfg!(windows)
+}

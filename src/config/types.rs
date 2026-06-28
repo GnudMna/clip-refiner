@@ -115,12 +115,16 @@ impl HotkeySettings {
         let mut lines = vec![
             format!("{}: クイックセレクター", self.quick_selector),
             format!("{}: 登録文字列セレクター", self.text_selector),
-            format!("{}: 画面 OCR", self.ocr),
+        ];
+        if crate::platform::supports_screen_ocr() {
+            lines.push(format!("{}: 画面 OCR", self.ocr));
+        }
+        lines.extend([
             format!("{}: 成功通知の切替", self.notification),
             format!("{}: 一時停止/再開", self.pause),
             format!("{}: 加工の取り消し", self.undo),
             format!("{}: 終了", self.quit),
-        ];
+        ]);
         for (index, mode) in favorite_modes.iter().enumerate() {
             if let Some(binding) = self.favorite_slot_binding(index) {
                 lines.push(format!("{binding}: {} (お気に入り)", mode.label()));
@@ -454,6 +458,7 @@ impl AppConfig {
         config.normalize_texts();
         config.normalize_favorite_modes();
         config.normalize_pipeline();
+        config.normalize_platform_modes();
         config.hotkeys.fix_invalid();
         (config, migration.migrated)
     }
@@ -464,6 +469,7 @@ impl AppConfig {
         self.normalize_texts();
         self.normalize_favorite_modes();
         self.normalize_pipeline();
+        self.normalize_platform_modes();
         self.version = consts::CONFIG_VERSION;
     }
 
@@ -588,13 +594,27 @@ impl AppConfig {
         !self.pipeline.is_empty()
     }
 
+    /// 現在の OS で未対応の加工モードを設定から除去する
+    pub(crate) fn normalize_platform_modes(&mut self) {
+        if !self.mode.is_supported_on_current_platform() {
+            crate::log_warn!(
+                "加工モード `{}` はこのプラットフォームでは未対応のため `{}` へフォールバックする",
+                self.mode.label(),
+                RefineMode::UrlDecode.label()
+            );
+            self.mode = RefineMode::UrlDecode;
+        }
+    }
+
     /// 加工パイプラインを許容範囲内に正規化する
     ///
     /// 画像出力モードは末尾1つのみ残し、それ以外の位置からは除去する
     pub(crate) fn normalize_pipeline(&mut self) {
         use std::collections::HashSet;
 
-        let valid: HashSet<RefineMode> = RefineMode::iter().collect();
+        let valid: HashSet<RefineMode> = RefineMode::iter()
+            .filter(|mode| mode.is_supported_on_current_platform())
+            .collect();
         self.pipeline.retain(|mode| valid.contains(mode));
 
         let image_mode = self
@@ -616,7 +636,9 @@ impl AppConfig {
     pub(crate) fn normalize_favorite_modes(&mut self) {
         use std::collections::HashSet;
 
-        let valid: HashSet<RefineMode> = RefineMode::iter().collect();
+        let valid: HashSet<RefineMode> = RefineMode::iter()
+            .filter(|mode| mode.is_supported_on_current_platform())
+            .collect();
         let mut seen = HashSet::new();
         self.favorite_modes.retain(|mode| {
             if !valid.contains(mode) || seen.contains(mode) {
