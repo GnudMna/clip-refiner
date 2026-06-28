@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use super::sections;
+
 use crate::config::types::AppConfig;
 
 use anyhow::Result;

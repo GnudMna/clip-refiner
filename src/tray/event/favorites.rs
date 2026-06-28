@@ -9,6 +9,9 @@ use super::super::state::{AppEvent, AppState};
 use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
 use crate::refiner::RefineMode;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// お気に入り変換モードのメニューイベントを処理する
 pub(super) fn handle_favorites_event(
     id: &tray_icon::menu::MenuId,
@@ -33,6 +36,9 @@ pub(super) fn handle_favorites_event(
     false
 }
 
+// ======================================================================
+// お気に入り操作
+// ======================================================================
 /// お気に入り変換モードの登録状態を切り替える
 pub(crate) fn toggle_favorite_mode(
     state: &Arc<AppState>,
@@ -90,6 +96,9 @@ pub(crate) fn move_favorite_mode(
     refresh_favorites_views(state, menu, quick_selector);
 }
 
+// ======================================================================
+// UI 更新
+// ======================================================================
 /// お気に入り表示をメニューとクイックセレクターへ反映する
 pub(crate) fn refresh_favorites_views(
     state: &Arc<AppState>,

@@ -5,9 +5,13 @@ use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 use super::super::text_selector::TextSelectorWindow;
+
 use crate::config::{AppConfig, ConfigReloadError};
 use crate::platform;
 
+// ======================================================================
+// 設定再読み込み
+// ======================================================================
 /// 設定再読み込みの結果
 pub struct ConfigReloadOutcome {
     /// ユーザー向けメッセージ
@@ -81,6 +85,9 @@ pub fn apply_config_reload(
     Ok(ConfigReloadOutcome { message })
 }
 
+// ======================================================================
+// プライベート関数
+// ======================================================================
 /// 再読み込み成功時の通知メッセージを組み立てる
 fn build_reload_message(hotkeys_changed: bool, monitor_changed: bool, migrated: bool) -> String {
     let mut parts = vec!["設定を反映しました".to_string()];
@@ -122,6 +129,9 @@ pub fn reload_config_with_notification(
     }
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;

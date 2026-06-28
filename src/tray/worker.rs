@@ -9,6 +9,7 @@ use super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
 use super::dispatch;
 use super::notify;
 use super::state::{AppEvent, AppState};
+
 use crate::config::AddRegisteredTextError;
 use crate::config::MonitorMode;
 use crate::platform;

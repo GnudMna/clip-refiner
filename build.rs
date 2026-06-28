@@ -1,7 +1,7 @@
-/// Windows リソースの著作権表記。`LICENSE` と揃えて更新してください。
+/// Windows リソースの著作権表記。`LICENSE` と揃えて更新する
 const LEGAL_COPYRIGHT: &str = "Copyright (c) 2026 Yuto Hirata";
 
-// PascalCase の場合は定数として直接記述してください
+// PascalCase の場合は定数として直接記述する
 const APP_NAME: &str = "ClipRefiner";
 
 fn main() {

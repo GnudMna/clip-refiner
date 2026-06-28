@@ -176,6 +176,7 @@ fn letter_to_code(ch: char) -> Option<Code> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::consts;
 
     /// デフォルトホットキー文字列が解析できること

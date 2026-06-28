@@ -11,6 +11,9 @@ use super::super::worker::ClipboardCommand;
 use crate::config::AppConfig;
 use crate::security::secret_from;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// 登録文字列メニューイベントを処理する
 pub(super) fn handle_texts_event(
     id: &tray_icon::menu::MenuId,
@@ -39,6 +42,9 @@ pub(super) fn handle_texts_event(
     false
 }
 
+// ======================================================================
+// 登録文字列操作
+// ======================================================================
 /// 登録文字列のクリップボードコピーを実行する
 pub(super) fn copy_registered_text(
     state: &Arc<AppState>,
@@ -70,6 +76,9 @@ pub(super) fn delete_registered_text(
     notify::show_when_enabled(state, "登録文字列", "登録文字列を削除しました");
 }
 
+// ======================================================================
+// UI 更新
+// ======================================================================
 /// 登録文字列メニューとセレクター表示を設定内容に合わせて更新する
 pub(crate) fn refresh_texts_views(
     state: &Arc<AppState>,

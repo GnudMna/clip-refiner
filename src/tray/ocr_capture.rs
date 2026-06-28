@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use super::event::run_ocr_on_image;
 use super::worker::ClipboardCommand;
+
 use crate::platform::ocr_overlay::OverlayWindow;
 use crate::platform::screen_capture::capture_screen_region;
 
@@ -47,7 +48,7 @@ pub fn init_ocr_capture(clipboard_tx: Sender<ClipboardCommand>) -> Result<OcrCap
 }
 
 // ======================================================================
-// UI操作
+// ウィンドウ操作
 // ======================================================================
 impl OcrCaptureWindow {
     /// 半透明オーバーレイを即座に表示する

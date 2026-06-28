@@ -13,6 +13,9 @@ use crate::config::types::AppConfig;
 use anyhow::{Context, Result};
 use toml_edit::DocumentMut;
 
+// ======================================================================
+// ドキュメント更新
+// ======================================================================
 /// `[notification_settings]` の設定値を更新する
 pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "notification_settings", SECTION_NOTIFICATION);
@@ -54,6 +57,9 @@ fn write_notification_table(notification: &mut toml_edit::Table, config: &AppCon
     Ok(())
 }
 
+// ======================================================================
+// テンプレート出力
+// ======================================================================
 /// `[notification_settings]` をコメント付きテンプレートへ書き出す
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
     write_table_section(out, SECTION_NOTIFICATION, "notification_settings")?;

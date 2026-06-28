@@ -1,7 +1,6 @@
 use std::ptr;
 
 use anyhow::{Context, Result, bail};
-
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
@@ -12,7 +11,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 // ======================================================================
-// 型
+// 画面矩形
 // ======================================================================
 /// 画面上の矩形領域 (物理ピクセル座標)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

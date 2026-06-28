@@ -13,6 +13,7 @@ use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
 use super::text_selector::TextSelectorWindow;
 use super::worker::ClipboardCommand;
+
 use crate::config::{AppConfig, HotkeySettings};
 use crate::consts;
 use crate::hotkey_binding::resolve_hotkey;

@@ -13,6 +13,9 @@ use crate::config::types::AppConfig;
 use anyhow::Result;
 use toml_edit::{DocumentMut, Table};
 
+// ======================================================================
+// ドキュメント更新
+// ======================================================================
 /// ルートレベルの設定値を更新する
 pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     let root = doc.as_table_mut();
@@ -62,6 +65,9 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+// ======================================================================
+// テンプレート出力
+// ======================================================================
 /// ルートレベルの設定をコメント付きテンプレートへ書き出す
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
     write_section(out, SECTION_BASIC)?;

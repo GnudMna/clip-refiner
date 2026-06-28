@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use super::dispatch;
 use super::state::AppState;
+
 use crate::autostart;
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
