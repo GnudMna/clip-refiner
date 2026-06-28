@@ -2,6 +2,8 @@
 
 mod notify;
 
+pub(crate) mod clipboard_image;
+
 #[cfg(windows)]
 mod notify_windows;
 

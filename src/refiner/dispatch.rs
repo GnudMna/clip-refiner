@@ -67,6 +67,7 @@ impl Refiner for RefineMode {
             RefineMode::MarkdownToHtml => markdown::markdown_to_html(text),
             RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(text),
             RefineMode::MarkdownToExcel => markdown::markdown_table_to_excel(text),
+            RefineMode::ExcelToImage => Cow::Borrowed(text),
             RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(text),
             RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
             RefineMode::AddComma => number::add_commas(text),
@@ -199,9 +200,9 @@ mod tests {
         ];
 
         assert_eq!(
-            CASES.len() + 6,
+            CASES.len() + 7,
             RefineMode::iter().count(),
-            "固定ケースと日時・正規表現モードの合計が RefineMode バリアント数と一致しません"
+            "固定ケースと日時・正規表現・画像モードの合計が RefineMode バリアント数と一致しません"
         );
 
         let empty_ctx = RefineContext::default();
@@ -235,6 +236,9 @@ mod tests {
                 RefineMode::RegexSplit => {
                     let ctx = regex_ctx(",", "");
                     assert_eq!(mode.refine("a,b,c", &ctx), "a\nb\nc");
+                }
+                RefineMode::ExcelToImage => {
+                    // 画像出力モードは `process_image_clipboard` で処理する
                 }
                 other => {
                     let (input, expected) = CASES.iter().find(|(m, _, _)| *m == other).map_or_else(

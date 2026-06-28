@@ -152,6 +152,10 @@ pub enum RefineMode {
     #[value(help = "Markdown表をExcel(TSV)形式へ変換")]
     #[strum(message = "Markdown→Excel")]
     MarkdownToExcel,
+    /// Excelでコピーしたセルの描画ビットマップをクリップボードの画像として保存する
+    #[value(help = "Excelの見た目を画像としてクリップボードへ保存")]
+    #[strum(message = "Excel→画像")]
+    ExcelToImage,
     /// Unixタイムスタンプを日時文字列へ変換する
     #[value(help = "Unixタイムスタンプを日時文字列へ変換")]
     #[strum(message = "Unixタイムスタンプ→日時文字列")]
@@ -209,8 +213,11 @@ pub enum RefineCategory {
     #[strum(message = "JSONへ変換")]
     ToJson,
     /// Markdown関連サブメニュー内
-    #[strum(message = "マークダウン")]
+    #[strum(message = "Markdown")]
     Markdown,
+    /// Excel関連サブメニュー内
+    #[strum(message = "Excel")]
+    Excel,
     /// 日時変換サブメニュー内
     #[strum(message = "日時変換")]
     Datetime,

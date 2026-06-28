@@ -261,6 +261,17 @@ impl AppState {
         });
     }
 
+    /// 画像加工成功後に元テキストの指紋を記録する
+    ///
+    /// クリップボード上に TSV が残る場合の再加工ループを防ぐ
+    pub fn record_image_processing_success(&self, source_text: &str) {
+        self.with_processed_state(|ps| {
+            let fp = ContentFingerprint::from_text(source_text);
+            ps.last_written = Some(fp);
+            ps.last_seen = fp;
+        });
+    }
+
     /// 加工せずに観測したクリップボード本文を記録する
     pub fn record_clipboard_observed(&self, text: &str) {
         self.with_processed_state(|ps| {

@@ -556,6 +556,7 @@ dependencies = [
  "directories",
  "getrandom 0.4.3",
  "global-hotkey",
+ "image",
  "indexmap",
  "notify-rust",
  "objc2",

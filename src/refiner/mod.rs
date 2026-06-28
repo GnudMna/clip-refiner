@@ -21,9 +21,9 @@ mod ordered_value;
 pub(crate) mod text_clipboard;
 mod transform;
 
-pub(crate) use text_clipboard::TextClipboard;
+pub(crate) use text_clipboard::{ImageClipboard, TextClipboard};
 
-pub(crate) use clipboard::process_text_clipboard;
+pub(crate) use clipboard::process_clipboard_io;
 pub use clipboard::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
 pub use context::RefineContext;
 pub use dispatch::Refiner;

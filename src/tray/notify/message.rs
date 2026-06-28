@@ -66,6 +66,33 @@ pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, proces
     platform::show_notification("変換完了", &body);
 }
 
+/// 画像加工完了時のデスクトップ通知を表示する
+pub fn show_image_process_notification(
+    state: &Arc<AppState>,
+    mode: RefineMode,
+    width: u32,
+    height: u32,
+) {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if !settings.enabled {
+        return;
+    }
+
+    let mut lines = Vec::new();
+    if settings.notify_mode {
+        lines.push(format!("モード: {}", mode.label()));
+    }
+    if settings.notify_result {
+        lines.push(format!("内容: 画像 ({width}x{height})"));
+    }
+
+    if lines.is_empty() {
+        return;
+    }
+
+    platform::show_notification("変換完了", &lines.join("\n"));
+}
+
 // ======================================================================
 // 一時停止通知
 // ======================================================================
