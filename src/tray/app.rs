@@ -124,6 +124,7 @@ impl App {
                         &self.menu,
                         &self.state,
                         &self.clipboard_tx,
+                        Some(&self.quick_selector),
                         control_flow,
                     );
                 }
@@ -142,7 +143,7 @@ impl App {
         match event {
             AppEvent::RequestModeChange(mode) => {
                 self.quick_selector.hide();
-                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode);
+                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode, None);
             }
             AppEvent::HideQuickSelector => {
                 self.quick_selector.hide();

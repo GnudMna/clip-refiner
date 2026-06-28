@@ -2,8 +2,11 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
 use super::super::menu::TrayMenu;
+use super::super::quick_selector::QuickSelectorWindow;
 use super::super::state::AppState;
 use super::super::worker::ClipboardCommand;
+use super::favorites::refresh_quick_selector_modes;
+
 use crate::refiner::RefineMode;
 use crate::tray::state::LockExt;
 
@@ -21,6 +24,7 @@ pub fn update_refine(
     menu: &TrayMenu,
     clipboard_tx: &Sender<ClipboardCommand>,
     mode: RefineMode,
+    quick_selector: Option<&QuickSelectorWindow>,
 ) {
     state.with_config_mut(|c| c.mode = mode);
 
@@ -37,6 +41,7 @@ pub fn update_refine(
 
     state.save_config();
     let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
+    refresh_quick_selector_modes(state, quick_selector);
 }
 
 /// 加工モードの選択メニューイベントを処理する
@@ -54,15 +59,17 @@ pub(super) fn handle_refine_mode_event(
     menu: &TrayMenu,
     state: &Arc<AppState>,
     clipboard_tx: &Sender<ClipboardCommand>,
+    quick_selector: Option<&QuickSelectorWindow>,
 ) -> bool {
-    if let Some((_, mode)) = menu
+    if let Some(mode) = menu
         .refine
         .favorite_records
         .lock_ignore_poison()
         .iter()
         .find(|(item, _)| item.id() == id)
+        .map(|(_, mode)| *mode)
     {
-        update_refine(state, menu, clipboard_tx, *mode);
+        update_refine(state, menu, clipboard_tx, mode, quick_selector);
         return true;
     }
 
@@ -71,9 +78,48 @@ pub(super) fn handle_refine_mode_event(
         .all_mode_items()
         .find(|(item, _)| item.id() == id)
     {
-        update_refine(state, menu, clipboard_tx, *mode);
+        update_refine(state, menu, clipboard_tx, *mode, quick_selector);
         true
     } else {
         false
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::refiner::RefineMode;
+    use crate::tray::menu::TrayMenu;
+    use crate::tray::state::{LockExt, test_app_state};
+
+    /// お気に入りサブメニューの `MenuId` からモードを解決できること
+    #[test]
+    fn resolve_favorite_mode_from_menu_id() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|config| config.favorite_modes = vec![RefineMode::Trim]);
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let item_id = menu
+            .refine
+            .favorite_records
+            .lock_ignore_poison()
+            .first()
+            .expect("お気に入り項目が存在する")
+            .0
+            .id()
+            .clone();
+
+        let resolved = menu
+            .refine
+            .favorite_records
+            .lock_ignore_poison()
+            .iter()
+            .find(|(item, _)| item.id() == &item_id)
+            .map(|(_, mode)| *mode);
+
+        assert_eq!(resolved, Some(RefineMode::Trim));
     }
 }
