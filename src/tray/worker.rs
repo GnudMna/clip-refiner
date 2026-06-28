@@ -39,6 +39,8 @@ pub enum ClipboardCommand {
     Undo,
     /// クリップボードの内容を登録文字列として保存する
     RegisterFromClipboard,
+    /// OCR 結果をクリップボードへ書き込む
+    SetOcrText(SecretString),
 }
 
 impl std::fmt::Debug for ClipboardCommand {
@@ -51,6 +53,7 @@ impl std::fmt::Debug for ClipboardCommand {
             Self::ProcessMode(mode) => f.debug_tuple("ProcessMode").field(mode).finish(),
             Self::Undo => f.write_str("Undo"),
             Self::RegisterFromClipboard => f.write_str("RegisterFromClipboard"),
+            Self::SetOcrText(_) => f.debug_tuple("SetOcrText").field(&"...").finish(),
         }
     }
 }
@@ -373,6 +376,20 @@ pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
                 state.record_clipboard_set(&text);
                 if state.with_config(|c| c.notification_settings.enabled) {
                     platform::show_notification("登録文字列", "クリップボードにコピーしました");
+                }
+            }
+        }
+        ClipboardCommand::SetOcrText(text) => {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
+                crate::log_error!("クリップボード設定エラー: {:?}", e);
+                platform::show_notification(
+                    "OCR エラー",
+                    "クリップボードへの書き込みに失敗しました",
+                );
+            } else {
+                state.record_clipboard_set(&text);
+                if state.with_config(|c| c.notification_settings.enabled) {
+                    platform::show_notification("OCR", "クリップボードにコピーしました");
                 }
             }
         }

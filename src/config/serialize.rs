@@ -32,6 +32,7 @@ const DOC_HOTKEY_NOTIFICATION: &str = "成功通知の ON/OFF";
 const DOC_HOTKEY_PAUSE: &str = "監視の一時停止・再開";
 const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
 const DOC_HOTKEY_TEXT_SELECTOR: &str = "登録文字列セレクター表示";
+const DOC_HOTKEY_OCR: &str = "画面範囲選択 OCR";
 const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 const DOC_HOTKEY_FAVORITE_SLOTS: &str = "お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / Alt+Shift+F1〜F11。空文字で無効)";
 const DOC_REGEX_PATTERN: &str = "正規表現パターン";
@@ -200,6 +201,13 @@ fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> 
         DOC_HOTKEY_TEXT_SELECTOR,
         TABLE_INDENT,
         &config.hotkeys.text_selector,
+    )?;
+    set_table_value(
+        hotkeys,
+        "ocr",
+        DOC_HOTKEY_OCR,
+        TABLE_INDENT,
+        &config.hotkeys.ocr,
     )?;
     set_table_value(
         hotkeys,
@@ -453,6 +461,13 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
         DOC_HOTKEY_TEXT_SELECTOR,
         "text_selector",
         &config.hotkeys.text_selector,
+    )?;
+    write_field(
+        &mut out,
+        TABLE_INDENT,
+        DOC_HOTKEY_OCR,
+        "ocr",
+        &config.hotkeys.ocr,
     )?;
     write_field(
         &mut out,

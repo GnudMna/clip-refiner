@@ -73,6 +73,9 @@ pub const DEFAULT_HOTKEY_UNDO: &str = "Alt+Shift+Z";
 /// 登録文字列セレクター表示のデフォルトホットキー
 pub const DEFAULT_HOTKEY_TEXT_SELECTOR: &str = "Alt+Shift+T";
 
+/// 画面 OCR キャプチャのデフォルトホットキー
+pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+O";
+
 /// 登録文字列の最大件数
 pub const MAX_REGISTERED_TEXTS: usize = 100;
 

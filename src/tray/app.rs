@@ -6,6 +6,8 @@ use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
+#[cfg(windows)]
+use super::ocr_capture::{OcrCaptureWindow, init_ocr_capture};
 use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
 use super::text_selector::{TextSelectorWindow, init_text_selector};
@@ -31,6 +33,9 @@ pub struct App {
     pub quick_selector: QuickSelectorWindow,
     /// 登録文字列選択用の UI ウィンドウ
     pub text_selector: TextSelectorWindow,
+    /// 画面範囲選択 OCR 用オーバーレイ
+    #[cfg(windows)]
+    pub ocr_capture: OcrCaptureWindow,
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
@@ -64,6 +69,8 @@ impl App {
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
         let text_selector = init_text_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
+        #[cfg(windows)]
+        let ocr_capture = init_ocr_capture(clipboard_tx.clone())?;
 
         HotkeyHandler::start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -74,6 +81,8 @@ impl App {
             menu,
             quick_selector,
             text_selector,
+            #[cfg(windows)]
+            ocr_capture,
             hotkey_handler,
             clipboard_tx,
             last_quick_selector_show: Instant::now(),
@@ -215,6 +224,8 @@ impl App {
                     menu: &self.menu,
                     quick_selector: Some(&self.quick_selector),
                     text_selector: Some(&self.text_selector),
+                    #[cfg(windows)]
+                    ocr_capture: Some(&self.ocr_capture),
                     control_flow,
                     last_quick_selector_show: &mut self.last_quick_selector_show,
                     last_text_selector_show: &mut self.last_text_selector_show,
