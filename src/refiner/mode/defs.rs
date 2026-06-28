@@ -17,6 +17,7 @@ use strum::{EnumIter, EnumMessage, IntoStaticStr};
     ValueEnum,
     PartialEq,
     Eq,
+    Hash,
     Serialize,
     Deserialize,
     EnumIter,

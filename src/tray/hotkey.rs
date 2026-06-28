@@ -253,7 +253,8 @@ impl HotkeyHandler {
                 text_selector.hide();
             }
             *ctx.last_quick_selector_show = Instant::now();
-            quick_selector.show(ctx.state.with_config(|c| c.mode));
+            let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
+            quick_selector.show(ctx.state.with_config(|c| c.mode), &modes_json);
         }
     }
 

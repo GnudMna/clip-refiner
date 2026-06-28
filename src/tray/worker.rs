@@ -450,16 +450,20 @@ fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc
         Ok(()) => {
             state.save_config();
             let _ = state.proxy.send_event(AppEvent::RefreshTexts);
-            platform::show_notification("登録文字列", "クリップボードの内容を登録しました");
+            notify::show_when_enabled(state, "登録文字列", "クリップボードの内容を登録しました");
         }
         Err(AddRegisteredTextError::Empty) => {
-            platform::show_notification("登録文字列", "クリップボードが空のため登録できません");
+            notify::show_when_enabled(
+                state,
+                "登録文字列",
+                "クリップボードが空のため登録できません",
+            );
         }
         Err(AddRegisteredTextError::TooLarge) => {
-            platform::show_notification("登録文字列", "テキストが長すぎるため登録できません");
+            notify::show_when_enabled(state, "登録文字列", "テキストが長すぎるため登録できません");
         }
         Err(AddRegisteredTextError::LimitReached) => {
-            platform::show_notification("登録文字列", "登録件数の上限に達しています");
+            notify::show_when_enabled(state, "登録文字列", "登録件数の上限に達しています");
         }
     }
 }

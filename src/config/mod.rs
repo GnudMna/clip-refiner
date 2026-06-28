@@ -8,8 +8,8 @@ mod types;
 pub use paths::{get_config_dir, open_config_file};
 pub use persistence::{ConfigReloadError, disk_config_modified_time};
 pub use types::{
-    AddRegisteredTextError, AppConfig, HotkeySettings, MonitorMode, NotificationSettings,
-    RegexSettings,
+    AddRegisteredTextError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
+    MonitorMode, NotificationSettings, RegexSettings,
 };
 
 // ======================================================================
@@ -174,5 +174,55 @@ interval_ms = 500
         assert_eq!(config.texts.len(), 1);
         assert_eq!(config.texts[0].text, "b");
         assert!(!config.remove_registered_text(5));
+    }
+
+    /// お気に入り変換モードの登録・解除と正規化が機能すること
+    #[test]
+    fn test_favorite_modes() {
+        use super::types::{FavoriteMoveDirection, FavoriteToggleResult};
+
+        let mut config = AppConfig::default();
+        assert_eq!(
+            config.toggle_favorite_mode(RefineMode::Trim),
+            FavoriteToggleResult::Added
+        );
+        assert!(config.is_favorite_mode(RefineMode::Trim));
+        assert_eq!(
+            config.toggle_favorite_mode(RefineMode::Trim),
+            FavoriteToggleResult::Removed
+        );
+        assert!(!config.is_favorite_mode(RefineMode::Trim));
+
+        config.favorite_modes = vec![RefineMode::Trim, RefineMode::Trim, RefineMode::UrlDecode];
+        config.normalize_favorite_modes();
+        assert_eq!(
+            config.favorite_modes,
+            vec![RefineMode::Trim, RefineMode::UrlDecode]
+        );
+
+        config.favorite_modes = vec![
+            RefineMode::Trim,
+            RefineMode::UrlDecode,
+            RefineMode::JsonFormat,
+        ];
+        assert!(config.move_favorite_mode(RefineMode::JsonFormat, FavoriteMoveDirection::Up));
+        assert_eq!(
+            config.favorite_modes,
+            vec![
+                RefineMode::Trim,
+                RefineMode::JsonFormat,
+                RefineMode::UrlDecode
+            ]
+        );
+        assert!(!config.move_favorite_mode(RefineMode::Trim, FavoriteMoveDirection::Up));
+        assert!(config.move_favorite_mode(RefineMode::Trim, FavoriteMoveDirection::Down));
+        assert_eq!(
+            config.favorite_modes,
+            vec![
+                RefineMode::JsonFormat,
+                RefineMode::Trim,
+                RefineMode::UrlDecode
+            ]
+        );
     }
 }

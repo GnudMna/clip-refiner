@@ -5,6 +5,7 @@ use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 use super::super::worker::ClipboardCommand;
 use crate::refiner::RefineMode;
+use crate::tray::state::LockExt;
 
 /// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
@@ -24,9 +25,15 @@ pub fn update_refine(
     state.with_config_mut(|c| c.mode = mode);
 
     menu.refine
-        .all_items()
+        .favorite_records
+        .lock_ignore_poison()
+        .iter()
+        .chain(menu.refine.all_mode_items())
         .for_each(|(item, m)| item.set_checked(*m == mode));
     menu.refresh_category_labels(mode);
+
+    let favorite_modes = state.with_config(|config| config.favorite_modes.clone());
+    menu.refine.sync_favorite_actions(mode, &favorite_modes);
 
     state.save_config();
     let _ = clipboard_tx.send(ClipboardCommand::ProcessMode(mode));
@@ -48,7 +55,22 @@ pub(super) fn handle_refine_mode_event(
     state: &Arc<AppState>,
     clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
-    if let Some((_, mode)) = menu.refine.all_items().find(|(item, _)| item.id() == id) {
+    if let Some((_, mode)) = menu
+        .refine
+        .favorite_records
+        .lock_ignore_poison()
+        .iter()
+        .find(|(item, _)| item.id() == id)
+    {
+        update_refine(state, menu, clipboard_tx, *mode);
+        return true;
+    }
+
+    if let Some((_, mode)) = menu
+        .refine
+        .all_mode_items()
+        .find(|(item, _)| item.id() == id)
+    {
         update_refine(state, menu, clipboard_tx, *mode);
         true
     } else {

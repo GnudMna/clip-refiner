@@ -123,6 +123,13 @@ pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str
     }
 }
 
+/// 成功通知が有効な場合のみデスクトップ通知を表示する
+pub fn show_when_enabled(state: &Arc<AppState>, summary: &str, body: &str) {
+    if state.with_config(|c| c.notification_settings.enabled) {
+        platform::show_notification(summary, body);
+    }
+}
+
 // ======================================================================
 // テスト
 // ======================================================================

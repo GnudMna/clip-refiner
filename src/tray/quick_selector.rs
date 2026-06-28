@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::refiner::RefineMode;
 use crate::tray::state::AppEvent;
@@ -16,6 +17,10 @@ use wry::{WebContext, WebViewBuilder};
 pub(crate) enum QuickSelectorIpcAction {
     /// 加工モードが選択された
     SelectMode(RefineMode),
+    /// お気に入り登録状態を切り替える
+    ToggleFavorite(RefineMode),
+    /// お気に入りの表示順を変更する
+    MoveFavorite(RefineMode, FavoriteMoveDirection),
     /// クイックセレクターを閉じる
     Close,
 }
@@ -26,6 +31,19 @@ pub(crate) fn parse_quick_selector_ipc_message(msg: &str) -> Option<QuickSelecto
         serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
             .ok()
             .map(QuickSelectorIpcAction::SelectMode)
+    } else if let Some(mode_str) = msg.strip_prefix("toggle-favorite:") {
+        serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
+            .ok()
+            .map(QuickSelectorIpcAction::ToggleFavorite)
+    } else if let Some(rest) = msg.strip_prefix("move-favorite:") {
+        let (mode_str, direction_str) = rest.split_once(':')?;
+        let mode = serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\"")).ok()?;
+        let direction = match direction_str {
+            "up" => FavoriteMoveDirection::Up,
+            "down" => FavoriteMoveDirection::Down,
+            _ => return None,
+        };
+        Some(QuickSelectorIpcAction::MoveFavorite(mode, direction))
     } else if msg == "close" {
         Some(QuickSelectorIpcAction::Close)
     } else {
@@ -45,9 +63,15 @@ pub(crate) fn assemble_quick_selector_html(modes_json: &str) -> String {
 }
 
 /// クイックセレクター表示時に実行するフォーカス用スクリプトを生成する
-pub(crate) fn quick_selector_focus_script(current_mode: RefineMode) -> String {
+pub(crate) fn quick_selector_focus_script(current_mode: RefineMode, modes_json: &str) -> String {
     let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
-    format!("focusInput({mode_id});")
+    format!("focusInput({mode_id}, {modes_json});")
+}
+
+/// モード一覧の再描画用スクリプトを生成する
+pub(crate) fn quick_selector_refresh_script(current_mode: RefineMode, modes_json: &str) -> String {
+    let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
+    format!("refreshModes({mode_id}, {modes_json});")
 }
 
 // ======================================================================
@@ -79,7 +103,7 @@ impl QuickSelectorWindow {
     /// * `anyhow::Result<Self>` - 生成に成功した場合は `QuickSelectorWindow` インスタンス、失敗した場合はエラー内容を返す
     pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let window = Arc::new(window);
-        let modes_json = RefineMode::to_json_list();
+        let modes_json = RefineMode::to_json_list(&[]);
 
         let html = assemble_quick_selector_html(&modes_json);
 
@@ -99,6 +123,13 @@ impl QuickSelectorWindow {
                 match parse_quick_selector_ipc_message(msg) {
                     Some(QuickSelectorIpcAction::SelectMode(mode)) => {
                         let _ = proxy_clone.send_event(AppEvent::RequestModeChange(mode));
+                    }
+                    Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
+                        let _ = proxy_clone.send_event(AppEvent::RequestFavoriteToggle(mode));
+                    }
+                    Some(QuickSelectorIpcAction::MoveFavorite(mode, direction)) => {
+                        let _ =
+                            proxy_clone.send_event(AppEvent::RequestFavoriteMove(mode, direction));
                     }
                     Some(QuickSelectorIpcAction::Close) => {
                         let _ = proxy_clone.send_event(AppEvent::HideQuickSelector);
@@ -126,10 +157,17 @@ impl QuickSelectorWindow {
     ///
     /// # Arguments
     /// * `current_mode` - 現在アプリケーションで選択されている加工モード
-    pub fn show(&self, current_mode: RefineMode) {
+    /// * `modes_json` - モード一覧 JSON
+    pub fn show(&self, current_mode: RefineMode, modes_json: &str) {
         self.window.set_visible(true);
         self.window.set_focus();
-        let script = quick_selector_focus_script(current_mode);
+        let script = quick_selector_focus_script(current_mode, modes_json);
+        let _ = self.webview.evaluate_script(&script);
+    }
+
+    /// モード一覧を再描画する
+    pub fn refresh_modes(&self, modes_json: &str, current_mode: RefineMode) {
+        let script = quick_selector_refresh_script(current_mode, modes_json);
         let _ = self.webview.evaluate_script(&script);
     }
 
@@ -211,6 +249,34 @@ mod tests {
         );
     }
 
+    /// `toggle-favorite:` プレフィックス付きメッセージを解釈できること
+    #[test]
+    fn parse_ipc_toggle_favorite() {
+        assert_eq!(
+            parse_quick_selector_ipc_message("toggle-favorite:Trim"),
+            Some(QuickSelectorIpcAction::ToggleFavorite(RefineMode::Trim))
+        );
+    }
+
+    /// `move-favorite:` プレフィックス付きメッセージを解釈できること
+    #[test]
+    fn parse_ipc_move_favorite() {
+        assert_eq!(
+            parse_quick_selector_ipc_message("move-favorite:Trim:up"),
+            Some(QuickSelectorIpcAction::MoveFavorite(
+                RefineMode::Trim,
+                FavoriteMoveDirection::Up
+            ))
+        );
+        assert_eq!(
+            parse_quick_selector_ipc_message("move-favorite:UrlDecode:down"),
+            Some(QuickSelectorIpcAction::MoveFavorite(
+                RefineMode::UrlDecode,
+                FavoriteMoveDirection::Down
+            ))
+        );
+    }
+
     /// `close` メッセージを解釈できること
     #[test]
     fn parse_ipc_close() {
@@ -225,6 +291,14 @@ mod tests {
     fn parse_ipc_unknown_returns_none() {
         assert_eq!(parse_quick_selector_ipc_message("invalid"), None);
         assert_eq!(parse_quick_selector_ipc_message("select:not-a-mode"), None);
+        assert_eq!(
+            parse_quick_selector_ipc_message("toggle-favorite:not-a-mode"),
+            None
+        );
+        assert_eq!(
+            parse_quick_selector_ipc_message("move-favorite:Trim:left"),
+            None
+        );
     }
 
     /// 生成 HTML にモード JSON と CSS が埋め込まれること
@@ -237,10 +311,10 @@ mod tests {
         assert!(html.contains("クイックセレクター"));
     }
 
-    /// フォーカス用スクリプトに現在モードが含まれること
+    /// フォーカス用スクリプトに現在モードと一覧 JSON が含まれること
     #[test]
     fn quick_selector_focus_script_contains_mode_json() {
-        let script = quick_selector_focus_script(RefineMode::JsonFormat);
+        let script = quick_selector_focus_script(RefineMode::JsonFormat, "[]");
         assert!(script.starts_with("focusInput("));
         assert!(script.contains("JsonFormat"));
         assert!(script.ends_with(");"));

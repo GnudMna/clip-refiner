@@ -3,6 +3,7 @@ use crate::hotkey_binding::parse_hotkey_binding;
 use crate::refiner::RefineMode;
 
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
 // ======================================================================
 // 監視モード
@@ -293,6 +294,9 @@ pub struct AppConfig {
     /// クリップボードへコピーする登録文字列
     #[serde(default)]
     pub texts: Vec<RegisteredText>,
+    /// お気に入り登録した変換モード (登録順)
+    #[serde(default)]
+    pub favorite_modes: Vec<RefineMode>,
 }
 
 impl Default for AppConfig {
@@ -313,6 +317,7 @@ impl Default for AppConfig {
             hotkeys: HotkeySettings::default(),
             regex: RegexSettings::default(),
             texts: Vec::new(),
+            favorite_modes: Vec::new(),
         }
     }
 }
@@ -327,6 +332,7 @@ impl AppConfig {
         let mut config = migration.config;
         config.clamp_values();
         config.normalize_texts();
+        config.normalize_favorite_modes();
         config.hotkeys.fix_invalid();
         (config, migration.migrated)
     }
@@ -335,6 +341,7 @@ impl AppConfig {
     pub fn normalize(&mut self) {
         self.clamp_values();
         self.normalize_texts();
+        self.normalize_favorite_modes();
         self.version = consts::CONFIG_VERSION;
     }
 
@@ -442,6 +449,95 @@ impl AppConfig {
         self.normalize_texts();
         true
     }
+
+    /// お気に入り変換モードを許容範囲内に正規化する
+    pub(crate) fn normalize_favorite_modes(&mut self) {
+        use std::collections::HashSet;
+
+        let valid: HashSet<RefineMode> = RefineMode::iter().collect();
+        let mut seen = HashSet::new();
+        self.favorite_modes.retain(|mode| {
+            if !valid.contains(mode) || seen.contains(mode) {
+                false
+            } else {
+                seen.insert(*mode);
+                true
+            }
+        });
+        if self.favorite_modes.len() > consts::MAX_FAVORITE_MODES {
+            self.favorite_modes.truncate(consts::MAX_FAVORITE_MODES);
+        }
+    }
+
+    /// 指定モードがお気に入り登録済みかどうか
+    pub fn is_favorite_mode(&self, mode: RefineMode) -> bool {
+        self.favorite_modes.contains(&mode)
+    }
+
+    /// お気に入り変換モードの登録状態を切り替える
+    ///
+    /// # Returns
+    /// * `FavoriteToggleResult` - 切り替え結果
+    pub fn toggle_favorite_mode(&mut self, mode: RefineMode) -> FavoriteToggleResult {
+        if let Some(index) = self.favorite_modes.iter().position(|m| *m == mode) {
+            self.favorite_modes.remove(index);
+            FavoriteToggleResult::Removed
+        } else if self.favorite_modes.len() >= consts::MAX_FAVORITE_MODES {
+            FavoriteToggleResult::LimitReached
+        } else {
+            self.favorite_modes.push(mode);
+            FavoriteToggleResult::Added
+        }
+    }
+
+    /// お気に入り変換モードの表示順を1つ移動する
+    ///
+    /// # Returns
+    /// * `bool` - 移動できた場合は `true`
+    pub fn move_favorite_mode(
+        &mut self,
+        mode: RefineMode,
+        direction: FavoriteMoveDirection,
+    ) -> bool {
+        let Some(index) = self.favorite_modes.iter().position(|m| *m == mode) else {
+            return false;
+        };
+        let target = match direction {
+            FavoriteMoveDirection::Up if index > 0 => index - 1,
+            FavoriteMoveDirection::Down if index + 1 < self.favorite_modes.len() => index + 1,
+            _ => return false,
+        };
+        self.favorite_modes.swap(index, target);
+        true
+    }
+
+    /// クイックセレクター向けの変換モード JSON 配列を生成する
+    pub fn modes_to_json_list(&self) -> String {
+        RefineMode::to_json_list(&self.favorite_modes)
+    }
+}
+
+// ======================================================================
+// お気に入り変換モード
+// ======================================================================
+/// お気に入り変換モードの切り替え結果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FavoriteToggleResult {
+    /// お気に入りへ追加した
+    Added,
+    /// お気に入りから削除した
+    Removed,
+    /// 登録件数の上限に達している
+    LimitReached,
+}
+
+/// お気に入り変換モードの移動方向
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FavoriteMoveDirection {
+    /// 上へ移動
+    Up,
+    /// 下へ移動
+    Down,
 }
 
 // ======================================================================

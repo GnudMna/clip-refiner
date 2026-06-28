@@ -82,6 +82,9 @@ pub const MAX_REGISTERED_TEXT_LABEL_CHARS: usize = 64;
 /// 登録文字列プレビューの最大文字数 (UI 表示用)
 pub const REGISTERED_TEXT_PREVIEW_MAX_CHARS: usize = 40;
 
+/// お気に入り変換モードの最大件数
+pub const MAX_FAVORITE_MODES: usize = 20;
+
 // ======================================================================
 // ヘルパー関数
 // ======================================================================

@@ -14,6 +14,7 @@ use tray_icon::menu::MenuEvent;
 
 mod app_control;
 mod config_reload;
+mod favorites;
 mod history;
 mod monitor;
 mod notification;
@@ -21,6 +22,7 @@ mod refine;
 mod texts;
 
 pub(crate) use config_reload::reload_config_with_notification;
+pub(crate) use favorites::{move_favorite_mode, toggle_favorite_mode};
 pub use refine::update_refine;
 
 /// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する
@@ -89,6 +91,9 @@ pub fn handle_menu_event(
         return;
     }
     if notification::handle_notification_event(&event.id, menu, state) {
+        return;
+    }
+    if favorites::handle_favorites_event(&event.id, menu, state, None) {
         return;
     }
     if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_tx) {
@@ -187,7 +192,7 @@ mod tests {
         assert_eq!(state.with_config(|c| c.mode), RefineMode::JsonFormat);
         assert!(
             menu.refine
-                .all_items()
+                .all_mode_items()
                 .any(|(item, mode)| *mode == RefineMode::JsonFormat && item.is_checked())
         );
         match rx.recv().expect("ワーカーコマンドが送信される") {
@@ -352,7 +357,7 @@ mod tests {
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
         let (item, mode) = menu
             .refine
-            .all_items()
+            .all_mode_items()
             .find(|(_, m)| *m == RefineMode::JsonFormat)
             .expect("JsonFormat メニュー項目が存在する");
         let (tx, rx) = mpsc::channel();

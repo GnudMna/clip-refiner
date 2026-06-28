@@ -162,6 +162,23 @@ impl App {
             AppEvent::RequestTextDelete(index) => {
                 event::delete_registered_text(&self.state, &self.menu, &self.text_selector, index);
             }
+            AppEvent::RequestFavoriteToggle(mode) => {
+                event::toggle_favorite_mode(
+                    &self.state,
+                    &self.menu,
+                    Some(&self.quick_selector),
+                    mode,
+                );
+            }
+            AppEvent::RequestFavoriteMove(mode, direction) => {
+                event::move_favorite_mode(
+                    &self.state,
+                    &self.menu,
+                    Some(&self.quick_selector),
+                    mode,
+                    direction,
+                );
+            }
             AppEvent::RefreshHistory => {
                 let _ = self.menu.refresh_history(&self.state);
             }
