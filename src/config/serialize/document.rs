@@ -1,10 +1,9 @@
 use super::format::{field_comment_prefix, section_header_prefix};
+use super::scalar::serde_to_toml_value;
 
 use anyhow::Result;
 use serde::Serialize;
 use toml_edit::{DocumentMut, Item, Table};
-
-use super::scalar::serde_to_toml_value;
 
 /// テーブルがなければセクション見出し付きで挿入する
 pub(crate) fn ensure_table(doc: &mut DocumentMut, name: &str, section_title: &str) {

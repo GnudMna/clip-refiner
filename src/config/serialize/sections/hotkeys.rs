@@ -14,6 +14,9 @@ use crate::config::types::AppConfig;
 use anyhow::{Context, Result};
 use toml_edit::DocumentMut;
 
+// ======================================================================
+// ドキュメント更新
+// ======================================================================
 /// `[hotkeys]` の設定値を更新する
 pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "hotkeys", SECTION_HOTKEYS);
@@ -88,6 +91,9 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
     Ok(())
 }
 
+// ======================================================================
+// テンプレート出力
+// ======================================================================
 /// `[hotkeys]` をコメント付きテンプレートへ書き出す
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
     write_table_section(out, SECTION_HOTKEYS, "hotkeys")?;

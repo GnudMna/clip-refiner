@@ -2,10 +2,9 @@ use std::ptr;
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
-
 use crate::platform::screen_capture::{ScreenRect, virtual_screen_bounds};
 
+use anyhow::{Context, Result, bail};
 use windows_sys::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION, CreateCompatibleDC,
@@ -23,7 +22,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 // ======================================================================
-// 型
+// オーバーレイ型
 // ======================================================================
 /// オーバーレイ上の選択矩形 (クライアント座標)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +112,7 @@ const ERROR_CLASS_ALREADY_EXISTS: u32 = 1410;
 static REGISTER_OVERLAY_CLASS: Once = Once::new();
 
 // ======================================================================
-// 公開 API
+// パブリック関数
 // ======================================================================
 impl OverlayWindow {
     /// 仮想デスクトップ全体を覆うオーバーレイウィンドウを生成する

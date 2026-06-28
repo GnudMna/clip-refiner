@@ -1,11 +1,10 @@
 use std::fmt::Write;
 
 use super::docs::SECTION_RULE;
+use super::scalar::toml_scalar;
 
 use anyhow::Result;
 use serde::Serialize;
-
-use super::scalar::toml_scalar;
 
 /// ルートレベルのセクション見出しを書き出す
 pub(crate) fn write_section<W: Write>(out: &mut W, title: &str) -> Result<()> {

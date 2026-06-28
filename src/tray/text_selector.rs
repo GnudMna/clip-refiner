@@ -1,6 +1,7 @@
 use super::dispatch;
 use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
 use super::state::AppEvent;
+
 use crate::consts;
 
 use tao::event_loop::EventLoopProxy;
@@ -100,7 +101,7 @@ impl TextSelectorWindow {
 }
 
 // ======================================================================
-// UI操作
+// ウィンドウ操作
 // ======================================================================
 impl TextSelectorWindow {
     /// テキストセレクタを表示し、登録文字列一覧を反映する

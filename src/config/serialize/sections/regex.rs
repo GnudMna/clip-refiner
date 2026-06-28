@@ -13,6 +13,9 @@ use crate::config::types::AppConfig;
 use anyhow::{Context, Result};
 use toml_edit::DocumentMut;
 
+// ======================================================================
+// ドキュメント更新
+// ======================================================================
 /// `[regex]` の設定値を更新する
 pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "regex", SECTION_REGEX);
@@ -54,6 +57,9 @@ fn write_regex_table(regex: &mut toml_edit::Table, config: &AppConfig) -> Result
     Ok(())
 }
 
+// ======================================================================
+// テンプレート出力
+// ======================================================================
 /// `[regex]` をコメント付きテンプレートへ書き出す
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
     write_table_section(out, SECTION_REGEX, "regex")?;

@@ -1,9 +1,9 @@
-use super::defs::{RefineCategory, RefineMode};
-
-use clap::ValueEnum;
 use std::collections::HashSet;
 use std::str::FromStr;
 
+use super::defs::{RefineCategory, RefineMode};
+
+use clap::ValueEnum;
 use strum::{EnumMessage, EnumProperty, IntoEnumIterator};
 
 // ======================================================================

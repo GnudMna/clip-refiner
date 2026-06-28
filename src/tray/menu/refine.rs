@@ -12,6 +12,27 @@ use strum::IntoEnumIterator;
 use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 // ======================================================================
+// プライベート関数
+// ======================================================================
+/// トレイメニュー表示用の変換モードラベルを生成する
+fn mode_menu_label(mode: RefineMode, is_favorite: bool) -> String {
+    if is_favorite {
+        format!("★ {}", mode.label())
+    } else {
+        mode.label().to_string()
+    }
+}
+
+/// お気に入りサブメニュー表示用のラベルを生成する
+fn favorite_menu_label(mode: RefineMode, hotkeys: &HotkeySettings, index: usize) -> String {
+    if let Some(binding) = hotkeys.favorite_slot_binding(index) {
+        format!("{} ({})", mode.label(), binding)
+    } else {
+        mode.label().to_string()
+    }
+}
+
+// ======================================================================
 // 変換モードメニュー
 // ======================================================================
 impl TrayMenu {
@@ -229,26 +250,5 @@ impl RefineMenu {
         for (item, mode) in self.all_mode_items() {
             item.set_text(mode_menu_label(*mode, favorite_set.contains(mode)));
         }
-    }
-}
-
-// ======================================================================
-// プライベート関数
-// ======================================================================
-/// トレイメニュー表示用の変換モードラベルを生成する
-fn mode_menu_label(mode: RefineMode, is_favorite: bool) -> String {
-    if is_favorite {
-        format!("★ {}", mode.label())
-    } else {
-        mode.label().to_string()
-    }
-}
-
-/// お気に入りサブメニュー表示用のラベルを生成する
-fn favorite_menu_label(mode: RefineMode, hotkeys: &HotkeySettings, index: usize) -> String {
-    if let Some(binding) = hotkeys.favorite_slot_binding(index) {
-        format!("{} ({})", mode.label(), binding)
-    } else {
-        mode.label().to_string()
     }
 }

@@ -3,6 +3,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use super::dispatch;
 use super::history::EncryptedHistoryStore;
+
 use crate::config::{AppConfig, RegexSettings};
 use crate::refiner::RefineMode;
 use crate::security::{ContentFingerprint, SecretString, secret_from};
@@ -367,6 +368,7 @@ impl AppState {
 #[allow(clippy::expect_used)]
 pub(crate) fn test_app_state() -> AppState {
     use crate::config::AppConfig;
+
     use tao::event_loop::EventLoopBuilder;
     #[cfg(windows)]
     use tao::platform::windows::EventLoopBuilderExtWindows;

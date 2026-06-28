@@ -68,11 +68,11 @@ fn refine_by_category<'a>(mode: RefineMode, text: &'a str, ctx: &RefineContext) 
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use super::super::transform::datetime;
     use super::*;
 
     use crate::config::RegexSettings;
 
-    use super::super::transform::datetime;
     use strum::IntoEnumIterator;
 
     fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {

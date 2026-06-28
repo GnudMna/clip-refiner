@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::super::state::AppState;
+
 use crate::config::NotificationSettings;
 use crate::platform;
 use crate::refiner::RefineMode;
@@ -136,6 +137,7 @@ pub fn show_when_enabled(state: &Arc<AppState>, summary: &str, body: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::NotificationSettings;
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
 

@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 
 use super::notify;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
+
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
@@ -203,7 +204,7 @@ pub(crate) fn record_clipboard_outcome(
 }
 
 // ======================================================================
-// UI更新
+// トレイメニュー更新
 // ======================================================================
 /// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
 ///
@@ -225,6 +226,7 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::RegexSettings;
     use crate::refiner::RefineMode;
     use crate::security::ContentFingerprint;

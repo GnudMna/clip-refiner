@@ -7,6 +7,9 @@ use super::text_clipboard::{ImageClipboard, TextClipboard};
 
 use crate::security::{is_within_clipboard_limit, is_within_parser_limit};
 
+// ======================================================================
+// 定数
+// ======================================================================
 /// Excel コピー時に描画ビットマップの到着を待つ最大試行回数
 #[cfg(test)]
 const EXCEL_IMAGE_RETRY_ATTEMPTS: u32 = 1;
@@ -335,6 +338,7 @@ pub(crate) fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::test_helpers::InMemoryTextClipboard;
 
     fn empty_ctx() -> RefineContext {

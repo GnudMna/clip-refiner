@@ -51,8 +51,9 @@ impl ImageClipboard for arboard::Clipboard {
     }
 
     fn set_image(&mut self, width: u32, height: u32, rgba: Vec<u8>) -> Result<(), String> {
-        use arboard::ImageData;
         use std::borrow::Cow;
+
+        use arboard::ImageData;
 
         arboard::Clipboard::set_image(
             self,

@@ -4,10 +4,14 @@ use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::menu::TrayMenu;
 use super::super::notify;
 use super::super::state::AppState;
+
 use crate::platform;
 
 use tao::event_loop::ControlFlow;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// アプリケーションの基本操作(終了、一時停止、設定ファイルの起動、ショートカット一覧表示)を処理する
 ///
 /// # Arguments
