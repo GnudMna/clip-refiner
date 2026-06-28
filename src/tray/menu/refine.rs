@@ -35,7 +35,7 @@ impl TrayMenu {
         let mut items_by_category: HashMap<RefineCategory, Vec<(CheckMenuItem, RefineMode)>> =
             HashMap::new();
 
-        for mode in RefineMode::iter() {
+        for mode in RefineMode::iter().filter(|mode| mode.is_supported_on_current_platform()) {
             let item = CheckMenuItem::new(
                 mode_menu_label(mode, favorite_set.contains(&mode)),
                 true,

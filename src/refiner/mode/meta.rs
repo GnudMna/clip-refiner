@@ -71,6 +71,23 @@ impl RefineMode {
         matches!(self, Self::ExcelToImage)
     }
 
+    /// 現在の OS で利用可能な加工モードかどうか
+    ///
+    /// 非対応 OS では UI から非表示とし、設定読み込み時に除去する
+    pub fn is_supported_on_current_platform(self) -> bool {
+        match self {
+            Self::ExcelToImage => cfg!(windows),
+            _ => true,
+        }
+    }
+
+    /// 現在の OS で UI に表示可能なモード数
+    pub fn supported_mode_count() -> usize {
+        Self::iter()
+            .filter(|mode| mode.is_supported_on_current_platform())
+            .count()
+    }
+
     /// クイックセレクタ向けのモード表示順を返す
     ///
     /// トレイメニューと同様に、通常項目を先頭に、続けてカテゴリ順で並べる
@@ -79,9 +96,17 @@ impl RefineMode {
     /// * `Vec<RefineMode>` - 表示順に並んだモード一覧
     pub fn quick_selector_modes() -> Vec<Self> {
         let mut ordered = Vec::new();
-        ordered.extend(Self::iter().filter(|m| m.category() == RefineCategory::Normal));
+        ordered.extend(
+            Self::iter()
+                .filter(|m| m.is_supported_on_current_platform())
+                .filter(|m| m.category() == RefineCategory::Normal),
+        );
         for category in RefineCategory::SUBMENU_ORDER {
-            ordered.extend(Self::iter().filter(|m| m.category() == category));
+            ordered.extend(
+                Self::iter()
+                    .filter(|m| m.is_supported_on_current_platform())
+                    .filter(|m| m.category() == category),
+            );
         }
         ordered
     }
@@ -247,7 +272,7 @@ mod tests {
         let parsed: Vec<serde_json::Value> =
             serde_json::from_str(&json).expect("to_json_list の出力が JSON として不正");
 
-        assert_eq!(parsed.len(), RefineMode::iter().count());
+        assert_eq!(parsed.len(), RefineMode::supported_mode_count());
 
         for item in &parsed {
             assert!(item.get("id").is_some());
@@ -301,7 +326,7 @@ mod tests {
     #[test]
     fn test_quick_selector_modes_order() {
         let ordered = RefineMode::quick_selector_modes();
-        assert_eq!(ordered.len(), RefineMode::iter().count());
+        assert_eq!(ordered.len(), RefineMode::supported_mode_count());
 
         let normal_count = RefineMode::iter()
             .filter(|m| m.category() == RefineCategory::Normal)
@@ -318,6 +343,23 @@ mod tests {
             }
         }
         assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
+    }
+
+    /// `ExcelToImage` のプラットフォーム対応が OS ごとに切り替わること
+    #[test]
+    fn test_excel_to_image_platform_support() {
+        if cfg!(windows) {
+            assert!(RefineMode::ExcelToImage.is_supported_on_current_platform());
+        } else {
+            assert!(!RefineMode::ExcelToImage.is_supported_on_current_platform());
+        }
+    }
+
+    /// 非 Windows では UI 向けモード一覧に `ExcelToImage` が含まれないこと
+    #[test]
+    #[cfg(not(windows))]
+    fn test_quick_selector_modes_excludes_windows_only_modes() {
+        assert!(!RefineMode::quick_selector_modes().contains(&RefineMode::ExcelToImage));
     }
 
     /// `RefineMode` のバリアント数と主要バリアントの存在を確認すること
