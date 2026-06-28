@@ -4,6 +4,7 @@
 
 use std::sync::Mutex;
 
+use super::dispatch;
 use super::state::AppState;
 use crate::autostart;
 use crate::config::MonitorMode;
@@ -268,9 +269,12 @@ impl TrayMenu {
         self.refine
             .sync_favorite_actions(config.mode, &config.favorite_modes);
         self.refine.sync_mode_labels(&config.favorite_modes);
-        let _ = self
+        if let Err(err) = self
             .refine
-            .rebuild_favorites(config.mode, &config.favorite_modes);
+            .rebuild_favorites(config.mode, &config.favorite_modes)
+        {
+            dispatch::log_menu_operation_error("お気に入りメニューの再構築", err);
+        }
 
         for (item, monitor_mode) in &self.monitor.items {
             item.set_checked(*monitor_mode == config.monitor_mode);

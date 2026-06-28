@@ -3,6 +3,7 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::clipboard_monitor::bump_monitor_generation;
+use super::dispatch;
 use super::menu::TrayMenu;
 use super::notify;
 use super::quick_selector::QuickSelectorWindow;
@@ -180,7 +181,7 @@ impl HotkeyHandler {
         std::thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
             while let Ok(event) = receiver.recv() {
-                let _ = proxy.send_event(AppEvent::Hotkey(event));
+                dispatch::send_app_event(&proxy, AppEvent::Hotkey(event));
             }
         });
     }
@@ -232,7 +233,7 @@ impl HotkeyHandler {
         } else if event.id == self.quit_hotkey.id() {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
-            let _ = ctx.clipboard_tx.send(ClipboardCommand::Undo);
+            dispatch::send_clipboard_command(ctx.clipboard_tx, ClipboardCommand::Undo);
         } else if event.id == self.text_selector_hotkey.id() {
             Self::handle_text_selector_hotkey(ctx);
         }

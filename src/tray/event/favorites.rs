@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::notify;
 use super::super::quick_selector::QuickSelectorWindow;
 use super::super::state::AppState;
+
 use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
 use crate::refiner::RefineMode;
 
@@ -94,7 +96,9 @@ pub(crate) fn refresh_favorites_views(
     menu: &TrayMenu,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
-    let _ = menu.refresh_favorites(state);
+    if let Err(err) = menu.refresh_favorites(state) {
+        dispatch::log_menu_operation_error("お気に入りメニューの更新", err);
+    }
     refresh_quick_selector_modes(state, quick_selector);
 }
 

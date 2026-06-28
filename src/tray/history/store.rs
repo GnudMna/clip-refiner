@@ -4,6 +4,7 @@
 
 use crate::security::SecretString;
 
+use anyhow::{Context, Result};
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use zeroize::Zeroize;
@@ -40,14 +41,14 @@ impl EncryptedHistoryStore {
     /// ランダム鍵で空のストアを生成する
     ///
     /// # Returns
-    /// * `Self` - 空の暗号化履歴ストア
-    pub fn new() -> Self {
+    /// * `Result<Self>` - 空の暗号化履歴ストア。鍵生成に失敗した場合は `Err`
+    pub fn new() -> Result<Self> {
         let mut key = [0u8; 32];
-        getrandom::fill(&mut key).expect("履歴暗号化鍵の生成に失敗");
-        Self {
+        getrandom::fill(&mut key).context("履歴暗号化鍵の生成に失敗")?;
+        Ok(Self {
             key,
             entries: Vec::new(),
-        }
+        })
     }
 }
 
@@ -196,7 +197,7 @@ mod tests {
     /// 暗号化ストアに平文バイト列がそのまま残らないこと
     #[test]
     fn test_encrypted_entries_do_not_contain_plaintext() {
-        let mut store = EncryptedHistoryStore::new();
+        let mut store = EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗");
         let secret = "super-secret-password-12345";
         store.add(secret, 10);
 
@@ -208,7 +209,7 @@ mod tests {
     /// 追加・復号・重複移動・上限が正しく動作すること
     #[test]
     fn test_add_dedup_limit_and_decrypt() {
-        let mut store = EncryptedHistoryStore::new();
+        let mut store = EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗");
 
         // 空白は無視
         store.add("   ", 10);

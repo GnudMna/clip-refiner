@@ -26,22 +26,43 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub fn run() -> Result<()> {
     setup_console();
 
-    let _guard = setup_logging()?;
+    let _guard = match setup_logging() {
+        Ok(guard) => guard,
+        Err(err) => {
+            report_fatal_startup_error("ログの初期化", &err);
+            return Err(err);
+        }
+    };
 
     #[cfg(windows)]
     platform::init_notifications();
 
     let args = Args::parse();
 
-    let _instance = ensure_single_instance()?;
+    let _instance = match ensure_single_instance() {
+        Ok(instance) => instance,
+        Err(err) => {
+            report_fatal_startup_error("多重起動防止", &err);
+            return Err(err);
+        }
+    };
 
-    if let Some(mode) = args.mode {
-        run_once(mode, &args)?;
-    } else {
-        tray::run_loop()?;
+    if let Err(err) = run_application(&args) {
+        log_error!("アプリケーションの実行に失敗: {:#}", err);
+        report_fatal_startup_error("実行", &err);
+        return Err(err);
     }
 
     Ok(())
+}
+
+/// 引数に応じて常駐またはワンショット実行を行う
+fn run_application(args: &Args) -> Result<()> {
+    if let Some(mode) = args.mode {
+        run_once(mode, args)
+    } else {
+        tray::run_loop()
+    }
 }
 
 // ======================================================================
@@ -239,4 +260,26 @@ fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
     }
 
     ctx
+}
+
+// ======================================================================
+// 起動失敗の通知
+// ======================================================================
+/// 起動失敗をログ・標準エラー・デスクトップ通知へ報告する
+///
+/// Windows の GUI ビルドではコンソールがないため、通知が主なフィードバックになる
+fn report_fatal_startup_error(context: &str, err: &anyhow::Error) {
+    let message = format!("{context}: {err:#}");
+    eprintln!("{message}");
+    platform::show_notification("起動エラー", &truncate_notification_body(&message, 240));
+}
+
+/// 通知本文の最大文字数に合わせて切り詰める
+fn truncate_notification_body(body: &str, max_chars: usize) -> String {
+    if body.chars().count() <= max_chars {
+        return body.to_string();
+    }
+
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", body.chars().take(keep).collect::<String>())
 }

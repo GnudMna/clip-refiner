@@ -1,5 +1,7 @@
+use super::dispatch;
 use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
 use super::state::AppEvent;
+
 use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::refiner::RefineMode;
@@ -101,16 +103,19 @@ impl QuickSelectorWindow {
             let msg = req.body();
             match parse_quick_selector_ipc_message(msg) {
                 Some(QuickSelectorIpcAction::SelectMode(mode)) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestModeChange(mode));
+                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestModeChange(mode));
                 }
                 Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestFavoriteToggle(mode));
+                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestFavoriteToggle(mode));
                 }
                 Some(QuickSelectorIpcAction::MoveFavorite(mode, direction)) => {
-                    let _ = proxy_clone.send_event(AppEvent::RequestFavoriteMove(mode, direction));
+                    dispatch::send_app_event(
+                        &proxy_clone,
+                        AppEvent::RequestFavoriteMove(mode, direction),
+                    );
                 }
                 Some(QuickSelectorIpcAction::Close) => {
-                    let _ = proxy_clone.send_event(AppEvent::HideQuickSelector);
+                    dispatch::send_app_event(&proxy_clone, AppEvent::HideQuickSelector);
                 }
                 None => {}
             }
