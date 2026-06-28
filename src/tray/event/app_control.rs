@@ -47,7 +47,7 @@ pub(super) fn handle_app_control(
             .send_event(crate::tray::state::AppEvent::ReloadConfig);
         true
     } else if id == menu.shortcut_list_item.id() {
-        let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
+        let body = state.with_config(|c| c.hotkeys.shortcut_list_text(&c.favorite_modes));
         platform::show_notification("ショートカット一覧", &body);
         true
     } else if id == menu.launch_at_login_item.id() {

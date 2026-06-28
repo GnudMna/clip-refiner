@@ -20,6 +20,7 @@ mod tests {
     use super::*;
 
     use crate::consts;
+    use crate::hotkey_binding::parse_hotkey_binding;
     use crate::refiner::RefineMode;
 
     /// `AppConfig` のデフォルト値が正しいこと
@@ -266,5 +267,51 @@ interval_ms = 500
                 RefineMode::UrlDecode
             ]
         );
+    }
+
+    /// お気に入りスロットのデフォルトホットキーが解決されること
+    #[test]
+    fn test_favorite_slot_default_bindings() {
+        let hotkeys = HotkeySettings::default();
+        assert_eq!(
+            hotkeys.favorite_slot_binding(0).as_deref(),
+            Some("Alt+Shift+1")
+        );
+        assert_eq!(
+            hotkeys.favorite_slot_binding(8).as_deref(),
+            Some("Alt+Shift+9")
+        );
+        assert_eq!(
+            hotkeys.favorite_slot_binding(9).as_deref(),
+            Some("Alt+Shift+F1")
+        );
+    }
+
+    /// 空文字のスロット設定はホットキーを無効化すること
+    #[test]
+    fn test_favorite_slot_empty_binding_disables_hotkey() {
+        let hotkeys = HotkeySettings {
+            favorite_mode_slots: vec![String::new()],
+            ..HotkeySettings::default()
+        };
+        assert!(hotkeys.favorite_slot_binding(0).is_none());
+        assert_eq!(
+            hotkeys.favorite_slot_binding(1).as_deref(),
+            Some("Alt+Shift+2")
+        );
+    }
+
+    /// 重複するお気に入りホットキーは除外されること
+    #[test]
+    fn test_resolve_favorite_slot_hotkeys_skips_duplicates() {
+        let hotkeys = HotkeySettings {
+            favorite_mode_slots: vec!["Alt+Shift+S".to_string()],
+            ..HotkeySettings::default()
+        };
+        let reserved =
+            vec![parse_hotkey_binding(consts::DEFAULT_HOTKEY_QUICK_SELECTOR).expect("解析に失敗")];
+        let resolved = hotkeys.resolve_favorite_slot_hotkeys(2, &reserved);
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].0, 1);
     }
 }

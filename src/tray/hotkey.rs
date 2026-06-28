@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use super::clipboard_monitor::bump_monitor_generation;
 use super::dispatch;
+use super::event::update_refine;
 use super::menu::TrayMenu;
 use super::notify;
 use super::quick_selector::QuickSelectorWindow;
@@ -14,6 +15,7 @@ use crate::config::{AppConfig, HotkeySettings};
 use crate::consts;
 use crate::hotkey_binding::resolve_hotkey;
 use crate::platform;
+use crate::refiner::RefineMode;
 
 use anyhow::Result;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::HotKey};
@@ -22,6 +24,14 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 // ======================================================================
 // ホットキーハンドラ構造体
 // ======================================================================
+/// お気に入り変換モード用ホットキー割り当て
+struct FavoriteHotkeyBinding {
+    /// 登録済みホットキー
+    hotkey: HotKey,
+    /// `favorite_modes` 内のインデックス
+    slot_index: usize,
+}
+
 /// グローバルホットキーの登録と管理を行う構造体
 ///
 /// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
@@ -41,6 +51,8 @@ pub struct HotkeyHandler {
     undo_hotkey: HotKey,
     /// 登録文字列セレクタ表示・非表示用ホットキー
     text_selector_hotkey: HotKey,
+    /// お気に入り変換モード用ホットキー
+    favorite_hotkeys: Vec<FavoriteHotkeyBinding>,
 }
 
 // ======================================================================
@@ -99,10 +111,11 @@ impl HotkeyHandler {
     ///
     /// # Arguments
     /// * `hotkeys` - 設定ファイルから読み込んだホットキー割り当て
+    /// * `favorite_modes` - お気に入り登録済み変換モード
     ///
     /// # Returns
     /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返す
-    pub fn new(hotkeys: &HotkeySettings) -> Result<Self> {
+    pub fn new(hotkeys: &HotkeySettings, favorite_modes: &[RefineMode]) -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
 
@@ -110,7 +123,7 @@ impl HotkeyHandler {
             manager.register(hotkey).map_err(|e| anyhow::anyhow!(e))?;
         }
 
-        Ok(Self {
+        let mut handler = Self {
             manager,
             quick_selector_hotkey: resolved.quick_selector,
             notification_hotkey: resolved.notification,
@@ -118,7 +131,10 @@ impl HotkeyHandler {
             quit_hotkey: resolved.quit,
             undo_hotkey: resolved.undo,
             text_selector_hotkey: resolved.text_selector,
-        })
+            favorite_hotkeys: Vec::new(),
+        };
+        handler.register_favorite_hotkeys(hotkeys, favorite_modes.len())?;
+        Ok(handler)
     }
 
     /// ホットキー割り当てを再登録する
@@ -127,15 +143,21 @@ impl HotkeyHandler {
     ///
     /// # Arguments
     /// * `hotkeys` - 新しいホットキー割り当て
+    /// * `favorite_modes` - お気に入り登録済み変換モード
     ///
     /// # Returns
     /// * `Result<()>` - 再登録成功時は `Ok(())`、失敗時は `Err`
-    pub fn reload(&mut self, hotkeys: &HotkeySettings) -> Result<()> {
+    pub fn reload(
+        &mut self,
+        hotkeys: &HotkeySettings,
+        favorite_modes: &[RefineMode],
+    ) -> Result<()> {
         for hotkey in self.registered_hotkeys() {
             self.manager
                 .unregister(hotkey)
                 .map_err(|e| anyhow::anyhow!(e))?;
         }
+        self.unregister_favorite_hotkeys()?;
 
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
         for hotkey in resolved.as_slice() {
@@ -151,7 +173,17 @@ impl HotkeyHandler {
         self.undo_hotkey = resolved.undo;
         self.text_selector_hotkey = resolved.text_selector;
 
-        Ok(())
+        self.register_favorite_hotkeys(hotkeys, favorite_modes.len())
+    }
+
+    /// お気に入り変換モード用ホットキーのみ再登録する
+    pub fn reload_favorite_slots(
+        &mut self,
+        hotkeys: &HotkeySettings,
+        favorite_count: usize,
+    ) -> Result<()> {
+        self.unregister_favorite_hotkeys()?;
+        self.register_favorite_hotkeys(hotkeys, favorite_count)
     }
 
     /// 登録済みホットキーを配列として返す
@@ -164,6 +196,43 @@ impl HotkeyHandler {
             self.undo_hotkey,
             self.text_selector_hotkey,
         ]
+    }
+
+    /// お気に入り変換モード用ホットキーを OS へ登録する
+    fn register_favorite_hotkeys(
+        &mut self,
+        hotkeys: &HotkeySettings,
+        favorite_count: usize,
+    ) -> Result<()> {
+        let resolved =
+            hotkeys.resolve_favorite_slot_hotkeys(favorite_count, &self.registered_hotkeys());
+        for (slot_index, hotkey) in resolved {
+            self.manager
+                .register(hotkey)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            self.favorite_hotkeys
+                .push(FavoriteHotkeyBinding { hotkey, slot_index });
+        }
+        Ok(())
+    }
+
+    /// お気に入り変換モード用ホットキーの登録を解除する
+    fn unregister_favorite_hotkeys(&mut self) -> Result<()> {
+        for binding in &self.favorite_hotkeys {
+            self.manager
+                .unregister(binding.hotkey)
+                .map_err(|e| anyhow::anyhow!(e))?;
+        }
+        self.favorite_hotkeys.clear();
+        Ok(())
+    }
+
+    /// ホットキー ID に対応するお気に入りスロットインデックスを返す
+    fn favorite_slot_for_hotkey(&self, hotkey_id: u32) -> Option<usize> {
+        self.favorite_hotkeys
+            .iter()
+            .find(|binding| binding.hotkey.id() == hotkey_id)
+            .map(|binding| binding.slot_index)
     }
 }
 
@@ -236,7 +305,36 @@ impl HotkeyHandler {
             dispatch::send_clipboard_command(ctx.clipboard_tx, ClipboardCommand::Undo);
         } else if event.id == self.text_selector_hotkey.id() {
             Self::handle_text_selector_hotkey(ctx);
+        } else if let Some(slot_index) = self.favorite_slot_for_hotkey(event.id) {
+            Self::handle_favorite_mode_hotkey(ctx, slot_index);
         }
+    }
+
+    /// お気に入り変換モード用ホットキーを処理する
+    fn handle_favorite_mode_hotkey(ctx: &mut HotkeyEventContext<'_>, slot_index: usize) {
+        let Some(mode) = ctx
+            .state
+            .with_config(|config| config.favorite_modes.get(slot_index).copied())
+        else {
+            return;
+        };
+
+        if let Some(quick_selector) = ctx.quick_selector {
+            quick_selector.hide();
+        }
+        if let Some(text_selector) = ctx.text_selector
+            && text_selector.is_visible()
+        {
+            text_selector.hide();
+        }
+
+        update_refine(
+            ctx.state,
+            ctx.menu,
+            ctx.clipboard_tx,
+            mode,
+            ctx.quick_selector,
+        );
     }
 
     /// クイックセレクター表示ホットキーを処理する
@@ -334,6 +432,14 @@ impl HotkeyHandler {
     pub(crate) fn undo_hotkey_id(&self) -> u32 {
         self.undo_hotkey.id()
     }
+
+    /// テスト用: お気に入りスロット 0 のホットキー ID を返す
+    pub(crate) fn favorite_hotkey_id_at(&self, slot_index: usize) -> Option<u32> {
+        self.favorite_hotkeys
+            .iter()
+            .find(|binding| binding.slot_index == slot_index)
+            .map(|binding| binding.hotkey.id())
+    }
 }
 
 #[cfg(test)]
@@ -345,6 +451,7 @@ mod tests {
     use super::*;
 
     use crate::config::HotkeySettings;
+    use crate::refiner::RefineMode;
     use crate::tray::menu::TrayMenu;
     use crate::tray::state::test_app_state;
     use crate::tray::worker::ClipboardCommand;
@@ -400,6 +507,7 @@ mod tests {
             quit: "Alt+Shift+F4".to_string(),
             undo: "Alt+Shift+F5".to_string(),
             text_selector: "Alt+Shift+F6".to_string(),
+            favorite_mode_slots: Vec::new(),
         }
     }
 
@@ -408,7 +516,8 @@ mod tests {
     /// グローバルホットキーは OS に残るため 1 テストにまとめる
     #[test]
     fn hotkey_event_handling() {
-        let handler = HotkeyHandler::new(&test_hotkeys()).expect("テスト用ホットキーの登録に失敗");
+        let mut handler =
+            HotkeyHandler::new(&test_hotkeys(), &[]).expect("テスト用ホットキーの登録に失敗");
         let mut ctx = HotkeyTestContext::new();
 
         // キー解放は無視
@@ -460,6 +569,33 @@ mod tests {
             ClipboardCommand::Undo
         ));
 
+        // お気に入りホットキー
+        ctx.state.with_config_mut(|config| {
+            config.favorite_modes = vec![RefineMode::Trim, RefineMode::JsonFormat];
+        });
+        handler
+            .reload_favorite_slots(&test_hotkeys(), 2)
+            .expect("お気に入りホットキーの再登録に失敗");
+        let favorite_id = handler
+            .favorite_hotkey_id_at(1)
+            .expect("スロット 1 のホットキーが登録される");
+        handler.handle_event(
+            GlobalHotKeyEvent {
+                id: favorite_id,
+                state: HotKeyState::Pressed,
+            },
+            &mut ctx.ctx(),
+        );
+        assert_eq!(
+            ctx.state.with_config(|config| config.mode),
+            RefineMode::JsonFormat
+        );
+        assert!(matches!(
+            rx.recv()
+                .expect("お気に入りホットキーで加工コマンドが送信される"),
+            ClipboardCommand::ProcessMode(RefineMode::JsonFormat)
+        ));
+
         // 終了
         handler.handle_event(
             GlobalHotKeyEvent {
@@ -499,13 +635,17 @@ mod tests {
             quit: "Alt+Ctrl+F4".to_string(),
             undo: "Alt+Ctrl+F5".to_string(),
             text_selector: "Alt+Ctrl+F6".to_string(),
+            favorite_mode_slots: Vec::new(),
         };
-        let mut handler = HotkeyHandler::new(&initial).expect("テスト用ホットキーの登録に失敗");
+        let mut handler =
+            HotkeyHandler::new(&initial, &[]).expect("テスト用ホットキーの登録に失敗");
         let quit_before = handler.quit_hotkey_id();
 
         let mut updated = initial.clone();
         updated.quit = "Alt+Ctrl+F12".to_string();
-        handler.reload(&updated).expect("ホットキーの再登録に失敗");
+        handler
+            .reload(&updated, &[])
+            .expect("ホットキーの再登録に失敗");
 
         assert_ne!(handler.quit_hotkey_id(), quit_before);
     }

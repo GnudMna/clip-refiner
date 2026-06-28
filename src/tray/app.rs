@@ -58,8 +58,9 @@ impl App {
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
         let state = Arc::new(AppState::new(proxy.clone())?);
         let menu = TrayMenu::build(&state)?;
-        let hotkeys = state.with_config(|c| c.hotkeys.clone());
-        let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
+        let (hotkeys, favorite_modes) =
+            state.with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
+        let hotkey_handler = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
         let text_selector = init_text_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
@@ -196,6 +197,17 @@ impl App {
                     &mut self.hotkey_handler,
                     &self.text_selector,
                 );
+            }
+            AppEvent::ReloadFavoriteHotkeys => {
+                let (hotkeys, favorite_count) = self
+                    .state
+                    .with_config(|c| (c.hotkeys.clone(), c.favorite_modes.len()));
+                if let Err(err) = self
+                    .hotkey_handler
+                    .reload_favorite_slots(&hotkeys, favorite_count)
+                {
+                    crate::log_warn!("お気に入りホットキーの再登録に失敗: {}", err);
+                }
             }
             AppEvent::Hotkey(hotkey_event) => {
                 let mut ctx = HotkeyEventContext {

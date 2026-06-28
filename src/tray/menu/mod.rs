@@ -170,7 +170,7 @@ impl TrayMenu {
     pub fn build(state: &AppState) -> Result<Self> {
         let config = state.with_config(std::clone::Clone::clone);
 
-        let refine = Self::build_refine_menu(config.mode, &config.favorite_modes)?;
+        let refine = Self::build_refine_menu(config.mode, &config.favorite_modes, &config.hotkeys)?;
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
         let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
         let history = Self::build_history_menu(config.history_enabled)?;
@@ -269,9 +269,9 @@ impl TrayMenu {
         self.refine
             .sync_favorite_actions(config.mode, &config.favorite_modes);
         self.refine.sync_mode_labels(&config.favorite_modes);
-        if let Err(err) = self
-            .refine
-            .rebuild_favorites(config.mode, &config.favorite_modes)
+        if let Err(err) =
+            self.refine
+                .rebuild_favorites(config.mode, &config.favorite_modes, &config.hotkeys)
         {
             dispatch::log_menu_operation_error("お気に入りメニューの再構築", err);
         }
@@ -316,7 +316,7 @@ impl TrayMenu {
 mod tests {
     use super::*;
 
-    use crate::config::MonitorMode;
+    use crate::config::{HotkeySettings, MonitorMode};
     use crate::refiner::{RefineCategory, RefineMode};
 
     use strum::IntoEnumIterator;
@@ -324,7 +324,7 @@ mod tests {
     /// 変換モードメニューに全モードが含まれること
     #[test]
     fn build_refine_menu_contains_all_modes() {
-        let refine = TrayMenu::build_refine_menu(RefineMode::Trim, &[])
+        let refine = TrayMenu::build_refine_menu(RefineMode::Trim, &[], &HotkeySettings::default())
             .expect("変換モードメニューの構築に失敗");
         let modes: Vec<_> = refine.all_mode_items().map(|(_, mode)| *mode).collect();
         assert_eq!(modes.len(), RefineMode::iter().count());
@@ -338,8 +338,12 @@ mod tests {
     /// 選択カテゴリのサブメニューにチェックプレフィックスが付くこと
     #[test]
     fn refresh_category_labels_marks_current_category() {
-        let refine = TrayMenu::build_refine_menu(RefineMode::UrlEncode, &[RefineMode::UrlEncode])
-            .expect("変換モードメニューの構築に失敗");
+        let refine = TrayMenu::build_refine_menu(
+            RefineMode::UrlEncode,
+            &[RefineMode::UrlEncode],
+            &HotkeySettings::default(),
+        )
+        .expect("変換モードメニューの構築に失敗");
         let tray = TrayMenu {
             _tray_icon: TrayIconBuilder::new()
                 .with_icon(create_icon().expect("アイコンの作成に失敗"))
