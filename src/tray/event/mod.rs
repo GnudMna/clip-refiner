@@ -73,12 +73,14 @@ impl FocusDismissibleSelector for super::text_selector::TextSelectorWindow {
 /// * `menu` - トレイメニュー構造体
 /// * `state` - アプリケーションの共有状態
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
+/// * `quick_selector` - 表示中の更新に使うクイックセレクター (未使用時は `None`)
 /// * `control_flow` - イベントループの制御フロー
 pub fn handle_menu_event(
     event: &MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
     clipboard_tx: &Sender<ClipboardCommand>,
+    quick_selector: Option<&QuickSelectorWindow>,
     control_flow: &mut ControlFlow,
 ) {
     if app_control::handle_app_control(&event.id, menu, state, control_flow) {
@@ -93,10 +95,10 @@ pub fn handle_menu_event(
     if notification::handle_notification_event(&event.id, menu, state) {
         return;
     }
-    if favorites::handle_favorites_event(&event.id, menu, state, None) {
+    if favorites::handle_favorites_event(&event.id, menu, state, quick_selector) {
         return;
     }
-    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_tx) {
+    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_tx, quick_selector) {
         return;
     }
     monitor::handle_monitor_event(&event.id, menu, state);
@@ -187,7 +189,7 @@ mod tests {
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
         let (tx, rx) = mpsc::channel();
 
-        update_refine(&state, &menu, &tx, RefineMode::JsonFormat);
+        update_refine(&state, &menu, &tx, RefineMode::JsonFormat, None);
 
         assert_eq!(state.with_config(|c| c.mode), RefineMode::JsonFormat);
         assert!(
@@ -249,6 +251,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -269,6 +272,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -292,6 +296,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -311,6 +316,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -341,6 +347,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -368,6 +375,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -393,6 +401,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -413,6 +422,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -438,6 +448,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -464,6 +475,7 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
@@ -485,9 +497,31 @@ mod tests {
             &menu,
             &state,
             &tx,
+            None,
             &mut control_flow,
         );
 
         assert!(state.with_config(|c| c.history_enabled));
+    }
+
+    /// お気に入り登録メニューで現在モードが登録されること
+    #[test]
+    fn handle_menu_event_add_favorite_registers_current_mode() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|config| config.mode = RefineMode::Trim);
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, _) = mpsc::channel();
+        let mut control_flow = ControlFlow::Wait;
+
+        handle_menu_event(
+            &menu_event(menu.refine.add_favorite_item.id()),
+            &menu,
+            &state,
+            &tx,
+            None,
+            &mut control_flow,
+        );
+
+        assert!(state.with_config(|config| config.is_favorite_mode(RefineMode::Trim)));
     }
 }
