@@ -1,6 +1,6 @@
 [package]
 name = "clip-refiner"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]
@@ -82,6 +82,7 @@ csv = "1.3"
 directories = "6.0.0"
 getrandom = "0.4.3"
 global-hotkey = "0.8.0"
+image = { version = "0.25.9", default-features = false, features = ["bmp", "jpeg"] }
 indexmap = { version = "2.14.0", features = ["serde"] }
 notify-rust = "4.18.0"
 percent-encoding = "2.3.2"
@@ -115,18 +116,26 @@ objc2-app-kit = "0.3"
 clipboard-win = { version = "5.0", features = ["std"] }
 windows = { version = "0.62.2", features = [
     "Data_Xml_Dom",
+    "Foundation",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
     "UI_Notifications",
+    "Win32_System_WinRT",
 ] }
-winreg = "0.56.0"
+windows-future = { version = "0.3.2", features = ["std"] }
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_System_Console",
     "Win32_System_Memory",
     "Win32_System_Threading",
     "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
+winreg = "0.56.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

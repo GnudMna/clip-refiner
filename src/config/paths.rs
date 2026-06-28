@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use super::permissions::restrict_private_dir_permissions;
+
 use crate::consts;
 
 use anyhow::{Context, Result};

@@ -8,6 +8,7 @@ mod clipboard;
 mod harness;
 
 pub use crate::config::MonitorMode;
+
 pub use clipboard::InMemoryTextClipboard;
 pub use harness::ClipboardHarness;
 

@@ -1,7 +1,9 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 use std::time::{Duration, Instant, SystemTime};
 
+use super::dispatch;
 use super::history::EncryptedHistoryStore;
+
 use crate::config::{AppConfig, RegexSettings};
 use crate::refiner::RefineMode;
 use crate::security::{ContentFingerprint, SecretString, secret_from};
@@ -26,12 +28,18 @@ pub enum AppEvent {
     RequestTextRegister,
     /// 登録文字列の削除要求
     RequestTextDelete(usize),
+    /// お気に入り変換モードの登録切替要求
+    RequestFavoriteToggle(RefineMode),
+    /// お気に入り変換モードの表示順変更要求
+    RequestFavoriteMove(RefineMode, crate::config::FavoriteMoveDirection),
     /// 履歴メニューの内容再構築要求
     RefreshHistory,
     /// 登録文字列メニューの内容再構築要求
     RefreshTexts,
     /// ディスク上の設定ファイルを再読み込みする要求
     ReloadConfig,
+    /// お気に入り変換モード用ホットキーの再登録要求
+    ReloadFavoriteHotkeys,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
@@ -40,8 +48,8 @@ pub enum AppEvent {
 ///
 /// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
-    /// 現在の加工モード
-    pub mode: RefineMode,
+    /// 監視時に適用する加工モード列
+    pub pipeline: Vec<RefineMode>,
     /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,
     /// 一時停止中かどうか
@@ -50,6 +58,15 @@ pub struct MonitorSnapshot {
     pub history_enabled: bool,
     /// 正規表現加工用の設定
     pub regex_settings: RegexSettings,
+}
+
+impl MonitorSnapshot {
+    /// パイプライン末尾が画像出力モードかどうか
+    pub fn produces_image(&self) -> bool {
+        self.pipeline
+            .last()
+            .is_some_and(|mode| mode.produces_image())
+    }
 }
 
 /// 監視ループにおける二重加工防止用の状態
@@ -145,21 +162,21 @@ impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
     ///
     /// # Returns
-    /// * `Self` - 新しく生成された `AppState` インスタンス
-    pub fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
+    /// * `Result<Self>` - 新しく生成された `AppState` インスタンス
+    pub fn new(proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let config = AppConfig::load();
         let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
-        Self {
+        Ok(Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
             undo_text: Mutex::new(None),
-            history_store: Mutex::new(EncryptedHistoryStore::new()),
+            history_store: Mutex::new(EncryptedHistoryStore::new()?),
             proxy,
             persist_config: true,
             config_disk_mtime: Mutex::new(disk_mtime),
             config_save_grace_until: Mutex::new(None),
-        }
+        })
     }
 
     /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
@@ -239,7 +256,7 @@ impl AppState {
     /// `config` `RwLock` の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
-            mode: config.mode,
+            pipeline: config.effective_pipeline(),
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
@@ -256,6 +273,17 @@ impl AppState {
     pub fn record_processing_success(&self, output: &str) {
         self.with_processed_state(|ps| {
             let fp = ContentFingerprint::from_text(output);
+            ps.last_written = Some(fp);
+            ps.last_seen = fp;
+        });
+    }
+
+    /// 画像加工成功後に元テキストの指紋を記録する
+    ///
+    /// クリップボード上に TSV が残る場合の再加工ループを防ぐ
+    pub fn record_image_processing_success(&self, source_text: &str) {
+        self.with_processed_state(|ps| {
+            let fp = ContentFingerprint::from_text(source_text);
             ps.last_written = Some(fp);
             ps.last_seen = fp;
         });
@@ -328,7 +356,7 @@ impl AppState {
         let limit = self.with_config(|c| c.history_limit);
         self.history_store.lock_ignore_poison().add(text, limit);
 
-        let _ = self.proxy.send_event(AppEvent::RefreshHistory);
+        dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
     }
 }
 
@@ -337,8 +365,10 @@ impl AppState {
 // ======================================================================
 /// ユニットテスト用の `AppState` を生成する
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+#[allow(clippy::expect_used)]
 pub(crate) fn test_app_state() -> AppState {
     use crate::config::AppConfig;
+
     use tao::event_loop::EventLoopBuilder;
     #[cfg(windows)]
     use tao::platform::windows::EventLoopBuilderExtWindows;
@@ -360,7 +390,9 @@ pub(crate) fn test_app_state() -> AppState {
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
         undo_text: Mutex::new(None),
-        history_store: Mutex::new(EncryptedHistoryStore::new()),
+        history_store: Mutex::new(
+            EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗"),
+        ),
         proxy: event_loop.create_proxy(),
         persist_config: false,
         config_disk_mtime: Mutex::new(None),
@@ -457,7 +489,7 @@ mod tests {
         });
 
         let snap = state.monitor_snapshot();
-        assert_eq!(snap.mode, RefineMode::UrlEncode);
+        assert_eq!(snap.pipeline, vec![RefineMode::UrlEncode]);
         assert_eq!(snap.interval_ms, 1500);
         assert!(snap.is_paused);
         assert!(snap.history_enabled);

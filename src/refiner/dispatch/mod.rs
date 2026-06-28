@@ -1,10 +1,22 @@
 use std::borrow::Cow;
 
 use super::context::RefineContext;
-use super::mode::RefineMode;
-use super::transform::{
-    datetime, escape, json, line_actions, markdown, number, path, regex, trim, url, yaml,
-};
+use super::mode::{RefineCategory, RefineMode};
+
+mod case_convert;
+mod datetime;
+mod escape;
+mod excel;
+mod json_format;
+mod line_actions;
+mod markdown;
+mod number;
+mod path;
+mod regex_modes;
+mod to_json;
+mod to_yaml;
+mod trim;
+mod url;
 
 // ======================================================================
 // 加工インターフェース
@@ -24,54 +36,30 @@ pub trait Refiner {
 
 impl Refiner for RefineMode {
     fn refine<'a>(&self, text: &'a str, ctx: &RefineContext) -> Cow<'a, str> {
-        match self {
-            RefineMode::UrlEncode => url::url_encode(text),
-            RefineMode::UrlDecode => {
-                url::url_decode(text).map_or_else(|_| Cow::Borrowed(text), Cow::Owned)
-            }
-            RefineMode::RemoveUtm => url::remove_utm_params(text),
-            RefineMode::ExtractBasename => path::extract_basename(text),
-            RefineMode::ExtractBasenameQuoted => path::extract_basename_quoted(text),
-            RefineMode::AddPathQuotes => path::add_path_quotes(text),
-            RefineMode::RemovePathQuotes => path::remove_path_quotes(text),
-            RefineMode::PathToSlash => path::convert_to_forward_slash(text),
-            RefineMode::PathToBackslash => path::convert_to_backslash(text),
-            RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
-            RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
-            RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
-            RefineMode::RemoveDuplicateLines => line_actions::remove_duplicate_lines(text),
-            RefineMode::Trim => trim::trim_text(text),
-            RefineMode::TrimLines => trim::trim_lines(text),
-            RefineMode::Escape => escape::escape_string(text),
-            RefineMode::Unescape => escape::unescape_string(text),
-            RefineMode::RegexEscape => escape::regex_escape(text),
-            RefineMode::RegexUnescape => escape::regex_unescape(text),
-            RefineMode::RegexReplace => {
-                regex::regex_replace(text, &ctx.regex, &mut ctx.regex_cache_mut())
-            }
-            RefineMode::RegexExtract => {
-                regex::regex_extract(text, &ctx.regex, &mut ctx.regex_cache_mut())
-            }
-            RefineMode::RegexDelete => {
-                regex::regex_delete(text, &ctx.regex, &mut ctx.regex_cache_mut())
-            }
-            RefineMode::RegexSplit => {
-                regex::regex_split(text, &ctx.regex, &mut ctx.regex_cache_mut())
-            }
-            RefineMode::JsonFormat => json::format_json(text),
-            RefineMode::JsonFormatPreserveOrder => json::format_json_preserve_order(text),
-            RefineMode::YamlToJson => yaml::yaml_to_json(text),
-            RefineMode::YamlToJsonPreserveOrder => yaml::yaml_to_json_preserve_order(text),
-            RefineMode::JsonToYaml => json::json_to_yaml(text),
-            RefineMode::JsonToYamlPreserveOrder => json::json_to_yaml_preserve_order(text),
-            RefineMode::MarkdownToHtml => markdown::markdown_to_html(text),
-            RefineMode::ExcelToMarkdown => markdown::excel_to_markdown_table(text),
-            RefineMode::MarkdownToExcel => markdown::markdown_table_to_excel(text),
-            RefineMode::TimestampToDatetime => datetime::timestamp_to_datetime_string(text),
-            RefineMode::DatetimeToTimestamp => datetime::datetime_string_to_timestamp(text),
-            RefineMode::AddComma => number::add_commas(text),
-            RefineMode::RemoveComma => number::remove_commas(text),
-        }
+        refine_by_category(*self, text, ctx)
+    }
+}
+
+/// `RefineMode` のカテゴリに応じて対応サブモジュールへディスパッチする
+///
+/// 新カテゴリ追加時はこことカテゴリ用 `refine` 実装の両方がコンパイルを要求する
+fn refine_by_category<'a>(mode: RefineMode, text: &'a str, ctx: &RefineContext) -> Cow<'a, str> {
+    match mode.category() {
+        RefineCategory::UrlActions => url::refine(mode, text, ctx),
+        RefineCategory::Path => path::refine(mode, text, ctx),
+        RefineCategory::LineActions => line_actions::refine(mode, text, ctx),
+        RefineCategory::Trim => trim::refine(mode, text, ctx),
+        RefineCategory::Escape => escape::refine(mode, text, ctx),
+        RefineCategory::Regex => regex_modes::refine(mode, text, ctx),
+        RefineCategory::JsonFormat => json_format::refine(mode, text, ctx),
+        RefineCategory::ToJson => to_json::refine(mode, text, ctx),
+        RefineCategory::ToYaml => to_yaml::refine(mode, text, ctx),
+        RefineCategory::Markdown => markdown::refine(mode, text, ctx),
+        RefineCategory::Excel => excel::refine(mode, text, ctx),
+        RefineCategory::Datetime => datetime::refine(mode, text, ctx),
+        RefineCategory::Number => number::refine(mode, text, ctx),
+        RefineCategory::Case => case_convert::refine(mode, text, ctx),
+        RefineCategory::Normal => unreachable!("{mode:?} は Normal カテゴリに属さない"),
     }
 }
 
@@ -80,6 +68,7 @@ impl Refiner for RefineMode {
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use super::super::transform::datetime;
     use super::*;
 
     use crate::config::RegexSettings;
@@ -196,12 +185,17 @@ mod tests {
             ),
             (RefineMode::AddComma, "1000", "1,000"),
             (RefineMode::RemoveComma, "1,000", "1000"),
+            (RefineMode::ToCamelCase, "foo_bar", "fooBar"),
+            (RefineMode::ToSnakeCase, "fooBar", "foo_bar"),
+            (RefineMode::ToPascalCase, "foo_bar", "FooBar"),
+            (RefineMode::ToKebabCase, "fooBar", "foo-bar"),
+            (RefineMode::ToScreamingSnakeCase, "fooBar", "FOO_BAR"),
         ];
 
         assert_eq!(
-            CASES.len() + 6,
+            CASES.len() + 7,
             RefineMode::iter().count(),
-            "固定ケースと日時・正規表現モードの合計が RefineMode バリアント数と一致しません"
+            "固定ケースと日時・正規表現・画像モードの合計が RefineMode バリアント数と一致しません"
         );
 
         let empty_ctx = RefineContext::default();
@@ -235,6 +229,9 @@ mod tests {
                 RefineMode::RegexSplit => {
                     let ctx = regex_ctx(",", "");
                     assert_eq!(mode.refine("a,b,c", &ctx), "a\nb\nc");
+                }
+                RefineMode::ExcelToImage => {
+                    // 画像出力モードは `process_image_clipboard` で処理する
                 }
                 other => {
                     let (input, expected) = CASES.iter().find(|(m, _, _)| *m == other).map_or_else(

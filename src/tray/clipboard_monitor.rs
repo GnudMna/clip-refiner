@@ -3,11 +3,12 @@ use std::sync::atomic::Ordering;
 
 use super::notify;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
+
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, RefineContext, TextClipboard,
-    process_text_clipboard,
+    ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode,
+    TextClipboard, process_clipboard_pipeline_io,
 };
 use crate::security::{ContentFingerprint, is_within_clipboard_limit};
 
@@ -86,38 +87,61 @@ pub(crate) fn should_process_clipboard(
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
-pub(crate) fn handle_clipboard_update<C: TextClipboard>(
+pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
     event_driven: bool,
     ctx: &RefineContext,
 ) -> bool {
-    let Ok(text) = clipboard.get_text() else {
-        return false;
+    let text = match clipboard.get_text() {
+        Ok(text) => text,
+        Err(_) if snap.produces_image() => String::new(),
+        Err(_) => return false,
     };
 
-    let should_process =
-        state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
+    if text.is_empty() {
+        if !snap.produces_image() {
+            return false;
+        }
+    } else {
+        let should_process =
+            state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
 
-    if !should_process {
-        return false;
+        if !should_process {
+            return false;
+        }
+
+        if !is_within_clipboard_limit(&text) {
+            crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
+            state.record_clipboard_observed(&text);
+            return false;
+        }
     }
 
-    if !is_within_clipboard_limit(&text) {
-        crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
-        state.record_clipboard_observed(&text);
-        return false;
-    }
-
-    let outcome = process_text_clipboard(clipboard, snap.mode, ctx);
+    let outcome = process_clipboard_pipeline_io(clipboard, &snap.pipeline, ctx);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            notify::show_process_notification(state, snap.mode, processed.as_str());
+            notify::show_process_notification(state, &snap.pipeline, processed.as_str());
+        }
+        Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+            notify::show_image_process_notification(
+                state,
+                snap.pipeline
+                    .last()
+                    .copied()
+                    .unwrap_or(RefineMode::ExcelToImage),
+                *width,
+                *height,
+            );
         }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
+        Err(ClipboardProcessError::NoImage) => {
+            // Excel 描画ビットマップの到着待ち。次回のクリップボード更新で再試行する
+            crate::log_debug!("Excel 描画画像を待機中");
+        }
         Err(ClipboardProcessError::TextTooLarge) => {
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
         }
@@ -155,8 +179,17 @@ pub(crate) fn record_clipboard_outcome(
             }
             true
         }
+        Ok(ClipboardProcessOutcome::ImageProcessed { .. }) => {
+            state.record_undo_source(observed_text);
+            state.record_image_processing_success(observed_text);
+            true
+        }
         Ok(ClipboardProcessOutcome::Unchanged)
-        | Err(ClipboardProcessError::ReadFailed(_) | ClipboardProcessError::WriteFailed(_)) => {
+        | Err(
+            ClipboardProcessError::ReadFailed(_)
+            | ClipboardProcessError::WriteFailed(_)
+            | ClipboardProcessError::NoImage,
+        ) => {
             state.record_clipboard_observed(observed_text);
             if snap.history_enabled {
                 state.add_to_history(observed_text);
@@ -171,7 +204,7 @@ pub(crate) fn record_clipboard_outcome(
 }
 
 // ======================================================================
-// UI更新
+// トレイメニュー更新
 // ======================================================================
 /// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
 ///
@@ -193,6 +226,7 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::RegexSettings;
     use crate::refiner::RefineMode;
     use crate::security::ContentFingerprint;
@@ -297,9 +331,9 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 
-    fn test_snapshot(mode: RefineMode, history_enabled: bool) -> MonitorSnapshot {
+    fn test_snapshot(pipeline: Vec<RefineMode>, history_enabled: bool) -> MonitorSnapshot {
         MonitorSnapshot {
-            mode,
+            pipeline,
             interval_ms: 1000,
             is_paused: false,
             history_enabled,
@@ -311,7 +345,7 @@ mod tests {
     #[test]
     fn record_outcome_processed_updates_state_and_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Ok(ClipboardProcessOutcome::Processed("trimmed".to_string()));
 
         assert!(record_clipboard_outcome(
@@ -335,7 +369,7 @@ mod tests {
     #[test]
     fn record_outcome_unchanged_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Ok(ClipboardProcessOutcome::Unchanged);
 
         assert!(!record_clipboard_outcome(
@@ -355,7 +389,7 @@ mod tests {
     #[test]
     fn record_outcome_skips_history_when_disabled() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, false);
+        let snap = test_snapshot(vec![RefineMode::Trim], false);
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
         record_clipboard_outcome(&state, &snap, &outcome, "x");
@@ -366,7 +400,7 @@ mod tests {
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Err(ClipboardProcessError::NoText);
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
@@ -380,7 +414,7 @@ mod tests {
     #[test]
     fn record_outcome_read_error_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(RefineMode::Trim, true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true);
         let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));

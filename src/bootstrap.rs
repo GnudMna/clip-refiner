@@ -26,22 +26,43 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub fn run() -> Result<()> {
     setup_console();
 
-    let _guard = setup_logging()?;
+    let _guard = match setup_logging() {
+        Ok(guard) => guard,
+        Err(err) => {
+            report_fatal_startup_error("ログの初期化", &err);
+            return Err(err);
+        }
+    };
 
     #[cfg(windows)]
     platform::init_notifications();
 
     let args = Args::parse();
 
-    let _instance = ensure_single_instance()?;
+    let _instance = match ensure_single_instance() {
+        Ok(instance) => instance,
+        Err(err) => {
+            report_fatal_startup_error("多重起動防止", &err);
+            return Err(err);
+        }
+    };
 
-    if let Some(mode) = args.mode {
-        run_once(mode, &args)?;
-    } else {
-        tray::run_loop()?;
+    if let Err(err) = run_application(&args) {
+        log_error!("アプリケーションの実行に失敗: {:#}", err);
+        report_fatal_startup_error("実行", &err);
+        return Err(err);
     }
 
     Ok(())
+}
+
+/// 引数に応じて常駐またはワンショット実行を行う
+fn run_application(args: &Args) -> Result<()> {
+    if args.mode.is_some() || !args.pipeline.is_empty() {
+        run_once(args)
+    } else {
+        tray::run_loop()
+    }
 }
 
 // ======================================================================
@@ -68,6 +89,9 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<RefineMode>,
+    /// ワンショットで順に適用する加工モード列 (`--mode` より優先)
+    #[arg(long = "pipeline", value_enum, num_args = 1..)]
+    pipeline: Vec<RefineMode>,
     /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
     #[arg(long = "regex-pattern")]
     regex_pattern: Option<String>,
@@ -189,14 +213,17 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 ///
 /// # Returns
 /// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
-fn run_once(mode: RefineMode, args: &Args) -> Result<()> {
-    log_info!("ワンショットモードで実行: {:?}", mode);
+fn run_once(args: &Args) -> Result<()> {
+    let pipeline = resolve_oneshot_pipeline(args)?;
+    log_info!("ワンショットモードで実行: {:?}", pipeline);
     let config = AppConfig::load();
     let ctx = build_refinement_context(&config, args);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
-    match refiner::process_clipboard(&mut clipboard, mode, &ctx) {
-        Ok(ClipboardProcessOutcome::Processed(_)) => {
+    match refiner::process_clipboard_pipeline(&mut clipboard, &pipeline, &ctx) {
+        Ok(
+            ClipboardProcessOutcome::Processed(_) | ClipboardProcessOutcome::ImageProcessed { .. },
+        ) => {
             log_info!("ワンショット処理が完了しました");
             eprintln!("加工が完了しました");
             Ok(())
@@ -237,4 +264,48 @@ fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
     }
 
     ctx
+}
+
+/// ワンショット実行用の加工パイプラインを解決する
+fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
+    let pipeline = if args.pipeline.is_empty() {
+        args.mode
+            .map(|mode| vec![mode])
+            .ok_or_else(|| anyhow::anyhow!("--mode または --pipeline を指定してください"))?
+    } else {
+        args.pipeline.clone()
+    };
+
+    for mode in &pipeline {
+        if !mode.is_supported_on_current_platform() {
+            anyhow::bail!(
+                "加工モード `{}` はこのプラットフォームでは未対応です",
+                mode.label()
+            );
+        }
+    }
+
+    Ok(pipeline)
+}
+
+// ======================================================================
+// 起動失敗の通知
+// ======================================================================
+/// 起動失敗をログ・標準エラー・デスクトップ通知へ報告する
+///
+/// Windows の GUI ビルドではコンソールがないため、通知が主なフィードバックになる
+fn report_fatal_startup_error(context: &str, err: &anyhow::Error) {
+    let message = format!("{context}: {err:#}");
+    eprintln!("{message}");
+    platform::show_notification("起動エラー", &truncate_notification_body(&message, 240));
+}
+
+/// 通知本文の最大文字数に合わせて切り詰める
+fn truncate_notification_body(body: &str, max_chars: usize) -> String {
+    if body.chars().count() <= max_chars {
+        return body.to_string();
+    }
+
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", body.chars().take(keep).collect::<String>())
 }

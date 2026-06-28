@@ -18,13 +18,16 @@ mod context;
 mod dispatch;
 mod mode;
 mod ordered_value;
+mod pipeline;
 pub(crate) mod text_clipboard;
 mod transform;
 
-pub(crate) use text_clipboard::TextClipboard;
+pub(crate) use text_clipboard::{ImageClipboard, TextClipboard};
 
-pub(crate) use clipboard::process_text_clipboard;
-pub use clipboard::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
+pub(crate) use clipboard::process_clipboard_pipeline_io;
+pub use clipboard::{
+    ClipboardProcessError, ClipboardProcessOutcome, process_clipboard, process_clipboard_pipeline,
+};
 pub use context::RefineContext;
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};

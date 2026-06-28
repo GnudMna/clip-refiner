@@ -6,6 +6,8 @@ use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
+#[cfg(windows)]
+use super::ocr_capture::{OcrCaptureWindow, init_ocr_capture};
 use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
 use super::text_selector::{TextSelectorWindow, init_text_selector};
@@ -31,6 +33,9 @@ pub struct App {
     pub quick_selector: QuickSelectorWindow,
     /// 登録文字列選択用の UI ウィンドウ
     pub text_selector: TextSelectorWindow,
+    /// 画面範囲選択 OCR 用オーバーレイ
+    #[cfg(windows)]
+    pub ocr_capture: OcrCaptureWindow,
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
@@ -56,13 +61,16 @@ impl App {
     /// # Returns
     /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合はエラーを返す。
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
-        let state = Arc::new(AppState::new(proxy.clone()));
+        let state = Arc::new(AppState::new(proxy.clone())?);
         let menu = TrayMenu::build(&state)?;
-        let hotkeys = state.with_config(|c| c.hotkeys.clone());
-        let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
+        let (hotkeys, favorite_modes) =
+            state.with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
+        let hotkey_handler = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
         let text_selector = init_text_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
+        #[cfg(windows)]
+        let ocr_capture = init_ocr_capture(clipboard_tx.clone())?;
 
         HotkeyHandler::start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -73,6 +81,8 @@ impl App {
             menu,
             quick_selector,
             text_selector,
+            #[cfg(windows)]
+            ocr_capture,
             hotkey_handler,
             clipboard_tx,
             last_quick_selector_show: Instant::now(),
@@ -124,6 +134,7 @@ impl App {
                         &self.menu,
                         &self.state,
                         &self.clipboard_tx,
+                        Some(&self.quick_selector),
                         control_flow,
                     );
                 }
@@ -142,7 +153,7 @@ impl App {
         match event {
             AppEvent::RequestModeChange(mode) => {
                 self.quick_selector.hide();
-                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode);
+                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode, None);
             }
             AppEvent::HideQuickSelector => {
                 self.quick_selector.hide();
@@ -155,15 +166,35 @@ impl App {
                 event::copy_registered_text(&self.state, &self.clipboard_tx, index);
             }
             AppEvent::RequestTextRegister => {
-                let _ = self
-                    .clipboard_tx
-                    .send(super::worker::ClipboardCommand::RegisterFromClipboard);
+                super::dispatch::send_clipboard_command(
+                    &self.clipboard_tx,
+                    super::worker::ClipboardCommand::RegisterFromClipboard,
+                );
             }
             AppEvent::RequestTextDelete(index) => {
                 event::delete_registered_text(&self.state, &self.menu, &self.text_selector, index);
             }
+            AppEvent::RequestFavoriteToggle(mode) => {
+                event::toggle_favorite_mode(
+                    &self.state,
+                    &self.menu,
+                    Some(&self.quick_selector),
+                    mode,
+                );
+            }
+            AppEvent::RequestFavoriteMove(mode, direction) => {
+                event::move_favorite_mode(
+                    &self.state,
+                    &self.menu,
+                    Some(&self.quick_selector),
+                    mode,
+                    direction,
+                );
+            }
             AppEvent::RefreshHistory => {
-                let _ = self.menu.refresh_history(&self.state);
+                if let Err(err) = self.menu.refresh_history(&self.state) {
+                    super::dispatch::log_menu_operation_error("履歴メニューの更新", err);
+                }
             }
             AppEvent::RefreshTexts => {
                 event::refresh_texts_views(&self.state, &self.menu, &self.text_selector);
@@ -176,12 +207,25 @@ impl App {
                     &self.text_selector,
                 );
             }
+            AppEvent::ReloadFavoriteHotkeys => {
+                let (hotkeys, favorite_count) = self
+                    .state
+                    .with_config(|c| (c.hotkeys.clone(), c.favorite_modes.len()));
+                if let Err(err) = self
+                    .hotkey_handler
+                    .reload_favorite_slots(&hotkeys, favorite_count)
+                {
+                    crate::log_warn!("お気に入りホットキーの再登録に失敗: {}", err);
+                }
+            }
             AppEvent::Hotkey(hotkey_event) => {
                 let mut ctx = HotkeyEventContext {
                     state: &self.state,
                     menu: &self.menu,
                     quick_selector: Some(&self.quick_selector),
                     text_selector: Some(&self.text_selector),
+                    #[cfg(windows)]
+                    ocr_capture: Some(&self.ocr_capture),
                     control_flow,
                     last_quick_selector_show: &mut self.last_quick_selector_show,
                     last_text_selector_show: &mut self.last_text_selector_show,

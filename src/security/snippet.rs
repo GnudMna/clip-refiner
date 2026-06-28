@@ -7,29 +7,34 @@ use regex::Regex;
 // ======================================================================
 // 機密情報の検出
 // ======================================================================
+/// 機密情報検出用の正規表現をコンパイルする
+#[allow(clippy::expect_used)]
+fn sensitive_regex(pattern: &str) -> Regex {
+    Regex::new(pattern).expect("機密情報検出用正規表現のコンパイルに失敗")
+}
+
 static PEM_KEY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----").unwrap());
+    LazyLock::new(|| sensitive_regex(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"));
 
 static JWT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.").unwrap());
+    LazyLock::new(|| sensitive_regex(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\."));
 
-static AWS_ACCESS_KEY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\bAKIA[0-9A-Z]{16}\b").unwrap());
+static AWS_ACCESS_KEY: LazyLock<Regex> = LazyLock::new(|| sensitive_regex(r"\bAKIA[0-9A-Z]{16}\b"));
 
 static TOKEN_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{10,}\b|\bghp_[A-Za-z0-9]{20,}\b|\bgho_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b")
-        .unwrap()
+    sensitive_regex(
+        r"(?i)\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{10,}\b|\bghp_[A-Za-z0-9]{20,}\b|\bgho_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b",
+    )
 });
 
 static CREDENTIAL_LINE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    sensitive_regex(
         r"(?im)^[^\n#]{0,40}(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[:=]\s*\S+",
     )
-    .unwrap()
 });
 
 static BARE_SECRET_TOKEN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z0-9+/=_-]{32,}$").unwrap());
+    LazyLock::new(|| sensitive_regex(r"^[A-Za-z0-9+/=_-]{32,}$"));
 
 /// テキストが機密情報を含む可能性があるか判定する
 ///

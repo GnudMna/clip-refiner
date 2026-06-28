@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::super::state::AppState;
+
 use crate::config::NotificationSettings;
 use crate::platform;
 use crate::refiner::RefineMode;
@@ -18,14 +19,14 @@ const NOTIFICATION_SNIPPET_MAX_CHARS: usize = 50;
 ///
 /// # Arguments
 /// * `settings` - 通知設定
-/// * `mode` - 実行された加工モード
+/// * `pipeline` - 実行された加工モード列
 /// * `processed` - 加工後のテキスト
 ///
 /// # Returns
 /// * `Option<String>` - 通知本文。表示不要な場合は `None`
 pub(crate) fn format_process_notification_body(
     settings: &NotificationSettings,
-    mode: RefineMode,
+    pipeline: &[RefineMode],
     processed: &str,
 ) -> Option<String> {
     if !settings.enabled {
@@ -34,7 +35,7 @@ pub(crate) fn format_process_notification_body(
 
     let mut lines = Vec::new();
     if settings.notify_mode {
-        lines.push(format!("モード: {}", mode.label()));
+        lines.push(format!("モード: {}", RefineMode::pipeline_label(pipeline)));
     }
     if settings.notify_result {
         lines.push(format!(
@@ -56,14 +57,41 @@ pub(crate) fn format_process_notification_body(
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態(通知設定の参照用)
-/// * `mode` - 実行された加工モード
+/// * `pipeline` - 実行された加工モード列
 /// * `processed` - 加工後のテキスト
-pub fn show_process_notification(state: &Arc<AppState>, mode: RefineMode, processed: &str) {
+pub fn show_process_notification(state: &Arc<AppState>, pipeline: &[RefineMode], processed: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
-    let Some(body) = format_process_notification_body(&settings, mode, processed) else {
+    let Some(body) = format_process_notification_body(&settings, pipeline, processed) else {
         return;
     };
     platform::show_notification("変換完了", &body);
+}
+
+/// 画像加工完了時のデスクトップ通知を表示する
+pub fn show_image_process_notification(
+    state: &Arc<AppState>,
+    mode: RefineMode,
+    width: u32,
+    height: u32,
+) {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if !settings.enabled {
+        return;
+    }
+
+    let mut lines = Vec::new();
+    if settings.notify_mode {
+        lines.push(format!("モード: {}", mode.label()));
+    }
+    if settings.notify_result {
+        lines.push(format!("内容: 画像 ({width}x{height})"));
+    }
+
+    if lines.is_empty() {
+        return;
+    }
+
+    platform::show_notification("変換完了", &lines.join("\n"));
 }
 
 // ======================================================================
@@ -96,12 +124,20 @@ pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str
     }
 }
 
+/// 成功通知が有効な場合のみデスクトップ通知を表示する
+pub fn show_when_enabled(state: &Arc<AppState>, summary: &str, body: &str) {
+    if state.with_config(|c| c.notification_settings.enabled) {
+        platform::show_notification(summary, body);
+    }
+}
+
 // ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::config::NotificationSettings;
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
 
@@ -114,19 +150,35 @@ mod tests {
         }
     }
 
+    /// パイプライン時はモード名を連結して表示すること
+    #[test]
+    fn format_body_includes_pipeline_labels() {
+        let body = format_process_notification_body(
+            &enabled_settings(),
+            &[RefineMode::UrlDecode, RefineMode::Trim],
+            "hello",
+        )
+        .expect("通知本文が生成される");
+
+        assert!(body.contains("モード: URLデコード → 全体をトリム"));
+    }
+
     /// 通知無効時は本文を生成しないこと
     #[test]
     fn format_body_returns_none_when_disabled() {
         let settings = NotificationSettings::default();
-        assert!(format_process_notification_body(&settings, RefineMode::Trim, "abc").is_none());
+        assert!(format_process_notification_body(&settings, &[RefineMode::Trim], "abc").is_none());
     }
 
     /// モード名と加工結果の両方を含むこと
     #[test]
     fn format_body_includes_mode_and_result() {
-        let body =
-            format_process_notification_body(&enabled_settings(), RefineMode::UrlEncode, "hello")
-                .expect("通知本文が生成される");
+        let body = format_process_notification_body(
+            &enabled_settings(),
+            &[RefineMode::UrlEncode],
+            "hello",
+        )
+        .expect("通知本文が生成される");
 
         assert!(body.contains("モード: URLエンコード"));
         assert!(body.contains("内容: hello"));
@@ -139,7 +191,7 @@ mod tests {
             notify_result: false,
             ..enabled_settings()
         };
-        let body = format_process_notification_body(&settings, RefineMode::Trim, "secret")
+        let body = format_process_notification_body(&settings, &[RefineMode::Trim], "secret")
             .expect("通知本文が生成される");
 
         assert!(body.contains("モード:"));
@@ -153,7 +205,7 @@ mod tests {
             notify_mode: false,
             ..enabled_settings()
         };
-        let body = format_process_notification_body(&settings, RefineMode::Trim, "hello")
+        let body = format_process_notification_body(&settings, &[RefineMode::Trim], "hello")
             .expect("通知本文が生成される");
 
         assert!(!body.contains("モード:"));
@@ -184,7 +236,7 @@ mod tests {
     fn format_body_masks_sensitive_result() {
         let body = format_process_notification_body(
             &enabled_settings(),
-            RefineMode::Trim,
+            &[RefineMode::Trim],
             "api_key=supersecretvalue",
         )
         .expect("通知本文が生成される");
