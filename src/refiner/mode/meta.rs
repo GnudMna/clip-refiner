@@ -16,11 +16,12 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 12] = [
+    pub const SUBMENU_ORDER: [Self; 13] = [
         Self::LineActions,
         Self::UrlActions,
         Self::Path,
         Self::Markdown,
+        Self::Excel,
         Self::Trim,
         Self::Escape,
         Self::Regex,
@@ -72,10 +73,16 @@ impl RefineMode {
             Self::JsonFormat | Self::JsonFormatPreserveOrder => C::JsonFormat,
             Self::YamlToJson | Self::YamlToJsonPreserveOrder => C::ToJson,
             Self::JsonToYaml | Self::JsonToYamlPreserveOrder => C::ToYaml,
-            Self::MarkdownToHtml | Self::ExcelToMarkdown | Self::MarkdownToExcel => C::Markdown,
+            Self::MarkdownToHtml => C::Markdown,
+            Self::ExcelToMarkdown | Self::MarkdownToExcel | Self::ExcelToImage => C::Excel,
             Self::TimestampToDatetime | Self::DatetimeToTimestamp => C::Datetime,
             Self::AddComma | Self::RemoveComma => C::Number,
         }
+    }
+
+    /// 画像をクリップボードへ書き込むモードかどうか
+    pub fn produces_image(self) -> bool {
+        matches!(self, Self::ExcelToImage)
     }
 
     /// クイックセレクタ向けのモード表示順を返す
@@ -150,6 +157,12 @@ mod tests {
             RefineMode::MarkdownToHtml.category(),
             RefineCategory::Markdown
         );
+
+        assert_eq!(
+            RefineMode::ExcelToMarkdown.category(),
+            RefineCategory::Excel
+        );
+        assert_eq!(RefineMode::ExcelToImage.category(), RefineCategory::Excel);
     }
 
     /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されていること
@@ -244,6 +257,6 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 36);
+        assert_eq!(variants.len(), 37);
     }
 }

@@ -2,4 +2,6 @@
 
 mod message;
 
-pub use message::{show_pause_notification, show_process_notification};
+pub use message::{
+    show_image_process_notification, show_pause_notification, show_process_notification,
+};

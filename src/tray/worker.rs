@@ -12,7 +12,7 @@ use crate::config::AddRegisteredTextError;
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_text_clipboard,
+    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_clipboard_io,
 };
 use crate::security::SecretString;
 
@@ -339,7 +339,7 @@ fn sync_monitor_generation(
 /// * `state` - アプリケーションの共有状態
 /// * `refine_ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 /// * `cmd` - 受信したコマンド
-pub(crate) fn handle_command<C: TextClipboard>(
+pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     refine_ctx: &mut RefineContext,
@@ -377,13 +377,20 @@ pub(crate) fn handle_command<C: TextClipboard>(
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
             refine_ctx.regex = state.with_config(|c| c.regex.clone());
-            match process_text_clipboard(clipboard, mode, refine_ctx) {
+            match process_clipboard_io(clipboard, mode, refine_ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
                     }
                     state.record_processing_success(&processed);
                     notify::show_process_notification(state, mode, &processed);
+                }
+                Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+                    if let Some(ref pre) = pre_text {
+                        state.record_undo_source(pre);
+                        state.record_image_processing_success(pre);
+                    }
+                    notify::show_image_process_notification(state, mode, width, height);
                 }
                 Ok(ClipboardProcessOutcome::Unchanged) => {
                     if state.with_config(|c| c.notification_settings.enabled) {

@@ -196,7 +196,9 @@ fn run_once(mode: RefineMode, args: &Args) -> Result<()> {
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
     match refiner::process_clipboard(&mut clipboard, mode, &ctx) {
-        Ok(ClipboardProcessOutcome::Processed(_)) => {
+        Ok(
+            ClipboardProcessOutcome::Processed(_) | ClipboardProcessOutcome::ImageProcessed { .. },
+        ) => {
             log_info!("ワンショット処理が完了しました");
             eprintln!("加工が完了しました");
             Ok(())

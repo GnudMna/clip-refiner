@@ -6,8 +6,8 @@ use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, RefineContext, TextClipboard,
-    process_text_clipboard,
+    ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, TextClipboard,
+    process_clipboard_io,
 };
 use crate::security::{ContentFingerprint, is_within_clipboard_limit};
 
@@ -86,38 +86,53 @@ pub(crate) fn should_process_clipboard(
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
-pub(crate) fn handle_clipboard_update<C: TextClipboard>(
+pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
     event_driven: bool,
     ctx: &RefineContext,
 ) -> bool {
-    let Ok(text) = clipboard.get_text() else {
-        return false;
+    let text = match clipboard.get_text() {
+        Ok(text) => text,
+        Err(_) if snap.mode.produces_image() => String::new(),
+        Err(_) => return false,
     };
 
-    let should_process =
-        state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
+    if text.is_empty() {
+        if !snap.mode.produces_image() {
+            return false;
+        }
+    } else {
+        let should_process =
+            state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
 
-    if !should_process {
-        return false;
+        if !should_process {
+            return false;
+        }
+
+        if !is_within_clipboard_limit(&text) {
+            crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
+            state.record_clipboard_observed(&text);
+            return false;
+        }
     }
 
-    if !is_within_clipboard_limit(&text) {
-        crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
-        state.record_clipboard_observed(&text);
-        return false;
-    }
-
-    let outcome = process_text_clipboard(clipboard, snap.mode, ctx);
+    let outcome = process_clipboard_io(clipboard, snap.mode, ctx);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
             notify::show_process_notification(state, snap.mode, processed.as_str());
         }
+        Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+            notify::show_image_process_notification(state, snap.mode, *width, *height);
+        }
         Ok(ClipboardProcessOutcome::Unchanged) | Err(ClipboardProcessError::NoText) => {}
+        Err(ClipboardProcessError::NoImage) => {
+            // Excel 描画ビットマップの到着待ち。次回のクリップボード更新で再試行する
+            crate::log_debug!("Excel 描画画像を待機中");
+        }
         Err(ClipboardProcessError::TextTooLarge) => {
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
         }
@@ -155,8 +170,17 @@ pub(crate) fn record_clipboard_outcome(
             }
             true
         }
+        Ok(ClipboardProcessOutcome::ImageProcessed { .. }) => {
+            state.record_undo_source(observed_text);
+            state.record_image_processing_success(observed_text);
+            true
+        }
         Ok(ClipboardProcessOutcome::Unchanged)
-        | Err(ClipboardProcessError::ReadFailed(_) | ClipboardProcessError::WriteFailed(_)) => {
+        | Err(
+            ClipboardProcessError::ReadFailed(_)
+            | ClipboardProcessError::WriteFailed(_)
+            | ClipboardProcessError::NoImage,
+        ) => {
             state.record_clipboard_observed(observed_text);
             if snap.history_enabled {
                 state.add_to_history(observed_text);
