@@ -1,10 +1,14 @@
+use std::collections::HashSet;
+use std::sync::Mutex;
+
 use super::{CategoryGroup, RefineMenu, TrayMenu};
 
 use crate::refiner::{RefineCategory, RefineMode};
+use crate::tray::state::{AppState, LockExt};
 
 use anyhow::{Context, Result};
 use strum::IntoEnumIterator;
-use tray_icon::menu::{CheckMenuItem, Submenu};
+use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 // ======================================================================
 // 変換モードメニュー
@@ -14,17 +18,27 @@ impl TrayMenu {
     ///
     /// # Arguments
     /// * `current_mode` - 現在選択されている変換モード
+    /// * `favorite_modes` - お気に入り登録済みモード
     ///
     /// # Returns
     /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す
-    pub(super) fn build_refine_menu(current_mode: RefineMode) -> Result<RefineMenu> {
+    pub(super) fn build_refine_menu(
+        current_mode: RefineMode,
+        favorite_modes: &[RefineMode],
+    ) -> Result<RefineMenu> {
         use std::collections::HashMap;
 
+        let favorite_set: HashSet<RefineMode> = favorite_modes.iter().copied().collect();
         let mut items_by_category: HashMap<RefineCategory, Vec<(CheckMenuItem, RefineMode)>> =
             HashMap::new();
 
         for mode in RefineMode::iter() {
-            let item = CheckMenuItem::new(mode.label(), true, mode == current_mode, None);
+            let item = CheckMenuItem::new(
+                mode_menu_label(mode, favorite_set.contains(&mode)),
+                true,
+                mode == current_mode,
+                None,
+            );
             items_by_category
                 .entry(mode.category())
                 .or_default()
@@ -57,8 +71,14 @@ impl TrayMenu {
             }
         }
 
+        let favorites_submenu = Submenu::new("お気に入り", true);
+        let add_favorite_item = MenuItem::new("現在のモードをお気に入りに登録", true, None);
+        let remove_favorite_item = MenuItem::new("現在のモードをお気に入りから解除", true, None);
+        let favorite_records = Mutex::new(Vec::new());
+
         // メインの変換モードメニュー組み立て
-        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
+        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> =
+            vec![&favorites_submenu as &dyn tray_icon::menu::IsMenuItem];
 
         // カテゴリグループの追加 (遅延配置を除く)
         for group in &groups {
@@ -82,11 +102,18 @@ impl TrayMenu {
         let main_submenu = Submenu::with_items("変換モード", true, &mode_menu_items)
             .context("変換モードメニューの作成に失敗しました")?;
 
-        Ok(RefineMenu {
+        let refine = RefineMenu {
             main_submenu,
+            favorites_submenu,
+            favorite_records,
+            add_favorite_item,
+            remove_favorite_item,
             normal_items,
             groups,
-        })
+        };
+        refine.rebuild_favorites(current_mode, favorite_modes)?;
+        refine.sync_favorite_actions(current_mode, favorite_modes);
+        Ok(refine)
     }
 
     /// 所属カテゴリに基づいてサブメニューのラベルを更新する
@@ -109,5 +136,92 @@ impl TrayMenu {
                 .submenu
                 .set_text(format!("{}{}", prefix, group.category.label()));
         }
+    }
+
+    /// お気に入り変換モードの表示を設定内容に合わせて更新する
+    pub fn refresh_favorites(&self, state: &AppState) -> Result<()> {
+        let (current_mode, favorite_modes) =
+            state.with_config(|config| (config.mode, config.favorite_modes.clone()));
+        self.refine
+            .rebuild_favorites(current_mode, &favorite_modes)?;
+        self.refine
+            .sync_favorite_actions(current_mode, &favorite_modes);
+        self.refine.sync_mode_labels(&favorite_modes);
+        Ok(())
+    }
+}
+
+// ======================================================================
+// お気に入り変換モードメニュー更新
+// ======================================================================
+impl RefineMenu {
+    /// お気に入りサブメニューの内容を再構築する
+    pub fn rebuild_favorites(
+        &self,
+        current_mode: RefineMode,
+        favorite_modes: &[RefineMode],
+    ) -> Result<()> {
+        let mut records = self.favorite_records.lock_ignore_poison();
+        records.clear();
+
+        for _ in 0..self.favorites_submenu.items().len() {
+            self.favorites_submenu.remove_at(0);
+        }
+
+        if favorite_modes.is_empty() {
+            let hint = MenuItem::new("(未登録)", false, None);
+            self.favorites_submenu
+                .append_items(&[&hint as &dyn tray_icon::menu::IsMenuItem])?;
+        } else {
+            for mode in favorite_modes {
+                records.push((
+                    CheckMenuItem::new(mode.label(), true, *mode == current_mode, None),
+                    *mode,
+                ));
+            }
+            for (item, _) in records.iter() {
+                self.favorites_submenu
+                    .append_items(&[item as &dyn tray_icon::menu::IsMenuItem])?;
+            }
+        }
+
+        self.favorites_submenu.append_items(&[
+            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+            &self.add_favorite_item as &dyn tray_icon::menu::IsMenuItem,
+            &self.remove_favorite_item as &dyn tray_icon::menu::IsMenuItem,
+        ])?;
+
+        Ok(())
+    }
+
+    /// お気に入り登録・解除項目の有効状態を同期する
+    pub fn sync_favorite_actions(&self, current_mode: RefineMode, favorite_modes: &[RefineMode]) {
+        let is_favorite = favorite_modes.contains(&current_mode);
+        let at_limit = favorite_modes.len() >= crate::consts::MAX_FAVORITE_MODES;
+
+        self.add_favorite_item
+            .set_enabled(!is_favorite && !at_limit);
+        self.remove_favorite_item.set_enabled(is_favorite);
+    }
+
+    /// 各モード項目のラベルへお気に入り印を反映する
+    pub fn sync_mode_labels(&self, favorite_modes: &[RefineMode]) {
+        let favorite_set: HashSet<RefineMode> = favorite_modes.iter().copied().collect();
+
+        for (item, mode) in self.all_mode_items() {
+            item.set_text(mode_menu_label(*mode, favorite_set.contains(mode)));
+        }
+    }
+}
+
+// ======================================================================
+// プライベート関数
+// ======================================================================
+/// トレイメニュー表示用の変換モードラベルを生成する
+fn mode_menu_label(mode: RefineMode, is_favorite: bool) -> String {
+    if is_favorite {
+        format!("★ {}", mode.label())
+    } else {
+        mode.label().to_string()
     }
 }

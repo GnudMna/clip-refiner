@@ -133,6 +133,67 @@ input::placeholder {
     border-top: none;
 }
 
+.category-section--favorites .category-accent {
+    background: #f0b429;
+}
+
+.favorite-button {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.favorite-button:hover,
+.item.selected .favorite-button {
+    border-color: #f0b429;
+    color: #f0b429;
+}
+
+.favorite-button.is-favorite {
+    border-color: #f0b429;
+    background: rgba(240, 180, 41, 0.15);
+    color: #f0b429;
+}
+
+.reorder-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.reorder-button {
+    width: 24px;
+    height: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    font-size: 8px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.reorder-button:hover:not(:disabled),
+.item.selected .reorder-button:not(:disabled) {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.reorder-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
 .category-header {
     display: flex;
     align-items: center;

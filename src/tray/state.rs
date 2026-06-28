@@ -26,6 +26,10 @@ pub enum AppEvent {
     RequestTextRegister,
     /// 登録文字列の削除要求
     RequestTextDelete(usize),
+    /// お気に入り変換モードの登録切替要求
+    RequestFavoriteToggle(RefineMode),
+    /// お気に入り変換モードの表示順変更要求
+    RequestFavoriteMove(RefineMode, crate::config::FavoriteMoveDirection),
     /// 履歴メニューの内容再構築要求
     RefreshHistory,
     /// 登録文字列メニューの内容再構築要求

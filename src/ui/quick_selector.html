@@ -24,7 +24,7 @@
         </div>
         <div id="results"></div>
         <div id="footer">
-            <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> 決定</span>
+            <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> 決定, <kbd>Ctrl+D</kbd> お気に入り, <kbd>Ctrl+Shift+↑↓</kbd> 順序</span>
             <span>閉じる: <kbd>Esc</kbd></span>
         </div>
     </div>
@@ -32,13 +32,52 @@
     <script type="application/json" id="modes-data">[]</script>
 
     <script>
-        const modes = JSON.parse(document.getElementById('modes-data').textContent);
+        let modes = JSON.parse(document.getElementById('modes-data').textContent);
         const input = document.getElementById('input');
         const results = document.getElementById('results');
+        const FAVORITES_CATEGORY = 'お気に入り';
 
         let currentModeId = null;
-        let filtered = [...modes];
+        let filtered = buildDisplayList('');
         let selectedIndex = 0;
+
+        function loadModes(nextModes) {
+            modes = nextModes;
+            filtered = buildDisplayList('');
+        }
+
+        function modeById(id) {
+            return modes.find((mode) => mode.id === id);
+        }
+
+        function favoriteIds() {
+            return modes
+                .filter((mode) => mode.favorite)
+                .sort((a, b) => {
+                    const left = a.favoriteIndex ?? Number.MAX_SAFE_INTEGER;
+                    const right = b.favoriteIndex ?? Number.MAX_SAFE_INTEGER;
+                    return left - right;
+                })
+                .map((mode) => mode.id);
+        }
+
+        function buildDisplayList(query) {
+            if (query) {
+                return modes.filter((mode) => modeMatches(mode, query));
+            }
+
+            const display = [];
+            for (const id of favoriteIds()) {
+                const mode = modeById(id);
+                if (mode) {
+                    display.push({ ...mode, listSection: 'favorites' });
+                }
+            }
+            for (const mode of modes) {
+                display.push({ ...mode, listSection: 'category' });
+            }
+            return display;
+        }
 
         function normalizeQuery(query) {
             return query.toLowerCase().trim();
@@ -94,6 +133,61 @@
             }
         }
 
+        function createReorderButtons(mode, query) {
+            if (query || mode.listSection !== 'favorites' || !mode.favorite) {
+                return null;
+            }
+
+            const ids = favoriteIds();
+            const index = ids.indexOf(mode.id);
+            if (index === -1) {
+                return null;
+            }
+
+            const container = document.createElement('div');
+            container.className = 'reorder-buttons';
+
+            const upButton = document.createElement('button');
+            upButton.type = 'button';
+            upButton.className = 'reorder-button';
+            upButton.textContent = '▲';
+            upButton.title = '上へ移動';
+            upButton.disabled = index === 0;
+            upButton.onclick = (event) => {
+                event.stopPropagation();
+                moveFavorite(mode.id, 'up');
+            };
+
+            const downButton = document.createElement('button');
+            downButton.type = 'button';
+            downButton.className = 'reorder-button';
+            downButton.textContent = '▼';
+            downButton.title = '下へ移動';
+            downButton.disabled = index === ids.length - 1;
+            downButton.onclick = (event) => {
+                event.stopPropagation();
+                moveFavorite(mode.id, 'down');
+            };
+
+            container.appendChild(upButton);
+            container.appendChild(downButton);
+            return container;
+        }
+
+        function createFavoriteButton(mode) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'favorite-button' + (mode.favorite ? ' is-favorite' : '');
+            button.title = mode.favorite ? 'お気に入りから解除' : 'お気に入りに登録';
+            button.setAttribute('aria-label', button.title);
+            button.textContent = mode.favorite ? '★' : '☆';
+            button.onclick = (event) => {
+                event.stopPropagation();
+                toggleFavorite(mode.id);
+            };
+            return button;
+        }
+
         function createItem(mode, index, query) {
             const isCurrent = mode.id === currentModeId;
             const div = document.createElement('div');
@@ -108,6 +202,12 @@
                 </div>
                 ${query && mode.value ? `<span class="value-hint">${highlightText(mode.value, query)}</span>` : ''}
             `;
+
+            const reorderButtons = createReorderButtons(mode, query);
+            if (reorderButtons) {
+                div.appendChild(reorderButtons);
+            }
+            div.appendChild(createFavoriteButton(mode));
 
             div.onmouseenter = () => setSelectedIndex(index, false);
             div.onclick = () => select(mode.id);
@@ -145,6 +245,16 @@
             }
         }
 
+        function sectionCategory(mode, query) {
+            if (query) {
+                return null;
+            }
+            if (mode.listSection === 'favorites') {
+                return FAVORITES_CATEGORY;
+            }
+            return mode.category || '';
+        }
+
         function renderList(scrollToSelection) {
             results.innerHTML = '';
             const query = normalizeQuery(input.value);
@@ -165,21 +275,25 @@
 
             filtered.forEach((mode) => {
                 let parent = results;
+                const category = sectionCategory(mode, query);
 
                 if (!query) {
-                    if (mode.category) {
-                        if (mode.category !== lastCategory) {
+                    if (category) {
+                        if (category !== lastCategory) {
                             currentSection = document.createElement('div');
                             currentSection.className = 'category-section';
+                            if (category === FAVORITES_CATEGORY) {
+                                currentSection.classList.add('category-section--favorites');
+                            }
 
                             const header = document.createElement('div');
                             header.className = 'category-header';
                             header.innerHTML =
                                 '<span class="category-accent" aria-hidden="true"></span>' +
-                                '<span class="category-label">' + escapeHtml(mode.category) + '</span>';
+                                '<span class="category-label">' + escapeHtml(category) + '</span>';
                             currentSection.appendChild(header);
                             results.appendChild(currentSection);
-                            lastCategory = mode.category;
+                            lastCategory = category;
                         }
                         parent = currentSection;
                     } else {
@@ -205,7 +319,7 @@
             const query = normalizeQuery(input.value);
             const previousId = filtered[selectedIndex]?.id;
 
-            filtered = modes.filter((mode) => modeMatches(mode, query));
+            filtered = buildDisplayList(query);
 
             const nextIndex = previousId
                 ? filtered.findIndex((mode) => mode.id === previousId)
@@ -218,6 +332,28 @@
             window.ipc.postMessage('select:' + id);
         }
 
+        function toggleFavorite(id) {
+            window.ipc.postMessage('toggle-favorite:' + id);
+        }
+
+        function moveFavorite(id, direction) {
+            window.ipc.postMessage('move-favorite:' + id + ':' + direction);
+        }
+
+        function moveSelectedFavorite(delta) {
+            if (normalizeQuery(input.value)) {
+                return false;
+            }
+
+            const mode = filtered[selectedIndex];
+            if (!mode || mode.listSection !== 'favorites' || !mode.favorite) {
+                return false;
+            }
+
+            moveFavorite(mode.id, delta < 0 ? 'up' : 'down');
+            return true;
+        }
+
         function close() {
             window.ipc.postMessage('close');
         }
@@ -227,6 +363,21 @@
                 return;
             }
             setSelectedIndex(selectedIndex + delta, true);
+        }
+
+        function applyFocus(modeId) {
+            currentModeId = modeId;
+            input.value = '';
+            filter();
+
+            const index = filtered.findIndex((mode) => mode.id === currentModeId);
+            if (index !== -1) {
+                selectedIndex = index;
+            }
+
+            renderList(true);
+            input.focus();
+            input.select();
         }
 
         input.oninput = filter;
@@ -261,23 +412,43 @@
                 } else {
                     close();
                 }
+            } else if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
+                if (filtered[selectedIndex]) {
+                    toggleFavorite(filtered[selectedIndex].id);
+                    e.preventDefault();
+                }
+            } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
+                if (moveSelectedFavorite(-1)) {
+                    e.preventDefault();
+                }
+            } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowDown') {
+                if (moveSelectedFavorite(1)) {
+                    e.preventDefault();
+                }
             }
         };
 
         // UI表示時にフォーカスを当てる
-        window.focusInput = (modeId) => {
-            currentModeId = modeId;
-            input.value = '';
-            filter();
-
-            const index = filtered.findIndex((mode) => mode.id === currentModeId);
-            if (index !== -1) {
-                selectedIndex = index;
+        window.focusInput = (modeId, modesJson) => {
+            if (modesJson) {
+                loadModes(modesJson);
             }
+            applyFocus(modeId);
+        };
 
+        // お気に入り更新後に一覧を再描画する
+        window.refreshModes = (modeId, modesJson) => {
+            const previousId = filtered[selectedIndex]?.id;
+            if (modesJson) {
+                loadModes(modesJson);
+            }
+            currentModeId = modeId;
+            filtered = buildDisplayList(normalizeQuery(input.value));
+            const nextIndex = previousId
+                ? filtered.findIndex((mode) => mode.id === previousId)
+                : -1;
+            selectedIndex = nextIndex !== -1 ? nextIndex : 0;
             renderList(true);
-            input.focus();
-            input.select();
         };
 
         renderList(false);

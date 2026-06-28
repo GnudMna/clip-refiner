@@ -15,6 +15,8 @@ const TABLE_INDENT: &str = "  ";
 // ======================================================================
 const DOC_VERSION: &str = "設定スキーマのバージョン";
 const DOC_MODE: &str = "使用する加工モード";
+const DOC_FAVORITE_MODES: &str =
+    "お気に入り変換モード (PascalCase の配列。例: [\"UrlDecode\", \"Trim\"])";
 const DOC_INTERVAL_MS: &str = "クリップボードのポーリング間隔 (ミリ秒、100〜60000)";
 const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \"Event\")";
 const DOC_IS_PAUSED: &str = "監視を一時停止するかどうか";
@@ -77,6 +79,13 @@ fn apply_root_fields(doc: &mut DocumentMut, config: &AppConfig) {
     let root = doc.as_table_mut();
     set_table_value(root, "version", DOC_VERSION, "", &config.version);
     set_table_value(root, "mode", DOC_MODE, "", &config.mode);
+    set_table_value(
+        root,
+        "favorite_modes",
+        DOC_FAVORITE_MODES,
+        "",
+        &config.favorite_modes,
+    );
     set_table_value(
         root,
         "interval_ms",
@@ -309,6 +318,13 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
     write_section(&mut out, SECTION_BASIC)?;
     write_field(&mut out, "", DOC_VERSION, "version", &config.version)?;
     write_field(&mut out, "", DOC_MODE, "mode", &config.mode)?;
+    write_field(
+        &mut out,
+        "",
+        DOC_FAVORITE_MODES,
+        "favorite_modes",
+        &config.favorite_modes,
+    )?;
 
     write_section(&mut out, SECTION_MONITOR)?;
     write_field(

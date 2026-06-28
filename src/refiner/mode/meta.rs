@@ -1,6 +1,7 @@
 use super::defs::{RefineCategory, RefineMode};
 
 use clap::ValueEnum;
+use std::collections::HashSet;
 use strum::{EnumMessage, IntoEnumIterator};
 
 // ======================================================================
@@ -102,20 +103,39 @@ impl RefineMode {
 
     /// UI(Webview)に渡すためのモード情報のJSONリストを生成する
     ///
+    /// 全モードをカテゴリ順で出力し、お気に入り状態と登録順序を付与する
+    ///
+    /// # Arguments
+    /// * `favorite_modes` - お気に入り登録済みモード (登録順)
+    ///
     /// # Returns
-    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名を含む JSON 配列文字列
-    pub fn to_json_list() -> String {
+    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名・お気に入り状態を含む JSON 配列文字列
+    pub fn to_json_list(favorite_modes: &[Self]) -> String {
+        use std::collections::HashMap;
+
+        let favorite_set: HashSet<Self> = favorite_modes.iter().copied().collect();
+        let favorite_index: HashMap<Self, usize> = favorite_modes
+            .iter()
+            .enumerate()
+            .map(|(index, mode)| (*mode, index))
+            .collect();
         let list: Vec<serde_json::Value> = Self::quick_selector_modes()
             .iter()
             .map(|m| {
-                serde_json::json!({
+                let favorite = favorite_set.contains(m);
+                let mut item = serde_json::json!({
                     "id": m,
                     "label": m.label(),
                     "category": m.category().label(),
                     "value": m.to_possible_value()
                         .map(|v| v.get_name().to_string())
                         .unwrap_or_default(),
-                })
+                    "favorite": favorite,
+                });
+                if let Some(index) = favorite_index.get(m) {
+                    item["favoriteIndex"] = serde_json::json!(index);
+                }
+                item
             })
             .collect();
         serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
@@ -212,18 +232,58 @@ mod tests {
     /// `to_json_list` が全モード分の有効な JSON を返すこと
     #[test]
     fn test_to_json_list() {
-        let json = RefineMode::to_json_list();
+        let json = RefineMode::to_json_list(&[RefineMode::UrlDecode, RefineMode::Trim]);
         let parsed: Vec<serde_json::Value> =
             serde_json::from_str(&json).expect("to_json_list の出力が JSON として不正");
 
         assert_eq!(parsed.len(), RefineMode::iter().count());
 
-        for item in parsed {
+        for item in &parsed {
             assert!(item.get("id").is_some());
             assert!(item.get("label").is_some());
             assert!(item.get("category").is_some());
             assert!(item.get("value").is_some());
+            assert!(item.get("favorite").is_some());
         }
+
+        let favorites: Vec<_> = parsed
+            .iter()
+            .filter(|item| item.get("favorite").and_then(serde_json::Value::as_bool) == Some(true))
+            .collect();
+        assert_eq!(favorites.len(), 2);
+
+        let url_decode = parsed
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("UrlDecode"))
+            .expect("UrlDecode が含まれる");
+        assert_eq!(
+            url_decode
+                .get("favoriteIndex")
+                .and_then(serde_json::Value::as_u64),
+            Some(0)
+        );
+
+        let trim = parsed
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("Trim"))
+            .expect("Trim が含まれる");
+        assert_eq!(
+            trim.get("favoriteIndex")
+                .and_then(serde_json::Value::as_u64),
+            Some(1)
+        );
+
+        let json_format = parsed
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("JsonFormat"))
+            .expect("JsonFormat が含まれる");
+        assert_eq!(
+            json_format
+                .get("favorite")
+                .and_then(serde_json::Value::as_bool),
+            Some(false)
+        );
+        assert!(json_format.get("favoriteIndex").is_none());
     }
 
     /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すこと

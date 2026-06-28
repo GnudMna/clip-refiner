@@ -2,11 +2,11 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
 use super::super::menu::TrayMenu;
+use super::super::notify;
 use super::super::state::{AppState, LockExt};
 use super::super::text_selector::TextSelectorWindow;
 use super::super::worker::ClipboardCommand;
 use crate::config::AppConfig;
-use crate::platform;
 use crate::security::secret_from;
 
 /// 登録文字列メニューイベントを処理する
@@ -62,7 +62,7 @@ pub(super) fn delete_registered_text(
 
     state.save_config();
     refresh_texts_views(state, menu, text_selector);
-    platform::show_notification("登録文字列", "登録文字列を削除しました");
+    notify::show_when_enabled(state, "登録文字列", "登録文字列を削除しました");
 }
 
 /// 登録文字列メニューとセレクター表示を設定内容に合わせて更新する
