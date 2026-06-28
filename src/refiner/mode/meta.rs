@@ -2,7 +2,9 @@ use super::defs::{RefineCategory, RefineMode};
 
 use clap::ValueEnum;
 use std::collections::HashSet;
-use strum::{EnumMessage, IntoEnumIterator};
+use std::str::FromStr;
+
+use strum::{EnumMessage, EnumProperty, IntoEnumIterator};
 
 // ======================================================================
 // メタデータ取得
@@ -50,35 +52,17 @@ impl RefineMode {
 
     /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
     ///
+    /// # Panics
+    /// バリアントに `category` 属性が未定義、または値が不正な場合
+    ///
     /// # Returns
     /// * `RefineCategory` - モードが属するカテゴリ
     pub fn category(self) -> RefineCategory {
-        use RefineCategory as C;
-        match self {
-            Self::UrlEncode | Self::UrlDecode | Self::RemoveUtm => C::UrlActions,
-            Self::ExtractBasename
-            | Self::ExtractBasenameQuoted
-            | Self::AddPathQuotes
-            | Self::RemovePathQuotes
-            | Self::PathToSlash
-            | Self::PathToBackslash => C::Path,
-            Self::SortLinesAsc
-            | Self::SortLinesDesc
-            | Self::RemoveEmptyLines
-            | Self::RemoveDuplicateLines => C::LineActions,
-            Self::Trim | Self::TrimLines => C::Trim,
-            Self::Escape | Self::Unescape | Self::RegexEscape | Self::RegexUnescape => C::Escape,
-            Self::RegexReplace | Self::RegexExtract | Self::RegexDelete | Self::RegexSplit => {
-                C::Regex
-            }
-            Self::JsonFormat | Self::JsonFormatPreserveOrder => C::JsonFormat,
-            Self::YamlToJson | Self::YamlToJsonPreserveOrder => C::ToJson,
-            Self::JsonToYaml | Self::JsonToYamlPreserveOrder => C::ToYaml,
-            Self::MarkdownToHtml => C::Markdown,
-            Self::ExcelToMarkdown | Self::MarkdownToExcel | Self::ExcelToImage => C::Excel,
-            Self::TimestampToDatetime | Self::DatetimeToTimestamp => C::Datetime,
-            Self::AddComma | Self::RemoveComma => C::Number,
-        }
+        let name = self
+            .get_str("category")
+            .unwrap_or_else(|| panic!("RefineMode::{self:?} に category 属性が未定義"));
+        RefineCategory::from_str(name)
+            .unwrap_or_else(|_| panic!("RefineMode::{self:?} の category={name:?} が不正"))
     }
 
     /// 画像をクリップボードへ書き込むモードかどうか
@@ -149,7 +133,7 @@ impl RefineMode {
 mod tests {
     use super::super::defs::{RefineCategory, RefineMode};
 
-    use strum::IntoEnumIterator;
+    use strum::{EnumProperty, IntoEnumIterator};
 
     /// `RefineMode` のラベルとカテゴリが期待どおりであること
     #[test]
@@ -207,6 +191,17 @@ mod tests {
     fn test_all_refine_modes_have_nonempty_labels() {
         for mode in RefineMode::iter() {
             assert!(!mode.label().is_empty(), "{mode:?} の label が空です");
+        }
+    }
+
+    /// 全 `RefineMode` に category 属性が定義されていること
+    #[test]
+    fn test_all_refine_modes_have_category_property() {
+        for mode in RefineMode::iter() {
+            assert!(
+                mode.get_str("category").is_some(),
+                "{mode:?} に category 属性がありません"
+            );
         }
     }
 

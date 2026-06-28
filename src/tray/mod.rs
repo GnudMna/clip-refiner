@@ -12,6 +12,7 @@ pub mod menu;
 mod notify;
 pub mod quick_selector;
 mod runner;
+mod selector_window;
 pub mod state;
 pub mod text_selector;
 pub mod worker;

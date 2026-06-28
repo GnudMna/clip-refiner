@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
+use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
+use super::state::AppEvent;
 use crate::consts;
-use crate::tray::state::AppEvent;
 
 use tao::event_loop::EventLoopProxy;
 use tao::window::Window;
-use wry::{WebContext, WebViewBuilder};
 
 // ======================================================================
 // テキストセレクタ IPC
@@ -46,8 +44,7 @@ pub(crate) fn parse_text_selector_ipc_message(msg: &str) -> Option<TextSelectorI
 
 /// テキストセレクタ用 HTML を組み立てる
 pub(crate) fn assemble_text_selector_html() -> String {
-    let css = include_str!("../ui/selector.css");
-    include_str!("../ui/text_selector.html").replace("@import url(\"selector.css\");", css)
+    embed_selector_css(include_str!("../ui/text_selector.html"))
 }
 
 /// テキストセレクタ表示時に実行するフォーカス用スクリプトを生成する
@@ -65,12 +62,7 @@ pub(crate) fn text_selector_refresh_script(texts_json: &str) -> String {
 // ======================================================================
 /// 登録文字列選択用のコマンドパレット風 UI を管理する構造体
 pub struct TextSelectorWindow {
-    /// `WebView` インスタンス
-    webview: wry::WebView,
-    /// 描画先のウィンドウ
-    window: Arc<Window>,
-    /// `WebView` のコンテキスト
-    _context: wry::WebContext,
+    inner: WebSelectorWindow,
 }
 
 // ======================================================================
@@ -79,44 +71,30 @@ pub struct TextSelectorWindow {
 impl TextSelectorWindow {
     /// テキストセレクタウィンドウと `WebView` を初期化して生成する
     pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
-        let window = Arc::new(window);
         let html = assemble_text_selector_html();
         let proxy_clone = proxy.clone();
+        let data_dir = format!("{}-TextSelector-WebView2", consts::APP_NAME);
 
-        let data_dir =
-            std::env::temp_dir().join(format!("{}-TextSelector-WebView2", consts::APP_NAME));
-
-        let mut context = WebContext::new(Some(data_dir));
-
-        let webview = WebViewBuilder::new_with_web_context(&mut context)
-            .with_transparent(true)
-            .with_background_color((0, 0, 0, 0))
-            .with_html(html)
-            .with_ipc_handler(move |req: wry::http::Request<String>| {
-                let msg = req.body();
-                match parse_text_selector_ipc_message(msg) {
-                    Some(TextSelectorIpcAction::SelectText(index)) => {
-                        let _ = proxy_clone.send_event(AppEvent::RequestTextCopy(index));
-                    }
-                    Some(TextSelectorIpcAction::Register) => {
-                        let _ = proxy_clone.send_event(AppEvent::RequestTextRegister);
-                    }
-                    Some(TextSelectorIpcAction::DeleteText(index)) => {
-                        let _ = proxy_clone.send_event(AppEvent::RequestTextDelete(index));
-                    }
-                    Some(TextSelectorIpcAction::Close) => {
-                        let _ = proxy_clone.send_event(AppEvent::HideTextSelector);
-                    }
-                    None => {}
+        let inner = WebSelectorWindow::build(window, &data_dir, html, move |req| {
+            let msg = req.body();
+            match parse_text_selector_ipc_message(msg) {
+                Some(TextSelectorIpcAction::SelectText(index)) => {
+                    let _ = proxy_clone.send_event(AppEvent::RequestTextCopy(index));
                 }
-            })
-            .build(&window)?;
+                Some(TextSelectorIpcAction::Register) => {
+                    let _ = proxy_clone.send_event(AppEvent::RequestTextRegister);
+                }
+                Some(TextSelectorIpcAction::DeleteText(index)) => {
+                    let _ = proxy_clone.send_event(AppEvent::RequestTextDelete(index));
+                }
+                Some(TextSelectorIpcAction::Close) => {
+                    let _ = proxy_clone.send_event(AppEvent::HideTextSelector);
+                }
+                None => {}
+            }
+        })?;
 
-        Ok(Self {
-            webview,
-            window,
-            _context: context,
-        })
+        Ok(Self { inner })
     }
 }
 
@@ -126,31 +104,29 @@ impl TextSelectorWindow {
 impl TextSelectorWindow {
     /// テキストセレクタを表示し、登録文字列一覧を反映する
     pub fn show(&self, texts_json: &str) {
-        self.window.set_visible(true);
-        self.window.set_focus();
         let script = text_selector_focus_script(texts_json);
-        let _ = self.webview.evaluate_script(&script);
+        self.inner.show_with_script(&script);
     }
 
     /// 登録文字列一覧を再描画する (ウィンドウ表示中の更新用)
     pub fn refresh_items(&self, texts_json: &str) {
         let script = text_selector_refresh_script(texts_json);
-        let _ = self.webview.evaluate_script(&script);
+        self.inner.evaluate_script(&script);
     }
 
     /// テキストセレクタを非表示にする
     pub fn hide(&self) {
-        self.window.set_visible(false);
+        self.inner.hide();
     }
 
     /// テキストセレクタが現在表示されているかどうかを確認する
     pub fn is_visible(&self) -> bool {
-        self.window.is_visible()
+        self.inner.is_visible()
     }
 
     /// テキストセレクタウィンドウの内部 ID を取得する
     pub fn id(&self) -> tao::window::WindowId {
-        self.window.id()
+        self.inner.id()
     }
 }
 
@@ -162,26 +138,12 @@ pub fn init_text_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
 ) -> anyhow::Result<TextSelectorWindow> {
-    use tao::window::WindowBuilder;
-
-    let window = WindowBuilder::new()
-        .with_title(format!("{} Text Selector", consts::APP_NAME))
-        .with_always_on_top(true)
-        .with_decorations(false)
-        .with_transparent(true)
-        .with_visible(false)
-        .with_resizable(false)
-        .with_inner_size(tao::dpi::LogicalSize::new(520.0, 600.0))
-        .build(event_loop)?;
-
-    if let Some(monitor) = window.current_monitor() {
-        let screen_size = monitor.size();
-        let window_size = window.outer_size();
-        let x = (screen_size.width.cast_signed() - window_size.width.cast_signed()) / 2;
-        let y = (screen_size.height.cast_signed() - window_size.height.cast_signed()) / 3;
-        window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
-    }
-
+    let window = build_hidden_selector_window(
+        event_loop,
+        &format!("{} Text Selector", consts::APP_NAME),
+        520.0,
+        600.0,
+    )?;
     TextSelectorWindow::new(window, proxy)
 }
 
