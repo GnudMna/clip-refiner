@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use super::{CategoryGroup, RefineMenu, TrayMenu};
 
+use crate::config::HotkeySettings;
 use crate::refiner::{RefineCategory, RefineMode};
 use crate::tray::state::{AppState, LockExt};
 
@@ -25,6 +26,7 @@ impl TrayMenu {
     pub(super) fn build_refine_menu(
         current_mode: RefineMode,
         favorite_modes: &[RefineMode],
+        hotkeys: &HotkeySettings,
     ) -> Result<RefineMenu> {
         use std::collections::HashMap;
 
@@ -111,7 +113,7 @@ impl TrayMenu {
             normal_items,
             groups,
         };
-        refine.rebuild_favorites(current_mode, favorite_modes)?;
+        refine.rebuild_favorites(current_mode, favorite_modes, hotkeys)?;
         refine.sync_favorite_actions(current_mode, favorite_modes);
         Ok(refine)
     }
@@ -140,10 +142,15 @@ impl TrayMenu {
 
     /// お気に入り変換モードの表示を設定内容に合わせて更新する
     pub fn refresh_favorites(&self, state: &AppState) -> Result<()> {
-        let (current_mode, favorite_modes) =
-            state.with_config(|config| (config.mode, config.favorite_modes.clone()));
+        let (current_mode, favorite_modes, hotkeys) = state.with_config(|config| {
+            (
+                config.mode,
+                config.favorite_modes.clone(),
+                config.hotkeys.clone(),
+            )
+        });
         self.refine
-            .rebuild_favorites(current_mode, &favorite_modes)?;
+            .rebuild_favorites(current_mode, &favorite_modes, &hotkeys)?;
         self.refine
             .sync_favorite_actions(current_mode, &favorite_modes);
         self.refine.sync_mode_labels(&favorite_modes);
@@ -160,6 +167,7 @@ impl RefineMenu {
         &self,
         current_mode: RefineMode,
         favorite_modes: &[RefineMode],
+        hotkeys: &HotkeySettings,
     ) -> Result<()> {
         let mut records = self.favorite_records.lock_ignore_poison();
         records.clear();
@@ -173,9 +181,14 @@ impl RefineMenu {
             self.favorites_submenu
                 .append_items(&[&hint as &dyn tray_icon::menu::IsMenuItem])?;
         } else {
-            for mode in favorite_modes {
+            for (index, mode) in favorite_modes.iter().enumerate() {
                 records.push((
-                    CheckMenuItem::new(mode.label(), true, *mode == current_mode, None),
+                    CheckMenuItem::new(
+                        favorite_menu_label(*mode, hotkeys, index),
+                        true,
+                        *mode == current_mode,
+                        None,
+                    ),
                     *mode,
                 ));
             }
@@ -221,6 +234,15 @@ impl RefineMenu {
 fn mode_menu_label(mode: RefineMode, is_favorite: bool) -> String {
     if is_favorite {
         format!("★ {}", mode.label())
+    } else {
+        mode.label().to_string()
+    }
+}
+
+/// お気に入りサブメニュー表示用のラベルを生成する
+fn favorite_menu_label(mode: RefineMode, hotkeys: &HotkeySettings, index: usize) -> String {
+    if let Some(binding) = hotkeys.favorite_slot_binding(index) {
+        format!("{} ({})", mode.label(), binding)
     } else {
         mode.label().to_string()
     }

@@ -37,6 +37,8 @@ pub enum AppEvent {
     RefreshTexts,
     /// ディスク上の設定ファイルを再読み込みする要求
     ReloadConfig,
+    /// お気に入り変換モード用ホットキーの再登録要求
+    ReloadFavoriteHotkeys,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }

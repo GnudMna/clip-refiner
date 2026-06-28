@@ -34,6 +34,9 @@ pub fn apply_config_reload(
 
     let previous = state.with_config(std::clone::Clone::clone);
     let hotkeys_changed = previous.hotkeys != loaded.hotkeys;
+    let favorite_hotkeys_changed = previous.hotkeys.favorite_mode_slots
+        != loaded.hotkeys.favorite_mode_slots
+        || previous.favorite_modes != loaded.favorite_modes;
     let monitor_changed = previous.monitor_mode != loaded.monitor_mode
         || previous.interval_ms != loaded.interval_ms
         || previous.is_paused != loaded.is_paused;
@@ -45,10 +48,11 @@ pub fn apply_config_reload(
     menu.sync_from_config(state)
         .map_err(|e| format!("メニュー同期に失敗: {e}"))?;
 
-    if hotkeys_changed {
+    if hotkeys_changed || favorite_hotkeys_changed {
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
+        let favorite_modes = state.with_config(|c| c.favorite_modes.clone());
         hotkey_handler
-            .reload(&hotkeys)
+            .reload(&hotkeys, &favorite_modes)
             .map_err(|e| format!("ホットキーの再登録に失敗: {e}"))?;
     }
 
@@ -67,7 +71,11 @@ pub fn apply_config_reload(
         text_selector.refresh_items(&texts_json);
     }
 
-    let message = build_reload_message(hotkeys_changed, monitor_changed, migrated);
+    let message = build_reload_message(
+        hotkeys_changed || favorite_hotkeys_changed,
+        monitor_changed,
+        migrated,
+    );
     crate::log_info!("設定を再読み込みしました: {}", message);
     Ok(ConfigReloadOutcome { message })
 }

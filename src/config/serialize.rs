@@ -32,6 +32,7 @@ const DOC_HOTKEY_PAUSE: &str = "監視の一時停止・再開";
 const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
 const DOC_HOTKEY_TEXT_SELECTOR: &str = "登録文字列セレクター表示";
 const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
+const DOC_HOTKEY_FAVORITE_SLOTS: &str = "お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / Alt+Shift+F1〜F11。空文字で無効)";
 const DOC_REGEX_PATTERN: &str = "正規表現パターン";
 const DOC_REGEX_REPLACEMENT: &str =
     "置換文字列 (RegexReplace で使用。キャプチャグループは $1 形式)";
@@ -205,6 +206,17 @@ fn apply_hotkeys_table(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> 
         TABLE_INDENT,
         &config.hotkeys.quit,
     )?;
+    if config.hotkeys.favorite_mode_slots.is_empty() {
+        hotkeys.remove("favorite_mode_slots");
+    } else {
+        set_table_value(
+            hotkeys,
+            "favorite_mode_slots",
+            DOC_HOTKEY_FAVORITE_SLOTS,
+            TABLE_INDENT,
+            &config.hotkeys.favorite_mode_slots,
+        )?;
+    }
     Ok(())
 }
 
@@ -446,6 +458,15 @@ fn to_commented_toml(config: &AppConfig) -> Result<String> {
         "quit",
         &config.hotkeys.quit,
     )?;
+    if !config.hotkeys.favorite_mode_slots.is_empty() {
+        write_field(
+            &mut out,
+            TABLE_INDENT,
+            DOC_HOTKEY_FAVORITE_SLOTS,
+            "favorite_mode_slots",
+            &config.hotkeys.favorite_mode_slots,
+        )?;
+    }
 
     write_table_section(&mut out, SECTION_REGEX, "regex")?;
     write_field(

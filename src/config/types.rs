@@ -86,6 +86,9 @@ pub struct HotkeySettings {
     /// 登録文字列セレクターの表示・非表示
     #[serde(default = "default_hotkey_text_selector")]
     pub text_selector: String,
+    /// お気に入り変換モード用ホットキー (登録順インデックスに対応。空文字で無効)
+    #[serde(default)]
+    pub favorite_mode_slots: Vec<String>,
 }
 
 impl Default for HotkeySettings {
@@ -97,22 +100,92 @@ impl Default for HotkeySettings {
             quit: default_hotkey_quit(),
             undo: default_hotkey_undo(),
             text_selector: default_hotkey_text_selector(),
+            favorite_mode_slots: Vec::new(),
         }
     }
 }
 
 impl HotkeySettings {
     /// ショートカット一覧表示用の文字列を生成する
-    pub fn shortcut_list_text(&self) -> String {
-        format!(
-            "{}: クイックセレクター\n{}: 登録文字列セレクター\n{}: 成功通知の切替\n{}: 一時停止/再開\n{}: 加工の取り消し\n{}: 終了",
-            self.quick_selector,
-            self.text_selector,
-            self.notification,
-            self.pause,
-            self.undo,
-            self.quit
-        )
+    pub fn shortcut_list_text(&self, favorite_modes: &[RefineMode]) -> String {
+        let mut lines = vec![
+            format!("{}: クイックセレクター", self.quick_selector),
+            format!("{}: 登録文字列セレクター", self.text_selector),
+            format!("{}: 成功通知の切替", self.notification),
+            format!("{}: 一時停止/再開", self.pause),
+            format!("{}: 加工の取り消し", self.undo),
+            format!("{}: 終了", self.quit),
+        ];
+        for (index, mode) in favorite_modes.iter().enumerate() {
+            if let Some(binding) = self.favorite_slot_binding(index) {
+                lines.push(format!("{binding}: {} (お気に入り)", mode.label()));
+            }
+        }
+        lines.join("\n")
+    }
+
+    /// お気に入りスロットのホットキー文字列を返す
+    ///
+    /// 設定で空文字が指定されたスロットは `None` を返す
+    pub fn favorite_slot_binding(&self, index: usize) -> Option<String> {
+        if index >= consts::MAX_FAVORITE_MODES {
+            return None;
+        }
+        if let Some(binding) = self.favorite_mode_slots.get(index) {
+            if binding.is_empty() {
+                return None;
+            }
+            return Some(binding.clone());
+        }
+        default_favorite_slot_binding(index)
+    }
+
+    /// お気に入りスロット用ホットキーを解決する
+    ///
+    /// 固定ホットキーおよび先に割り当てたスロットと重複する割り当ては除外する
+    pub fn resolve_favorite_slot_hotkeys(
+        &self,
+        favorite_count: usize,
+        reserved: &[global_hotkey::hotkey::HotKey],
+    ) -> Vec<(usize, global_hotkey::hotkey::HotKey)> {
+        use std::collections::HashSet;
+
+        let mut used_ids: HashSet<u32> = reserved
+            .iter()
+            .map(global_hotkey::hotkey::HotKey::id)
+            .collect();
+        let mut resolved = Vec::new();
+
+        for index in 0..favorite_count.min(consts::MAX_FAVORITE_MODES) {
+            let Some(binding) = self.favorite_slot_binding(index) else {
+                continue;
+            };
+            let hotkey = match parse_hotkey_binding(&binding) {
+                Ok(hotkey) => hotkey,
+                Err(e) => {
+                    crate::log_warn!(
+                        "お気に入りスロット {} のホットキー解析に失敗: {} (指定値: '{}')",
+                        index + 1,
+                        e,
+                        binding
+                    );
+                    continue;
+                }
+            };
+            let id = hotkey.id();
+            if used_ids.contains(&id) {
+                crate::log_warn!(
+                    "お気に入りスロット {} のホットキー '{}' は他の割り当てと重複するため無効",
+                    index + 1,
+                    binding
+                );
+                continue;
+            }
+            used_ids.insert(id);
+            resolved.push((index, hotkey));
+        }
+
+        resolved
     }
 
     /// 不正なホットキー文字列をデフォルト値へ置き換える
@@ -135,6 +208,27 @@ impl HotkeySettings {
             consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
             "text_selector",
         );
+        self.normalize_favorite_mode_slots();
+    }
+
+    /// お気に入りスロット用ホットキー設定を正規化する
+    pub(crate) fn normalize_favorite_mode_slots(&mut self) {
+        if self.favorite_mode_slots.len() > consts::MAX_FAVORITE_MODES {
+            self.favorite_mode_slots
+                .truncate(consts::MAX_FAVORITE_MODES);
+        }
+        for (index, slot) in self.favorite_mode_slots.iter_mut().enumerate() {
+            if slot.is_empty() {
+                continue;
+            }
+            if parse_hotkey_binding(slot).is_err() {
+                crate::log_warn!(
+                    "お気に入りスロット {} のホットキー設定が無効なため無効化する (指定値: '{slot}')",
+                    index + 1
+                );
+                slot.clear();
+            }
+        }
     }
 }
 
@@ -193,6 +287,17 @@ fn default_hotkey_undo() -> String {
 /// 登録文字列セレクターのデフォルトホットキーを返す
 fn default_hotkey_text_selector() -> String {
     consts::DEFAULT_HOTKEY_TEXT_SELECTOR.to_string()
+}
+
+/// お気に入りスロットのデフォルトホットキー文字列を返す
+fn default_favorite_slot_binding(index: usize) -> Option<String> {
+    if index < 9 {
+        return Some(format!("Alt+Shift+{}", index + 1));
+    }
+    if index < consts::MAX_FAVORITE_MODES {
+        return Some(format!("Alt+Shift+F{}", index - 8));
+    }
+    None
 }
 
 /// 設定ファイルに `version` が無い場合のデシリアライズ用デフォルト
