@@ -180,6 +180,26 @@ pub enum RefineMode {
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     #[strum(message = "カンマ除去", props(category = "Number"))]
     RemoveComma,
+    /// 識別子を `camelCase` へ変換する
+    #[value(help = "識別子をcamelCaseへ変換")]
+    #[strum(message = "camelCaseへ変換", props(category = "Case"))]
+    ToCamelCase,
+    /// 識別子を `snake_case` へ変換する
+    #[value(help = "識別子をsnake_caseへ変換")]
+    #[strum(message = "snake_caseへ変換", props(category = "Case"))]
+    ToSnakeCase,
+    /// 識別子を `PascalCase` へ変換する
+    #[value(help = "識別子をPascalCaseへ変換")]
+    #[strum(message = "PascalCaseへ変換", props(category = "Case"))]
+    ToPascalCase,
+    /// 識別子を `kebab-case` へ変換する
+    #[value(help = "識別子をkebab-caseへ変換")]
+    #[strum(message = "kebab-caseへ変換", props(category = "Case"))]
+    ToKebabCase,
+    /// 識別子を `SCREAMING_SNAKE_CASE` へ変換する
+    #[value(help = "識別子をSCREAMING_SNAKE_CASEへ変換")]
+    #[strum(message = "SCREAMING_SNAKE_CASEへ変換", props(category = "Case"))]
+    ToScreamingSnakeCase,
 }
 
 // ======================================================================
@@ -234,4 +254,7 @@ pub enum RefineCategory {
     /// 数値変換サブメニュー内
     #[strum(message = "数値変換")]
     Number,
+    /// ケース変換サブメニュー内
+    #[strum(message = "ケース変換")]
+    Case,
 }
