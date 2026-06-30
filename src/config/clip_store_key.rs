@@ -1,3 +1,4 @@
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -16,7 +17,7 @@ const KEY_LEN: usize = 32;
 
 static CLIP_STORE_KEY: OnceLock<[u8; KEY_LEN]> = OnceLock::new();
 
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 thread_local! {
     static THREAD_CLIP_STORE_KEY: RefCell<Option<[u8; KEY_LEN]>> = const { RefCell::new(None) };
 }
@@ -28,7 +29,7 @@ thread_local! {
 ///
 /// 鍵ファイルが無い場合は新規生成して保存する
 pub fn clip_store_key() -> Result<[u8; KEY_LEN]> {
-    #[cfg(any(test, feature = "test-helpers"))]
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     if let Some(key) = thread_local_clip_store_key() {
         return Ok(key);
     }
@@ -42,7 +43,7 @@ pub fn clip_store_key() -> Result<[u8; KEY_LEN]> {
     Ok(key)
 }
 
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 fn thread_local_clip_store_key() -> Option<[u8; KEY_LEN]> {
     THREAD_CLIP_STORE_KEY.with(|cell| {
         if let Some(key) = *cell.borrow() {
@@ -60,7 +61,7 @@ pub fn ensure_clip_store_key() -> Result<()> {
 }
 
 /// テスト用にキャッシュ済み暗号化鍵を破棄する
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn clear_clip_store_key_cache() {
     THREAD_CLIP_STORE_KEY.with(|cell| *cell.borrow_mut() = None);
 }

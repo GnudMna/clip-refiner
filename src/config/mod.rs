@@ -8,7 +8,7 @@ mod registered_images;
 mod serialize;
 mod types;
 
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};
 pub use persistence::{ConfigReloadError, disk_config_modified_time};
