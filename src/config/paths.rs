@@ -1,3 +1,4 @@
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,7 +13,7 @@ use anyhow::{Context, Result};
 // ======================================================================
 // テスト用設定ディレクトリ
 // ======================================================================
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 thread_local! {
     static TEST_CONFIG_DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
@@ -28,7 +29,7 @@ thread_local! {
 /// # Returns
 /// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス
 pub fn get_config_dir() -> Result<PathBuf> {
-    #[cfg(any(test, feature = "test-helpers"))]
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     if let Some(dir) = test_config_dir_override() {
         return Ok(dir);
     }
@@ -40,19 +41,19 @@ pub fn get_config_dir() -> Result<PathBuf> {
 }
 
 /// テスト用に設定ディレクトリを上書きする
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn set_test_config_dir(dir: PathBuf) {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = Some(dir));
 }
 
 /// テスト用設定ディレクトリの上書きを解除する
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn clear_test_config_dir() {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = None);
     super::clip_store_key::clear_clip_store_key_cache();
 }
 
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 fn test_config_dir_override() -> Option<PathBuf> {
     TEST_CONFIG_DIR.with(|cell| cell.borrow().clone())
 }
