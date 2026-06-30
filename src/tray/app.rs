@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
+use super::clip_selector::{ClipSelectorWindow, init_clip_selector};
 use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
@@ -10,7 +11,6 @@ use super::menu::TrayMenu;
 use super::ocr_capture::{OcrCaptureWindow, init_ocr_capture};
 use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
-use super::text_selector::{TextSelectorWindow, init_text_selector};
 
 use anyhow::Result;
 use tao::event::Event;
@@ -31,8 +31,8 @@ pub struct App {
     pub menu: TrayMenu,
     /// 加工モード選択用クイックセレクター
     pub quick_selector: QuickSelectorWindow,
-    /// 登録文字列選択用の UI ウィンドウ
-    pub text_selector: TextSelectorWindow,
+    /// 登録クリップ選択用の UI ウィンドウ
+    pub clip_selector: ClipSelectorWindow,
     /// 画面範囲選択 OCR 用オーバーレイ
     #[cfg(windows)]
     pub ocr_capture: OcrCaptureWindow,
@@ -42,8 +42,8 @@ pub struct App {
     pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
     /// 最後にクイックセレクターを表示した時刻(連打防止用)
     pub last_quick_selector_show: Instant,
-    /// 最後にテキストセレクターを表示した時刻(連打防止用)
-    pub last_text_selector_show: Instant,
+    /// 最後に登録クリップセレクターを表示した時刻(連打防止用)
+    pub last_clip_selector_show: Instant,
 }
 
 // ======================================================================
@@ -67,7 +67,7 @@ impl App {
             state.with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
         let hotkey_handler = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
-        let text_selector = init_text_selector(event_loop, &proxy)?;
+        let clip_selector = init_clip_selector(event_loop, &proxy)?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
         #[cfg(windows)]
         let ocr_capture = init_ocr_capture(clipboard_tx.clone())?;
@@ -80,13 +80,13 @@ impl App {
             state,
             menu,
             quick_selector,
-            text_selector,
+            clip_selector,
             #[cfg(windows)]
             ocr_capture,
             hotkey_handler,
             clipboard_tx,
             last_quick_selector_show: Instant::now(),
-            last_text_selector_show: Instant::now(),
+            last_clip_selector_show: Instant::now(),
         })
     }
 }
@@ -120,11 +120,11 @@ impl App {
             }
             Event::WindowEvent {
                 window_id, event, ..
-            } if window_id == self.text_selector.id() => {
+            } if window_id == self.clip_selector.id() => {
                 event::handle_window_event(
                     &event,
-                    &self.text_selector,
-                    &self.last_text_selector_show,
+                    &self.clip_selector,
+                    &self.last_clip_selector_show,
                 );
             }
             _ => {
@@ -158,21 +158,21 @@ impl App {
             AppEvent::HideQuickSelector => {
                 self.quick_selector.hide();
             }
-            AppEvent::HideTextSelector => {
-                self.text_selector.hide();
+            AppEvent::HideClipSelector => {
+                self.clip_selector.hide();
             }
-            AppEvent::RequestTextCopy(index) => {
-                self.text_selector.hide();
-                event::copy_registered_text(&self.state, &self.clipboard_tx, index);
+            AppEvent::RequestClipCopy(index) => {
+                self.clip_selector.hide();
+                event::copy_registered_clip(&self.state, &self.clipboard_tx, index);
             }
-            AppEvent::RequestTextRegister => {
+            AppEvent::RequestClipRegister => {
                 super::dispatch::send_clipboard_command(
                     &self.clipboard_tx,
-                    super::worker::ClipboardCommand::RegisterFromClipboard,
+                    super::worker::ClipboardCommand::RegisterClipFromClipboard,
                 );
             }
-            AppEvent::RequestTextDelete(index) => {
-                event::delete_registered_text(&self.state, &self.menu, &self.text_selector, index);
+            AppEvent::RequestClipDelete(index) => {
+                event::delete_registered_clip(&self.state, &self.menu, &self.clip_selector, index);
             }
             AppEvent::RequestFavoriteToggle(mode) => {
                 event::toggle_favorite_mode(
@@ -196,15 +196,15 @@ impl App {
                     super::dispatch::log_menu_operation_error("履歴メニューの更新", err);
                 }
             }
-            AppEvent::RefreshTexts => {
-                event::refresh_texts_views(&self.state, &self.menu, &self.text_selector);
+            AppEvent::RefreshClips => {
+                event::refresh_clips_views(&self.state, &self.menu, &self.clip_selector);
             }
             AppEvent::ReloadConfig => {
                 event::reload_config_with_notification(
                     &self.state,
                     &self.menu,
                     &mut self.hotkey_handler,
-                    &self.text_selector,
+                    &self.clip_selector,
                 );
             }
             AppEvent::ReloadFavoriteHotkeys => {
@@ -223,12 +223,12 @@ impl App {
                     state: &self.state,
                     menu: &self.menu,
                     quick_selector: Some(&self.quick_selector),
-                    text_selector: Some(&self.text_selector),
+                    clip_selector: Some(&self.clip_selector),
                     #[cfg(windows)]
                     ocr_capture: Some(&self.ocr_capture),
                     control_flow,
                     last_quick_selector_show: &mut self.last_quick_selector_show,
-                    last_text_selector_show: &mut self.last_text_selector_show,
+                    last_clip_selector_show: &mut self.last_clip_selector_show,
                     clipboard_tx: &self.clipboard_tx,
                 };
                 self.hotkey_handler.handle_event(hotkey_event, &mut ctx);

@@ -83,9 +83,9 @@ pub struct HotkeySettings {
     /// 直近の加工を取り消す
     #[serde(default = "default_hotkey_undo")]
     pub undo: String,
-    /// 登録文字列セレクターの表示・非表示
-    #[serde(default = "default_hotkey_text_selector")]
-    pub text_selector: String,
+    /// 登録クリップセレクターの表示・非表示
+    #[serde(default = "default_hotkey_clip_selector")]
+    pub clip_selector: String,
     /// 画面範囲選択 OCR の開始
     #[serde(default = "default_hotkey_ocr")]
     pub ocr: String,
@@ -102,7 +102,7 @@ impl Default for HotkeySettings {
             pause: default_hotkey_pause(),
             quit: default_hotkey_quit(),
             undo: default_hotkey_undo(),
-            text_selector: default_hotkey_text_selector(),
+            clip_selector: default_hotkey_clip_selector(),
             ocr: default_hotkey_ocr(),
             favorite_mode_slots: Vec::new(),
         }
@@ -114,7 +114,7 @@ impl HotkeySettings {
     pub fn shortcut_list_text(&self, favorite_modes: &[RefineMode]) -> String {
         let mut lines = vec![
             format!("{}: クイックセレクター", self.quick_selector),
-            format!("{}: 登録文字列セレクター", self.text_selector),
+            format!("{}: 登録クリップセレクター", self.clip_selector),
         ];
         if crate::platform::supports_screen_ocr() {
             lines.push(format!("{}: 画面 OCR", self.ocr));
@@ -213,9 +213,9 @@ impl HotkeySettings {
         fix_hotkey_field(&mut self.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
         fix_hotkey_field(&mut self.undo, consts::DEFAULT_HOTKEY_UNDO, "undo");
         fix_hotkey_field(
-            &mut self.text_selector,
-            consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
-            "text_selector",
+            &mut self.clip_selector,
+            consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
+            "clip_selector",
         );
         fix_hotkey_field(&mut self.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr");
         self.normalize_favorite_mode_slots();
@@ -294,9 +294,9 @@ fn default_hotkey_undo() -> String {
     consts::DEFAULT_HOTKEY_UNDO.to_string()
 }
 
-/// 登録文字列セレクターのデフォルトホットキーを返す
-fn default_hotkey_text_selector() -> String {
-    consts::DEFAULT_HOTKEY_TEXT_SELECTOR.to_string()
+/// 登録クリップセレクターのデフォルトホットキーを返す
+fn default_hotkey_clip_selector() -> String {
+    consts::DEFAULT_HOTKEY_CLIP_SELECTOR.to_string()
 }
 
 /// 画面 OCR のデフォルトホットキーを返す
@@ -329,28 +329,71 @@ fn default_history_limit() -> usize {
 }
 
 // ======================================================================
-// 登録文字列
+// 登録クリップ
 // ======================================================================
-/// クリップボードへコピーするための登録文字列
+/// クリップボードへコピーするための登録クリップ (テキストまたは画像)
 ///
-/// `config.toml` の `[[texts]]` セクションとして保存される
+/// `config.toml` の `[[clips]]` セクションとして保存される
+/// `image_file` が指定されている場合は画像登録として扱う
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct RegisteredText {
+pub struct RegisteredClip {
     /// 一覧表示用のラベル
     pub label: String,
-    /// クリップボードへコピーする本文
+    /// クリップボードへコピーする本文 (画像登録時は空)
+    #[serde(default)]
     pub text: String,
+    /// 登録画像ファイル名 (`registered-images` ディレクトリ内の相対パス)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_file: Option<String>,
 }
 
-impl RegisteredText {
-    /// テキストセレクター向けの JSON オブジェクトを生成する
-    pub fn to_text_selector_json(&self, index: usize, preview: &str) -> serde_json::Value {
-        serde_json::json!({
+impl RegisteredClip {
+    /// 画像登録かどうかを返す
+    pub fn is_image(&self) -> bool {
+        self.image_file.is_some()
+    }
+
+    /// 登録クリップセレクター向けの JSON オブジェクトを生成する
+    pub fn to_clip_selector_json(
+        &self,
+        index: usize,
+        preview: &str,
+        thumbnail: Option<&str>,
+        hover_preview: Option<&str>,
+    ) -> serde_json::Value {
+        let mut value = serde_json::json!({
             "id": index.to_string(),
             "label": self.label,
             "preview": preview,
-        })
+            "kind": if self.is_image() { "image" } else { "text" },
+        });
+        if let Some(thumbnail) = thumbnail {
+            value["thumbnail"] = serde_json::Value::String(thumbnail.to_string());
+        }
+        if let Some(hover_preview) = hover_preview {
+            value["hover_preview"] = serde_json::Value::String(hover_preview.to_string());
+        }
+        value
     }
+}
+
+// ======================================================================
+// 登録クリップボード内容
+// ======================================================================
+/// 登録済みクリップボード内容 (コピー用)
+#[derive(Debug, Clone)]
+pub enum ResolvedClip {
+    /// テキスト
+    Text(String),
+    /// RGBA 画像
+    Image {
+        /// 画像幅 (ピクセル)
+        width: u32,
+        /// 画像高さ (ピクセル)
+        height: u32,
+        /// RGBA ピクセル列
+        rgba: Vec<u8>,
+    },
 }
 
 // ======================================================================
@@ -414,9 +457,9 @@ pub struct AppConfig {
     /// 正規表現加工用のパターンと置換文字列
     #[serde(default)]
     pub regex: RegexSettings,
-    /// クリップボードへコピーする登録文字列
+    /// クリップボードへコピーする登録クリップ
     #[serde(default)]
-    pub texts: Vec<RegisteredText>,
+    pub clips: Vec<RegisteredClip>,
     /// お気に入り登録した変換モード (登録順)
     #[serde(default)]
     pub favorite_modes: Vec<RefineMode>,
@@ -440,7 +483,7 @@ impl Default for AppConfig {
             notification_settings: NotificationSettings::default(),
             hotkeys: HotkeySettings::default(),
             regex: RegexSettings::default(),
-            texts: Vec::new(),
+            clips: Vec::new(),
             favorite_modes: Vec::new(),
         }
     }
@@ -455,7 +498,7 @@ impl AppConfig {
         let migration = super::migrate::migrate_config(self);
         let mut config = migration.config;
         config.clamp_values();
-        config.normalize_texts();
+        config.normalize_clips();
         config.normalize_favorite_modes();
         config.normalize_pipeline();
         config.normalize_platform_modes();
@@ -466,7 +509,7 @@ impl AppConfig {
     /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新
     pub fn normalize(&mut self) {
         self.clamp_values();
-        self.normalize_texts();
+        self.normalize_clips();
         self.normalize_favorite_modes();
         self.normalize_pipeline();
         self.normalize_platform_modes();
@@ -483,98 +526,189 @@ impl AppConfig {
             .clamp(consts::MIN_INTERVAL_MS, consts::MAX_INTERVAL_MS);
     }
 
-    /// 登録文字列を許容範囲内に正規化する
-    pub(crate) fn normalize_texts(&mut self) {
+    /// 登録クリップを許容範囲内に正規化する
+    pub(crate) fn normalize_clips(&mut self) {
+        use super::registered_images::{
+            format_registered_image_label, load_registered_image, registered_image_exists,
+        };
         use crate::security::{format_public_snippet, is_within_clipboard_limit};
 
-        self.texts.retain(|entry| {
-            !entry.text.trim().is_empty() && is_within_clipboard_limit(&entry.text)
+        self.clips.retain(|entry| {
+            if let Some(ref image_file) = entry.image_file {
+                registered_image_exists(image_file)
+            } else {
+                !entry.text.trim().is_empty() && is_within_clipboard_limit(&entry.text)
+            }
         });
-        if self.texts.len() > consts::MAX_REGISTERED_TEXTS {
-            self.texts.truncate(consts::MAX_REGISTERED_TEXTS);
+        if self.clips.len() > consts::MAX_REGISTERED_CLIPS {
+            self.clips.truncate(consts::MAX_REGISTERED_CLIPS);
         }
-        for entry in &mut self.texts {
+        for entry in &mut self.clips {
             if entry.label.trim().is_empty() {
-                let preview = format_public_snippet(&entry.text, 20);
-                entry.label = if preview.is_empty() {
-                    "登録文字列".to_string()
+                entry.label = if let Some(ref image_file) = entry.image_file {
+                    load_registered_image(image_file).map_or_else(
+                        |_| "登録画像".to_string(),
+                        |(width, height, _)| format_registered_image_label(width, height),
+                    )
                 } else {
-                    preview
+                    let preview = format_public_snippet(&entry.text, 20);
+                    if preview.is_empty() {
+                        "登録クリップ".to_string()
+                    } else {
+                        preview
+                    }
                 };
             }
             let char_count = entry.label.chars().count();
-            if char_count > consts::MAX_REGISTERED_TEXT_LABEL_CHARS {
+            if char_count > consts::MAX_REGISTERED_CLIP_LABEL_CHARS {
                 entry.label = entry
                     .label
                     .chars()
-                    .take(consts::MAX_REGISTERED_TEXT_LABEL_CHARS)
+                    .take(consts::MAX_REGISTERED_CLIP_LABEL_CHARS)
                     .collect();
             }
         }
     }
 
-    /// 登録文字列をクイックセレクター向け JSON 配列へ変換する
-    pub fn texts_to_json_list(&self) -> String {
+    /// 登録クリップをクイックセレクター向け JSON 配列へ変換する
+    pub fn clips_to_json_list(&self) -> String {
         use crate::security::format_public_snippet;
 
         let list: Vec<serde_json::Value> = self
-            .texts
+            .clips
             .iter()
             .enumerate()
             .map(|(index, entry)| {
-                let preview =
-                    format_public_snippet(&entry.text, consts::REGISTERED_TEXT_PREVIEW_MAX_CHARS);
-                entry.to_text_selector_json(index, &preview)
+                let preview = if entry.is_image() {
+                    entry.label.clone()
+                } else {
+                    format_public_snippet(&entry.text, consts::REGISTERED_CLIP_PREVIEW_MAX_CHARS)
+                };
+                let thumbnail = entry.image_file.as_ref().and_then(|image_file| {
+                    super::registered_images::registered_image_thumbnail_data_url(
+                        image_file,
+                        consts::SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION,
+                    )
+                });
+                let hover_preview = entry.image_file.as_ref().and_then(|image_file| {
+                    super::registered_images::registered_image_hover_preview_data_url(
+                        image_file,
+                        consts::SELECTOR_IMAGE_HOVER_PREVIEW_MAX_DIMENSION,
+                    )
+                });
+                entry.to_clip_selector_json(
+                    index,
+                    &preview,
+                    thumbnail.as_deref(),
+                    hover_preview.as_deref(),
+                )
             })
             .collect();
         serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
     }
 
-    /// 指定インデックスの登録文字列本文を返す
-    pub fn registered_text_at(&self, index: usize) -> Option<&str> {
-        self.texts.get(index).map(|entry| entry.text.as_str())
+    /// 指定インデックスの登録クリップ本文を返す
+    pub fn registered_clip_text_at(&self, index: usize) -> Option<&str> {
+        self.clips
+            .get(index)
+            .filter(|entry| !entry.is_image())
+            .map(|entry| entry.text.as_str())
     }
 
-    /// クリップボードの内容を登録文字列として追加する
+    /// 指定インデックスの登録クリップボード内容を返す
+    pub fn resolve_registered_clip(&self, index: usize) -> Option<ResolvedClip> {
+        let entry = self.clips.get(index)?;
+        if let Some(ref image_file) = entry.image_file {
+            let (width, height, rgba) =
+                super::registered_images::load_registered_image(image_file).ok()?;
+            Some(ResolvedClip::Image {
+                width,
+                height,
+                rgba,
+            })
+        } else {
+            Some(ResolvedClip::Text(entry.text.clone()))
+        }
+    }
+
+    /// クリップボードの内容を登録クリップとして追加する
     ///
     /// # Returns
     /// * `Ok(())` - 追加成功
-    /// * `Err(AddRegisteredTextError)` - 空文字・サイズ超過・件数上限
-    pub fn add_registered_text(
+    /// * `Err(AddRegisteredClipError)` - 空文字・サイズ超過・件数上限
+    pub fn add_registered_clip(
         &mut self,
         text: impl Into<String>,
-    ) -> Result<(), AddRegisteredTextError> {
+    ) -> Result<(), AddRegisteredClipError> {
         use crate::security::is_within_clipboard_limit;
 
         let text = text.into();
         if text.trim().is_empty() {
-            return Err(AddRegisteredTextError::Empty);
+            return Err(AddRegisteredClipError::Empty);
         }
         if !is_within_clipboard_limit(&text) {
-            return Err(AddRegisteredTextError::TooLarge);
+            return Err(AddRegisteredClipError::TooLarge);
         }
-        if self.texts.len() >= consts::MAX_REGISTERED_TEXTS {
-            return Err(AddRegisteredTextError::LimitReached);
+        if self.clips.len() >= consts::MAX_REGISTERED_CLIPS {
+            return Err(AddRegisteredClipError::LimitReached);
         }
 
-        self.texts.push(RegisteredText {
+        self.clips.push(RegisteredClip {
             label: String::new(),
             text,
+            image_file: None,
         });
-        self.normalize_texts();
+        self.normalize_clips();
         Ok(())
     }
 
-    /// 指定インデックスの登録文字列を削除する
+    /// クリップボードの画像を登録画像として追加する
+    ///
+    /// # Returns
+    /// * `Ok(())` - 追加成功
+    /// * `Err(AddRegisteredClipError)` - サイズ超過・件数上限・保存失敗
+    pub fn add_registered_image(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) -> Result<(), AddRegisteredClipError> {
+        if self.clips.len() >= consts::MAX_REGISTERED_CLIPS {
+            return Err(AddRegisteredClipError::LimitReached);
+        }
+
+        let image_file = super::registered_images::save_registered_image(width, height, rgba)
+            .map_err(|err| {
+                crate::log_error!("登録画像の保存に失敗: {:?}", err);
+                if err.to_string().contains("上限") {
+                    AddRegisteredClipError::ImageTooLarge
+                } else {
+                    AddRegisteredClipError::ImageInvalid
+                }
+            })?;
+
+        self.clips.push(RegisteredClip {
+            label: String::new(),
+            text: String::new(),
+            image_file: Some(image_file),
+        });
+        self.normalize_clips();
+        Ok(())
+    }
+
+    /// 指定インデックスの登録クリップを削除する
     ///
     /// # Returns
     /// * `bool` - 削除できた場合は `true`
-    pub fn remove_registered_text(&mut self, index: usize) -> bool {
-        if index >= self.texts.len() {
+    pub fn remove_registered_clip(&mut self, index: usize) -> bool {
+        if index >= self.clips.len() {
             return false;
         }
-        self.texts.remove(index);
-        self.normalize_texts();
+        if let Some(image_file) = self.clips[index].image_file.clone() {
+            super::registered_images::delete_registered_image(&image_file);
+        }
+        self.clips.remove(index);
+        self.normalize_clips();
         true
     }
 
@@ -725,15 +859,19 @@ pub enum FavoriteMoveDirection {
 }
 
 // ======================================================================
-// 登録文字列の追加
+// 登録クリップの追加
 // ======================================================================
-/// 登録文字列の追加に失敗した理由
+/// 登録クリップの追加に失敗した理由
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AddRegisteredTextError {
+pub enum AddRegisteredClipError {
     /// 空文字または空白のみ
     Empty,
     /// クリップボード上限を超える
     TooLarge,
     /// 登録件数の上限に達している
     LimitReached,
+    /// 登録画像のサイズまたはピクセル数が上限を超える
+    ImageTooLarge,
+    /// 登録画像の形式または内容が不正
+    ImageInvalid,
 }

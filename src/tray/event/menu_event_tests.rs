@@ -156,16 +156,16 @@ fn handle_menu_event_history_clear() {
     assert_eq!(state.history_len(), 0);
 }
 
-/// 登録文字列の「クリップボードを登録」でワーカーコマンドが送信されること
+/// 登録クリップの「クリップボードを登録」でワーカーコマンドが送信されること
 #[test]
-fn handle_menu_event_texts_register_sends_command() {
+fn handle_menu_event_clips_register_sends_command() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
     let (tx, rx) = mpsc::channel();
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
-        &menu_event(menu.texts.register_item.id()),
+        &menu_event(menu.clips.register_item.id()),
         &menu,
         &state,
         &tx,
@@ -175,7 +175,7 @@ fn handle_menu_event_texts_register_sends_command() {
 
     assert!(matches!(
         rx.recv().expect("ワーカーコマンドが送信される"),
-        ClipboardCommand::RegisterFromClipboard
+        ClipboardCommand::RegisterClipFromClipboard
     ));
 }
 

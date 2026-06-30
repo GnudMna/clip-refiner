@@ -40,6 +40,7 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
         let from = config.version;
         config = match from {
             0 => migrate_v0_to_v1(config),
+            1 => migrate_v1_to_v2(config),
             v => {
                 crate::log_warn!("未対応の設定 version={v}。デフォルト設定を使用する");
                 return ConfigMigration {
@@ -67,9 +68,14 @@ fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
     config
 }
 
-// ======================================================================
-// テスト
-// ======================================================================
+/// v1 から v2 へ移行
+///
+/// v2 で変更: `[[texts]]` → `[[clips]]`、`hotkeys.text_selector` → `hotkeys.clip_selector`
+fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
+    config.version = 2;
+    config
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,7 +104,7 @@ mod tests {
         };
         let result = migrate_config(config);
         assert!(result.migrated);
-        assert_eq!(result.config.version, 1);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
         assert_eq!(result.config.mode, RefineMode::Trim);
         assert_eq!(result.config.interval_ms, 500);
         assert!(result.config.history_enabled);

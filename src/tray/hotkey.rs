@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
+use super::clip_selector::ClipSelectorWindow;
 use super::clipboard_monitor::bump_monitor_generation;
 use super::dispatch;
 use super::event::update_refine;
@@ -11,7 +12,6 @@ use super::notify;
 use super::ocr_capture::OcrCaptureWindow;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
-use super::text_selector::TextSelectorWindow;
 use super::worker::ClipboardCommand;
 
 use crate::config::{AppConfig, HotkeySettings};
@@ -52,8 +52,8 @@ pub struct HotkeyHandler {
     quit_hotkey: HotKey,
     /// 加工取り消し用ホットキー
     undo_hotkey: HotKey,
-    /// 登録文字列セレクタ表示・非表示用ホットキー
-    text_selector_hotkey: HotKey,
+    /// 登録クリップセレクタ表示・非表示用ホットキー
+    clip_selector_hotkey: HotKey,
     /// 画面範囲選択 OCR 用ホットキー
     #[cfg(windows)]
     ocr_hotkey: HotKey,
@@ -71,7 +71,7 @@ struct ResolvedHotkeys {
     pause: HotKey,
     quit: HotKey,
     undo: HotKey,
-    text_selector: HotKey,
+    clip_selector: HotKey,
     #[cfg(windows)]
     ocr: HotKey,
 }
@@ -93,10 +93,10 @@ impl ResolvedHotkeys {
             pause: resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause"),
             quit: resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit"),
             undo: resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo"),
-            text_selector: resolve_hotkey(
-                &hotkeys.text_selector,
-                consts::DEFAULT_HOTKEY_TEXT_SELECTOR,
-                "text_selector",
+            clip_selector: resolve_hotkey(
+                &hotkeys.clip_selector,
+                consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
+                "clip_selector",
             ),
             #[cfg(windows)]
             ocr: resolve_hotkey(&hotkeys.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr"),
@@ -111,7 +111,7 @@ impl ResolvedHotkeys {
             self.pause,
             self.quit,
             self.undo,
-            self.text_selector,
+            self.clip_selector,
         ];
         #[cfg(windows)]
         hotkeys.push(self.ocr);
@@ -143,7 +143,7 @@ impl HotkeyHandler {
             pause_hotkey: resolved.pause,
             quit_hotkey: resolved.quit,
             undo_hotkey: resolved.undo,
-            text_selector_hotkey: resolved.text_selector,
+            clip_selector_hotkey: resolved.clip_selector,
             #[cfg(windows)]
             ocr_hotkey: resolved.ocr,
             favorite_hotkeys: Vec::new(),
@@ -186,7 +186,7 @@ impl HotkeyHandler {
         self.pause_hotkey = resolved.pause;
         self.quit_hotkey = resolved.quit;
         self.undo_hotkey = resolved.undo;
-        self.text_selector_hotkey = resolved.text_selector;
+        self.clip_selector_hotkey = resolved.clip_selector;
         #[cfg(windows)]
         {
             self.ocr_hotkey = resolved.ocr;
@@ -213,7 +213,7 @@ impl HotkeyHandler {
             self.pause_hotkey,
             self.quit_hotkey,
             self.undo_hotkey,
-            self.text_selector_hotkey,
+            self.clip_selector_hotkey,
         ];
         #[cfg(windows)]
         hotkeys.push(self.ocr_hotkey);
@@ -289,8 +289,8 @@ pub struct HotkeyEventContext<'a> {
     pub menu: &'a TrayMenu,
     /// クイックセレクターウィンドウのインスタンス (クイックセレクター操作時のみ必要)
     pub quick_selector: Option<&'a QuickSelectorWindow>,
-    /// テキストセレクターウィンドウのインスタンス (テキストセレクター操作時のみ必要)
-    pub text_selector: Option<&'a TextSelectorWindow>,
+    /// 登録クリップセレクターウィンドウのインスタンス (登録クリップセレクター操作時のみ必要)
+    pub clip_selector: Option<&'a ClipSelectorWindow>,
     /// OCR キャプチャオーバーレイ (OCR 操作時のみ必要)
     #[cfg(windows)]
     pub ocr_capture: Option<&'a OcrCaptureWindow>,
@@ -298,8 +298,8 @@ pub struct HotkeyEventContext<'a> {
     pub control_flow: &'a mut ControlFlow,
     /// クイックセレクターが最後に表示された時刻(更新用)
     pub last_quick_selector_show: &'a mut Instant,
-    /// テキストセレクターが最後に表示された時刻(更新用)
-    pub last_text_selector_show: &'a mut Instant,
+    /// 登録クリップセレクターが最後に表示された時刻(更新用)
+    pub last_clip_selector_show: &'a mut Instant,
     /// クリップボード・ワーカーへの送信チャネル
     pub clipboard_tx: &'a Sender<ClipboardCommand>,
 }
@@ -328,8 +328,8 @@ impl HotkeyHandler {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
             dispatch::send_clipboard_command(ctx.clipboard_tx, ClipboardCommand::Undo);
-        } else if event.id == self.text_selector_hotkey.id() {
-            Self::handle_text_selector_hotkey(ctx);
+        } else if event.id == self.clip_selector_hotkey.id() {
+            Self::handle_clip_selector_hotkey(ctx);
         } else if self.handle_ocr_hotkey_if_pressed(event.id, ctx) {
         } else if let Some(slot_index) = self.favorite_slot_for_hotkey(event.id) {
             Self::handle_favorite_mode_hotkey(ctx, slot_index);
@@ -348,10 +348,10 @@ impl HotkeyHandler {
         if let Some(quick_selector) = ctx.quick_selector {
             quick_selector.hide();
         }
-        if let Some(text_selector) = ctx.text_selector
-            && text_selector.is_visible()
+        if let Some(clip_selector) = ctx.clip_selector
+            && clip_selector.is_visible()
         {
-            text_selector.hide();
+            clip_selector.hide();
         }
 
         update_refine(
@@ -372,10 +372,10 @@ impl HotkeyHandler {
         if quick_selector.is_visible() {
             quick_selector.hide();
         } else {
-            if let Some(text_selector) = ctx.text_selector
-                && text_selector.is_visible()
+            if let Some(clip_selector) = ctx.clip_selector
+                && clip_selector.is_visible()
             {
-                text_selector.hide();
+                clip_selector.hide();
             }
             *ctx.last_quick_selector_show = Instant::now();
             let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
@@ -383,23 +383,23 @@ impl HotkeyHandler {
         }
     }
 
-    /// テキストセレクター表示ホットキーを処理する
-    fn handle_text_selector_hotkey(ctx: &mut HotkeyEventContext<'_>) {
-        let Some(text_selector) = ctx.text_selector else {
+    /// 登録クリップセレクター表示ホットキーを処理する
+    fn handle_clip_selector_hotkey(ctx: &mut HotkeyEventContext<'_>) {
+        let Some(clip_selector) = ctx.clip_selector else {
             return;
         };
 
-        if text_selector.is_visible() {
-            text_selector.hide();
+        if clip_selector.is_visible() {
+            clip_selector.hide();
         } else {
             if let Some(quick_selector) = ctx.quick_selector
                 && quick_selector.is_visible()
             {
                 quick_selector.hide();
             }
-            *ctx.last_text_selector_show = Instant::now();
-            let texts_json = ctx.state.with_config(AppConfig::texts_to_json_list);
-            text_selector.show(&texts_json);
+            *ctx.last_clip_selector_show = Instant::now();
+            let clips_json = ctx.state.with_config(AppConfig::clips_to_json_list);
+            clip_selector.show(&clips_json);
         }
     }
 
@@ -420,10 +420,10 @@ impl HotkeyHandler {
         {
             quick_selector.hide();
         }
-        if let Some(text_selector) = ctx.text_selector
-            && text_selector.is_visible()
+        if let Some(clip_selector) = ctx.clip_selector
+            && clip_selector.is_visible()
         {
-            text_selector.hide();
+            clip_selector.hide();
         }
 
         ocr_capture.show();
@@ -539,7 +539,7 @@ mod tests {
         menu: TrayMenu,
         control_flow: ControlFlow,
         last_quick_selector_show: Instant,
-        last_text_selector_show: Instant,
+        last_clip_selector_show: Instant,
         clipboard_tx: Sender<ClipboardCommand>,
     }
 
@@ -554,7 +554,7 @@ mod tests {
                 menu,
                 control_flow: ControlFlow::Wait,
                 last_quick_selector_show: Instant::now(),
-                last_text_selector_show: Instant::now(),
+                last_clip_selector_show: Instant::now(),
                 clipboard_tx,
             }
         }
@@ -564,12 +564,12 @@ mod tests {
                 state: &self.state,
                 menu: &self.menu,
                 quick_selector: None,
-                text_selector: None,
+                clip_selector: None,
                 #[cfg(windows)]
                 ocr_capture: None,
                 control_flow: &mut self.control_flow,
                 last_quick_selector_show: &mut self.last_quick_selector_show,
-                last_text_selector_show: &mut self.last_text_selector_show,
+                last_clip_selector_show: &mut self.last_clip_selector_show,
                 clipboard_tx: &self.clipboard_tx,
             }
         }
@@ -583,7 +583,7 @@ mod tests {
             pause: "Alt+Shift+F3".to_string(),
             quit: "Alt+Shift+F4".to_string(),
             undo: "Alt+Shift+F5".to_string(),
-            text_selector: "Alt+Shift+F6".to_string(),
+            clip_selector: "Alt+Shift+F6".to_string(),
             ocr: "Alt+Shift+F7".to_string(),
             favorite_mode_slots: Vec::new(),
         }
@@ -712,7 +712,7 @@ mod tests {
             pause: "Alt+Ctrl+F3".to_string(),
             quit: "Alt+Ctrl+F4".to_string(),
             undo: "Alt+Ctrl+F5".to_string(),
-            text_selector: "Alt+Ctrl+F6".to_string(),
+            clip_selector: "Alt+Ctrl+F6".to_string(),
             ocr: "Alt+Ctrl+F7".to_string(),
             favorite_mode_slots: Vec::new(),
         };
