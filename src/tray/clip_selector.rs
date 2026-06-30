@@ -1,5 +1,7 @@
 use super::dispatch;
-use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
+use super::selector_window::{
+    WebSelectorWindow, build_hidden_selector_window, embed_clip_selector_assets,
+};
 use super::state::AppEvent;
 
 use crate::consts;
@@ -46,7 +48,7 @@ pub(crate) fn parse_clip_selector_ipc_message(msg: &str) -> Option<ClipSelectorI
 
 /// 登録クリップセレクタ用 HTML を組み立てる
 pub(crate) fn assemble_clip_selector_html() -> String {
-    embed_selector_css(include_str!("../ui/clip_selector.html"))
+    embed_clip_selector_assets(include_str!("../ui/clip_selector.html"))
 }
 
 /// 登録クリップセレクタ表示時に実行するフォーカス用スクリプトを生成する
@@ -204,6 +206,10 @@ mod tests {
     fn assemble_clip_selector_html_embeds_css() {
         let html = assemble_clip_selector_html();
         assert!(!html.contains(r#"@import url("selector.css");"#));
+        assert!(!html.contains(r#"@import url("clip_selector.css");"#));
+        assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(html.contains("window.SelectorCommon"));
+        assert!(html.contains("#image-hover-preview"));
         assert!(html.contains("focusInput"));
     }
 
