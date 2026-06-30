@@ -6,135 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url("selector.css");
-
-        .item.action {
-            border-top: 1px solid var(--border-subtle);
-            margin-top: 4px;
-            padding-top: 14px;
-        }
-
-        .item.action .label {
-            color: var(--accent-color);
-        }
-
-        .selector-heading {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--accent-color);
-            margin-bottom: 8px;
-        }
-
-        .item-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            min-width: 0;
-            flex: 1 1 auto;
-        }
-
-        .item-delete {
-            flex-shrink: 0;
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 6px;
-            background: transparent;
-            color: var(--text-muted);
-            font-size: 18px;
-            line-height: 1;
-            cursor: pointer;
-            opacity: 0;
-            transition: opacity 0.1s, background 0.1s, color 0.1s;
-        }
-
-        .item:hover .item-delete,
-        .item.selected .item-delete {
-            opacity: 1;
-        }
-
-        .item-delete:hover {
-            background: rgba(220, 80, 80, 0.2);
-            color: #f08080;
-        }
-
-        .item-delete:active {
-            background: rgba(220, 80, 80, 0.35);
-        }
-
-        .item.item--image .item-content {
-            align-items: center;
-        }
-
-        .item-thumbnail {
-            flex-shrink: 0;
-            width: 56px;
-            height: 56px;
-            object-fit: contain;
-            border-radius: 6px;
-            background: var(--surface-raised);
-            border: 1px solid var(--border-subtle);
-        }
-
-        .item-thumbnail--placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            color: var(--text-muted);
-        }
-
-        .item--image .mode-info {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 2px;
-        }
-
-        .item--image .value-hint {
-            font-size: 11px;
-        }
-
-        #image-hover-preview {
-            position: fixed;
-            z-index: 1000;
-            display: none;
-            flex-direction: column;
-            gap: 8px;
-            max-width: min(480px, calc(100vw - 20px));
-            padding: 10px;
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow:
-                0 16px 48px rgba(0, 0, 0, 0.6),
-                0 0 0 1px rgba(0, 0, 0, 0.3);
-            pointer-events: none;
-        }
-
-        #image-hover-preview.is-visible {
-            display: flex;
-        }
-
-        #image-hover-preview img {
-            display: block;
-            max-width: 100%;
-            max-height: min(460px, calc(100vh - 80px));
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            border-radius: 8px;
-            background: var(--surface-raised);
-            border: 1px solid var(--border-subtle);
-        }
-
-        #image-hover-preview .image-hover-preview-caption {
-            font-size: 11px;
-            color: var(--text-muted);
-            text-align: center;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
+        @import url("clip_selector.css");
     </style>
 </head>
 
@@ -155,13 +27,27 @@
         <span class="image-hover-preview-caption"></span>
     </div>
 
+    <script src="selector-common.js"></script>
+
     <script>
+        const {
+            normalizeQuery,
+            highlightText,
+            postIpc,
+            close,
+            createSelection,
+            handleArrowKeys,
+            handleHomeEndKeys,
+            handleEscapeKey,
+            focusSearchInput,
+        } = window.SelectorCommon;
+
         const input = document.getElementById('input');
         const results = document.getElementById('results');
 
         let items = [];
         let filtered = [];
-        let selectedIndex = 0;
+        const selection = createSelection(results, totalRows);
 
         const imageHoverPreview = document.getElementById('image-hover-preview');
         const imageHoverPreviewImg = imageHoverPreview.querySelector('img');
@@ -178,7 +64,7 @@
             imageHoverPreviewCaption.textContent = '';
         }
 
-        function positionImageHoverPreview(_anchorEl) {
+        function positionImageHoverPreview() {
             const margin = 10;
 
             imageHoverPreview.style.left = '0px';
@@ -206,7 +92,7 @@
             imageHoverPreviewImg.src = src;
             imageHoverPreviewCaption.textContent = item.preview || item.label;
             imageHoverPreview.setAttribute('aria-hidden', 'false');
-            positionImageHoverPreview(anchorEl);
+            positionImageHoverPreview();
         }
 
         function bindImageHoverPreview(item, previewTarget) {
@@ -221,38 +107,6 @@
         results.addEventListener('mouseleave', hideImageHoverPreview);
         results.addEventListener('scroll', hideImageHoverPreview, { passive: true });
         input.addEventListener('mouseenter', hideImageHoverPreview);
-
-        function normalizeQuery(query) {
-            return query.toLowerCase().trim();
-        }
-
-        function escapeHtml(text) {
-            return text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-
-        function highlightText(text, query) {
-            const safe = escapeHtml(text);
-            if (!query) {
-                return safe;
-            }
-
-            const lowerText = text.toLowerCase();
-            const index = lowerText.indexOf(query);
-            if (index === -1) {
-                return safe;
-            }
-
-            const end = index + query.length;
-            return (
-                escapeHtml(text.slice(0, index)) +
-                '<mark>' + escapeHtml(text.slice(index, end)) + '</mark>' +
-                escapeHtml(text.slice(end))
-            );
-        }
 
         function itemMatches(item, query) {
             if (!query) {
@@ -271,23 +125,10 @@
             return filtered.length + 1;
         }
 
-        function clampSelectedIndex() {
-            if (totalRows() === 0) {
-                selectedIndex = 0;
-                return;
-            }
-            if (selectedIndex >= totalRows()) {
-                selectedIndex = totalRows() - 1;
-            }
-            if (selectedIndex < 0) {
-                selectedIndex = 0;
-            }
-        }
-
         function createItem(item, index, query) {
             const div = document.createElement('div');
             const isImage = item.kind === 'image';
-            div.className = 'item' + (isImage ? ' item--image' : '') + (index === selectedIndex ? ' selected' : '');
+            div.className = 'item' + (isImage ? ' item--image' : '') + (index === selection.index ? ' selected' : '');
 
             const content = document.createElement('div');
             content.className = 'item-content';
@@ -346,7 +187,7 @@
             };
             div.appendChild(deleteBtn);
 
-            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onmouseenter = () => selection.setSelectedIndex(index, false);
             div.onclick = () => select(item.id);
 
             return div;
@@ -356,7 +197,7 @@
             const label = 'クリップボードを登録';
             const preview = '現在のクリップボードを登録クリップに追加';
             const div = document.createElement('div');
-            div.className = 'item action' + (index === selectedIndex ? ' selected' : '');
+            div.className = 'item action' + (index === selection.index ? ' selected' : '');
 
             div.innerHTML = `
                 <div class="mode-info">
@@ -365,47 +206,16 @@
                 <span class="value-hint">${highlightText(preview, query)}</span>
             `;
 
-            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onmouseenter = () => selection.setSelectedIndex(index, false);
             div.onclick = () => register();
             return div;
-        }
-
-        function updateSelectionHighlight() {
-            results.querySelectorAll('.item').forEach((element, index) => {
-                element.classList.toggle('selected', index === selectedIndex);
-            });
-        }
-
-        function scrollSelectedIntoView() {
-            const elements = results.querySelectorAll('.item');
-            elements[selectedIndex]?.scrollIntoView({ block: 'nearest' });
-        }
-
-        function setSelectedIndex(index, scroll) {
-            if (totalRows() === 0) {
-                return;
-            }
-
-            const next = Math.max(0, Math.min(index, totalRows() - 1));
-            if (next === selectedIndex) {
-                if (scroll) {
-                    scrollSelectedIntoView();
-                }
-                return;
-            }
-
-            selectedIndex = next;
-            updateSelectionHighlight();
-            if (scroll) {
-                scrollSelectedIntoView();
-            }
         }
 
         function renderList(scrollToSelection) {
             hideImageHoverPreview();
             results.innerHTML = '';
             const query = normalizeQuery(input.value);
-            clampSelectedIndex();
+            selection.clampSelectedIndex();
 
             if (filtered.length === 0) {
                 const empty = document.createElement('div');
@@ -423,114 +233,94 @@
             results.appendChild(createRegisterRow(filtered.length, query));
 
             if (scrollToSelection) {
-                scrollSelectedIntoView();
+                selection.scrollSelectedIntoView();
             }
         }
 
         function filter() {
             const query = normalizeQuery(input.value);
-            const previousIndex = selectedIndex;
+            const previousIndex = selection.index;
 
             filtered = items.filter((item) => itemMatches(item, query));
 
             if (isRegisterIndex(previousIndex)) {
-                selectedIndex = filtered.length;
+                selection.index = filtered.length;
             } else if (previousIndex < filtered.length) {
-                selectedIndex = previousIndex;
+                selection.index = previousIndex;
             } else {
-                selectedIndex = 0;
+                selection.index = 0;
             }
 
             renderList(true);
         }
 
         function select(id) {
-            window.ipc.postMessage('select:' + id);
+            postIpc('select:' + id);
         }
 
         function register() {
-            window.ipc.postMessage('register');
+            postIpc('register');
         }
 
         function deleteItem(id) {
-            window.ipc.postMessage('delete:' + id);
+            postIpc('delete:' + id);
         }
 
         function deleteSelected() {
-            const item = filtered[selectedIndex];
+            const item = filtered[selection.index];
             if (!item) {
                 return;
             }
             deleteItem(item.id);
         }
 
-        function close() {
+        function closeSelector() {
             hideImageHoverPreview();
-            window.ipc.postMessage('close');
-        }
-
-        function moveSelection(delta) {
-            if (totalRows() === 0) {
-                return;
-            }
-            setSelectedIndex(selectedIndex + delta, true);
+            close();
         }
 
         function activateSelection() {
-            if (isRegisterIndex(selectedIndex)) {
+            if (isRegisterIndex(selection.index)) {
                 register();
-            } else if (filtered[selectedIndex]) {
-                select(filtered[selectedIndex].id);
+            } else if (filtered[selection.index]) {
+                select(filtered[selection.index].id);
             }
         }
 
         input.oninput = filter;
 
         window.onkeydown = (e) => {
-            if (e.key === 'ArrowDown') {
-                moveSelection(1);
-                e.preventDefault();
-            } else if (e.key === 'ArrowUp') {
-                moveSelection(-1);
-                e.preventDefault();
-            } else if (e.key === 'Home') {
-                if (totalRows() > 0) {
-                    setSelectedIndex(0, true);
-                    e.preventDefault();
-                }
-            } else if (e.key === 'End') {
-                if (totalRows() > 0) {
-                    setSelectedIndex(totalRows() - 1, true);
-                    e.preventDefault();
-                }
-            } else if (e.key === 'Enter' && e.ctrlKey) {
+            if (handleArrowKeys(e, selection.moveSelection)) {
+                return;
+            }
+            if (handleHomeEndKeys(e, totalRows, selection.setSelectedIndex)) {
+                return;
+            }
+            if (e.key === 'Enter' && e.ctrlKey) {
                 register();
                 e.preventDefault();
-            } else if (e.key === 'Enter') {
+                return;
+            }
+            if (e.key === 'Enter') {
                 activateSelection();
                 e.preventDefault();
-            } else if (e.key === 'Delete' && !isRegisterIndex(selectedIndex) && filtered[selectedIndex]) {
+                return;
+            }
+            if (e.key === 'Delete' && !isRegisterIndex(selection.index) && filtered[selection.index]) {
                 deleteSelected();
                 e.preventDefault();
-            } else if (e.key === 'Escape') {
-                if (input.value) {
-                    input.value = '';
-                    filter();
-                    e.preventDefault();
-                } else {
-                    close();
-                }
+                return;
             }
+            handleEscapeKey(e, input, filter, closeSelector);
         };
 
         // UI 表示時にフォーカスを当てる
         window.focusInput = (nextItems) => {
             items = Array.isArray(nextItems) ? nextItems : [];
             input.value = '';
-            selectedIndex = 0;
+            selection.index = 0;
             filter();
-            input.focus();
-            input.select();
+            focusSearchInput(input);
         };
 
         // 登録後などに一覧だけ更新する
