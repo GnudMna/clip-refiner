@@ -70,7 +70,7 @@ fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
 
 /// v1 から v2 へ移行
 ///
-/// v2 で変更: `[[texts]]` → `[[clips]]`、`hotkeys.text_selector` → `hotkeys.clip_selector`
+/// v2 で変更: `[[texts]]` → 登録クリップ (`registered-clips.dat`)、`hotkeys.text_selector` → `hotkeys.clip_selector`
 fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
     config.version = 2;
     config

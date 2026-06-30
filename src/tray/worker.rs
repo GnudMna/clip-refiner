@@ -681,22 +681,24 @@ mod tests {
     fn register_clip_from_clipboard_saves_image() {
         use crate::test_helpers::InMemoryTextClipboard;
 
-        let state = Arc::new(test_app_state());
-        let rgba = vec![
-            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
-        ];
-        let mut clipboard =
-            InMemoryTextClipboard::with_text("ignored").with_source_image(2, 2, rgba);
+        crate::test_helpers::with_temp_config_dir(|| {
+            let state = Arc::new(test_app_state());
+            let rgba = vec![
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+            ];
+            let mut clipboard =
+                InMemoryTextClipboard::with_text("ignored").with_source_image(2, 2, rgba);
 
-        register_clip_from_clipboard(&mut clipboard, &state);
+            register_clip_from_clipboard(&mut clipboard, &state);
 
-        let is_image = state.with_config(|c| {
-            c.clips
-                .first()
-                .and_then(|e| e.image_file.as_ref())
-                .is_some()
+            let is_image = state.with_config(|c| {
+                c.clips
+                    .first()
+                    .and_then(|e| e.image_file.as_ref())
+                    .is_some()
+            });
+            assert!(is_image);
         });
-        assert!(is_image);
     }
 
     /// 登録画像をクリップボードへコピーできること
@@ -704,23 +706,25 @@ mod tests {
     fn copy_registered_writes_image_to_clipboard() {
         use crate::test_helpers::InMemoryTextClipboard;
 
-        let state = Arc::new(test_app_state());
-        let rgba = vec![
-            10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
-        ];
-        state.with_config_mut(|c| {
-            c.add_registered_image(2, 2, &rgba).expect("register image");
+        crate::test_helpers::with_temp_config_dir(|| {
+            let state = Arc::new(test_app_state());
+            let rgba = vec![
+                10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
+            ];
+            state.with_config_mut(|c| {
+                c.add_registered_image(2, 2, &rgba).expect("register image");
+            });
+
+            let mut clipboard = InMemoryTextClipboard::with_text("");
+            let mut refine_ctx = RefineContext::default();
+            handle_command(
+                &mut clipboard,
+                &state,
+                &mut refine_ctx,
+                ClipboardCommand::CopyRegisteredClip(0),
+            );
+
+            assert_eq!(clipboard.written_image_size(), Some((2, 2)));
         });
-
-        let mut clipboard = InMemoryTextClipboard::with_text("");
-        let mut refine_ctx = RefineContext::default();
-        handle_command(
-            &mut clipboard,
-            &state,
-            &mut refine_ctx,
-            ClipboardCommand::CopyRegisteredClip(0),
-        );
-
-        assert_eq!(clipboard.written_image_size(), Some((2, 2)));
     }
 }

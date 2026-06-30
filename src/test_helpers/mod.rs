@@ -5,11 +5,13 @@
 #![allow(clippy::missing_panics_doc)]
 
 mod clipboard;
+mod config_dir;
 mod harness;
 
 pub use crate::config::MonitorMode;
 
 pub use clipboard::InMemoryTextClipboard;
+pub use config_dir::with_temp_config_dir;
 pub use harness::ClipboardHarness;
 
 /// クリップボード本文の処理上限 (バイト)

@@ -15,7 +15,6 @@ pub(crate) fn to_commented_toml(config: &AppConfig) -> Result<String> {
     sections::notification::append_template(&mut out, config)?;
     sections::hotkeys::append_template(&mut out, config)?;
     sections::regex::append_template(&mut out, config)?;
-    sections::clips::append_template(&mut out, config)?;
 
     Ok(out)
 }
