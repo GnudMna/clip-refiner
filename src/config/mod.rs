@@ -1,15 +1,20 @@
+mod clip_store_key;
 mod migrate;
 mod paths;
 pub(crate) mod permissions;
 mod persistence;
+mod registered_clips;
+mod registered_images;
 mod serialize;
 mod types;
 
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};
 pub use persistence::{ConfigReloadError, disk_config_modified_time};
 pub use types::{
-    AddRegisteredTextError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
-    MonitorMode, NotificationSettings, RegexSettings,
+    AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
+    MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
 };
 
 // ======================================================================
@@ -161,62 +166,66 @@ interval_ms = 500
         );
     }
 
-    /// `add_registered_text` が登録・検証・上限チェックを行うこと
+    /// `add_registered_clip` が登録・検証・上限チェックを行うこと
     #[test]
-    fn test_add_registered_text() {
-        use super::AddRegisteredTextError;
-        use super::types::RegisteredText;
+    fn test_add_registered_clip() {
+        use super::AddRegisteredClipError;
+        use super::types::RegisteredClip;
 
         let mut config = AppConfig::default();
-        assert_eq!(config.add_registered_text("  hello  "), Ok(()));
-        assert_eq!(config.texts.len(), 1);
-        assert_eq!(config.texts[0].text, "  hello  ");
-        assert!(!config.texts[0].label.is_empty());
+        assert_eq!(config.add_registered_clip("  hello  "), Ok(()));
+        assert_eq!(config.clips.len(), 1);
+        assert_eq!(config.clips[0].text, "  hello  ");
+        assert!(!config.clips[0].label.is_empty());
 
         assert_eq!(
-            config.add_registered_text("   ".to_string()),
-            Err(AddRegisteredTextError::Empty)
+            config.add_registered_clip("   ".to_string()),
+            Err(AddRegisteredClipError::Empty)
         );
 
-        config.texts = vec![RegisteredText {
+        config.clips = vec![RegisteredClip {
             label: "x".into(),
             text: "y".into(),
+            image_file: None,
         }];
-        for i in 0..consts::MAX_REGISTERED_TEXTS {
-            config.texts.push(RegisteredText {
+        for i in 0..consts::MAX_REGISTERED_CLIPS {
+            config.clips.push(RegisteredClip {
                 label: format!("l{i}"),
                 text: format!("t{i}"),
+                image_file: None,
             });
         }
         assert_eq!(
-            config.add_registered_text("overflow"),
-            Err(AddRegisteredTextError::LimitReached)
+            config.add_registered_clip("overflow"),
+            Err(AddRegisteredClipError::LimitReached)
         );
     }
 
-    /// `remove_registered_text` が指定項目を削除すること
+    /// `remove_registered_clip` が指定項目を削除すること
     #[test]
-    fn test_remove_registered_text() {
-        use super::types::RegisteredText;
+    fn test_remove_registered_clip() {
+        use super::types::RegisteredClip;
 
         let mut config = AppConfig {
-            texts: vec![
-                RegisteredText {
+            clips: vec![
+                RegisteredClip {
                     label: "first".into(),
                     text: "a".into(),
+                    image_file: None,
                 },
-                RegisteredText {
+                RegisteredClip {
                     label: "second".into(),
                     text: "b".into(),
+                    image_file: None,
                 },
             ],
             ..Default::default()
         };
 
-        assert!(config.remove_registered_text(0));
-        assert_eq!(config.texts.len(), 1);
-        assert_eq!(config.texts[0].text, "b");
-        assert!(!config.remove_registered_text(5));
+        assert!(config.remove_registered_clip(0));
+        assert_eq!(config.clips.len(), 1);
+        assert_eq!(config.clips[0].text, "b");
+        assert!(!config.remove_registered_clip(5));
     }
 
     /// お気に入り変換モードの登録・解除と正規化が機能すること

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
+use super::super::clip_selector::ClipSelectorWindow;
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
-use super::super::text_selector::TextSelectorWindow;
 
 use crate::config::{AppConfig, ConfigReloadError};
 use crate::platform;
@@ -24,7 +24,7 @@ pub struct ConfigReloadOutcome {
 /// * `state` - アプリケーションの共有状態
 /// * `menu` - トレイメニュー構造体
 /// * `hotkey_handler` - グローバルホットキーハンドラ
-/// * `text_selector` - 登録文字列セレクター (表示中なら内容を更新)
+/// * `clip_selector` - 登録クリップセレクター (表示中なら内容を更新)
 ///
 /// # Returns
 /// * `Result<ConfigReloadOutcome, String>` - 成功時は結果メッセージ、失敗時はエラー文言
@@ -32,7 +32,7 @@ pub fn apply_config_reload(
     state: &Arc<AppState>,
     menu: &TrayMenu,
     hotkey_handler: &mut HotkeyHandler,
-    text_selector: &TextSelectorWindow,
+    clip_selector: &ClipSelectorWindow,
 ) -> Result<ConfigReloadOutcome, String> {
     let (loaded, migrated) = AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
 
@@ -71,9 +71,9 @@ pub fn apply_config_reload(
         bump_monitor_generation(state);
     }
 
-    if text_selector.is_visible() {
-        let texts_json = state.with_config(AppConfig::texts_to_json_list);
-        text_selector.refresh_items(&texts_json);
+    if clip_selector.is_visible() {
+        let clips_json = state.with_config(AppConfig::clips_to_json_list);
+        clip_selector.refresh_items(&clips_json);
     }
 
     let message = build_reload_message(
@@ -118,9 +118,9 @@ pub fn reload_config_with_notification(
     state: &Arc<AppState>,
     menu: &TrayMenu,
     hotkey_handler: &mut HotkeyHandler,
-    text_selector: &TextSelectorWindow,
+    clip_selector: &ClipSelectorWindow,
 ) {
-    match apply_config_reload(state, menu, hotkey_handler, text_selector) {
+    match apply_config_reload(state, menu, hotkey_handler, clip_selector) {
         Ok(outcome) => platform::show_notification("設定を再読み込み", &outcome.message),
         Err(message) => {
             crate::log_warn!("設定の再読み込みに失敗: {}", message);

@@ -1,6 +1,6 @@
 //! コマンドパレット風 `WebView` セレクターの共通基盤
 //!
-//! クイックセレクターと登録文字列セレクターで共有するウィンドウ生成・表示制御を提供する
+//! クイックセレクターと登録クリップセレクターで共有するウィンドウ生成・表示制御を提供する
 
 use std::sync::Arc;
 
@@ -13,10 +13,25 @@ use wry::{WebContext, WebView, WebViewBuilder};
 // ======================================================================
 // HTML 組み立て
 // ======================================================================
-/// セレクター HTML 内の CSS `@import` をインライン展開する
-pub(crate) fn embed_selector_css(html: &str) -> String {
+const SELECTOR_CSS_IMPORT: &str = r#"@import url("selector.css");"#;
+const CLIP_SELECTOR_CSS_IMPORT: &str = r#"@import url("clip_selector.css");"#;
+const SELECTOR_COMMON_JS_TAG: &str = r#"<script src="selector-common.js"></script>"#;
+
+/// セレクター HTML 内の共通アセット (CSS / JS) をインライン展開する
+pub(crate) fn embed_selector_assets(html: &str) -> String {
     let css = include_str!("../ui/selector.css");
-    html.replace("@import url(\"selector.css\");", css)
+    let common_js = include_str!("../ui/selector-common.js");
+
+    html.replace(SELECTOR_CSS_IMPORT, css).replace(
+        SELECTOR_COMMON_JS_TAG,
+        &format!("<script>\n{common_js}\n</script>"),
+    )
+}
+
+/// 登録クリップセレクター専用 CSS をインライン展開する
+pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
+    let clip_css = include_str!("../ui/clip_selector.css");
+    embed_selector_assets(html).replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
 }
 
 // ======================================================================
@@ -123,4 +138,34 @@ pub(crate) fn build_hidden_selector_window(
     }
 
     Ok(window)
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 共通 CSS / JS がインライン展開されること
+    #[test]
+    fn embed_selector_assets_inlines_common_files() {
+        let html = embed_selector_assets(
+            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script>"#,
+        );
+        assert!(!html.contains(SELECTOR_CSS_IMPORT));
+        assert!(!html.contains(SELECTOR_COMMON_JS_TAG));
+        assert!(html.contains("window.SelectorCommon"));
+        assert!(html.contains("--bg-color"));
+    }
+
+    /// 登録クリップセレクター専用 CSS がインライン展開されること
+    #[test]
+    fn embed_clip_selector_assets_inlines_clip_css() {
+        let html = embed_clip_selector_assets(
+            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style>"#,
+        );
+        assert!(!html.contains(CLIP_SELECTOR_CSS_IMPORT));
+        assert!(html.contains("#image-hover-preview"));
+    }
 }

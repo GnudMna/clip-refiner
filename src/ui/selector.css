@@ -75,6 +75,13 @@ body {
     background: var(--surface-color);
 }
 
+.selector-heading {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+}
+
 input {
     width: 100%;
     background: var(--bg-color);
