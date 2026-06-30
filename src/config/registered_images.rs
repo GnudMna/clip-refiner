@@ -2,10 +2,12 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
+use super::clip_store_key::clip_store_key;
 use super::paths::get_config_dir;
 use super::permissions::{restrict_private_dir_permissions, restrict_private_file_permissions};
 
 use crate::consts;
+use crate::security::{decrypt_bytes, encrypt_bytes};
 
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -15,6 +17,8 @@ use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 // 定数
 // ======================================================================
 const REGISTERED_IMAGES_DIR: &str = "registered-images";
+const ENCRYPTED_IMAGE_EXT: &str = "enc";
+const LEGACY_IMAGE_EXT: &str = "png";
 
 // ======================================================================
 // パブリック関数
@@ -31,7 +35,7 @@ pub fn registered_images_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
-/// RGBA 画像を PNG として保存し、設定に記録する相対ファイル名を返す
+/// RGBA 画像を暗号化 PNG として保存し、設定に記録する相対ファイル名を返す
 pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<String> {
     validate_rgba_buffer(width, height, rgba)?;
 
@@ -40,10 +44,19 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
         bail!("登録画像の PNG サイズが上限を超えています");
     }
 
-    let filename = format!("{}.png", blake3::hash(&png).to_hex());
+    let key = clip_store_key()?;
+    let encrypted = encrypt_bytes(&key, &png)?;
+    if encrypted.len() > consts::MAX_REGISTERED_IMAGE_ENCRYPTED_BYTES {
+        bail!("登録画像の暗号化サイズが上限を超えています");
+    }
+
+    let filename = format!(
+        "{}.{ENCRYPTED_IMAGE_EXT}",
+        blake3::hash(&encrypted).to_hex()
+    );
     let path = registered_images_dir()?.join(&filename);
     if !path.exists() {
-        fs::write(&path, &png).context("登録画像ファイルの書き込みに失敗しました")?;
+        fs::write(&path, &encrypted).context("登録画像ファイルの書き込みに失敗しました")?;
         restrict_private_file_permissions(&path)?;
     }
 
@@ -52,14 +65,8 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
 
 /// 登録画像ファイルを RGBA バッファとして読み込む
 pub fn load_registered_image(relative_filename: &str) -> Result<(u32, u32, Vec<u8>)> {
-    let path = resolve_registered_image_path(relative_filename)?;
-    let bytes =
-        fs::read(&path).with_context(|| format!("登録画像の読み込みに失敗: {}", path.display()))?;
-    if bytes.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-        bail!("登録画像の PNG サイズが上限を超えています");
-    }
-
-    decode_png(&bytes)
+    let png = read_registered_image_png(relative_filename)?;
+    decode_png(&png)
 }
 
 /// 登録画像ファイルが存在するかどうかを返す
@@ -74,6 +81,39 @@ pub fn delete_registered_image(relative_filename: &str) {
     if let Ok(path) = resolve_registered_image_path(relative_filename) {
         let _ = fs::remove_file(path);
     }
+}
+
+/// v2 の平文 PNG を暗号化ファイルへ移行する
+///
+/// 既に `.enc` の場合はファイル名をそのまま返す
+pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<String> {
+    if relative_filename.ends_with(&format!(".{ENCRYPTED_IMAGE_EXT}")) {
+        return Ok(relative_filename.to_string());
+    }
+    if !relative_filename.ends_with(&format!(".{LEGACY_IMAGE_EXT}")) {
+        bail!("登録画像のファイル名が不正です");
+    }
+
+    let path = resolve_registered_image_path(relative_filename)?;
+    let png =
+        fs::read(&path).with_context(|| format!("登録画像の読み込みに失敗: {}", path.display()))?;
+    if png.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
+        bail!("登録画像の PNG サイズが上限を超えています");
+    }
+
+    let key = clip_store_key()?;
+    let encrypted = encrypt_bytes(&key, &png)?;
+    let filename = format!(
+        "{}.{ENCRYPTED_IMAGE_EXT}",
+        blake3::hash(&encrypted).to_hex()
+    );
+    let new_path = registered_images_dir()?.join(&filename);
+    if !new_path.exists() {
+        fs::write(&new_path, &encrypted).context("登録画像の暗号化保存に失敗しました")?;
+        restrict_private_file_permissions(&new_path)?;
+    }
+    let _ = fs::remove_file(path);
+    Ok(filename)
 }
 
 /// 登録画像の表示用ラベルを生成する
@@ -113,24 +153,43 @@ fn registered_image_preview_data_url(
     max_dimension: u32,
     max_bytes: usize,
 ) -> Option<String> {
-    let path = resolve_registered_image_path(relative_filename).ok()?;
-    let bytes = fs::read(&path).ok()?;
-    if bytes.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-        return None;
-    }
-
-    let image = image::load_from_memory_with_format(&bytes, ImageFormat::Png).ok()?;
+    let png = read_registered_image_png(relative_filename).ok()?;
+    let image = image::load_from_memory_with_format(&png, ImageFormat::Png).ok()?;
     encode_thumbnail_data_url(&image, max_dimension, max_bytes)
 }
 
 // ======================================================================
 // プライベート関数
 // ======================================================================
+fn read_registered_image_png(relative_filename: &str) -> Result<Vec<u8>> {
+    let path = resolve_registered_image_path(relative_filename)?;
+    let bytes =
+        fs::read(&path).with_context(|| format!("登録画像の読み込みに失敗: {}", path.display()))?;
+
+    if relative_filename.ends_with(&format!(".{ENCRYPTED_IMAGE_EXT}")) {
+        if bytes.len() > consts::MAX_REGISTERED_IMAGE_ENCRYPTED_BYTES {
+            bail!("登録画像の暗号化サイズが上限を超えています");
+        }
+        let key = clip_store_key()?;
+        let png = decrypt_bytes(&key, &bytes)?;
+        if png.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
+            bail!("登録画像の PNG サイズが上限を超えています");
+        }
+        return Ok(png);
+    }
+
+    if bytes.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
+        bail!("登録画像の PNG サイズが上限を超えています");
+    }
+    Ok(bytes)
+}
+
 fn resolve_registered_image_path(relative_filename: &str) -> Result<PathBuf> {
     if relative_filename.is_empty()
         || relative_filename.contains('/')
         || relative_filename.contains('\\')
         || relative_filename.contains("..")
+        || !is_allowed_image_filename(relative_filename)
     {
         bail!("登録画像のファイル名が不正です");
     }
@@ -141,6 +200,11 @@ fn resolve_registered_image_path(relative_filename: &str) -> Result<PathBuf> {
     }
 
     Ok(path)
+}
+
+fn is_allowed_image_filename(filename: &str) -> bool {
+    filename.ends_with(&format!(".{ENCRYPTED_IMAGE_EXT}"))
+        || filename.ends_with(&format!(".{LEGACY_IMAGE_EXT}"))
 }
 
 fn validate_rgba_buffer(width: u32, height: u32, rgba: &[u8]) -> Result<()> {
@@ -259,5 +323,11 @@ mod tests {
     fn resolve_rejects_path_traversal() {
         assert!(resolve_registered_image_path("../secret.png").is_err());
         assert!(resolve_registered_image_path("a/b.png").is_err());
+    }
+
+    /// 許可されていない拡張子を拒否すること
+    #[test]
+    fn resolve_rejects_unknown_extension() {
+        assert!(resolve_registered_image_path("image.jpg").is_err());
     }
 }

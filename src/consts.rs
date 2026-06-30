@@ -85,8 +85,14 @@ pub const MAX_REGISTERED_CLIP_LABEL_CHARS: usize = 64;
 /// 登録クリッププレビューの最大文字数 (UI 表示用)
 pub const REGISTERED_CLIP_PREVIEW_MAX_CHARS: usize = 40;
 
+/// 登録クリップの暗号化ファイル最大バイト数 (256 MiB)
+pub const MAX_REGISTERED_CLIPS_FILE_BYTES: usize = 256 * 1024 * 1024;
+
 /// 登録画像 PNG の最大バイト数 (16 MiB)
 pub const MAX_REGISTERED_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+/// 登録画像の暗号化ファイル最大バイト数 (PNG 上限 + 暗号化オーバーヘッド)
+pub const MAX_REGISTERED_IMAGE_ENCRYPTED_BYTES: usize = MAX_REGISTERED_IMAGE_BYTES + 64;
 
 /// 登録画像の最大辺長 (ピクセル)
 pub const MAX_REGISTERED_IMAGE_DIMENSION: u32 = 8192;

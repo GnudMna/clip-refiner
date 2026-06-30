@@ -1,11 +1,15 @@
+mod clip_store_key;
 mod migrate;
 mod paths;
 pub(crate) mod permissions;
 mod persistence;
+mod registered_clips;
 mod registered_images;
 mod serialize;
 mod types;
 
+#[cfg(any(test, feature = "test-helpers"))]
+pub(crate) use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};
 pub use persistence::{ConfigReloadError, disk_config_modified_time};
 pub use types::{

@@ -36,11 +36,6 @@ pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_HOTKEYS: &str =
     "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は自動または「設定を再読み込み」で反映)";
 pub(crate) const SECTION_REGEX: &str = "正規表現加工モード用のパターンと置換文字列";
-pub(crate) const SECTION_CLIPS: &str = "クリップボードへコピーする登録クリップ (`[[clips]]` 形式)";
-pub(crate) const DOC_CLIP_LABEL: &str = "一覧表示用のラベル";
-pub(crate) const DOC_CLIP_BODY: &str = "クリップボードへコピーする本文 (画像登録時は空)";
-pub(crate) const DOC_CLIP_IMAGE: &str =
-    "登録画像ファイル名 (`registered-images` ディレクトリ内。指定時は画像登録として扱う)";
 
 pub(crate) const SECTION_RULE: &str =
     "# -----------------------------------------------------------------------------";

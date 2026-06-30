@@ -333,7 +333,7 @@ fn default_history_limit() -> usize {
 // ======================================================================
 /// クリップボードへコピーするための登録クリップ (テキストまたは画像)
 ///
-/// `config.toml` の `[[clips]]` セクションとして保存される
+/// `registered-clips.dat` に暗号化して保存される
 /// `image_file` が指定されている場合は画像登録として扱う
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RegisteredClip {
@@ -457,8 +457,8 @@ pub struct AppConfig {
     /// 正規表現加工用のパターンと置換文字列
     #[serde(default)]
     pub regex: RegexSettings,
-    /// クリップボードへコピーする登録クリップ
-    #[serde(default)]
+    /// クリップボードへコピーする登録クリップ (`registered-clips.dat` に保存)
+    #[serde(skip)]
     pub clips: Vec<RegisteredClip>,
     /// お気に入り登録した変換モード (登録順)
     #[serde(default)]
