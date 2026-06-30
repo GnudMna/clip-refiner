@@ -26,7 +26,7 @@ pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 /// 設定ファイルのスキーマバージョン
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
-pub const CONFIG_VERSION: u32 = 1;
+pub const CONFIG_VERSION: u32 = 2;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
@@ -70,20 +70,41 @@ pub const DEFAULT_HOTKEY_QUIT: &str = "Alt+Shift+Q";
 /// 加工取り消しのデフォルトホットキー
 pub const DEFAULT_HOTKEY_UNDO: &str = "Alt+Shift+Z";
 
-/// 登録文字列セレクター表示のデフォルトホットキー
-pub const DEFAULT_HOTKEY_TEXT_SELECTOR: &str = "Alt+Shift+T";
+/// 登録クリップセレクター表示のデフォルトホットキー
+pub const DEFAULT_HOTKEY_CLIP_SELECTOR: &str = "Alt+Shift+T";
 
 /// 画面 OCR キャプチャのデフォルトホットキー
 pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+O";
 
-/// 登録文字列の最大件数
-pub const MAX_REGISTERED_TEXTS: usize = 100;
+/// 登録クリップの最大件数
+pub const MAX_REGISTERED_CLIPS: usize = 100;
 
-/// 登録文字列ラベルの最大文字数
-pub const MAX_REGISTERED_TEXT_LABEL_CHARS: usize = 64;
+/// 登録クリップラベルの最大文字数
+pub const MAX_REGISTERED_CLIP_LABEL_CHARS: usize = 64;
 
-/// 登録文字列プレビューの最大文字数 (UI 表示用)
-pub const REGISTERED_TEXT_PREVIEW_MAX_CHARS: usize = 40;
+/// 登録クリッププレビューの最大文字数 (UI 表示用)
+pub const REGISTERED_CLIP_PREVIEW_MAX_CHARS: usize = 40;
+
+/// 登録画像 PNG の最大バイト数 (16 MiB)
+pub const MAX_REGISTERED_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+/// 登録画像の最大辺長 (ピクセル)
+pub const MAX_REGISTERED_IMAGE_DIMENSION: u32 = 8192;
+
+/// 登録画像の最大ピクセル数 (`4096×4096`)
+pub const MAX_REGISTERED_IMAGE_PIXELS: u64 = 16_777_216;
+
+/// セレクター用画像プレビューの最大辺長 (ピクセル)
+pub const SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION: u32 = 64;
+
+/// セレクター hover プレビューの最大辺長 (ピクセル)
+pub const SELECTOR_IMAGE_HOVER_PREVIEW_MAX_DIMENSION: u32 = 480;
+
+/// セレクター用画像プレビュー JPEG の最大バイト数
+pub const MAX_SELECTOR_IMAGE_PREVIEW_BYTES: usize = 24 * 1024;
+
+/// セレクター hover プレビュー JPEG の最大バイト数
+pub const MAX_SELECTOR_IMAGE_HOVER_PREVIEW_BYTES: usize = 256 * 1024;
 
 /// お気に入り変換モードの最大件数
 pub const MAX_FAVORITE_MODES: usize = 20;

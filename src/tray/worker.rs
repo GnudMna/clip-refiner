@@ -10,11 +10,12 @@ use super::dispatch;
 use super::notify;
 use super::state::{AppEvent, AppState};
 
-use crate::config::AddRegisteredTextError;
+use crate::config::AddRegisteredClipError;
 use crate::config::MonitorMode;
+use crate::config::ResolvedClip;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard,
+    ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode, TextClipboard,
     process_clipboard_pipeline_io,
 };
 use crate::security::SecretString;
@@ -32,14 +33,14 @@ const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 pub enum ClipboardCommand {
     /// 指定されたテキストをクリップボードにセットする(履歴からの復元用など)
     SetText(SecretString),
-    /// 登録文字列をクリップボードにコピーする
-    CopyRegisteredText(SecretString),
+    /// 登録済みクリップボード内容をコピーする
+    CopyRegisteredClip(usize),
     /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
     /// 直近の加工を取り消し、加工前のテキストをクリップボードへ復元する
     Undo,
-    /// クリップボードの内容を登録文字列として保存する
-    RegisterFromClipboard,
+    /// クリップボードの内容を登録クリップとして保存する
+    RegisterClipFromClipboard,
     /// OCR 結果をクリップボードへ書き込む
     SetOcrText(SecretString),
 }
@@ -48,12 +49,12 @@ impl std::fmt::Debug for ClipboardCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SetText(_) => f.debug_tuple("SetText").field(&"...").finish(),
-            Self::CopyRegisteredText(_) => {
-                f.debug_tuple("CopyRegisteredText").field(&"...").finish()
+            Self::CopyRegisteredClip(index) => {
+                f.debug_tuple("CopyRegisteredClip").field(&index).finish()
             }
             Self::ProcessMode(mode) => f.debug_tuple("ProcessMode").field(mode).finish(),
             Self::Undo => f.write_str("Undo"),
-            Self::RegisterFromClipboard => f.write_str("RegisterFromClipboard"),
+            Self::RegisterClipFromClipboard => f.write_str("RegisterClipFromClipboard"),
             Self::SetOcrText(_) => f.debug_tuple("SetOcrText").field(&"...").finish(),
         }
     }
@@ -366,19 +367,8 @@ pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
                 }
             }
         }
-        ClipboardCommand::CopyRegisteredText(text) => {
-            if let Err(e) = clipboard.set_text(text.to_string()) {
-                crate::log_error!("クリップボード設定エラー: {:?}", e);
-                platform::show_notification(
-                    "クリップボードエラー",
-                    "登録文字列のコピーに失敗しました。",
-                );
-            } else {
-                state.record_clipboard_set(&text);
-                if state.with_config(|c| c.notification_settings.enabled) {
-                    platform::show_notification("登録文字列", "クリップボードにコピーしました");
-                }
-            }
+        ClipboardCommand::CopyRegisteredClip(index) => {
+            copy_registered_clip_to_clipboard(clipboard, state, index);
         }
         ClipboardCommand::SetOcrText(text) => {
             if let Err(e) = clipboard.set_text(text.to_string()) {
@@ -446,14 +436,95 @@ pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
                 platform::show_notification("加工の取り消し", "取り消せる加工がありません");
             }
         }
-        ClipboardCommand::RegisterFromClipboard => {
-            register_text_from_clipboard(clipboard, state);
+        ClipboardCommand::RegisterClipFromClipboard => {
+            register_clip_from_clipboard(clipboard, state);
         }
     }
 }
 
-/// クリップボードの内容を登録文字列として保存する
-fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
+/// 登録済みクリップボード内容をクリップボードへコピーする
+fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    index: usize,
+) {
+    let clip = state.with_config(|config| config.resolve_registered_clip(index));
+    match clip {
+        Some(ResolvedClip::Text(text)) => {
+            if let Err(e) = clipboard.set_text(text.clone()) {
+                crate::log_error!("クリップボード設定エラー: {:?}", e);
+                platform::show_notification(
+                    "クリップボードエラー",
+                    "登録クリップのコピーに失敗しました。",
+                );
+            } else {
+                state.record_clipboard_set(&text);
+                if state.with_config(|c| c.notification_settings.enabled) {
+                    platform::show_notification("登録クリップ", "クリップボードにコピーしました");
+                }
+            }
+        }
+        Some(ResolvedClip::Image {
+            width,
+            height,
+            rgba,
+        }) => {
+            if let Err(e) = clipboard.set_image(width, height, rgba) {
+                crate::log_error!("クリップボード画像設定エラー: {:?}", e);
+                platform::show_notification(
+                    "クリップボードエラー",
+                    "登録クリップのコピーに失敗しました。",
+                );
+            } else if state.with_config(|c| c.notification_settings.enabled) {
+                platform::show_notification("登録クリップ", "クリップボードにコピーしました");
+            }
+        }
+        None => {}
+    }
+}
+
+/// クリップボードの内容を登録クリップとして保存する
+fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+) {
+    if let Ok((width, height, rgba)) = clipboard.get_image() {
+        let outcome = state.with_config_mut(|c| c.add_registered_image(width, height, &rgba));
+        match outcome {
+            Ok(()) => {
+                state.save_config();
+                dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
+                notify::show_when_enabled(
+                    state,
+                    "登録クリップ",
+                    "クリップボードの画像を登録しました",
+                );
+            }
+            Err(AddRegisteredClipError::ImageTooLarge) => {
+                notify::show_when_enabled(
+                    state,
+                    "登録クリップ",
+                    "画像が大きすぎるため登録できません",
+                );
+            }
+            Err(AddRegisteredClipError::LimitReached) => {
+                notify::show_when_enabled(state, "登録クリップ", "登録件数の上限に達しています");
+            }
+            Err(
+                AddRegisteredClipError::ImageInvalid
+                | AddRegisteredClipError::Empty
+                | AddRegisteredClipError::TooLarge,
+            ) => {
+                notify::show_when_enabled(
+                    state,
+                    "登録クリップ",
+                    "画像の形式が不正なため登録できません",
+                );
+            }
+        }
+        return;
+    }
+
     let text = match clipboard.get_text() {
         Ok(text) => text,
         Err(e) => {
@@ -466,26 +537,31 @@ fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc
         }
     };
 
-    let outcome = state.with_config_mut(|c| c.add_registered_text(text));
+    let outcome = state.with_config_mut(|c| c.add_registered_clip(text));
     match outcome {
         Ok(()) => {
             state.save_config();
-            dispatch::send_app_event(&state.proxy, AppEvent::RefreshTexts);
-            notify::show_when_enabled(state, "登録文字列", "クリップボードの内容を登録しました");
+            dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
+            notify::show_when_enabled(state, "登録クリップ", "クリップボードの内容を登録しました");
         }
-        Err(AddRegisteredTextError::Empty) => {
+        Err(AddRegisteredClipError::Empty) => {
             notify::show_when_enabled(
                 state,
-                "登録文字列",
+                "登録クリップ",
                 "クリップボードが空のため登録できません",
             );
         }
-        Err(AddRegisteredTextError::TooLarge) => {
-            notify::show_when_enabled(state, "登録文字列", "テキストが長すぎるため登録できません");
+        Err(AddRegisteredClipError::TooLarge) => {
+            notify::show_when_enabled(
+                state,
+                "登録クリップ",
+                "テキストが長すぎるため登録できません",
+            );
         }
-        Err(AddRegisteredTextError::LimitReached) => {
-            notify::show_when_enabled(state, "登録文字列", "登録件数の上限に達しています");
+        Err(AddRegisteredClipError::LimitReached) => {
+            notify::show_when_enabled(state, "登録クリップ", "登録件数の上限に達しています");
         }
+        Err(AddRegisteredClipError::ImageTooLarge | AddRegisteredClipError::ImageInvalid) => {}
     }
 }
 
@@ -598,5 +674,53 @@ mod tests {
         } else {
             assert_eq!(effective, MonitorMode::Polling);
         }
+    }
+
+    /// クリップボード画像を登録できること
+    #[test]
+    fn register_clip_from_clipboard_saves_image() {
+        use crate::test_helpers::InMemoryTextClipboard;
+
+        let state = Arc::new(test_app_state());
+        let rgba = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+        ];
+        let mut clipboard =
+            InMemoryTextClipboard::with_text("ignored").with_source_image(2, 2, rgba);
+
+        register_clip_from_clipboard(&mut clipboard, &state);
+
+        let is_image = state.with_config(|c| {
+            c.clips
+                .first()
+                .and_then(|e| e.image_file.as_ref())
+                .is_some()
+        });
+        assert!(is_image);
+    }
+
+    /// 登録画像をクリップボードへコピーできること
+    #[test]
+    fn copy_registered_writes_image_to_clipboard() {
+        use crate::test_helpers::InMemoryTextClipboard;
+
+        let state = Arc::new(test_app_state());
+        let rgba = vec![
+            10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
+        ];
+        state.with_config_mut(|c| {
+            c.add_registered_image(2, 2, &rgba).expect("register image");
+        });
+
+        let mut clipboard = InMemoryTextClipboard::with_text("");
+        let mut refine_ctx = RefineContext::default();
+        handle_command(
+            &mut clipboard,
+            &state,
+            &mut refine_ctx,
+            ClipboardCommand::CopyRegisteredClip(0),
+        );
+
+        assert_eq!(clipboard.written_image_size(), Some((2, 2)));
     }
 }

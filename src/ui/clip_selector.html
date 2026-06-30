@@ -61,20 +61,98 @@
         .item-delete:active {
             background: rgba(220, 80, 80, 0.35);
         }
+
+        .item.item--image .item-content {
+            align-items: center;
+        }
+
+        .item-thumbnail {
+            flex-shrink: 0;
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+            border-radius: 6px;
+            background: var(--surface-raised);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .item-thumbnail--placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: var(--text-muted);
+        }
+
+        .item--image .mode-info {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+        }
+
+        .item--image .value-hint {
+            font-size: 11px;
+        }
+
+        #image-hover-preview {
+            position: fixed;
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            max-width: min(480px, calc(100vw - 20px));
+            padding: 10px;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow:
+                0 16px 48px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+        }
+
+        #image-hover-preview.is-visible {
+            display: flex;
+        }
+
+        #image-hover-preview img {
+            display: block;
+            max-width: 100%;
+            max-height: min(460px, calc(100vh - 80px));
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 8px;
+            background: var(--surface-raised);
+            border: 1px solid var(--border-subtle);
+        }
+
+        #image-hover-preview .image-hover-preview-caption {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 
 <body>
     <div id="container">
         <div id="search-box">
-            <div class="selector-heading">登録文字列セレクター</div>
-            <input type="text" id="input" placeholder="ラベル・本文で検索..." autocomplete="off" spellcheck="false">
+            <div class="selector-heading">登録クリップセレクター</div>
+            <input type="text" id="input" placeholder="ラベル・プレビューで検索..." autocomplete="off" spellcheck="false">
         </div>
         <div id="results"></div>
         <div id="footer">
             <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> コピー, <kbd>Del</kbd> 削除, <kbd>Ctrl+Enter</kbd> 登録</span>
             <span>閉じる: <kbd>Esc</kbd></span>
         </div>
+    </div>
+    <div id="image-hover-preview" aria-hidden="true">
+        <img alt="">
+        <span class="image-hover-preview-caption"></span>
     </div>
 
     <script>
@@ -84,6 +162,65 @@
         let items = [];
         let filtered = [];
         let selectedIndex = 0;
+
+        const imageHoverPreview = document.getElementById('image-hover-preview');
+        const imageHoverPreviewImg = imageHoverPreview.querySelector('img');
+        const imageHoverPreviewCaption = imageHoverPreview.querySelector('.image-hover-preview-caption');
+
+        function imagePreviewSource(item) {
+            return item.hover_preview || item.thumbnail || null;
+        }
+
+        function hideImageHoverPreview() {
+            imageHoverPreview.classList.remove('is-visible');
+            imageHoverPreview.setAttribute('aria-hidden', 'true');
+            imageHoverPreviewImg.removeAttribute('src');
+            imageHoverPreviewCaption.textContent = '';
+        }
+
+        function positionImageHoverPreview(_anchorEl) {
+            const margin = 10;
+
+            imageHoverPreview.style.left = '0px';
+            imageHoverPreview.style.top = '0px';
+            imageHoverPreview.classList.add('is-visible');
+
+            const previewRect = imageHoverPreview.getBoundingClientRect();
+            let left = (window.innerWidth - previewRect.width) / 2;
+            let top = (window.innerHeight - previewRect.height) / 2;
+
+            left = Math.max(margin, Math.min(left, window.innerWidth - previewRect.width - margin));
+            top = Math.max(margin, Math.min(top, window.innerHeight - previewRect.height - margin));
+
+            imageHoverPreview.style.left = `${left}px`;
+            imageHoverPreview.style.top = `${top}px`;
+        }
+
+        function showImageHoverPreview(item, anchorEl) {
+            const src = imagePreviewSource(item);
+            if (!src || item.kind !== 'image' || !anchorEl) {
+                hideImageHoverPreview();
+                return;
+            }
+
+            imageHoverPreviewImg.src = src;
+            imageHoverPreviewCaption.textContent = item.preview || item.label;
+            imageHoverPreview.setAttribute('aria-hidden', 'false');
+            positionImageHoverPreview(anchorEl);
+        }
+
+        function bindImageHoverPreview(item, previewTarget) {
+            previewTarget.onmouseenter = () => {
+                showImageHoverPreview(item, previewTarget);
+            };
+            previewTarget.onmouseleave = () => {
+                hideImageHoverPreview();
+            };
+        }
+
+        results.addEventListener('mouseleave', hideImageHoverPreview);
+        results.addEventListener('scroll', hideImageHoverPreview, { passive: true });
+        input.addEventListener('mouseenter', hideImageHoverPreview);
 
         function normalizeQuery(query) {
             return query.toLowerCase().trim();
@@ -122,7 +259,7 @@
                 return true;
             }
 
-            const fields = [item.label, item.preview];
+            const fields = [item.label, item.preview, item.kind === 'image' ? '画像' : ''];
             return fields.some((field) => field && field.toLowerCase().includes(query));
         }
 
@@ -149,33 +286,75 @@
 
         function createItem(item, index, query) {
             const div = document.createElement('div');
-            div.className = 'item' + (index === selectedIndex ? ' selected' : '');
+            const isImage = item.kind === 'image';
+            div.className = 'item' + (isImage ? ' item--image' : '') + (index === selectedIndex ? ' selected' : '');
 
-            div.innerHTML = `
-                <div class="item-content">
-                    <div class="mode-info">
-                        <span class="label">${highlightText(item.label, query)}</span>
-                    </div>
-                    ${item.preview ? `<span class="value-hint">${highlightText(item.preview, query)}</span>` : ''}
-                </div>
-                <button type="button" class="item-delete" title="削除" aria-label="削除">×</button>
-            `;
+            const content = document.createElement('div');
+            content.className = 'item-content';
 
-            div.onmouseenter = () => setSelectedIndex(index, false);
-            div.onclick = () => select(item.id);
+            if (isImage) {
+                let previewTarget = null;
+                if (item.thumbnail) {
+                    const img = document.createElement('img');
+                    img.className = 'item-thumbnail';
+                    img.src = item.thumbnail;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    content.appendChild(img);
+                    previewTarget = img;
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'item-thumbnail item-thumbnail--placeholder';
+                    placeholder.textContent = '🖼';
+                    placeholder.setAttribute('aria-hidden', 'true');
+                    content.appendChild(placeholder);
+                    if (imagePreviewSource(item)) {
+                        previewTarget = placeholder;
+                    }
+                }
+                if (previewTarget) {
+                    bindImageHoverPreview(item, previewTarget);
+                }
+            }
 
-            const deleteBtn = div.querySelector('.item-delete');
+            const modeInfo = document.createElement('div');
+            modeInfo.className = 'mode-info';
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.innerHTML = highlightText(item.label, query);
+            modeInfo.appendChild(label);
+            content.appendChild(modeInfo);
+
+            if (item.preview && !isImage) {
+                const hint = document.createElement('span');
+                hint.className = 'value-hint';
+                hint.innerHTML = highlightText(item.preview, query);
+                content.appendChild(hint);
+            }
+
+            div.appendChild(content);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'item-delete';
+            deleteBtn.title = '削除';
+            deleteBtn.setAttribute('aria-label', '削除');
+            deleteBtn.textContent = '×';
             deleteBtn.onclick = (e) => {
                 e.stopPropagation();
                 deleteItem(item.id);
             };
+            div.appendChild(deleteBtn);
+
+            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onclick = () => select(item.id);
 
             return div;
         }
 
         function createRegisterRow(index, query) {
             const label = 'クリップボードを登録';
-            const preview = '現在のクリップボードを登録文字列に追加';
+            const preview = '現在のクリップボードを登録クリップに追加';
             const div = document.createElement('div');
             div.className = 'item action' + (index === selectedIndex ? ' selected' : '');
 
@@ -223,6 +402,7 @@
         }
 
         function renderList(scrollToSelection) {
+            hideImageHoverPreview();
             results.innerHTML = '';
             const query = normalizeQuery(input.value);
             clampSelectedIndex();
@@ -231,8 +411,8 @@
                 const empty = document.createElement('div');
                 empty.className = 'empty';
                 empty.textContent = items.length === 0
-                    ? '登録文字列がありません'
-                    : '該当する登録文字列がありません';
+                    ? '登録クリップがありません'
+                    : '該当する登録クリップがありません';
                 results.appendChild(empty);
             } else {
                 filtered.forEach((item, index) => {
@@ -285,6 +465,7 @@
         }
 
         function close() {
+            hideImageHoverPreview();
             window.ipc.postMessage('close');
         }
 

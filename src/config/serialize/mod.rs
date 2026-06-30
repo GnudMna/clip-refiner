@@ -32,7 +32,7 @@ fn apply_config_to_document(doc: &mut DocumentMut, config: &AppConfig) -> Result
     sections::notification::apply(doc, config)?;
     sections::hotkeys::apply(doc, config)?;
     sections::regex::apply(doc, config)?;
-    sections::texts::apply(doc, config)?;
+    sections::clips::apply(doc, config)?;
     Ok(())
 }
 
