@@ -9,7 +9,6 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Rust-1.96%20%7C%202024_edition-orange?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHJvbGU9ImltZyI%2BPHRpdGxlPldpbmRvd3M8L3RpdGxlPjxwYXRoIGQ9Ik0zIDEyLjVWNi44bDgtMS4xdjYuOEgzem05LTcuMyAxMC0xLjR2OC43SDEyVjUuMnpNMyAxMy41aDh2NS43bC04LTEuMnYtNC41em05IDBoMTB2OC42bC0xMC0xLjR2LTcuMnoiLz48L3N2Zz4%3D&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux">
@@ -18,6 +17,10 @@
 
 <p>
   <sub>42 種類の加工モード &middot; 加工パイプライン &middot; お気に入り &middot; 画面 OCR (Windows) &middot; 暗号化履歴 &middot; 機密情報マスキング</sub>
+</p>
+
+<p>
+  <sub>ソースからビルドする場合やコントリビュートする場合は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照</sub>
 </p>
 
 </div>
@@ -47,8 +50,7 @@
 - [🕘 クリップボード履歴](#-クリップボード履歴)
 - [🚀 ログイン時の自動起動](#-ログイン時の自動起動)
 - [📝 加工モードの使用例](#-加工モードの使用例)
-- [🛠️ インストール・ビルド](#️-インストールビルド)
-- [🧪 開発・テスト](#-開発テスト)
+- [📦 インストール](#-インストール)
 - [⚙️ 設定](#️-設定)
 - [📋 ログ](#-ログ)
 - [📄 ライセンス](#-ライセンス)
@@ -436,7 +438,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 <p>コマンドパレット風のウィンドウで、加工モードをキーボードから素早く検索・選択できます。グローバルホットキー (既定で <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd>) で表示・非表示を切り替えます。</p>
 
 <ul>
-<li><strong>検索</strong>: モード名・カテゴリ・CLI 名 (<code>--mode</code> の値) のいずれにも部分一致で絞り込み</li>
+<li><strong>検索</strong>: モード名・カテゴリ・CLI 名 (<code>--mode</code> の値) のいずれにも部分一致で絞り込み。一致部分はハイライト表示</li>
 <li><strong>お気に入り</strong>: 登録済みモードは先頭の「お気に入り」セクションに表示。星印ボタンまたは <kbd>Ctrl</kbd> + <kbd>D</kbd> で登録・解除</li>
 <li><strong>現在のモード</strong>: 表示時に現在選択中のモードがハイライト</li>
 <li><strong>マウス操作</strong>: ホバー選択・クリック決定にも対応</li>
@@ -455,7 +457,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 
 ## 📋 登録クリップセレクタ
 
-<p>よく使うテキストや画像を <code>config.toml</code> に登録し、ホットキーまたはトレイメニューからクリップボードへ即コピーできる機能です。クイックセレクタと同様のコマンドパレット風 UI (<strong>登録クリップセレクタ</strong>) も利用できます。画像はセレクターでサムネイルプレビューが表示されます。</p>
+<p>よく使うテキストや画像を <code>config.toml</code> に登録し、ホットキーまたはトレイメニューからクリップボードへ即コピーできる機能です。クイックセレクタと同様のコマンドパレット風 UI (<strong>登録クリップセレクタ</strong>) も利用できます。検索文字列に一致するラベル・プレビューはハイライト表示され、画像はサムネイルプレビューが表示されます。</p>
 
 <div style="border-left: 4px solid #ff9f43; padding: 12px 16px; margin: 12px 0; background: rgba(255, 159, 67, 0.08); border-radius: 0 8px 8px 0;">
 <strong>表示:</strong> グローバルホットキー (既定で <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd>)<br>
@@ -466,6 +468,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 | キー                               | 動作                                               |
 | :--------------------------------- | :------------------------------------------------- |
 | <kbd>↑</kbd> / <kbd>↓</kbd>        | 候補の移動                                         |
+| <kbd>Home</kbd> / <kbd>End</kbd>   | 先頭 / 末尾へ移動                                  |
 | <kbd>Enter</kbd>                   | 選択中の登録クリップをクリップボードへコピー       |
 | <kbd>Del</kbd>                     | 選択中の登録クリップを削除                           |
 | <kbd>Ctrl</kbd> + <kbd>Enter</kbd> | 現在のクリップボード内容を新規登録                 |
@@ -755,113 +758,29 @@ multiline = false
 
 ---
 
-## 🛠️ インストール・ビルド
+## 📦 インストール
 
-### 前提条件
+<p>リリース済みのインストーラーがある場合は、各プラットフォーム向けのパッケージを利用する。ソースからビルドする手順は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照。</p>
 
-<ul>
-<li><a href="https://www.rust-lang.org/tools/install">Rust / Cargo</a> (edition 2024、Rust 1.96 以上。<code>rust-toolchain.toml</code> でピン留め)</li>
-</ul>
+### Windows (MSI)
 
-#### Linux の追加パッケージ
+<p>配布用 MSI を実行し、画面の指示に従ってインストールする。per-user インストールのため、管理者権限は不要。</p>
 
-<p>GUI および通知機能のために、以下のパッケージが必要になる場合があります:</p>
+### macOS (DMG)
 
-```bash
-sudo apt-get install libdbus-1-dev pkg-config libatk1.0-dev libgtk-3-dev
-```
+<p>DMG を開き、<code>ClipRefiner.app</code> を Applications フォルダへドラッグする。初回起動時に Gatekeeper の確認が表示される場合がある。</p>
 
-### ビルド
+### Linux (deb)
 
 ```bash
-git clone <repository_url>
-cd clip-refiner
-cargo build --release
+sudo dpkg -i clip-refiner_{version}-1_{arch}.deb
 ```
 
-<p>バイナリは <code>target/release/ClipRefiner</code> (Windows では <code>ClipRefiner.exe</code>) に生成されます。各プラットフォーム用のビルドスクリプト (<code>scripts/windows/build.ps1</code>、<code>scripts/macos/build.sh</code>、<code>scripts/linux/build.sh</code>) も利用できます。</p>
+<p>インストール後は <code>ClipRefiner</code> コマンドまたはアプリケーションメニューから起動できる。</p>
 
-### プラットフォーム別インストーラー (任意)
-
-#### Windows MSI
-
-<p><code>cargo-wix</code> と WiX Toolset v3 を使って MSI を作成できます。</p>
-
-```powershell
-# 前提: cargo install cargo-wix --locked
-#       winget install WiXToolset.WiXToolset
-./scripts/windows/build-msi.ps1
-```
-
-<p>出力先: <code>target/wix/clip-refiner-{version}-{arch}.msi</code> (per-user インストール、日本語 UI)</p>
-
-#### macOS DMG
-
-<p><code>cargo-bundle</code> で <code>.app</code> バンドルを作成し、<code>hdiutil</code> で DMG インストーラーを生成します。macOS 11.0 以降が必要です。</p>
-
-```bash
-# 前提: cargo install cargo-bundle --locked
-#       Xcode Command Line Tools
-./scripts/macos/build-dmg.sh
-```
-
-<p>出力先:</p>
-
-<ul>
-<li><code>target/release/bundle/osx/ClipRefiner.app</code></li>
-<li><code>target/bundle/clip-refiner-{version}-{arch}.dmg</code> (Applications へのシンボリックリンク付き)</li>
-</ul>
-
-<p><code>--skip-build</code> (<code>-s</code>) を付けると、既存のリリースビルドからパッケージのみ作成します。</p>
-
-#### Linux deb
-
-<p><code>cargo-deb</code> で <code>.deb</code> パッケージを作成します。デスクトップエントリとアイコンも同梱されます。</p>
-
-```bash
-# 前提: cargo install cargo-deb --locked
-#       上記「Linux の追加パッケージ」をインストール済みであること
-./scripts/linux/build-deb.sh
-```
-
-<p>出力先: <code>target/debian/clip-refiner_{version}-1_{arch}.deb</code></p>
-
-<p>インストール後は <code>ClipRefiner</code> コマンドとアプリケーションメニューから起動できます。ログイン時自動起動は XDG <code>autostart</code> を使用します。</p>
-
-<p><code>--skip-build</code> (<code>-s</code>) を付けると、既存のリリースビルドからパッケージのみ作成します。</p>
-
----
-
-## 🧪 開発・テスト
-
-```bash
-# 単体テスト・統合テストを実行
-cargo test
-
-# ライブラリ API のドキュメントを生成
-cargo doc --no-deps --open
-```
-
-<p>加工ロジックは <code>clip_refiner</code> ライブラリクレートとしても利用できる。</p>
-
-```rust
-use clip_refiner::{RefineContext, RefineMode, Refiner};
-
-let ctx = RefineContext::default();
-let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
-assert_eq!(output, "hello world");
-```
-
-<p>統合テスト (<code>tests/</code>) では監視ループ・ワーカー・履歴・正規表現の主要経路を検証する。</p>
-
-| ファイル | 検証内容 |
-| :------- | :------- |
-| <code>monitor_flow.rs</code> | 監視加工、Undo、同一テキストの再加工抑制、自身の書き戻しスキップ |
-| <code>worker_flow.rs</code> | 手動加工 (<code>ProcessMode</code>)、履歴復元後の再加工抑制 |
-| <code>history_flow.rs</code> | 暗号化履歴の記録・重複処理・復号 |
-| <code>regex_flow.rs</code> | <code>config</code> の正規表現設定、コンパイルキャッシュ、Event 方式 |
-
-<p>テスト用ヘルパー (<code>test_helpers</code>) はデバッグビルド、<code>cargo test</code> 実行時、または <code>test-helpers</code> feature 有効時に利用可能。</p>
+<div style="border-left: 4px solid #feca57; padding: 10px 14px; margin: 12px 0; background: rgba(254, 202, 87, 0.08); border-radius: 0 6px 6px 0;">
+<strong>ポータブル利用:</strong> インストーラーを使わず単体の実行ファイルだけを配置する場合も、引数なしで起動すればシステムトレイに常駐して動作する (設定はユーザの設定ディレクトリへ保存される)
+</div>
 
 ---
 
@@ -985,7 +904,7 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 ## 📋 ログ
 
-<p>ログファイルは設定ディレクトリ内の <code>logs/</code> フォルダに日次ローテーションで保存されます。</p>
+<p>ログファイルは設定ディレクトリ内の <code>logs/</code> フォルダに日次ローテーションで保存されます。不具合報告時は該当する日付のログファイルを添付してください。</p>
 
 <table>
 <tbody>
@@ -1000,7 +919,7 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 </tbody>
 </table>
 
-<p>ログレベルは環境変数 <code>RUST_LOG</code> で制御できます (例: <code>RUST_LOG=debug</code>)。デバッグビルド (<code>cargo build</code> / <code>cargo run</code>) では、ファイルに加えて標準出力にもログが出力されます。リリースビルドではファイルのみです。</p>
+<p>ログレベルの詳細設定 (<code>RUST_LOG</code> など) は <a href="DEVELOPMENT.md#ログ">DEVELOPMENT.md</a> を参照してください。</p>
 
 ---
 
@@ -1013,7 +932,7 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 </p>
 
 <p>
-<sub>Made with Rust 🦀</sub>
+<sub><a href="DEVELOPMENT.md">開発者向けドキュメント</a></sub>
 </p>
 
 </div>

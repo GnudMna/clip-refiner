@@ -7,7 +7,7 @@
 #
 # 前提:
 #   - cargo install cargo-deb --locked
-#   - ビルド用の開発パッケージ (README の「Linux の追加パッケージ」参照)
+#   - ビルド用の開発パッケージ (DEVELOPMENT.md の「Linux の追加パッケージ」参照)
 #   - packaging/linux/clip-refiner.desktop が存在すること
 #
 # 出力:
