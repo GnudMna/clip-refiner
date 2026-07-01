@@ -15,6 +15,9 @@
 
 ### Changed
 
+- `tray/hotkey` を解決・登録・イベント処理のサブモジュールへ分割
+- `platform/ocr_overlay/windows` を型・座標変換・描画・ウィンドウプロシージャのサブモジュールへ分割
+- 全 OS で有効になった `RefineMode::is_supported_on_current_platform` と `normalize_platform_modes` を除去
 - README を概要・クイックスタート中心に簡素化し、加工モード一覧・UI 操作・使用例・セキュリティ詳細を [CONFIG.md](CONFIG.md) へ移行
 - [CONFIG.md](CONFIG.md) に加工モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例・ログイン時自動起動の節を追加
 - 登録クリップのドキュメント記述を `registered-clips.dat` 暗号化保存 (設定 v2) に合わせて修正

@@ -9,7 +9,6 @@ use crate::consts;
 use crate::refiner::RefineMode;
 
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
 /// 設定ファイルに `version` が無い場合のデシリアライズ用デフォルト
 fn default_config_version() -> u32 {
@@ -106,7 +105,6 @@ impl AppConfig {
         migration.config.normalize_clips();
         migration.config.normalize_favorite_modes();
         migration.config.normalize_pipeline();
-        migration.config.normalize_platform_modes();
         migration.config.hotkeys.fix_invalid();
         migration
     }
@@ -117,7 +115,6 @@ impl AppConfig {
         self.normalize_clips();
         self.normalize_favorite_modes();
         self.normalize_pipeline();
-        self.normalize_platform_modes();
         self.version = consts::CONFIG_VERSION;
     }
 
@@ -335,29 +332,10 @@ impl AppConfig {
         !self.pipeline.is_empty()
     }
 
-    /// 現在の OS で未対応の加工モードを設定から除去する
-    pub(crate) fn normalize_platform_modes(&mut self) {
-        if !self.mode.is_supported_on_current_platform() {
-            crate::log_warn!(
-                "加工モード `{}` はこのプラットフォームでは未対応のため `{}` へフォールバックする",
-                self.mode.label(),
-                RefineMode::UrlDecode.label()
-            );
-            self.mode = RefineMode::UrlDecode;
-        }
-    }
-
     /// 加工パイプラインを許容範囲内に正規化する
     ///
     /// 画像出力モードは末尾1つのみ残し、それ以外の位置からは除去する
     pub(crate) fn normalize_pipeline(&mut self) {
-        use std::collections::HashSet;
-
-        let valid: HashSet<RefineMode> = RefineMode::iter()
-            .filter(|mode| mode.is_supported_on_current_platform())
-            .collect();
-        self.pipeline.retain(|mode| valid.contains(mode));
-
         let image_mode = self
             .pipeline
             .iter()
@@ -377,12 +355,9 @@ impl AppConfig {
     pub(crate) fn normalize_favorite_modes(&mut self) {
         use std::collections::HashSet;
 
-        let valid: HashSet<RefineMode> = RefineMode::iter()
-            .filter(|mode| mode.is_supported_on_current_platform())
-            .collect();
         let mut seen = HashSet::new();
         self.favorite_modes.retain(|mode| {
-            if !valid.contains(mode) || seen.contains(mode) {
+            if seen.contains(mode) {
                 false
             } else {
                 seen.insert(*mode);

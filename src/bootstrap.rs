@@ -268,24 +268,13 @@ fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
 
 /// ワンショット実行用の加工パイプラインを解決する
 fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
-    let pipeline = if args.pipeline.is_empty() {
+    if args.pipeline.is_empty() {
         args.mode
             .map(|mode| vec![mode])
-            .ok_or_else(|| anyhow::anyhow!("--mode または --pipeline を指定してください"))?
+            .ok_or_else(|| anyhow::anyhow!("--mode または --pipeline を指定してください"))
     } else {
-        args.pipeline.clone()
-    };
-
-    for mode in &pipeline {
-        if !mode.is_supported_on_current_platform() {
-            anyhow::bail!(
-                "加工モード `{}` はこのプラットフォームでは未対応です",
-                mode.label()
-            );
-        }
+        Ok(args.pipeline.clone())
     }
-
-    Ok(pipeline)
 }
 
 // ======================================================================

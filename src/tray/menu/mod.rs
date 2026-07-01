@@ -340,7 +340,7 @@ mod tests {
     use crate::config::{HotkeySettings, MonitorMode};
     use crate::refiner::{RefineCategory, RefineMode};
 
-    /// 変換モードメニューに現在の OS で利用可能な全モードが含まれること
+    /// 変換モードメニューに全モードが含まれること
     #[test]
     fn build_refine_menu_contains_all_modes() {
         use std::collections::HashSet;
@@ -350,7 +350,7 @@ mod tests {
             TrayMenu::build_refine_menu(RefineMode::Trim, &active, &[], &HotkeySettings::default())
                 .expect("変換モードメニューの構築に失敗");
         let modes: Vec<_> = refine.all_mode_items().map(|(_, mode)| *mode).collect();
-        assert_eq!(modes.len(), RefineMode::supported_mode_count());
+        assert_eq!(modes.len(), 42);
         assert!(
             refine
                 .all_mode_items()
