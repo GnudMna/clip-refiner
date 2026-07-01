@@ -6,6 +6,8 @@
 //!
 //! [`RefineMode`] は [`Refiner`] トレイト経由でテキストへ適用できる
 //!
+//! 複数モードの連鎖は [`apply_text_pipeline`] または [`apply_pipeline_to_text`] を使う
+//!
 //! ```
 //! use clip_refiner::refiner::{RefineContext, RefineMode, Refiner};
 //!
@@ -26,9 +28,11 @@ pub(crate) use text_clipboard::{ImageClipboard, TextClipboard};
 
 pub(crate) use clipboard::process_clipboard_pipeline_io;
 pub use clipboard::{
-    ClipboardProcessError, ClipboardProcessOutcome, process_clipboard, process_clipboard_pipeline,
+    ClipboardProcessError, ClipboardProcessOutcome, apply_pipeline_to_text, process_clipboard,
+    process_clipboard_pipeline,
 };
 pub use context::RefineContext;
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
+pub use pipeline::{apply_text_pipeline, split_pipeline};

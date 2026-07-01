@@ -163,21 +163,70 @@ cargo test --doc --features test-helpers
 
 ## ライブラリとしての利用
 
-`Cargo.toml` に依存を追加し、`clip_refiner` クレートから加工 API を呼び出す。
+`ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは `clip_refiner` クレートとして他プロジェクトから呼び出せる。ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従い、破壊的変更は [CHANGELOG.md](CHANGELOG.md) の **Breaking changes** 節に記載する。
+
+`Cargo.toml` に依存を追加する:
 
 ```toml
 [dependencies]
 clip_refiner = { path = ".." }
+# または crates.io / Git リポジトリ URL
 ```
 
-公開 API の要約:
+### 公開 API 一覧
 
-| 型 / 関数 | 説明 |
-| :-------- | :--- |
-| `RefineMode` | 加工モードの列挙型 |
-| `RefineContext` | 加工時のコンテキスト (正規表現設定など) |
-| `Refiner` | 加工のエントリポイント |
-| `run()` | アプリケーション全体の起動 (バイナリと同等) |
+| 種別 | 名前 | 説明 |
+| :--- | :--- | :--- |
+| モジュール | `refiner` | 加工モードとテキスト / クリップボード加工 |
+| モジュール | `config` | 設定型と `config.toml` 永続化 |
+| 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
+| 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
+| 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
+| クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
+| 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
+| 設定 | `AppConfig`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
+| 設定 | `AppConfig::load`, `AppConfig::save`, `AppConfig::reload_from_disk` | 設定ファイル I/O |
+| 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
+| 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
+| 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
+| アプリ | `run()` | トレイ常駐アプリ全体の起動 |
+
+### 使用例
+
+単一モード:
+
+```rust
+use clip_refiner::{RefineContext, RefineMode, Refiner};
+
+let ctx = RefineContext::default();
+let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
+assert_eq!(output, "hello world");
+```
+
+加工パイプライン:
+
+```rust
+use clip_refiner::{apply_text_pipeline, RefineContext, RefineMode};
+
+let ctx = RefineContext::default();
+let result = apply_text_pipeline(
+    "  %E3%81%82  ",
+    &[RefineMode::UrlDecode, RefineMode::Trim],
+    &ctx,
+);
+assert_eq!(result.as_deref(), Some("あ"));
+```
+
+設定連携:
+
+```rust
+use clip_refiner::{AppConfig, RefineContext, apply_text_pipeline};
+
+let config = AppConfig::load();
+let ctx = RefineContext::from_config(&config);
+let pipeline = config.effective_pipeline();
+let _ = apply_text_pipeline("  hello  ", &pipeline, &ctx);
+```
 
 詳細は `cargo doc --open` で生成される API ドキュメントを参照。
 
