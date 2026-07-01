@@ -114,6 +114,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
         ClipboardCommand::RegisterClipFromClipboard => {
             register_clip_from_clipboard(clipboard, state);
         }
+        ClipboardCommand::Shutdown => {}
     }
 }
 

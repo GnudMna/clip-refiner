@@ -104,8 +104,11 @@ interval_ms = 500
         let config: AppConfig = toml::from_str(v0_toml).expect("デシリアライズに失敗");
         assert_eq!(config.version, 0);
 
-        let (prepared, migrated) = config.prepare_loaded();
-        assert!(migrated);
+        let (prepared, migration) = {
+            let migration = config.prepare_loaded();
+            (migration.config.clone(), migration)
+        };
+        assert!(migration.migrated);
         assert_eq!(prepared.version, consts::CONFIG_VERSION);
         assert_eq!(prepared.mode, RefineMode::Trim);
         assert_eq!(prepared.interval_ms, 500);
@@ -123,8 +126,9 @@ mode = "JsonFormat"
 interval_ms = 2000
 "#;
         let config: AppConfig = toml::from_str(v0_toml).expect("デシリアライズに失敗");
-        let (mut prepared, migrated) = config.prepare_loaded();
-        assert!(migrated);
+        let migration = config.prepare_loaded();
+        let mut prepared = migration.config;
+        assert!(migration.migrated);
 
         prepared.normalize();
         let content = config_to_toml(&prepared, Some(v0_toml)).expect("移行後 TOML の生成に失敗");
@@ -145,8 +149,9 @@ interval_ms = 500
         let config: AppConfig = toml::from_str(toml_str).expect("デシリアライズに失敗");
         assert_eq!(config.version, consts::CONFIG_VERSION);
 
-        let (prepared, migrated) = config.prepare_loaded();
-        assert!(!migrated);
+        let migration = config.prepare_loaded();
+        assert!(!migration.migrated);
+        let prepared = migration.config;
         assert_eq!(prepared.version, consts::CONFIG_VERSION);
         assert_eq!(prepared.mode, RefineMode::Trim);
         assert_eq!(prepared.interval_ms, 500);

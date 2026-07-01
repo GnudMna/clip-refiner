@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 
 use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::state::{AppState, LockExt};
-use super::super::worker::ClipboardCommand;
+use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 /// クリップボード履歴に関連するメニューイベント(有効化切替、消去、過去項目の選択)を処理する
 ///
@@ -20,7 +19,7 @@ pub(super) fn handle_history_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
+    clipboard_worker: &ClipboardWorkerHandle,
 ) -> bool {
     if id == menu.history.enabled_item.id() {
         let enabled = menu.history.enabled_item.is_checked();
@@ -44,7 +43,7 @@ pub(super) fn handle_history_event(
 
     if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
         if let Some(text) = state.get_history_entry(*index) {
-            dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::SetText(text));
+            dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::SetText(text));
         }
         return true;
     }

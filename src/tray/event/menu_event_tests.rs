@@ -7,11 +7,19 @@ use super::{handle_menu_event, should_hide_selector_on_focus_loss, update_refine
 use crate::config::MonitorMode;
 use crate::refiner::RefineMode;
 use crate::tray::menu::TrayMenu;
-use crate::tray::state::{LockExt, test_app_state};
-use crate::tray::worker::ClipboardCommand;
+use crate::tray::state::{AppState, LockExt, test_app_state};
+use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
+
+fn with_test_worker(
+    state: &Arc<AppState>,
+) -> (Arc<ClipboardWorkerHandle>, mpsc::Receiver<ClipboardCommand>) {
+    let (tx, rx) = mpsc::channel();
+    let worker = ClipboardWorkerHandle::for_test(Arc::clone(state), tx);
+    (worker, rx)
+}
 
 // ======================================================================
 // フォーカス喪失
@@ -37,9 +45,9 @@ fn should_hide_selector_after_focus_loss_delay() {
 fn update_refine_updates_config_and_sends_command() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, rx) = mpsc::channel();
+    let (worker, rx) = with_test_worker(&state);
 
-    update_refine(&state, &menu, &tx, RefineMode::JsonFormat, None);
+    update_refine(&state, &menu, &worker, RefineMode::JsonFormat, None);
 
     assert_eq!(state.with_config(|c| c.mode), RefineMode::JsonFormat);
     assert!(
@@ -96,14 +104,14 @@ fn menu_event(id: &tray_icon::menu::MenuId) -> MenuEvent {
 fn handle_menu_event_quit_exits() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(menu.quit_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -116,7 +124,7 @@ fn handle_menu_event_quit_exits() {
 fn handle_menu_event_pause_enables_paused() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     menu.pause_item.set_checked(true);
@@ -124,7 +132,7 @@ fn handle_menu_event_pause_enables_paused() {
         &menu_event(menu.pause_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -141,14 +149,14 @@ fn handle_menu_event_history_clear() {
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
     menu.refresh_history(&state)
         .expect("履歴メニューの更新に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(menu.history.clear_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -161,14 +169,14 @@ fn handle_menu_event_history_clear() {
 fn handle_menu_event_clips_register_sends_command() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, rx) = mpsc::channel();
+    let (worker, rx) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(menu.clips.register_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -192,14 +200,14 @@ fn handle_menu_event_history_select_sends_text() {
         let records = menu.history.records.lock_ignore_poison();
         records[0].0.clone()
     };
-    let (tx, rx) = mpsc::channel();
+    let (worker, rx) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(&record_id),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -220,14 +228,14 @@ fn handle_menu_event_refine_mode_change() {
         .all_mode_items()
         .find(|(_, m)| *m == RefineMode::JsonFormat)
         .expect("JsonFormat メニュー項目が存在する");
-    let (tx, rx) = mpsc::channel();
+    let (worker, rx) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -245,7 +253,7 @@ fn handle_menu_event_refine_mode_change() {
 fn handle_menu_event_notification_enabled() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     menu.notification.enabled_item.set_checked(true);
@@ -253,7 +261,7 @@ fn handle_menu_event_notification_enabled() {
         &menu_event(menu.notification.enabled_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -266,7 +274,7 @@ fn handle_menu_event_notification_enabled() {
 fn handle_menu_event_notification_clipboard_content_toggle() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     menu.notification.notify_result_item.set_checked(true);
@@ -274,7 +282,7 @@ fn handle_menu_event_notification_clipboard_content_toggle() {
         &menu_event(menu.notification.notify_result_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -293,14 +301,14 @@ fn handle_menu_event_interval_change() {
         .iter()
         .find(|(_, ms)| *ms == 500)
         .expect("0.5秒の監視周期項目が存在する");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -320,14 +328,14 @@ fn handle_menu_event_monitor_mode_change() {
         .iter()
         .find(|(_, mode)| *mode == MonitorMode::Event)
         .expect("イベント監視項目が存在する");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -341,7 +349,7 @@ fn handle_menu_event_monitor_mode_change() {
 fn handle_menu_event_history_enabled() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     menu.history.enabled_item.set_checked(true);
@@ -349,7 +357,7 @@ fn handle_menu_event_history_enabled() {
         &menu_event(menu.history.enabled_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );
@@ -363,14 +371,14 @@ fn handle_menu_event_add_favorite_registers_current_mode() {
     let state = Arc::new(test_app_state());
     state.with_config_mut(|config| config.mode = RefineMode::Trim);
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-    let (tx, _) = mpsc::channel();
+    let (worker, _) = with_test_worker(&state);
     let mut control_flow = ControlFlow::Wait;
 
     handle_menu_event(
         &menu_event(menu.refine.add_favorite_item.id()),
         &menu,
         &state,
-        &tx,
+        &worker,
         None,
         &mut control_flow,
     );

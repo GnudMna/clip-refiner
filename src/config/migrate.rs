@@ -12,6 +12,8 @@ pub struct ConfigMigration {
     pub config: AppConfig,
     /// スキーマ移行または互換性フォールバックが実行された
     pub migrated: bool,
+    /// 現行アプリより新しい `version` を検出し、番号のみ現行へ揃えた
+    pub newer_version_clamped: bool,
 }
 
 // ======================================================================
@@ -19,17 +21,20 @@ pub struct ConfigMigration {
 // ======================================================================
 /// 保存済み設定を現行スキーマ (`CONFIG_VERSION`) へ順次移行する
 ///
-/// `version` が現行より新しい場合はデフォルト設定へフォールバックする
+/// `version` が現行より新しい場合は既存項目を維持し、`version` 番号のみ現行へ揃える
 pub fn migrate_config(config: AppConfig) -> ConfigMigration {
     if config.version > consts::CONFIG_VERSION {
+        let saved_version = config.version;
         crate::log_warn!(
-            "設定 version={} はアプリが対応する version={} より新しい。デフォルト設定を使用する",
-            config.version,
+            "設定 version={saved_version} はアプリが対応する version={} より新しい。既存項目を維持し version を現行へ揃える",
             consts::CONFIG_VERSION
         );
+        let mut config = config;
+        config.version = consts::CONFIG_VERSION;
         return ConfigMigration {
-            config: AppConfig::default(),
+            config,
             migrated: true,
+            newer_version_clamped: true,
         };
     }
 
@@ -46,6 +51,7 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
                 return ConfigMigration {
                     config: AppConfig::default(),
                     migrated: true,
+                    newer_version_clamped: false,
                 };
             }
         };
@@ -53,7 +59,11 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
         crate::log_info!("設定を v{from} から v{} へ移行した", config.version);
     }
 
-    ConfigMigration { config, migrated }
+    ConfigMigration {
+        config,
+        migrated,
+        newer_version_clamped: false,
+    }
 }
 
 // ======================================================================
@@ -122,19 +132,23 @@ mod tests {
         assert!(result.config.favorite_modes.is_empty());
     }
 
-    /// 現行より新しい version はデフォルトへフォールバック
+    /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃える
     #[test]
-    fn migrate_newer_version_falls_back_to_default() {
+    fn migrate_newer_version_clamps_version_and_preserves_settings() {
         let config = AppConfig {
             version: consts::CONFIG_VERSION + 1,
             mode: RefineMode::Trim,
+            interval_ms: 500,
+            history_enabled: true,
             ..Default::default()
         };
         let result = migrate_config(config);
         assert!(result.migrated);
-        let default = AppConfig::default();
-        assert_eq!(result.config.version, default.version);
-        assert_eq!(result.config.mode, default.mode);
+        assert!(result.newer_version_clamped);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert_eq!(result.config.mode, RefineMode::Trim);
+        assert_eq!(result.config.interval_ms, 500);
+        assert!(result.config.history_enabled);
     }
 
     /// 現行 version 指定時は `migrated` にならないこと

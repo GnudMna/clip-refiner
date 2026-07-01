@@ -1,12 +1,11 @@
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::clip_selector::ClipSelectorWindow;
 use super::menu::TrayMenu;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::AppState;
-use super::worker::ClipboardCommand;
+use super::worker::ClipboardWorkerHandle;
 
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
@@ -80,24 +79,22 @@ impl FocusDismissibleSelector for ClipSelectorWindow {
 /// * `event` - 受信したメニューイベント
 /// * `menu` - トレイメニュー構造体
 /// * `state` - アプリケーションの共有状態
-/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
-/// * `quick_selector` - 表示中の更新に使うクイックセレクター (未使用時は `None`)
-/// * `control_flow` - イベントループの制御フロー
+/// * `clipboard_worker` - クリップボード・ワーカー
 pub fn handle_menu_event(
     event: &MenuEvent,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
+    clipboard_worker: &ClipboardWorkerHandle,
     quick_selector: Option<&QuickSelectorWindow>,
     control_flow: &mut ControlFlow,
 ) {
     if app_control::handle_app_control(&event.id, menu, state, control_flow) {
         return;
     }
-    if history::handle_history_event(&event.id, menu, state, clipboard_tx) {
+    if history::handle_history_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
-    if clips::handle_clips_event(&event.id, menu, state, clipboard_tx) {
+    if clips::handle_clips_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
     if notification::handle_notification_event(&event.id, menu, state) {
@@ -106,7 +103,7 @@ pub fn handle_menu_event(
     if favorites::handle_favorites_event(&event.id, menu, state, quick_selector) {
         return;
     }
-    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_tx, quick_selector) {
+    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_worker, quick_selector) {
         return;
     }
     monitor::handle_monitor_event(&event.id, menu, state);
@@ -115,10 +112,10 @@ pub fn handle_menu_event(
 /// 登録クリップをクリップボードへコピーする
 pub(crate) fn copy_registered_clip(
     state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
+    clipboard_worker: &ClipboardWorkerHandle,
     index: usize,
 ) {
-    clips::copy_registered_clip(state, clipboard_tx, index);
+    clips::copy_registered_clip(state, clipboard_worker, index);
 }
 
 /// 登録クリップを削除し、メニューとセレクターを更新する

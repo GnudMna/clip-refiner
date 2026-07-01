@@ -1,13 +1,13 @@
 //! クリップボード操作と監視を単一スレッドで処理するワーカー
 
 mod command;
+mod handle;
 mod handlers;
 mod monitor_loop;
 
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Instant;
 
 use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
 
@@ -17,56 +17,36 @@ use super::clipboard_change::ChangeWatcher;
 use super::dispatch;
 use super::state::{AppEvent, AppState};
 
-use crate::platform;
-
 use arboard::Clipboard;
 
 pub use command::ClipboardCommand;
+pub use handle::ClipboardWorkerHandle;
 
 /// 設定ファイルの外部変更を検知するポーリング間隔
-const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
+const CONFIG_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
 // ======================================================================
 // ワーカースレッド
 // ======================================================================
-/// クリップボード操作と監視を単一スレッドで処理するワーカーを開始する
+/// クリップボードワーカーのメインループを実行する
 ///
-/// すべてのクリップボード読み書きはこのスレッドに集約され、
-/// UI からのコマンドと監視ループが `recv_timeout` で交互に処理される
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-///
-/// # Returns
-/// * `Sender<ClipboardCommand>` - ワーカーに操作を依頼するためのチャネル送信端
-pub fn spawn_clipboard_worker(state: Arc<AppState>) -> Sender<ClipboardCommand> {
-    let (tx, rx): (Sender<ClipboardCommand>, Receiver<ClipboardCommand>) = mpsc::channel();
-
-    thread::spawn(move || run_worker_loop(&state, &rx));
-
-    tx
-}
-
-/// クリップボードワーカースレッドのメインループを実行する
-///
-/// クリップボードの初期化、変更検知ウォッチャーの生成、監視ループ状態の管理を行い、
-/// コマンド受信と監視処理を交互に実行する
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `rx` - ワーカーに操作を依頼するためのチャネル受信端
-fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
+/// 初期化失敗・`Shutdown` コマンド・受信チャネル切断で終了する
+fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>) {
     let mut clipboard = match Clipboard::new() {
         Ok(cb) => cb,
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
-            platform::show_notification(
-                "クリップボードエラー",
-                "クリップボードの初期化に失敗しました。監視処理は停止します。",
-            );
+            state.set_worker_recovery_pending(true);
+            dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerStopped);
             return;
         }
     };
+
+    let notify_recovery = state.take_worker_recovery_pending();
+    state.set_worker_alive(true);
+    if notify_recovery {
+        dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerReady);
+    }
 
     let watcher = ChangeWatcher::new();
     let mut monitor = MonitorLoopState::new();
@@ -83,16 +63,29 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
         }
 
         let timeout = monitor.recv_timeout(state, &watcher);
-        match rx.recv_timeout(timeout) {
-            Ok(cmd) => handle_command(&mut clipboard, state, &mut monitor.refine_ctx, cmd),
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+        let should_exit = match rx.recv_timeout(timeout) {
+            Ok(ClipboardCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => true,
+            Ok(cmd) => {
+                handle_command(&mut clipboard, state, &mut monitor.refine_ctx, cmd);
+                false
+            }
+            Err(RecvTimeoutError::Timeout) => false,
+        };
+        if should_exit {
+            break;
         }
 
         if should_run_monitor_tick(state, &monitor) {
             monitor.tick(&mut clipboard, state, &watcher);
         }
     }
+
+    state.set_worker_alive(false);
+}
+
+/// ワーカー停止時にユーザーへ案内する通知本文
+pub(super) fn worker_stopped_notification_body() -> &'static str {
+    "クリップボードの初期化に失敗したか、監視処理が停止しました。トレイメニューの「クリップボード監視を再開」を実行してください"
 }
 
 // ======================================================================
@@ -104,6 +97,8 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use super::*;
+
+    use std::time::Duration;
 
     use crate::config::MonitorMode;
     use crate::refiner::RefineContext;

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::clip_selector::ClipSelectorWindow;
@@ -12,7 +11,7 @@ use super::notify;
 use super::ocr_capture::OcrCaptureWindow;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
-use super::worker::ClipboardCommand;
+use super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 use crate::config::{AppConfig, HotkeySettings};
 use crate::consts;
@@ -300,8 +299,8 @@ pub struct HotkeyEventContext<'a> {
     pub last_quick_selector_show: &'a mut Instant,
     /// 登録クリップセレクターが最後に表示された時刻(更新用)
     pub last_clip_selector_show: &'a mut Instant,
-    /// クリップボード・ワーカーへの送信チャネル
-    pub clipboard_tx: &'a Sender<ClipboardCommand>,
+    /// クリップボード・ワーカー
+    pub clipboard_worker: &'a ClipboardWorkerHandle,
 }
 
 // ======================================================================
@@ -327,7 +326,7 @@ impl HotkeyHandler {
         } else if event.id == self.quit_hotkey.id() {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
-            dispatch::send_clipboard_command(ctx.clipboard_tx, ClipboardCommand::Undo);
+            dispatch::send_clipboard_command(ctx.clipboard_worker, ClipboardCommand::Undo);
         } else if event.id == self.clip_selector_hotkey.id() {
             Self::handle_clip_selector_hotkey(ctx);
         } else if self.handle_ocr_hotkey_if_pressed(event.id, ctx) {
@@ -357,7 +356,7 @@ impl HotkeyHandler {
         update_refine(
             ctx.state,
             ctx.menu,
-            ctx.clipboard_tx,
+            ctx.clipboard_worker,
             mode,
             ctx.quick_selector,
         );
@@ -540,14 +539,15 @@ mod tests {
         control_flow: ControlFlow,
         last_quick_selector_show: Instant,
         last_clip_selector_show: Instant,
-        clipboard_tx: Sender<ClipboardCommand>,
+        clipboard_worker: Arc<ClipboardWorkerHandle>,
     }
 
     impl HotkeyTestContext {
         fn new() -> Self {
             let state = Arc::new(test_app_state());
             let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-            let (clipboard_tx, _) = mpsc::channel();
+            let (tx, _) = mpsc::channel();
+            let clipboard_worker = ClipboardWorkerHandle::for_test(Arc::clone(&state), tx);
 
             Self {
                 state,
@@ -555,7 +555,7 @@ mod tests {
                 control_flow: ControlFlow::Wait,
                 last_quick_selector_show: Instant::now(),
                 last_clip_selector_show: Instant::now(),
-                clipboard_tx,
+                clipboard_worker,
             }
         }
 
@@ -570,7 +570,7 @@ mod tests {
                 control_flow: &mut self.control_flow,
                 last_quick_selector_show: &mut self.last_quick_selector_show,
                 last_clip_selector_show: &mut self.last_clip_selector_show,
-                clipboard_tx: &self.clipboard_tx,
+                clipboard_worker: &self.clipboard_worker,
             }
         }
     }
@@ -634,7 +634,7 @@ mod tests {
 
         // 取り消し
         let (tx, rx) = mpsc::channel();
-        ctx.clipboard_tx = tx;
+        ctx.clipboard_worker = ClipboardWorkerHandle::for_test(Arc::clone(&ctx.state), tx);
         handler.handle_event(
             GlobalHotKeyEvent {
                 id: handler.undo_hotkey_id(),

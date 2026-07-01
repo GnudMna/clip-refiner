@@ -1,11 +1,10 @@
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 
 use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::quick_selector::QuickSelectorWindow;
 use super::super::state::AppState;
-use super::super::worker::ClipboardCommand;
+use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::favorites::refresh_quick_selector_modes;
 
 use crate::refiner::RefineMode;
@@ -26,7 +25,7 @@ use crate::tray::state::LockExt;
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    clipboard_tx: &Sender<ClipboardCommand>,
+    clipboard_worker: &ClipboardWorkerHandle,
     mode: RefineMode,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
@@ -49,7 +48,7 @@ pub fn update_refine(
     menu.refine.sync_favorite_actions(mode, &favorite_modes);
 
     state.save_config();
-    dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::ProcessMode(mode));
+    dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::ProcessMode(mode));
     refresh_quick_selector_modes(state, quick_selector);
 }
 
@@ -70,7 +69,7 @@ pub(super) fn handle_refine_mode_event(
     id: &tray_icon::menu::MenuId,
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_tx: &Sender<ClipboardCommand>,
+    clipboard_worker: &ClipboardWorkerHandle,
     quick_selector: Option<&QuickSelectorWindow>,
 ) -> bool {
     if let Some(mode) = menu
@@ -81,7 +80,7 @@ pub(super) fn handle_refine_mode_event(
         .find(|(item, _)| item.id() == id)
         .map(|(_, mode)| *mode)
     {
-        update_refine(state, menu, clipboard_tx, mode, quick_selector);
+        update_refine(state, menu, clipboard_worker, mode, quick_selector);
         return true;
     }
 
@@ -90,7 +89,7 @@ pub(super) fn handle_refine_mode_event(
         .all_mode_items()
         .find(|(item, _)| item.id() == id)
     {
-        update_refine(state, menu, clipboard_tx, *mode, quick_selector);
+        update_refine(state, menu, clipboard_worker, *mode, quick_selector);
         true
     } else {
         false

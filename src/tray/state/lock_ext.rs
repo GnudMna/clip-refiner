@@ -11,8 +11,15 @@ pub trait LockExt<T> {
 
 impl<T> LockExt<T> for Mutex<T> {
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T> {
-        self.lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        match self.lock() {
+            Ok(guard) => guard,
+            Err(poison) => {
+                crate::log_error!(
+                    "Mutex がポイズン状態になっています。データを復旧して処理を継続します"
+                );
+                poison.into_inner()
+            }
+        }
     }
 }
 
@@ -26,12 +33,26 @@ pub trait RwLockExt<T> {
 
 impl<T> RwLockExt<T> for RwLock<T> {
     fn read_ignore_poison(&self) -> RwLockReadGuard<'_, T> {
-        self.read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        match self.read() {
+            Ok(guard) => guard,
+            Err(poison) => {
+                crate::log_error!(
+                    "RwLock の読み取りロックがポイズン状態です。データを復旧して処理を継続します"
+                );
+                poison.into_inner()
+            }
+        }
     }
 
     fn write_ignore_poison(&self) -> RwLockWriteGuard<'_, T> {
-        self.write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        match self.write() {
+            Ok(guard) => guard,
+            Err(poison) => {
+                crate::log_error!(
+                    "RwLock の書き込みロックがポイズン状態です。データを復旧して処理を継続します"
+                );
+                poison.into_inner()
+            }
+        }
     }
 }

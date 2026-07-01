@@ -88,7 +88,11 @@ impl AppConfig {
 
         match parse_config_toml(&content) {
             Ok((config, legacy_clips)) => {
-                let (config, migrated) = finish_loading(config, legacy_clips);
+                let (config, migrated, newer_version_clamped) =
+                    finish_loading(config, legacy_clips);
+                if newer_version_clamped {
+                    notify_newer_config_version_clamped();
+                }
                 if migrated && let Err(e) = config.save() {
                     crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
                 }
@@ -107,8 +111,8 @@ impl AppConfig {
     /// スキーマ移行が必要な場合は移行後の内容を保存する
     ///
     /// # Returns
-    /// * `Result<(Self, bool), ConfigReloadError>` - 読み込んだ設定と、移行が実行されたかどうか
-    pub fn reload_from_disk() -> Result<(Self, bool), ConfigReloadError> {
+    /// * `Result<(Self, bool, bool), ConfigReloadError>` - 読み込んだ設定、移行実行有無、将来 version のクランプ有無
+    pub fn reload_from_disk() -> Result<(Self, bool, bool), ConfigReloadError> {
         let config_path =
             Self::config_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
 
@@ -122,12 +126,15 @@ impl AppConfig {
         let (config, legacy_clips) =
             parse_config_toml(&content).map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
 
-        let (config, migrated) = finish_loading(config, legacy_clips);
+        let (config, migrated, newer_version_clamped) = finish_loading(config, legacy_clips);
+        if newer_version_clamped {
+            notify_newer_config_version_clamped();
+        }
         if migrated && let Err(e) = config.save() {
             crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
         }
 
-        Ok((config, migrated))
+        Ok((config, migrated, newer_version_clamped))
     }
 
     /// 現在の設定をファイルへ保存する
@@ -203,8 +210,11 @@ fn parse_config_toml(content: &str) -> Result<(AppConfig, Vec<RegisteredClip>)> 
 }
 
 /// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
-fn finish_loading(config: AppConfig, legacy_clips: Vec<RegisteredClip>) -> (AppConfig, bool) {
-    let (mut config, schema_migrated) = config.prepare_loaded();
+fn finish_loading(config: AppConfig, legacy_clips: Vec<RegisteredClip>) -> (AppConfig, bool, bool) {
+    let migration = config.prepare_loaded();
+    let mut config = migration.config;
+    let schema_migrated = migration.migrated;
+    let newer_version_clamped = migration.newer_version_clamped;
 
     let file_clips = load_registered_clips().unwrap_or_else(|err| {
         crate::log_warn!("登録クリップファイルの読み込みに失敗: {:?}", err);
@@ -226,7 +236,19 @@ fn finish_loading(config: AppConfig, legacy_clips: Vec<RegisteredClip>) -> (AppC
 
     config.normalize_clips();
 
-    (config, schema_migrated || clips_migrated)
+    (
+        config,
+        schema_migrated || clips_migrated,
+        newer_version_clamped,
+    )
+}
+
+/// 将来バージョン向け設定を検出した旨を通知する
+fn notify_newer_config_version_clamped() {
+    crate::platform::show_notification(
+        "設定の互換性",
+        "将来バージョン向けの設定を検出しました。既存の項目は維持し、version を現行に揃えました",
+    );
 }
 
 /// 破損した設定ファイルをバックアップする
@@ -272,8 +294,9 @@ text = "secret-body"
             assert_eq!(legacy_clips.len(), 1);
             assert!(config.clips.is_empty());
 
-            let (config, migrated) = finish_loading(config, legacy_clips);
+            let (config, migrated, newer_version_clamped) = finish_loading(config, legacy_clips);
             assert!(migrated);
+            assert!(!newer_version_clamped);
             assert_eq!(config.clips[0].text, "secret-body");
 
             config.save().expect("save");

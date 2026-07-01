@@ -34,7 +34,8 @@ pub fn apply_config_reload(
     hotkey_handler: &mut HotkeyHandler,
     clip_selector: &ClipSelectorWindow,
 ) -> Result<ConfigReloadOutcome, String> {
-    let (loaded, migrated) = AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
+    let (loaded, migrated, newer_version_clamped) =
+        AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
 
     let previous = state.with_config(std::clone::Clone::clone);
     let hotkeys_changed = previous.hotkeys != loaded.hotkeys;
@@ -76,11 +77,21 @@ pub fn apply_config_reload(
         clip_selector.refresh_items(&clips_json);
     }
 
-    let message = build_reload_message(
-        hotkeys_changed || favorite_hotkeys_changed,
-        monitor_changed,
-        migrated,
-    );
+    let mut change_labels = Vec::new();
+    if hotkeys_changed || favorite_hotkeys_changed {
+        change_labels.push("ホットキーを更新");
+    }
+    if monitor_changed {
+        change_labels.push("監視設定を更新");
+    }
+    if migrated {
+        change_labels.push("設定スキーマを移行");
+    }
+    if newer_version_clamped {
+        change_labels.push("将来 version を現行へ揃え");
+    }
+
+    let message = build_reload_message(&change_labels);
     crate::log_info!("設定を再読み込みしました: {}", message);
     Ok(ConfigReloadOutcome { message })
 }
@@ -89,17 +100,9 @@ pub fn apply_config_reload(
 // プライベート関数
 // ======================================================================
 /// 再読み込み成功時の通知メッセージを組み立てる
-fn build_reload_message(hotkeys_changed: bool, monitor_changed: bool, migrated: bool) -> String {
+fn build_reload_message(extra_parts: &[&str]) -> String {
     let mut parts = vec!["設定を反映しました".to_string()];
-    if hotkeys_changed {
-        parts.push("ホットキーを更新".to_string());
-    }
-    if monitor_changed {
-        parts.push("監視設定を更新".to_string());
-    }
-    if migrated {
-        parts.push("設定スキーマを移行".to_string());
-    }
+    parts.extend(extra_parts.iter().map(|label| (*label).to_string()));
     parts.join(" / ")
 }
 
@@ -139,19 +142,22 @@ mod tests {
     /// 再読み込み成功メッセージが変更内容を反映すること
     #[test]
     fn build_reload_message_lists_changes() {
-        let message = build_reload_message(true, true, true);
+        let message = build_reload_message(&[
+            "ホットキーを更新",
+            "監視設定を更新",
+            "設定スキーマを移行",
+            "将来 version を現行へ揃え",
+        ]);
         assert!(message.contains("設定を反映しました"));
         assert!(message.contains("ホットキーを更新"));
         assert!(message.contains("監視設定を更新"));
         assert!(message.contains("設定スキーマを移行"));
+        assert!(message.contains("将来 version を現行へ揃え"));
     }
 
     /// 変更がない場合は基本メッセージのみであること
     #[test]
     fn build_reload_message_without_changes() {
-        assert_eq!(
-            build_reload_message(false, false, false),
-            "設定を反映しました"
-        );
+        assert_eq!(build_reload_message(&[]), "設定を反映しました");
     }
 }

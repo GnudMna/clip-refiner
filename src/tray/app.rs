@@ -1,6 +1,4 @@
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
-use std::time::Instant;
 
 use super::clip_selector::{ClipSelectorWindow, init_clip_selector};
 use super::clipboard_monitor::bump_monitor_generation;
@@ -11,11 +9,14 @@ use super::menu::TrayMenu;
 use super::ocr_capture::{OcrCaptureWindow, init_ocr_capture};
 use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
+use super::worker::ClipboardWorkerHandle;
 
 use anyhow::Result;
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 use tray_icon::menu::MenuEvent;
+
+use std::time::Instant;
 
 // ======================================================================
 // アプリケーション構造体
@@ -38,8 +39,8 @@ pub struct App {
     pub ocr_capture: OcrCaptureWindow,
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
-    /// クリップボード処理ワーカーへの送信チャネル
-    pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
+    /// クリップボード処理ワーカー
+    pub clipboard_worker: Arc<ClipboardWorkerHandle>,
     /// 最後にクイックセレクターを表示した時刻(連打防止用)
     pub last_quick_selector_show: Instant,
     /// 最後に登録クリップセレクターを表示した時刻(連打防止用)
@@ -68,9 +69,9 @@ impl App {
         let hotkey_handler = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
         let clip_selector = init_clip_selector(event_loop, &proxy)?;
-        let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
+        let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
         #[cfg(windows)]
-        let ocr_capture = init_ocr_capture(clipboard_tx.clone())?;
+        let ocr_capture = init_ocr_capture(Arc::clone(&clipboard_worker))?;
 
         HotkeyHandler::start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -84,7 +85,7 @@ impl App {
             #[cfg(windows)]
             ocr_capture,
             hotkey_handler,
-            clipboard_tx,
+            clipboard_worker,
             last_quick_selector_show: Instant::now(),
             last_clip_selector_show: Instant::now(),
         })
@@ -133,12 +134,34 @@ impl App {
                         &menu_event,
                         &self.menu,
                         &self.state,
-                        &self.clipboard_tx,
+                        &self.clipboard_worker,
                         Some(&self.quick_selector),
                         control_flow,
                     );
                 }
             }
+        }
+    }
+
+    /// クリップボードワーカーの再起動・停止・復旧イベントを処理する
+    fn handle_clipboard_worker_lifecycle(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::RestartClipboardWorker => self.clipboard_worker.restart(),
+            AppEvent::ClipboardWorkerStopped => {
+                self.clipboard_worker.sync_menu_state(&self.menu);
+                crate::platform::show_notification(
+                    "クリップボードエラー",
+                    super::worker::worker_stopped_notification_body(),
+                );
+            }
+            AppEvent::ClipboardWorkerReady => {
+                self.clipboard_worker.sync_menu_state(&self.menu);
+                crate::platform::show_notification(
+                    "クリップボード監視",
+                    "クリップボード監視を再開しました",
+                );
+            }
+            _ => {}
         }
     }
 
@@ -153,7 +176,7 @@ impl App {
         match event {
             AppEvent::RequestModeChange(mode) => {
                 self.quick_selector.hide();
-                event::update_refine(&self.state, &self.menu, &self.clipboard_tx, mode, None);
+                event::update_refine(&self.state, &self.menu, &self.clipboard_worker, mode, None);
             }
             AppEvent::HideQuickSelector => {
                 self.quick_selector.hide();
@@ -163,11 +186,11 @@ impl App {
             }
             AppEvent::RequestClipCopy(index) => {
                 self.clip_selector.hide();
-                event::copy_registered_clip(&self.state, &self.clipboard_tx, index);
+                event::copy_registered_clip(&self.state, &self.clipboard_worker, index);
             }
             AppEvent::RequestClipRegister => {
                 super::dispatch::send_clipboard_command(
-                    &self.clipboard_tx,
+                    &self.clipboard_worker,
                     super::worker::ClipboardCommand::RegisterClipFromClipboard,
                 );
             }
@@ -207,6 +230,9 @@ impl App {
                     &self.clip_selector,
                 );
             }
+            AppEvent::RestartClipboardWorker
+            | AppEvent::ClipboardWorkerStopped
+            | AppEvent::ClipboardWorkerReady => self.handle_clipboard_worker_lifecycle(event),
             AppEvent::ReloadFavoriteHotkeys => {
                 let (hotkeys, favorite_count) = self
                     .state
@@ -229,7 +255,7 @@ impl App {
                     control_flow,
                     last_quick_selector_show: &mut self.last_quick_selector_show,
                     last_clip_selector_show: &mut self.last_clip_selector_show,
-                    clipboard_tx: &self.clipboard_tx,
+                    clipboard_worker: &self.clipboard_worker,
                 };
                 self.hotkey_handler.handle_event(hotkey_event, &mut ctx);
             }

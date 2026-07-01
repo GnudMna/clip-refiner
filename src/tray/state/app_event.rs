@@ -29,6 +29,12 @@ pub enum AppEvent {
     RefreshClips,
     /// ディスク上の設定ファイルを再読み込みする要求
     ReloadConfig,
+    /// クリップボードワーカーの再起動要求
+    RestartClipboardWorker,
+    /// クリップボードワーカーが停止した
+    ClipboardWorkerStopped,
+    /// クリップボードワーカーが稼働を再開した
+    ClipboardWorkerReady,
     /// お気に入り変換モード用ホットキーの再登録要求
     ReloadFavoriteHotkeys,
     /// システム全体から受信したグローバルホットキーイベント
