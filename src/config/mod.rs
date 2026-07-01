@@ -157,6 +157,36 @@ interval_ms = 500
         assert_eq!(prepared.interval_ms, 500);
     }
 
+    /// v1 TOML は現行スキーマへ移行し、`pipeline` など既存項目を保持すること
+    #[test]
+    fn test_prepare_loaded_migrates_v1_toml_with_pipeline() {
+        let v1_toml = r#"
+version = 1
+mode = "Trim"
+pipeline = ["UrlDecode", "Trim"]
+interval_ms = 750
+history_enabled = true
+"#;
+        let config: AppConfig = toml::from_str(v1_toml).expect("デシリアライズに失敗");
+        assert_eq!(config.version, 1);
+        assert_eq!(
+            config.pipeline,
+            vec![RefineMode::UrlDecode, RefineMode::Trim]
+        );
+
+        let migration = config.prepare_loaded();
+        assert!(migration.migrated);
+        let prepared = migration.config;
+        assert_eq!(prepared.version, consts::CONFIG_VERSION);
+        assert_eq!(prepared.mode, RefineMode::Trim);
+        assert_eq!(
+            prepared.pipeline,
+            vec![RefineMode::UrlDecode, RefineMode::Trim]
+        );
+        assert_eq!(prepared.interval_ms, 750);
+        assert!(prepared.history_enabled);
+    }
+
     /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えること
     #[test]
     fn test_hotkey_settings_fix_invalid() {

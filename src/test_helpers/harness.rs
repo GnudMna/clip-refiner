@@ -55,6 +55,13 @@ impl ClipboardHarness {
         self
     }
 
+    /// 監視時に適用する加工パイプラインを設定する
+    #[must_use]
+    pub fn with_pipeline(self, pipeline: Vec<RefineMode>) -> Self {
+        self.state.with_config_mut(|c| c.pipeline = pipeline);
+        self
+    }
+
     /// 加工モードを変更する
     pub fn set_mode(&self, mode: RefineMode) {
         self.state.with_config_mut(|c| c.mode = mode);
@@ -153,6 +160,16 @@ impl ClipboardHarness {
             &self.state,
             &mut self.refine_ctx,
             ClipboardCommand::SetText(secret_from(text.as_ref().to_string())),
+        );
+    }
+
+    /// ワーカーへ送られる `SetOcrText` コマンドを処理する
+    pub fn set_ocr_text(&mut self, text: impl AsRef<str>) {
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::SetOcrText(secret_from(text.as_ref().to_string())),
         );
     }
 

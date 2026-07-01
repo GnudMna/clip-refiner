@@ -258,3 +258,55 @@ fn default_favorite_slot_binding(index: usize) -> Option<String> {
     }
     None
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::hotkey_binding::parse_hotkey_binding;
+
+    /// 固定ホットキーと重複するお気に入りスロットは除外されること
+    #[test]
+    fn resolve_favorite_slot_skips_duplicate_fixed_hotkeys() {
+        let hotkeys = HotkeySettings {
+            quick_selector: "Alt+Shift+1".to_string(),
+            favorite_mode_slots: vec!["Alt+Shift+1".to_string()],
+            ..HotkeySettings::default()
+        };
+        let reserved = vec![parse_hotkey_binding("Alt+Shift+1").expect("parse")];
+
+        let resolved = hotkeys.resolve_favorite_slot_hotkeys(1, &reserved);
+
+        assert!(resolved.is_empty());
+    }
+
+    /// 先に割り当てたスロットと重複するお気に入りスロットは除外されること
+    #[test]
+    fn resolve_favorite_slot_skips_duplicate_among_slots() {
+        let hotkeys = HotkeySettings {
+            favorite_mode_slots: vec!["Alt+Shift+F10".to_string(), "Alt+Shift+F10".to_string()],
+            ..HotkeySettings::default()
+        };
+
+        let resolved = hotkeys.resolve_favorite_slot_hotkeys(2, &[]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].0, 0);
+    }
+
+    /// 空文字のスロット設定は無効としてスキップされること
+    #[test]
+    fn resolve_favorite_slot_skips_empty_binding() {
+        let hotkeys = HotkeySettings {
+            favorite_mode_slots: vec![String::new()],
+            ..HotkeySettings::default()
+        };
+
+        let resolved = hotkeys.resolve_favorite_slot_hotkeys(1, &[]);
+
+        assert!(resolved.is_empty());
+    }
+}

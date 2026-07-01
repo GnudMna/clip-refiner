@@ -161,4 +161,25 @@ mod tests {
         let result = migrate_config(config);
         assert!(!result.migrated);
     }
+
+    /// v1 設定は v2 へ移行し、加工パイプラインを保持すること
+    #[test]
+    fn migrate_v1_to_v2_preserves_pipeline() {
+        let config = AppConfig {
+            version: 1,
+            mode: RefineMode::JsonFormat,
+            pipeline: vec![RefineMode::UrlDecode, RefineMode::Trim],
+            interval_ms: 333,
+            ..Default::default()
+        };
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert_eq!(result.config.mode, RefineMode::JsonFormat);
+        assert_eq!(
+            result.config.pipeline,
+            vec![RefineMode::UrlDecode, RefineMode::Trim]
+        );
+        assert_eq!(result.config.interval_ms, 333);
+    }
 }
