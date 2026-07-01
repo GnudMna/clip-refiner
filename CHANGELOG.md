@@ -15,6 +15,9 @@
 
 ### Changed
 
+- README を概要・クイックスタート中心に簡素化し、加工モード一覧・UI 操作・使用例・セキュリティ詳細を [CONFIG.md](CONFIG.md) へ移行
+- [CONFIG.md](CONFIG.md) に加工モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例・ログイン時自動起動の節を追加
+- 登録クリップのドキュメント記述を `registered-clips.dat` 暗号化保存 (設定 v2) に合わせて修正
 - クリップボードワーカー初期化失敗時に UI へ通知し、自動復旧を試みるように変更
 - 設定 `version` がアプリより新しい場合、全項目のデフォルト化ではなく `version` を現行スキーマへクランプして既存値を保持するように変更
 - `excel-to-image` 加工モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
