@@ -367,7 +367,6 @@ interval_ms = 500
 
     /// `normalize_pipeline` が画像モードを末尾へ移動し件数を制限すること
     #[test]
-    #[cfg(windows)]
     fn test_normalize_pipeline_moves_image_mode_to_end() {
         let mut config = AppConfig {
             pipeline: vec![
@@ -386,36 +385,5 @@ interval_ms = 500
                 RefineMode::ExcelToImage,
             ]
         );
-    }
-
-    /// 非 Windows では `ExcelToImage` をパイプラインから除去すること
-    #[test]
-    #[cfg(not(windows))]
-    fn test_normalize_pipeline_strips_unsupported_image_mode() {
-        let mut config = AppConfig {
-            pipeline: vec![
-                RefineMode::ExcelToImage,
-                RefineMode::Trim,
-                RefineMode::UrlDecode,
-            ],
-            ..Default::default()
-        };
-        config.normalize_pipeline();
-        assert_eq!(
-            config.pipeline,
-            vec![RefineMode::Trim, RefineMode::UrlDecode]
-        );
-    }
-
-    /// 非 Windows では未対応の `mode` をデフォルトへフォールバックすること
-    #[test]
-    #[cfg(not(windows))]
-    fn test_normalize_platform_modes_falls_back_unsupported_mode() {
-        let mut config = AppConfig {
-            mode: RefineMode::ExcelToImage,
-            ..Default::default()
-        };
-        config.normalize_platform_modes();
-        assert_eq!(config.mode, RefineMode::UrlDecode);
     }
 }

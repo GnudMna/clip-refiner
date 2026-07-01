@@ -20,5 +20,5 @@ pub use notify_windows::{init_notifications, show_notification};
 // ======================================================================
 /// 画面範囲選択 OCR が利用可能かどうか
 pub fn supports_screen_ocr() -> bool {
-    cfg!(windows)
+    cfg!(screen_ocr)
 }

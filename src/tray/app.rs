@@ -5,7 +5,6 @@ use super::clipboard_monitor::bump_monitor_generation;
 use super::event;
 use super::hotkey::{HotkeyEventContext, HotkeyHandler};
 use super::menu::TrayMenu;
-#[cfg(windows)]
 use super::ocr_capture::{OcrCaptureWindow, init_ocr_capture};
 use super::quick_selector::{QuickSelectorWindow, init_quick_selector};
 use super::state::{AppEvent, AppState};
@@ -35,7 +34,7 @@ pub struct App {
     /// 登録クリップ選択用の UI ウィンドウ
     pub clip_selector: ClipSelectorWindow,
     /// 画面範囲選択 OCR 用オーバーレイ
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     pub ocr_capture: OcrCaptureWindow,
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
@@ -70,8 +69,8 @@ impl App {
         let quick_selector = init_quick_selector(event_loop, &proxy)?;
         let clip_selector = init_clip_selector(event_loop, &proxy)?;
         let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
-        #[cfg(windows)]
-        let ocr_capture = init_ocr_capture(Arc::clone(&clipboard_worker))?;
+        #[cfg(screen_ocr)]
+        let ocr_capture = init_ocr_capture(event_loop, &proxy, Arc::clone(&clipboard_worker))?;
 
         HotkeyHandler::start_event_listener(proxy);
         menu.refresh_history(&state)?;
@@ -82,7 +81,7 @@ impl App {
             menu,
             quick_selector,
             clip_selector,
-            #[cfg(windows)]
+            #[cfg(screen_ocr)]
             ocr_capture,
             hotkey_handler,
             clipboard_worker,
@@ -127,6 +126,12 @@ impl App {
                     &self.clip_selector,
                     &self.last_clip_selector_show,
                 );
+            }
+            #[cfg(all(screen_ocr, not(windows)))]
+            Event::WindowEvent {
+                window_id, event, ..
+            } if self.ocr_capture.id() == window_id => {
+                let _ = event;
             }
             _ => {
                 if let Ok(menu_event) = MenuEvent::receiver().try_recv() {
@@ -183,6 +188,10 @@ impl App {
             }
             AppEvent::HideClipSelector => {
                 self.clip_selector.hide();
+            }
+            AppEvent::HideOcrCapture => {
+                #[cfg(screen_ocr)]
+                self.ocr_capture.hide();
             }
             AppEvent::RequestClipCopy(index) => {
                 self.clip_selector.hide();
@@ -250,7 +259,7 @@ impl App {
                     menu: &self.menu,
                     quick_selector: Some(&self.quick_selector),
                     clip_selector: Some(&self.clip_selector),
-                    #[cfg(windows)]
+                    #[cfg(screen_ocr)]
                     ocr_capture: Some(&self.ocr_capture),
                     control_flow,
                     last_quick_selector_show: &mut self.last_quick_selector_show,

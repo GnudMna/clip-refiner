@@ -67,7 +67,7 @@
 | `notification_settings.notify_pause` | bool | `true` | 一時停止切替時の通知 |
 | `hotkeys.quick_selector` | string | `"Alt+Shift+S"` | クイックセレクター表示 |
 | `hotkeys.clip_selector` | string | `"Alt+Shift+T"` | 登録クリップセレクター表示 |
-| `hotkeys.ocr` | string | `"Alt+Shift+O"` | 画面範囲選択 OCR の開始 (**Windows のみ**) |
+| `hotkeys.ocr` | string | `"Alt+Shift+O"` | 画面範囲選択 OCR の開始 |
 | `hotkeys.notification` | string | `"Alt+Shift+N"` | デスクトップ通知の ON/OFF |
 | `hotkeys.pause` | string | `"Alt+Shift+P"` | 監視の一時停止・再開 |
 | `hotkeys.undo` | string | `"Alt+Shift+Z"` | 直近の加工を取り消し |
@@ -102,7 +102,7 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 ```
 
 - **最大段数**: 10 段まで
-- **画像出力**: `ExcelToImage` はパイプライン末尾へ自動移動 (Windows のみ)
+- **画像出力**: `ExcelToImage` はパイプライン末尾へ自動移動
 - **通知**: 連鎖適用時は `URLデコード → 全体をトリム → JSON整形` のようにモード名を連結して表示
 
 ワンショット実行時は CLI の `--pipeline` でも同様に連鎖指定できます (`--mode` より優先)。例:

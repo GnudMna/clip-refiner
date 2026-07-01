@@ -75,10 +75,7 @@ impl RefineMode {
     ///
     /// 非対応 OS では UI から非表示とし、設定読み込み時に除去する
     pub fn is_supported_on_current_platform(self) -> bool {
-        match self {
-            Self::ExcelToImage => cfg!(windows),
-            _ => true,
-        }
+        true
     }
 
     /// 現在の OS で UI に表示可能なモード数
@@ -345,21 +342,11 @@ mod tests {
         assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
     }
 
-    /// `ExcelToImage` のプラットフォーム対応が OS ごとに切り替わること
+    /// `ExcelToImage` が全プラットフォームで利用可能であること
     #[test]
     fn test_excel_to_image_platform_support() {
-        if cfg!(windows) {
-            assert!(RefineMode::ExcelToImage.is_supported_on_current_platform());
-        } else {
-            assert!(!RefineMode::ExcelToImage.is_supported_on_current_platform());
-        }
-    }
-
-    /// 非 Windows では UI 向けモード一覧に `ExcelToImage` が含まれないこと
-    #[test]
-    #[cfg(not(windows))]
-    fn test_quick_selector_modes_excludes_windows_only_modes() {
-        assert!(!RefineMode::quick_selector_modes().contains(&RefineMode::ExcelToImage));
+        assert!(RefineMode::ExcelToImage.is_supported_on_current_platform());
+        assert!(RefineMode::quick_selector_modes().contains(&RefineMode::ExcelToImage));
     }
 
     /// `RefineMode` のバリアント数と主要バリアントの存在を確認すること
