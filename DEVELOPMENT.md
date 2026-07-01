@@ -1,6 +1,6 @@
 # ClipRefiner 開発者向けドキュメント
 
-ユーザ向けの機能説明・操作方法は [README.md](README.md) を参照してください。
+ユーザ向けの機能説明・操作方法は [README.md](README.md) を参照してください。設定の詳細は [CONFIG.md](CONFIG.md) を参照してください。
 
 ## 目次
 
@@ -11,6 +11,7 @@
 - [品質チェック](#品質チェック)
 - [ライブラリとしての利用](#ライブラリとしての利用)
 - [プロジェクト構成](#プロジェクト構成)
+- [スレッドモデル](#スレッドモデル)
 - [ログ](#ログ)
 - [コーディング規約](#コーディング規約)
 
@@ -189,6 +190,7 @@ clip-refiner/
 ├── tests/               # 統合テスト
 ├── scripts/             # ビルド・品質チェック用スクリプト
 ├── packaging/           # Linux デスクトップエントリなど
+├── CONFIG.md            # 設定リファレンス (config.toml)
 └── wix/                 # Windows MSI 用 WiX ソース
 ```
 
@@ -196,9 +198,69 @@ clip-refiner/
 
 ---
 
+## スレッドモデル
+
+監視モード (引数なし起動) では、クリップボード操作を単一スレッドに集約し、UI は `tao` のイベントループ上で動作する。各スレッドの役割と通信経路は次のとおり。
+
+```mermaid
+flowchart TB
+    subgraph main ["メインスレッド (tao Event Loop)"]
+        App["App"]
+        Tray["TrayMenu / tray-icon"]
+        QS["QuickSelector (WebView)"]
+        CS["ClipSelector (WebView)"]
+        App --> Tray
+        App --> QS
+        App --> CS
+    end
+
+    subgraph hotkey_thread ["ホットキーリスナースレッド"]
+        GHK["GlobalHotKeyEvent::receiver()"]
+    end
+
+    subgraph worker ["クリップボードワーカースレッド"]
+        WL["recv_timeout ループ"]
+        Mon["監視ループ (Polling / Event)"]
+        Cmd["ClipboardCommand 処理"]
+        WL --> Mon
+        WL --> Cmd
+    end
+
+    CB[("OS クリップボード")]
+    State[("AppState (Arc)")]
+
+    GHK -->|"AppEvent::Hotkey"| App
+    App -->|"ClipboardCommand (mpsc)"| WL
+    WL -->|"AppEvent (EventLoopProxy)"| App
+    Cmd <--> CB
+    Mon <--> CB
+    App <--> State
+    WL <--> State
+```
+
+### 各コンポーネント
+
+| コンポーネント | スレッド | 責務 |
+| :------------- | :------- | :--- |
+| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC、`AppEvent` の受信と `App::handle_event` への振り分け |
+| **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る |
+| **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理 |
+| **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、加工済み状態・履歴・Undo 用テキスト (`Mutex`)。UI とワーカーの両方から参照 |
+
+### 通信の要点
+
+- **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピーなど)
+- **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了)
+- **ホットキー → UI**: 専用スレッドが `AppEvent::Hotkey` を送り、メインスレッドの `HotkeyHandler` が処理
+- **クリップボード**: `arboard::Clipboard` はワーカースレッド内の 1 インスタンスのみが触る (競合回避)
+
+加工ロジック自体 (`refiner/`) はスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。
+
+---
+
 ## ログ
 
-ログファイルは設定ディレクトリ内の `logs/` フォルダに日次ローテーションで保存される (保存場所は [README のログ節](README.md#-ログ) を参照)。
+ログファイルは設定ディレクトリ内の `logs/` フォルダに日次ローテーションで保存される (保存場所は [CONFIG.md のログ節](CONFIG.md#ログ) を参照)。
 
 ログレベルは環境変数 `RUST_LOG` で制御できる (例: `RUST_LOG=debug`)。
 
