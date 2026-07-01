@@ -13,8 +13,13 @@
 - 画面 OCR を macOS (Apple Vision) / Linux (Tesseract) で利用可能に (`Alt+Shift+O`、WebView オーバーレイ)
 - Linux 向け画面 OCR 用の `ocr_overlay.html` と `xcap` による領域キャプチャ
 - ライブラリ API: `config` モジュールの公開、加工パイプライン API (`apply_text_pipeline`, `apply_pipeline_to_text`, `split_pipeline`)、クレートルート re-export、`RefineContext::with_regex`
+- `clip-refiner-core` クレートで加工ロジックと設定型を GUI 非依存に分離 (`crates/` 配下)
+- feature `app` (デフォルト) でトレイ UI / CLI をオプション化。ライブラリ利用は `default-features = false` または core 直接依存
 
 ### Changed
+
+- ワークスペースを `crates/clip-refiner` と `crates/clip-refiner-core` に再構成 (ルートは virtual manifest)
+- `HotkeySettings` の UI 向けメソッドを `tray/hotkey/settings.rs` へ移動
 
 - `tray/hotkey` を解決・登録・イベント処理のサブモジュールへ分割
 - `platform/ocr_overlay/windows` を型・座標変換・描画・ウィンドウプロシージャのサブモジュールへ分割

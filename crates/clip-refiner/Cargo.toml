@@ -1,0 +1,192 @@
+[package]
+name = "clip-refiner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "クリップボードのテキストを加工するツール"
+readme = "../../README.md"
+build = "build.rs"
+
+[package.metadata.wix]
+upgrade-guid = "A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D"
+path-guid = "B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D"
+product-icon = "../../assets/icon.ico"
+eula = true
+culture = "ja-JP"
+# perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
+linker-args = ["-sice:ICE91"]
+
+[package.metadata.deb]
+maintainer = "Yuto Hirata"
+copyright = "2026, Yuto Hirata"
+license-file = ["../../LICENSE", "0"]
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+    ["../../target/release/ClipRefiner", "usr/bin/", "755"],
+    ["../../packaging/linux/clip-refiner.desktop", "usr/share/applications/clip-refiner.desktop", "644"],
+    ["../../assets/icon.png", "usr/share/icons/hicolor/256x256/apps/clip-refiner.png", "644"],
+    ["../../LICENSE", "usr/share/doc/clip-refiner/LICENSE", "644"],
+]
+
+[package.metadata.bundle.bin.ClipRefiner]
+name = "ClipRefiner"
+identifier = "com.y_hirata.clip-refiner"
+icon = ["../../assets/icon.png"]
+copyright = "Copyright (c) 2026 Yuto Hirata"
+category = "Utility"
+short_description = "クリップボードのテキストを加工するツール"
+long_description = """
+クリップボードのテキストをリアルタイムで監視し、\
+指定した形式に自動加工するツール。
+"""
+osx_minimum_system_version = "11.0"
+
+[lib]
+name = "clip_refiner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ClipRefiner"
+path = "src/main.rs"
+required-features = ["app"]
+
+[features]
+default = ["app"]
+app = [
+    "dep:anyhow",
+    "dep:arboard",
+    "dep:chrono",
+    "dep:clap",
+    "dep:global-hotkey",
+    "dep:image",
+    "dep:notify-rust",
+    "dep:png",
+    "dep:single-instance",
+    "dep:tao",
+    "dep:tracing-appender",
+    "dep:tracing-subscriber",
+    "dep:tray-icon",
+    "dep:wry",
+    "dep:serde_json",
+    "dep:strum",
+    "dep:blake3",
+    "dep:chacha20poly1305",
+    "dep:getrandom",
+    "dep:zeroize",
+    "dep:clipboard-win",
+    "dep:windows",
+    "dep:windows-future",
+    "dep:windows-sys",
+    "dep:winreg",
+    "dep:tesseract",
+    "dep:wayland-clipboard-listener",
+    "dep:x11rb",
+    "dep:xcap",
+    "dep:objc2",
+    "dep:objc2-app-kit",
+    "dep:objc2-foundation",
+    "dep:objc2-vision",
+]
+test-helpers = ["clip-refiner-core/test-helpers"]
+
+[[test]]
+name = "monitor_flow"
+path = "tests/monitor_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "worker_flow"
+path = "tests/worker_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "history_flow"
+path = "tests/history_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "regex_flow"
+path = "tests/regex_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "ocr_flow"
+path = "tests/ocr_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "library_api"
+path = "tests/library_api.rs"
+
+[dependencies]
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.9.0" }
+anyhow = { version = "1.0.103", optional = true }
+arboard = { version = "3.6.1", optional = true }
+chrono = { version = "0.4.45", optional = true, features = ["serde"] }
+clap = { version = "4.6.1", optional = true, features = ["derive"] }
+global-hotkey = { version = "0.8.0", optional = true }
+image = { version = "0.25.9", optional = true, default-features = false, features = ["bmp", "jpeg", "png"] }
+notify-rust = { version = "4.18.0", optional = true }
+png = { version = "0.18.1", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0.150", optional = true }
+single-instance = { version = "0.3.3", optional = true }
+strum = { version = "0.28.0", optional = true, features = ["derive"] }
+tao = { version = "0.35.3", optional = true }
+tracing = "0.1.44"
+tracing-appender = { version = "0.2.5", optional = true }
+tracing-subscriber = { version = "0.3.23", optional = true, features = ["env-filter"] }
+tray-icon = { version = "0.24.1", optional = true }
+wry = { version = "0.55.1", optional = true }
+blake3 = { version = "1.8", optional = true }
+chacha20poly1305 = { version = "0.10.1", optional = true }
+getrandom = { version = "0.4.3", optional = true }
+zeroize = { version = "1.8", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tesseract = { version = "0.15.2", optional = true }
+wayland-clipboard-listener = { version = "0.6.1", optional = true, features = ["wlr-data-control"] }
+x11rb = { version = "0.13", optional = true }
+xcap = { version = "0.9.6", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+objc2-app-kit = { version = "0.3", optional = true }
+objc2-foundation = { version = "0.3", optional = true }
+objc2-vision = { version = "0.3.2", optional = true, features = ["VNRecognizeTextRequest", "VNRequest"] }
+xcap = { version = "0.9.6", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+clipboard-win = { version = "5.0", optional = true, features = ["std"] }
+windows = { version = "0.62.2", optional = true, features = [
+    "Data_Xml_Dom",
+    "Foundation",
+    "Globalization",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "UI_Notifications",
+    "Win32_System_WinRT",
+] }
+windows-future = { version = "0.3.2", optional = true, features = ["std"] }
+windows-sys = { version = "0.61.2", optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_System_Console",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+winreg = { version = "0.56.0", optional = true }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[lints]
+workspace = true

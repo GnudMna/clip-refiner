@@ -1,162 +1,12 @@
-[package]
-name = "clip-refiner"
+[workspace]
+members = ["crates/clip-refiner", "crates/clip-refiner-core"]
+resolver = "2"
+
+[workspace.package]
 version = "0.9.0"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]
-description = "クリップボードのテキストを加工するツール"
-readme = "README.md"
-build = "build.rs"
-
-[package.metadata.wix]
-upgrade-guid = "A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D"
-path-guid = "B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D"
-product-icon = "assets/icon.ico"
-eula = true
-culture = "ja-JP"
-# perUser 専用のため ICE91 (ALLUSERS 非対応ディレクトリ) を抑制
-linker-args = ["-sice:ICE91"]
-
-[package.metadata.deb]
-maintainer = "Yuto Hirata"
-copyright = "2026, Yuto Hirata"
-license-file = ["LICENSE", "0"]
-section = "utils"
-priority = "optional"
-depends = "$auto"
-assets = [
-    ["target/release/ClipRefiner", "usr/bin/", "755"],
-    ["packaging/linux/clip-refiner.desktop", "usr/share/applications/clip-refiner.desktop", "644"],
-    ["assets/icon.png", "usr/share/icons/hicolor/256x256/apps/clip-refiner.png", "644"],
-    ["LICENSE", "usr/share/doc/clip-refiner/LICENSE", "644"],
-]
-
-[package.metadata.bundle.bin.ClipRefiner]
-name = "ClipRefiner"
-identifier = "com.y_hirata.clip-refiner"
-icon = ["assets/icon.png"]
-copyright = "Copyright (c) 2026 Yuto Hirata"
-category = "Utility"
-short_description = "クリップボードのテキストを加工するツール"
-long_description = """
-クリップボードのテキストをリアルタイムで監視し、\
-指定した形式に自動加工するツール。
-"""
-osx_minimum_system_version = "11.0"
-
-[lib]
-name = "clip_refiner"
-path = "src/lib.rs"
-
-[[bin]]
-name = "ClipRefiner"
-path = "src/main.rs"
-
-[features]
-test-helpers = []
-
-[[test]]
-name = "monitor_flow"
-path = "tests/monitor_flow.rs"
-
-[[test]]
-name = "worker_flow"
-path = "tests/worker_flow.rs"
-
-[[test]]
-name = "history_flow"
-path = "tests/history_flow.rs"
-
-[[test]]
-name = "regex_flow"
-path = "tests/regex_flow.rs"
-
-[[test]]
-name = "ocr_flow"
-path = "tests/ocr_flow.rs"
-
-[dependencies]
-anyhow = "1.0.103"
-arboard = "3.6.1"
-base64 = "0.22.1"
-blake3 = "1.8"
-chacha20poly1305 = "0.10.1"
-chrono = { version = "0.4.45", features = ["serde"] }
-clap = { version = "4.6.1", features = ["derive"] }
-csv = "1.3"
-directories = "6.0.0"
-getrandom = "0.4.3"
-global-hotkey = "0.8.0"
-image = { version = "0.25.9", default-features = false, features = ["bmp", "jpeg", "png"] }
-indexmap = { version = "2.14.0", features = ["serde"] }
-notify-rust = "4.18.0"
-percent-encoding = "2.3.2"
-png = "0.18.1"
-pulldown-cmark = "0.13.4"
-regex = "1.12.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.150"
-toml = "1.1.2"
-toml_edit = "0.25.12"
-serde_norway = "0.9.42"
-single-instance = "0.3.3"
-strum = { version = "0.28.0", features = ["derive"] }
-tao = "0.35.3"
-tracing = "0.1.44"
-tracing-appender = "0.2.5"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-tray-icon = "0.24.1"
-wry = "0.55.1"
-zeroize = "1.8"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-tesseract = "0.15.2"
-wayland-clipboard-listener = { version = "0.6.1", features = ["wlr-data-control"] }
-x11rb = "0.13"
-xcap = "0.9.6"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = "0.3"
-objc2-foundation = "0.3"
-objc2-vision = { version = "0.3.2", features = ["VNRecognizeTextRequest", "VNRequest"] }
-xcap = "0.9.6"
-
-[target.'cfg(windows)'.dependencies]
-clipboard-win = { version = "5.0", features = ["std"] }
-windows = { version = "0.62.2", features = [
-    "Data_Xml_Dom",
-    "Foundation",
-    "Globalization",
-    "Graphics_Imaging",
-    "Media_Ocr",
-    "UI_Notifications",
-    "Win32_System_WinRT",
-] }
-windows-future = { version = "0.3.2", features = ["std"] }
-windows-sys = { version = "0.61.2", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_Security",
-    "Win32_Security_Authorization",
-    "Win32_Security_Cryptography",
-    "Win32_System_Console",
-    "Win32_System_Memory",
-    "Win32_System_Threading",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
-] }
-winreg = "0.56.0"
-
-[target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(screen_ocr)"] }
-
-[lints.clippy]
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
 
 [profile.release]
 opt-level = 3
@@ -165,3 +15,10 @@ strip = true
 lto = "fat"
 incremental = false
 codegen-units = 1
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(screen_ocr)"] }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
