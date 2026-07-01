@@ -20,7 +20,7 @@
 </p>
 
 <p>
-  <sub>設定の詳細は <a href="CONFIG.md">CONFIG.md</a>、ビルド・開発は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照</sub>
+  <sub>設定の詳細は <a href="CONFIG.md">CONFIG.md</a>、変更履歴は <a href="CHANGELOG.md">CHANGELOG.md</a>、ビルド・開発は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照</sub>
 </p>
 
 </div>
