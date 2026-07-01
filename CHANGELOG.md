@@ -10,11 +10,15 @@
 
 - [CONFIG.md](CONFIG.md) を追加し、設定リファレンスを README から分離
 - [DEVELOPMENT.md](DEVELOPMENT.md) にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
+- 画面 OCR を macOS (Apple Vision) / Linux (Tesseract) で利用可能に (`Alt+Shift+O`、WebView オーバーレイ)
+- Linux 向け画面 OCR 用の `ocr_overlay.html` と `xcap` による領域キャプチャ
 
 ### Changed
 
 - クリップボードワーカー初期化失敗時に UI へ通知し、自動復旧を試みるように変更
 - 設定 `version` がアプリより新しい場合、全項目のデフォルト化ではなく `version` を現行スキーマへクランプして既存値を保持するように変更
+- `excel-to-image` 加工モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
+- OCR 前処理 (小画像の拡大・日本語空白除去) を `platform/ocr/normalize.rs` / `prepare.rs` へ共通化
 
 ### Fixed
 

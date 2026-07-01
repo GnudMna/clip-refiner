@@ -7,7 +7,7 @@ use super::dispatch;
 use super::event::update_refine;
 use super::menu::TrayMenu;
 use super::notify;
-#[cfg(windows)]
+#[cfg(screen_ocr)]
 use super::ocr_capture::OcrCaptureWindow;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::{AppEvent, AppState};
@@ -54,7 +54,7 @@ pub struct HotkeyHandler {
     /// 登録クリップセレクタ表示・非表示用ホットキー
     clip_selector_hotkey: HotKey,
     /// 画面範囲選択 OCR 用ホットキー
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     ocr_hotkey: HotKey,
     /// お気に入り変換モード用ホットキー
     favorite_hotkeys: Vec<FavoriteHotkeyBinding>,
@@ -71,7 +71,7 @@ struct ResolvedHotkeys {
     quit: HotKey,
     undo: HotKey,
     clip_selector: HotKey,
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     ocr: HotKey,
 }
 
@@ -97,7 +97,7 @@ impl ResolvedHotkeys {
                 consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
                 "clip_selector",
             ),
-            #[cfg(windows)]
+            #[cfg(screen_ocr)]
             ocr: resolve_hotkey(&hotkeys.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr"),
         }
     }
@@ -112,7 +112,7 @@ impl ResolvedHotkeys {
             self.undo,
             self.clip_selector,
         ];
-        #[cfg(windows)]
+        #[cfg(screen_ocr)]
         hotkeys.push(self.ocr);
         hotkeys
     }
@@ -143,7 +143,7 @@ impl HotkeyHandler {
             quit_hotkey: resolved.quit,
             undo_hotkey: resolved.undo,
             clip_selector_hotkey: resolved.clip_selector,
-            #[cfg(windows)]
+            #[cfg(screen_ocr)]
             ocr_hotkey: resolved.ocr,
             favorite_hotkeys: Vec::new(),
         };
@@ -186,7 +186,7 @@ impl HotkeyHandler {
         self.quit_hotkey = resolved.quit;
         self.undo_hotkey = resolved.undo;
         self.clip_selector_hotkey = resolved.clip_selector;
-        #[cfg(windows)]
+        #[cfg(screen_ocr)]
         {
             self.ocr_hotkey = resolved.ocr;
         }
@@ -214,7 +214,7 @@ impl HotkeyHandler {
             self.undo_hotkey,
             self.clip_selector_hotkey,
         ];
-        #[cfg(windows)]
+        #[cfg(screen_ocr)]
         hotkeys.push(self.ocr_hotkey);
         hotkeys
     }
@@ -291,7 +291,7 @@ pub struct HotkeyEventContext<'a> {
     /// 登録クリップセレクターウィンドウのインスタンス (登録クリップセレクター操作時のみ必要)
     pub clip_selector: Option<&'a ClipSelectorWindow>,
     /// OCR キャプチャオーバーレイ (OCR 操作時のみ必要)
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     pub ocr_capture: Option<&'a OcrCaptureWindow>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
@@ -403,7 +403,7 @@ impl HotkeyHandler {
     }
 
     /// 画面 OCR キャプチャオーバーレイ表示ホットキーを処理する
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     fn handle_ocr_hotkey(ctx: &mut HotkeyEventContext<'_>) {
         let Some(ocr_capture) = ctx.ocr_capture else {
             return;
@@ -429,7 +429,7 @@ impl HotkeyHandler {
     }
 
     /// OCR ホットキーが押された場合に処理する
-    #[cfg(windows)]
+    #[cfg(screen_ocr)]
     fn handle_ocr_hotkey_if_pressed(
         &self,
         hotkey_id: u32,
@@ -442,7 +442,7 @@ impl HotkeyHandler {
         true
     }
 
-    #[cfg(not(windows))]
+    #[cfg(not(screen_ocr))]
     fn handle_ocr_hotkey_if_pressed(
         &self,
         _hotkey_id: u32,

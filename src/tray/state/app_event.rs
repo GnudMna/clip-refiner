@@ -13,6 +13,12 @@ pub enum AppEvent {
     HideQuickSelector,
     /// 登録クリップセレクターの非表示要求
     HideClipSelector,
+    /// 画面 OCR オーバーレイの非表示要求 (macOS / Linux)
+    #[allow(
+        dead_code,
+        reason = "macOS / Linux の WebView オーバーレイ IPC からのみ送出"
+    )]
+    HideOcrCapture,
     /// 登録クリップのクリップボードコピー要求
     RequestClipCopy(usize),
     /// クリップボードの内容を登録クリップとして保存する要求

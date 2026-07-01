@@ -11,6 +11,13 @@ fn main() {
         println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
     }
 
+    if matches!(
+        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("windows" | "macos" | "linux")
+    ) {
+        println!("cargo:rustc-cfg=screen_ocr");
+    }
+
     // Windows の場合は exe にリソース情報を埋め込む
     #[cfg(windows)]
     {
