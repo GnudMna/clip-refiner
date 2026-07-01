@@ -45,8 +45,36 @@ impl RefineContext {
         }
     }
 
+    /// 正規表現設定のみを指定してコンテキストを生成する
+    pub fn with_regex(regex: RegexSettings) -> Self {
+        Self {
+            regex,
+            ..Self::default()
+        }
+    }
+
     /// 正規表現コンパイルキャッシュへの可変参照を返す
     pub(crate) fn regex_cache_mut(&self) -> std::cell::RefMut<'_, RegexPatternCache> {
         self.regex_cache.borrow_mut()
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::refiner::{RefineMode, Refiner};
+
+    /// `with_regex` で正規表現設定を渡せること
+    #[test]
+    fn with_regex_applies_pattern() {
+        let ctx = RefineContext::with_regex(RegexSettings {
+            pattern: r"\s+".to_string(),
+            replacement: "-".to_string(),
+            ..RegexSettings::default()
+        });
+        assert_eq!(RefineMode::RegexReplace.refine("a   b", &ctx), "a-b");
     }
 }

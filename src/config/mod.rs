@@ -1,3 +1,8 @@
+//! `ClipRefiner` の設定型と永続化 API
+//!
+//! [`AppConfig`] は `config.toml` の内容に対応する。正規表現設定 ([`RegexSettings`]) は
+//! [`RefineContext::from_config`](crate::RefineContext::from_config) 経由で加工 API に渡せる
+
 mod clip_store_key;
 mod migrate;
 mod paths;
@@ -8,6 +13,7 @@ mod registered_images;
 mod serialize;
 mod types;
 
+pub use crate::consts::CONFIG_VERSION;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};

@@ -80,12 +80,12 @@ pub(crate) fn apply_refinement_to_text(
     mode: RefineMode,
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    apply_refinement_pipeline_to_text(text, &[mode], ctx)
+    apply_pipeline_to_text(text, &[mode], ctx)
 }
 
 /// テキストに加工パイプラインを順に適用する
 ///
-/// クリップボード I/O は行わない
+/// クリップボード I/O は行わない。入力サイズ上限を超える場合は `TextTooLarge` を返す
 ///
 /// # Arguments
 /// * `text` - 加工前のテキスト
@@ -96,7 +96,7 @@ pub(crate) fn apply_refinement_to_text(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
-pub(crate) fn apply_refinement_pipeline_to_text(
+pub fn apply_pipeline_to_text(
     text: &str,
     pipeline: &[RefineMode],
     ctx: &RefineContext,
@@ -192,7 +192,7 @@ pub(crate) fn process_text_clipboard_pipeline<C: TextClipboard>(
         .get_text()
         .map_err(ClipboardProcessError::ReadFailed)?;
 
-    match apply_refinement_pipeline_to_text(&text, pipeline, ctx)? {
+    match apply_pipeline_to_text(&text, pipeline, ctx)? {
         ClipboardProcessOutcome::Processed(result) => {
             clipboard
                 .set_text(result.clone())
@@ -309,7 +309,7 @@ pub(crate) fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
         .get_text()
         .map_err(ClipboardProcessError::ReadFailed)?;
 
-    let text_outcome = apply_refinement_pipeline_to_text(&text, pipeline, ctx)?;
+    let text_outcome = apply_pipeline_to_text(&text, pipeline, ctx)?;
 
     match text_outcome {
         ClipboardProcessOutcome::Processed(result) => {
@@ -409,10 +409,10 @@ mod tests {
 
     /// 加工パイプラインが順に適用されること
     #[test]
-    fn apply_refinement_pipeline_to_text_chains_modes() {
+    fn apply_pipeline_to_text_chains_modes() {
         let input = "  %E3%81%82  ";
         assert_eq!(
-            apply_refinement_pipeline_to_text(
+            apply_pipeline_to_text(
                 input,
                 &[RefineMode::UrlDecode, RefineMode::Trim],
                 &empty_ctx(),
@@ -423,9 +423,9 @@ mod tests {
 
     /// 加工パイプラインで変更がない場合は `Unchanged` を返すこと
     #[test]
-    fn apply_refinement_pipeline_to_text_returns_unchanged() {
+    fn apply_pipeline_to_text_returns_unchanged() {
         assert_eq!(
-            apply_refinement_pipeline_to_text("hello", &[RefineMode::Trim], &empty_ctx()),
+            apply_pipeline_to_text("hello", &[RefineMode::Trim], &empty_ctx()),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
     }

@@ -14,7 +14,7 @@ use super::mode::RefineMode;
 ///
 /// # Returns
 /// * `(Vec<RefineMode>, Option<RefineMode>)` - テキスト用モード列と末尾の画像モード
-pub(crate) fn split_pipeline(pipeline: &[RefineMode]) -> (Vec<RefineMode>, Option<RefineMode>) {
+pub fn split_pipeline(pipeline: &[RefineMode]) -> (Vec<RefineMode>, Option<RefineMode>) {
     if pipeline.is_empty() {
         return (Vec::new(), None);
     }
@@ -41,7 +41,7 @@ pub(crate) fn split_pipeline(pipeline: &[RefineMode]) -> (Vec<RefineMode>, Optio
 ///
 /// # Returns
 /// * `Option<String>` - いずれかの段で変更があった場合は加工後テキスト、変更がなければ `None`
-pub(crate) fn apply_text_pipeline(
+pub fn apply_text_pipeline(
     text: &str,
     modes: &[RefineMode],
     ctx: &RefineContext,
