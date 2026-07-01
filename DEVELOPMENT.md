@@ -1,6 +1,6 @@
 # ClipRefiner 開発者向けドキュメント
 
-ユーザ向けの機能説明・操作方法は [README.md](README.md) を参照してください。設定の詳細は [CONFIG.md](CONFIG.md) を参照してください。
+ユーザ向けの機能説明・操作方法は [README.md](README.md) を参照してください。設定の詳細は [CONFIG.md](CONFIG.md)、バージョンごとの変更内容は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
 ## 目次
 
@@ -13,6 +13,7 @@
 - [プロジェクト構成](#プロジェクト構成)
 - [スレッドモデル](#スレッドモデル)
 - [ログ](#ログ)
+- [リリースと変更履歴](#リリースと変更履歴)
 - [コーディング規約](#コーディング規約)
 
 ---
@@ -268,6 +269,19 @@ flowchart TB
 | :--------- | :----- |
 | デバッグビルド (`cargo build` / `cargo run`) | ログファイル + 標準出力 |
 | リリースビルド | ログファイルのみ |
+
+---
+
+## リリースと変更履歴
+
+バージョンごとの利用者向け変更内容は [CHANGELOG.md](CHANGELOG.md) に記載する ([Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式)。
+
+リリース作業の目安:
+
+1. `Cargo.toml` の `version` を更新し、Git タグ `v{version}` を付与する
+2. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を新バージョン見出し (`## [x.y.z] - YYYY-MM-DD`) へ移し、空の `[Unreleased]` を用意する
+3. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
+4. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
 
 ---
 
