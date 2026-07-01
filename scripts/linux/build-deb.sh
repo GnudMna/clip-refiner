@@ -59,7 +59,7 @@ assert_cargo_deb_installed
 echo "deb パッケージの作成を開始します..."
 echo
 
-deb_args=(--release)
+deb_args=(-p clip-refiner --release)
 if [[ "$SKIP_BUILD" == true ]]; then
     deb_args+=(--no-build)
 fi
