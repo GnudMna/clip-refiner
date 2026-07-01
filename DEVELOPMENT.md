@@ -127,7 +127,7 @@ let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
 assert_eq!(output, "hello world");
 ```
 
-統合テスト (`tests/`) では監視ループ・ワーカー・履歴・正規表現の主要経路を検証する。
+統合テスト (`crates/clip-refiner/tests/`) では監視ループ・ワーカー・履歴・正規表現の主要経路を検証する。
 
 | ファイル | 検証内容 |
 | :------- | :------- |
@@ -163,15 +163,29 @@ cargo test --doc --features test-helpers
 
 ## ライブラリとしての利用
 
-`ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは `clip_refiner` クレートとして他プロジェクトから呼び出せる。ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従い、破壊的変更は [CHANGELOG.md](CHANGELOG.md) の **Breaking changes** 節に記載する。
+`ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは GUI 非依存の **`clip-refiner-core`** クレート (`clip_refiner_core`) として他プロジェクトから呼び出せる。`clip-refiner` パッケージは core を re-export しており、feature `app` (デフォルト有効) でトレイ常駐 UI と `run()` を追加する。
 
-`Cargo.toml` に依存を追加する:
+ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従い、破壊的変更は [CHANGELOG.md](CHANGELOG.md) の **Breaking changes** 節に記載する。
+
+### 依存の追加
+
+GUI 依存 (`tao`, `wry`, `tray-icon` など) を避ける場合は、次のいずれかを使う。
+
+**推奨: core クレートを直接依存**
 
 ```toml
 [dependencies]
-clip_refiner = { path = ".." }
-# または crates.io / Git リポジトリ URL
+clip-refiner-core = { path = "crates/clip-refiner-core" }
 ```
+
+**互換: `clip-refiner` で feature を無効化**
+
+```toml
+[dependencies]
+clip-refiner = { path = "..", default-features = false }
+```
+
+Rust コード上のクレート名はいずれも `clip_refiner` (re-export) または `clip_refiner_core` を使える。
 
 ### 公開 API 一覧
 
@@ -189,7 +203,7 @@ clip_refiner = { path = ".." }
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
-| アプリ | `run()` | トレイ常駐アプリ全体の起動 |
+| アプリ | `run()` | トレイ常駐アプリ全体の起動 (feature `app` が必要) |
 
 ### 使用例
 
@@ -236,20 +250,22 @@ let _ = apply_text_pipeline("  hello  ", &pipeline, &ctx);
 
 ```
 clip-refiner/
-├── src/
-│   ├── main.rs          # バイナリエントリポイント
-│   ├── lib.rs           # ライブラリクレート・run()
-│   ├── refiner/         # 加工モードと変換ロジック
-│   ├── tray/            # システムトレイ・ホットキー・セレクター UI
-│   ├── config/          # config.toml の読み書き・マイグレーション
-│   ├── platform/        # OS 固有 (通知・OCR・クリップボード画像)
-│   ├── security/        # 履歴暗号化・機密マスキング
-│   └── ui/              # クイックセレクター / 登録クリップセレクターの HTML・CSS・JS
-├── tests/               # 統合テスト
-├── scripts/             # ビルド・品質チェック用スクリプト
-├── packaging/           # Linux デスクトップエントリなど
-├── CONFIG.md            # 設定リファレンス (config.toml)
-└── wix/                 # Windows MSI 用 WiX ソース
+├── Cargo.toml           # workspace ルート (virtual manifest)
+├── crates/
+│   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
+│   │   ├── src/
+│   │   ├── tests/
+│   │   └── build.rs
+│   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)
+│       └── src/
+│           ├── config/
+│           ├── refiner/
+│           └── security/
+├── assets/
+├── scripts/
+├── packaging/
+├── CONFIG.md
+└── wix/
 ```
 
 セレクター UI (`src/ui/`) は WebView 上で動作し、`selector-common.js` に共通ロジックを集約している。
