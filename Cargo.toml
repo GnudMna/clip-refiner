@@ -71,6 +71,10 @@ path = "tests/history_flow.rs"
 name = "regex_flow"
 path = "tests/regex_flow.rs"
 
+[[test]]
+name = "ocr_flow"
+path = "tests/ocr_flow.rs"
+
 [dependencies]
 anyhow = "1.0.103"
 arboard = "3.6.1"

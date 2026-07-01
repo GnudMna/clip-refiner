@@ -153,3 +153,59 @@ fn event_mode_attempts_reprocess_on_unchanged_clipboard() {
     assert!(!event.run_configured_monitor_update());
     assert_eq!(event.clipboard_text(), "hello");
 }
+
+// ======================================================================
+// 加工パイプライン
+// ======================================================================
+/// 監視時に `pipeline` 設定が順に適用されること
+#[test]
+fn monitor_applies_configured_pipeline_chain() {
+    let mut harness = ClipboardHarness::with_text("  %E3%81%82  ")
+        .with_mode(RefineMode::Trim)
+        .with_pipeline(vec![RefineMode::UrlDecode, RefineMode::Trim]);
+
+    assert!(harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "あ");
+}
+
+/// `pipeline` 設定時は `mode` 単体ではなくパイプラインが優先されること
+#[test]
+fn monitor_pipeline_overrides_mode_when_active() {
+    let mut harness = ClipboardHarness::with_text("hello%20world")
+        .with_mode(RefineMode::Trim)
+        .with_pipeline(vec![RefineMode::UrlDecode]);
+
+    assert!(harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "hello world");
+}
+
+/// パイプライン監視加工後に Undo で加工前テキストへ戻せること
+#[test]
+fn monitor_pipeline_then_undo_restores_original() {
+    let mut harness = ClipboardHarness::with_text("  %E3%81%82  ")
+        .with_pipeline(vec![RefineMode::UrlDecode, RefineMode::Trim]);
+
+    assert!(harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "あ");
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "  %E3%81%82  ");
+}
+
+/// パイプライン設定変更が次の監視加工に反映されること
+#[test]
+fn monitor_applies_updated_pipeline_from_snapshot() {
+    let mut harness =
+        ClipboardHarness::with_text("a%2Fb").with_pipeline(vec![RefineMode::UrlDecode]);
+
+    assert!(harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "a/b");
+
+    harness.with_config_mut(|c| {
+        c.pipeline = vec![RefineMode::UrlEncode];
+    });
+    harness.replace_clipboard("c d");
+
+    assert!(harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "c%20d");
+}

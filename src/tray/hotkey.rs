@@ -514,6 +514,12 @@ impl HotkeyHandler {
             .find(|binding| binding.slot_index == slot_index)
             .map(|binding| binding.hotkey.id())
     }
+
+    /// テスト用: OCR ホットキーの ID を返す
+    #[cfg(screen_ocr)]
+    pub(crate) fn ocr_hotkey_id(&self) -> u32 {
+        self.ocr_hotkey.id()
+    }
 }
 
 #[cfg(test)]
@@ -565,7 +571,7 @@ mod tests {
                 menu: &self.menu,
                 quick_selector: None,
                 clip_selector: None,
-                #[cfg(windows)]
+                #[cfg(screen_ocr)]
                 ocr_capture: None,
                 control_flow: &mut self.control_flow,
                 last_quick_selector_show: &mut self.last_quick_selector_show,
@@ -647,19 +653,19 @@ mod tests {
             ClipboardCommand::Undo
         ));
 
-        // お気に入りホットキー
+        // お気に入りホットキー (スロット 1)
         ctx.state.with_config_mut(|config| {
             config.favorite_modes = vec![RefineMode::Trim, RefineMode::JsonFormat];
         });
         handler
             .reload_favorite_slots(&test_hotkeys(), 2)
             .expect("お気に入りホットキーの再登録に失敗");
-        let favorite_id = handler
+        let favorite_slot_one = handler
             .favorite_hotkey_id_at(1)
             .expect("スロット 1 のホットキーが登録される");
         handler.handle_event(
             GlobalHotKeyEvent {
-                id: favorite_id,
+                id: favorite_slot_one,
                 state: HotKeyState::Pressed,
             },
             &mut ctx.ctx(),
@@ -672,6 +678,26 @@ mod tests {
             rx.recv()
                 .expect("お気に入りホットキーで加工コマンドが送信される"),
             ClipboardCommand::ProcessMode(RefineMode::JsonFormat)
+        ));
+
+        // お気に入りホットキー (スロット 0)
+        let favorite_slot_zero = handler
+            .favorite_hotkey_id_at(0)
+            .expect("スロット 0 のホットキーが登録される");
+        handler.handle_event(
+            GlobalHotKeyEvent {
+                id: favorite_slot_zero,
+                state: HotKeyState::Pressed,
+            },
+            &mut ctx.ctx(),
+        );
+        assert_eq!(
+            ctx.state.with_config(|config| config.mode),
+            RefineMode::Trim
+        );
+        assert!(matches!(
+            rx.recv().expect("スロット 0 で加工コマンドが送信される"),
+            ClipboardCommand::ProcessMode(RefineMode::Trim)
         ));
 
         // 終了
@@ -727,5 +753,15 @@ mod tests {
             .expect("ホットキーの再登録に失敗");
 
         assert_ne!(handler.quit_hotkey_id(), quit_before);
+
+        #[cfg(screen_ocr)]
+        {
+            let ocr_before = handler.ocr_hotkey_id();
+            updated.ocr = "Alt+Ctrl+F8".to_string();
+            handler
+                .reload(&updated, &[])
+                .expect("OCR ホットキーの再登録に失敗");
+            assert_ne!(handler.ocr_hotkey_id(), ocr_before);
+        }
     }
 }
