@@ -210,4 +210,16 @@ mod tests {
         let state = test_app_state();
         assert!(!state.is_config_persistence_enabled());
     }
+
+    /// ワーカー稼働状態の更新
+    #[test]
+    fn test_worker_alive_state() {
+        let state = test_app_state();
+        assert!(state.is_worker_alive());
+        state.set_worker_alive(false);
+        assert!(!state.is_worker_alive());
+        state.set_worker_recovery_pending(true);
+        assert!(state.take_worker_recovery_pending());
+        assert!(!state.take_worker_recovery_pending());
+    }
 }

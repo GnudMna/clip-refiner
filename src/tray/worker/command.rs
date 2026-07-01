@@ -20,6 +20,8 @@ pub enum ClipboardCommand {
     RegisterClipFromClipboard,
     /// OCR 結果をクリップボードへ書き込む
     SetOcrText(SecretString),
+    /// ワーカースレッドの終了要求
+    Shutdown,
 }
 
 impl std::fmt::Debug for ClipboardCommand {
@@ -33,6 +35,7 @@ impl std::fmt::Debug for ClipboardCommand {
             Self::Undo => f.write_str("Undo"),
             Self::RegisterClipFromClipboard => f.write_str("RegisterClipFromClipboard"),
             Self::SetOcrText(_) => f.debug_tuple("SetOcrText").field(&"...").finish(),
+            Self::Shutdown => f.write_str("Shutdown"),
         }
     }
 }

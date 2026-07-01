@@ -99,17 +99,16 @@ impl AppConfig {
     /// 読み込み直後の後処理: スキーマ移行・値クランプ・ホットキー検証
     ///
     /// # Returns
-    /// * `(Self, bool)` - 後処理済み設定と、スキーマ移行が実行されたかどうか
-    pub fn prepare_loaded(self) -> (Self, bool) {
-        let migration = super::super::migrate::migrate_config(self);
-        let mut config = migration.config;
-        config.clamp_values();
-        config.normalize_clips();
-        config.normalize_favorite_modes();
-        config.normalize_pipeline();
-        config.normalize_platform_modes();
-        config.hotkeys.fix_invalid();
-        (config, migration.migrated)
+    /// * `ConfigMigration` - 後処理済み設定と移行メタデータ
+    pub fn prepare_loaded(self) -> super::super::migrate::ConfigMigration {
+        let mut migration = super::super::migrate::migrate_config(self);
+        migration.config.clamp_values();
+        migration.config.normalize_clips();
+        migration.config.normalize_favorite_modes();
+        migration.config.normalize_pipeline();
+        migration.config.normalize_platform_modes();
+        migration.config.hotkeys.fix_invalid();
+        migration
     }
 
     /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新

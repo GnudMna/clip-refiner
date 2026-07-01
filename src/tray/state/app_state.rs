@@ -1,4 +1,7 @@
-use std::sync::{Mutex, RwLock, atomic::AtomicU64};
+use std::sync::{
+    Mutex, RwLock,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use std::time::{Duration, Instant, SystemTime};
 
 use super::super::dispatch;
@@ -19,6 +22,10 @@ use tao::event_loop::EventLoopProxy;
 ///
 /// 設定、クリップボードの最終処理内容、暗号化履歴などを保持する
 pub struct AppState {
+    /// クリップボードワーカーが稼働中かどうか
+    worker_alive: AtomicBool,
+    /// ワーカー再起動成功時にユーザーへ通知するかどうか
+    worker_recovery_pending: AtomicBool,
     /// 永続化設定データ
     pub config: RwLock<AppConfig>,
     /// クリップボード監視スレッドの世代管理カウンタ
@@ -52,6 +59,8 @@ impl AppState {
         let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
         Ok(Self {
             config: RwLock::new(config),
+            worker_alive: AtomicBool::new(false),
+            worker_recovery_pending: AtomicBool::new(false),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
             undo_text: Mutex::new(None),
@@ -122,6 +131,27 @@ impl AppState {
     /// 設定を変更する
     pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
         f(&mut self.config.write_ignore_poison())
+    }
+
+    /// クリップボードワーカーが稼働中かどうか
+    pub fn is_worker_alive(&self) -> bool {
+        self.worker_alive.load(Ordering::SeqCst)
+    }
+
+    /// クリップボードワーカーの稼働状態を更新する
+    pub fn set_worker_alive(&self, alive: bool) {
+        self.worker_alive.store(alive, Ordering::SeqCst);
+    }
+
+    /// ワーカー復旧成功時の通知が必要であることを記録する
+    pub fn set_worker_recovery_pending(&self, pending: bool) {
+        self.worker_recovery_pending
+            .store(pending, Ordering::SeqCst);
+    }
+
+    /// ワーカー復旧成功時の通知が必要かどうかを取得し、フラグをクリアする
+    pub fn take_worker_recovery_pending(&self) -> bool {
+        self.worker_recovery_pending.swap(false, Ordering::SeqCst)
     }
 
     /// 設定のディスク保存が有効かどうかを返す
@@ -272,6 +302,8 @@ pub(crate) fn test_app_state() -> AppState {
 
     AppState {
         config: RwLock::new(config),
+        worker_alive: AtomicBool::new(true),
+        worker_recovery_pending: AtomicBool::new(false),
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
         undo_text: Mutex::new(None),

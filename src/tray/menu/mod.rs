@@ -148,6 +148,8 @@ pub struct TrayMenu {
     pub open_config_item: MenuItem,
     /// 設定ファイルを再読み込みする項目
     pub reload_config_item: MenuItem,
+    /// 停止したクリップボードワーカーを再起動する項目
+    pub retry_clipboard_worker_item: MenuItem,
     /// ショートカット一覧表示項目
     pub shortcut_list_item: MenuItem,
     /// ログイン時の自動起動を切り替える項目
@@ -196,6 +198,8 @@ impl TrayMenu {
             CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
         let open_config_item = MenuItem::new("設定を開く", true, None);
         let reload_config_item = MenuItem::new("設定を再読み込み", true, None);
+        let retry_clipboard_worker_item = MenuItem::new("クリップボード監視を再開", true, None);
+        retry_clipboard_worker_item.set_enabled(false);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -215,6 +219,7 @@ impl TrayMenu {
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &open_config_item as &dyn tray_icon::menu::IsMenuItem,
                 &reload_config_item as &dyn tray_icon::menu::IsMenuItem,
+                &retry_clipboard_worker_item as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
@@ -245,6 +250,7 @@ impl TrayMenu {
             notification,
             open_config_item,
             reload_config_item,
+            retry_clipboard_worker_item,
             shortcut_list_item,
             launch_at_login_item,
         };
@@ -317,6 +323,11 @@ impl TrayMenu {
 
         Ok(())
     }
+
+    /// クリップボードワーカー再開メニューの有効状態を更新する
+    pub fn set_clipboard_worker_retry_enabled(&self, enabled: bool) {
+        self.retry_clipboard_worker_item.set_enabled(enabled);
+    }
 }
 
 // ======================================================================
@@ -383,6 +394,7 @@ mod tests {
                 .expect("通知メニューの構築に失敗"),
             open_config_item: MenuItem::new("設定を開く", true, None),
             reload_config_item: MenuItem::new("設定を再読み込み", true, None),
+            retry_clipboard_worker_item: MenuItem::new("クリップボード監視を再開", true, None),
             shortcut_list_item: MenuItem::new("ショートカット一覧", true, None),
             launch_at_login_item: CheckMenuItem::new("ログイン時に起動", true, false, None),
         };
