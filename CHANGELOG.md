@@ -6,31 +6,30 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-02
+
 ### Added
 
-- [CONFIG.md](CONFIG.md) を追加し、設定リファレンスを README から分離
-- [DEVELOPMENT.md](DEVELOPMENT.md) にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
-- 画面 OCR を macOS (Apple Vision) / Linux (Tesseract) で利用可能に (`Alt+Shift+O`、WebView オーバーレイ)
-- Linux 向け画面 OCR 用の `ocr_overlay.html` と `xcap` による領域キャプチャ
+- 画面 OCR を macOS (Apple Vision) / Linux (Tesseract) で利用可能に (`Alt+Shift+O`、WebView オーバーレイ。Linux は `xcap` による領域キャプチャ)
+- `excel-to-image` 加工モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
 - ライブラリ API: `config` モジュールの公開、加工パイプライン API (`apply_text_pipeline`, `apply_pipeline_to_text`, `split_pipeline`)、クレートルート re-export、`RefineContext::with_regex`
 - `clip-refiner-core` クレートで加工ロジックと設定型を GUI 非依存に分離 (`crates/` 配下)
 - feature `app` (デフォルト) でトレイ UI / CLI をオプション化。ライブラリ利用は `default-features = false` または core 直接依存
+- [CONFIG.md](CONFIG.md) を追加し、設定リファレンス・加工モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例を README から分離
+- [CHANGELOG.md](CHANGELOG.md) を追加 (Keep a Changelog 形式)
+- [DEVELOPMENT.md](DEVELOPMENT.md) にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
 
 ### Changed
 
 - ワークスペースを `crates/clip-refiner` と `crates/clip-refiner-core` に再構成 (ルートは virtual manifest)
-- `HotkeySettings` の UI 向けメソッドを `tray/hotkey/settings.rs` へ移動
-
-- `tray/hotkey` を解決・登録・イベント処理のサブモジュールへ分割
-- `platform/ocr_overlay/windows` を型・座標変換・描画・ウィンドウプロシージャのサブモジュールへ分割
-- 全 OS で有効になった `RefineMode::is_supported_on_current_platform` と `normalize_platform_modes` を除去
-- README を概要・クイックスタート中心に簡素化し、加工モード一覧・UI 操作・使用例・セキュリティ詳細を [CONFIG.md](CONFIG.md) へ移行
-- [CONFIG.md](CONFIG.md) に加工モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例・ログイン時自動起動の節を追加
-- 登録クリップのドキュメント記述を `registered-clips.dat` 暗号化保存 (設定 v2) に合わせて修正
+- README を概要・クイックスタート中心に簡素化
+- プラットフォーム別の加工モード制限を廃止 (`RefineMode::is_supported_on_current_platform` / `normalize_platform_modes` を除去)
+- 設定 `version` がアプリより新しい場合、全項目のデフォルト化ではなく `version` を現行スキーマへクランプして既存値を保持
 - クリップボードワーカー初期化失敗時に UI へ通知し、自動復旧を試みるように変更
-- 設定 `version` がアプリより新しい場合、全項目のデフォルト化ではなく `version` を現行スキーマへクランプして既存値を保持するように変更
-- `excel-to-image` 加工モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
-- OCR 前処理 (小画像の拡大・日本語空白除去) を `platform/ocr/normalize.rs` / `prepare.rs` へ共通化
+- OCR 前処理 (小画像の拡大・日本語空白除去) を共通化
+- 登録クリップのドキュメント記述を `registered-clips.dat` 暗号化保存 (設定 v2) に合わせて修正
+- `tray/hotkey` を解決・登録・イベント処理のサブモジュールへ分割。`HotkeySettings` の UI 向けメソッドを `tray/hotkey/settings.rs` へ移動
+- `platform/ocr_overlay/windows` を型・座標変換・描画・ウィンドウプロシージャのサブモジュールへ分割
 
 ### Fixed
 
@@ -270,7 +269,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.9.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...develop
+[0.10.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.9.0...v0.10.0
 [0.9.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.8.0...v0.9.0
 [0.8.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.7.1...v0.8.0
 [0.7.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.7.0...v0.7.1
