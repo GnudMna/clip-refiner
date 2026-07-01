@@ -20,7 +20,7 @@
 </p>
 
 <p>
-  <sub>ソースからビルドする場合やコントリビュートする場合は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照</sub>
+  <sub>設定の詳細は <a href="CONFIG.md">CONFIG.md</a>、ビルド・開発は <a href="DEVELOPMENT.md">DEVELOPMENT.md</a> を参照</sub>
 </p>
 
 </div>
@@ -33,27 +33,46 @@
 <tr>
 <td valign="top" width="50%">
 
-- [✨ 主な機能](#-主な機能)
-- [🛠️ 加工モード一覧](#️-加工モード一覧)
-- [🚀 使用方法](#-使用方法)
-- [🖥️ システムトレイメニュー](#️-システムトレイメニュー)
-- [🪟 クイックセレクタ](#-クイックセレクタ)
-- [⭐ お気に入り変換モード](#-お気に入り変換モード)
-- [📋 登録クリップセレクタ](#-登録クリップセレクタ)
-- [🔍 画面 OCR (Windows)](#-画面-ocr-windows)
-- [⌨️ グローバルホットキー](#️-グローバルホットキー)
+<ul>
+<li><a href="#-主な機能">✨ 主な機能</a></li>
+<li><a href="#️-加工モード一覧">🛠️ 加工モード一覧</a></li>
+<li><a href="#-使用方法">🚀 使用方法</a>
+  <ul>
+  <li><a href="#監視モード-常駐">監視モード (常駐)</a></li>
+  <li><a href="#ワンショットモード">ワンショットモード</a></li>
+  <li><a href="#コマンドラインオプション">コマンドラインオプション</a></li>
+  </ul>
+</li>
+<li><a href="#️-システムトレイメニュー">🖥️ システムトレイメニュー</a></li>
+<li><a href="#-クイックセレクタ">🪟 クイックセレクタ</a></li>
+<li><a href="#-登録クリップセレクタ">📋 登録クリップセレクタ</a></li>
+<li><a href="#-お気に入り変換モード">⭐ お気に入り変換モード</a></li>
+<li><a href="#-画面-ocr-windows">🔍 画面 OCR (Windows)</a></li>
+<li><a href="#️-グローバルホットキー">⌨️ グローバルホットキー</a></li>
+</ul>
 
 </td>
 <td valign="top" width="50%">
 
-- [↩️ 加工の取り消し](#️-加工の取り消し)
-- [🕘 クリップボード履歴](#-クリップボード履歴)
-- [🚀 ログイン時の自動起動](#-ログイン時の自動起動)
-- [📝 加工モードの使用例](#-加工モードの使用例)
-- [📦 インストール](#-インストール)
-- [⚙️ 設定](#️-設定)
-- [📋 ログ](#-ログ)
-- [📄 ライセンス](#-ライセンス)
+<ul>
+<li><a href="#️-加工の取り消し">↩️ 加工の取り消し</a></li>
+<li><a href="#-クリップボード履歴">🕘 クリップボード履歴</a>
+  <ul>
+  <li><a href="#-セキュリティ">🔒 セキュリティ</a></li>
+  </ul>
+</li>
+<li><a href="#-ログイン時の自動起動">🚀 ログイン時の自動起動</a></li>
+<li><a href="#-加工モードの使用例">📝 加工モードの使用例</a></li>
+<li><a href="#-インストール">📦 インストール</a>
+  <ul>
+  <li><a href="#windows-msi">Windows (MSI)</a></li>
+  <li><a href="#macos-dmg">macOS (DMG)</a></li>
+  <li><a href="#linux-deb">Linux (deb)</a></li>
+  </ul>
+</li>
+<li><a href="#️-設定">⚙️ 設定</a></li>
+<li><a href="#-ライセンス">📄 ライセンス</a></li>
+</ul>
 
 </td>
 </tr>
@@ -336,7 +355,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 
 ### ワンショットモード
 
-<p>特定の加工を一度だけ行いたい場合は <code>--mode</code> (短縮形 <code>-m</code>) でモードを指定します。常駐せずに、現在のクリップボードの内容を加工して書き戻し、すぐに終了します。</p>
+<p>特定の加工を一度だけ行いたい場合は <code>--mode</code> (短縮形 <code>-m</code>) でモードを指定します。複数モードを順に適用する場合は <code>--pipeline</code> を使います (<code>--mode</code> より優先)。常駐せずに、現在のクリップボードの内容を加工して書き戻し、すぐに終了します。</p>
 
 ```bash
 # クリップボード内の URL をデコードする
@@ -344,6 +363,9 @@ Windows / macOS / Linux 対応。多重起動防止付き
 
 # 短縮形でも指定できる
 ./ClipRefiner.exe -m json-format
+
+# 複数モードを順に適用する
+./ClipRefiner.exe --pipeline url-decode trim
 
 # 正規表現で置換 (config.toml の [regex] を使用)
 ./ClipRefiner.exe -m regex-replace
@@ -354,17 +376,18 @@ Windows / macOS / Linux 対応。多重起動防止付き
 
 ### コマンドラインオプション
 
-| オプション                                        | 説明                                                                                    |
-| :------------------------------------------------ | :-------------------------------------------------------------------------------------- |
-| <code>-m</code>, <code>--mode &lt;MODE&gt;</code> | ワンショットで実行する加工モードを指定 ([加工モード一覧](#️-加工モード一覧) 参照)        |
-| <code>--regex-pattern &lt;PATTERN&gt;</code>      | 正規表現パターン (<code>config.toml</code> の <code>regex.pattern</code> を上書き)      |
-| <code>--regex-replacement &lt;TEXT&gt;</code>     | 置換文字列 (<code>regex.replacement</code> を上書き。<code>regex-replace</code> で使用) |
-| <code>--regex-case-insensitive</code>             | 大文字小文字を無視 (<code>(?i)</code> 相当)                                             |
-| <code>--regex-multiline</code>                    | 複数行モード (<code>(?m)</code> 相当)                                                   |
-| <code>-h</code>, <code>--help</code>              | ヘルプを表示                                                                            |
-| <code>-V</code>, <code>--version</code>           | バージョンを表示                                                                        |
+| オプション                                        | 説明                                                                                                               |
+| :------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------- |
+| <code>-m</code>, <code>--mode &lt;MODE&gt;</code> | ワンショットで実行する加工モードを指定 ([加工モード一覧](#️-加工モード一覧) 参照)                                   |
+| <code>--pipeline &lt;MODE&gt;...</code>           | ワンショットで順に適用する加工モード列 (<code>--mode</code> より優先。例: <code>--pipeline url-decode trim</code>) |
+| <code>--regex-pattern &lt;PATTERN&gt;</code>      | 正規表現パターン (<code>config.toml</code> の <code>regex.pattern</code> を上書き)                                 |
+| <code>--regex-replacement &lt;TEXT&gt;</code>     | 置換文字列 (<code>regex.replacement</code> を上書き。<code>regex-replace</code> で使用)                            |
+| <code>--regex-case-insensitive</code>             | 大文字小文字を無視 (<code>(?i)</code> 相当)                                                                        |
+| <code>--regex-multiline</code>                    | 複数行モード (<code>(?m)</code> 相当)                                                                              |
+| <code>-h</code>, <code>--help</code>              | ヘルプを表示                                                                                                       |
+| <code>-V</code>, <code>--version</code>           | バージョンを表示                                                                                                   |
 
-<p>正規表現オプションはワンショット実行時のみ有効です。常駐モードでは <code>config.toml</code> の <code>[regex]</code> セクションが使用されます。</p>
+<p>正規表現オプションはワンショット実行時のみ有効です。常駐モードでは <code>config.toml</code> の <code>[regex]</code> セクションが使用されます。加工パイプラインの詳細は <a href="CONFIG.md#加工パイプライン-pipeline">CONFIG.md</a> を参照してください。</p>
 
 ---
 
@@ -444,14 +467,14 @@ Windows / macOS / Linux 対応。多重起動防止付き
 <li><strong>マウス操作</strong>: ホバー選択・クリック決定にも対応</li>
 </ul>
 
-| キー                                       | 動作                                               |
-| :----------------------------------------- | :------------------------------------------------- |
-| <kbd>↑</kbd> / <kbd>↓</kbd>                | 候補の移動                                         |
-| <kbd>Home</kbd> / <kbd>End</kbd>           | 先頭 / 末尾へ移動                                  |
-| <kbd>Enter</kbd>                           | 選択中のモードを決定                               |
-| <kbd>Ctrl</kbd> + <kbd>D</kbd>             | 選択中のモードをお気に入りに登録 / 解除            |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | お気に入り内の並び順を変更              |
-| <kbd>Esc</kbd>                             | 検索文字列があればクリア、空ならウィンドウを閉じる |
+| キー                                                             | 動作                                               |
+| :--------------------------------------------------------------- | :------------------------------------------------- |
+| <kbd>↑</kbd> / <kbd>↓</kbd>                                      | 候補の移動                                         |
+| <kbd>Home</kbd> / <kbd>End</kbd>                                 | 先頭 / 末尾へ移動                                  |
+| <kbd>Enter</kbd>                                                 | 選択中のモードを決定                               |
+| <kbd>Ctrl</kbd> + <kbd>D</kbd>                                   | 選択中のモードをお気に入りに登録 / 解除            |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | お気に入り内の並び順を変更                         |
+| <kbd>Esc</kbd>                                                   | 検索文字列があればクリア、空ならウィンドウを閉じる |
 
 ---
 
@@ -470,7 +493,7 @@ Windows / macOS / Linux 対応。多重起動防止付き
 | <kbd>↑</kbd> / <kbd>↓</kbd>        | 候補の移動                                         |
 | <kbd>Home</kbd> / <kbd>End</kbd>   | 先頭 / 末尾へ移動                                  |
 | <kbd>Enter</kbd>                   | 選択中の登録クリップをクリップボードへコピー       |
-| <kbd>Del</kbd>                     | 選択中の登録クリップを削除                           |
+| <kbd>Del</kbd>                     | 選択中の登録クリップを削除                         |
 | <kbd>Ctrl</kbd> + <kbd>Enter</kbd> | 現在のクリップボード内容を新規登録                 |
 | <kbd>Esc</kbd>                     | 検索文字列があればクリア、空ならウィンドウを閉じる |
 
@@ -738,9 +761,9 @@ multiline = false
 <summary><strong>ケース変換</strong> (<code>to-snake-case</code>)</summary>
 <br>
 
-|                       |                        |
-| :-------------------- | :--------------------- |
-| <strong>入力</strong> | <code>HelloWorld</code> |
+|                       |                          |
+| :-------------------- | :----------------------- |
+| <strong>入力</strong> | <code>HelloWorld</code>  |
 | <strong>出力</strong> | <code>hello_world</code> |
 
 </details>
@@ -786,7 +809,7 @@ sudo dpkg -i clip-refiner_{version}-1_{arch}.deb
 
 ## ⚙️ 設定
 
-<p>設定ファイル (<code>config.toml</code>) は設定変更のたびに自動保存され、以下の場所に配置されます。</p>
+<p>設定は <code>config.toml</code> に自動保存されます。トレイメニューの「設定を開く」から編集するか、次の場所のファイルを直接編集できます。</p>
 
 <table>
 <tbody>
@@ -801,125 +824,7 @@ sudo dpkg -i clip-refiner_{version}-1_{arch}.deb
 </tbody>
 </table>
 
-<div style="border-left: 4px solid #7c5cff; padding: 10px 14px; margin: 12px 0; background: rgba(124, 92, 255, 0.08); border-radius: 0 6px 6px 0;">
-<strong>設定ディレクトリ名:</strong> Windows は <code>ClipRefiner</code>、Linux/macOS は <code>clip-refiner</code> (OS ごとの慣例に合わせた名称)
-</div>
-
-<p>設定ファイルの解析に失敗した場合、元ファイルは <code>config.toml.bak</code> として退避され、デフォルト設定で起動します。TOML 形式のため <code>#</code> でコメントを書けます。初回保存時は各項目の説明コメントが付与され、以降の保存ではユーザーが追記したコメントを維持したまま値のみ更新されます。設定ディレクトリとログファイルは、Unix では所有者専用パーミッション、Windows では現在ユーザー専用 DACL で保護されます。</p>
-
-### 処理の制限
-
-| 対象                                | 上限                    |
-| :---------------------------------- | :---------------------- |
-| クリップボード本文                  | 2 MiB                   |
-| JSON / YAML / Markdown パーサー入力 | 1 MiB                   |
-| 正規表現パターン                    | 8 KiB                   |
-| 登録クリップ                          | 100 件 (ラベル 64 文字) |
-| お気に入り変換モード                | 20 件                   |
-| 加工パイプライン                    | 10 段                   |
-
-<p>上限を超える入力は処理されず、登録クリップの追加は拒否されます。通知・履歴メニュー・登録クリッププレビューでは、API キー・JWT・PEM 秘密鍵・資格情報行など機密らしい内容を <code>[機密情報のため非表示]</code> に自動置換します (クリップボード本体は加工対象のまま保持)。</p>
-
-### 設定項目
-
-<table>
-<thead>
-<tr>
-<th align="left">キー</th>
-<th align="left">型</th>
-<th align="left">デフォルト</th>
-<th align="left">説明</th>
-</tr>
-</thead>
-<tbody>
-<tr><td><code>version</code></td><td>number</td><td><code>1</code></td><td>設定スキーマのバージョン</td></tr>
-<tr><td><code>mode</code></td><td>string</td><td><code>"UrlDecode"</code></td><td>使用する加工モード (<code>pipeline</code> が空の場合に監視で適用)</td></tr>
-<tr><td><code>pipeline</code></td><td>array</td><td>(空)</td><td>監視時に順に適用する加工モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は <code>mode</code> のみ。例: <code>["UrlDecode", "Trim"]</code>)</td></tr>
-<tr><td><code>favorite_modes</code></td><td>array</td><td>(空)</td><td>お気に入り変換モード (PascalCase の配列、最大 20 件。例: <code>["UrlDecode", "Trim"]</code>)</td></tr>
-<tr><td><code>interval_ms</code></td><td>number</td><td><code>1000</code></td><td>クリップボードのポーリング間隔 (ミリ秒、100〜60000)</td></tr>
-<tr><td><code>monitor_mode</code></td><td>string</td><td><code>"Polling"</code></td><td>監視方式。<code>"Polling"</code> または <code>"Event"</code></td></tr>
-<tr><td><code>is_paused</code></td><td>bool</td><td><code>false</code></td><td>監視を一時停止するかどうか</td></tr>
-<tr><td><code>history_enabled</code></td><td>bool</td><td><code>false</code></td><td>加工履歴の有効・無効</td></tr>
-<tr><td><code>history_limit</code></td><td>number</td><td><code>10</code></td><td>履歴の最大保持件数 (1〜100)</td></tr>
-<tr><td><code>notification_settings.enabled</code></td><td>bool</td><td><code>false</code></td><td>デスクトップ通知の有効・無効</td></tr>
-<tr><td><code>notification_settings.notify_mode</code></td><td>bool</td><td><code>true</code></td><td>モード変更時の通知</td></tr>
-<tr><td><code>notification_settings.notify_result</code></td><td>bool</td><td><code>false</code></td><td>通知にクリップボードの内容を表示するかどうか</td></tr>
-<tr><td><code>notification_settings.notify_pause</code></td><td>bool</td><td><code>true</code></td><td>一時停止切替時の通知</td></tr>
-<tr><td><code>hotkeys.quick_selector</code></td><td>string</td><td><code>"Alt+Shift+S"</code></td><td>クイックセレクター表示</td></tr>
-<tr><td><code>hotkeys.clip_selector</code></td><td>string</td><td><code>"Alt+Shift+T"</code></td><td>登録クリップセレクター表示</td></tr>
-<tr><td><code>hotkeys.ocr</code></td><td>string</td><td><code>"Alt+Shift+O"</code></td><td>画面範囲選択 OCR の開始 (<strong>Windows のみ</strong>)</td></tr>
-<tr><td><code>hotkeys.notification</code></td><td>string</td><td><code>"Alt+Shift+N"</code></td><td>デスクトップ通知の ON/OFF</td></tr>
-<tr><td><code>hotkeys.pause</code></td><td>string</td><td><code>"Alt+Shift+P"</code></td><td>監視の一時停止・再開</td></tr>
-<tr><td><code>hotkeys.undo</code></td><td>string</td><td><code>"Alt+Shift+Z"</code></td><td>直近の加工を取り消し</td></tr>
-<tr><td><code>hotkeys.quit</code></td><td>string</td><td><code>"Alt+Shift+Q"</code></td><td>アプリケーション終了</td></tr>
-<tr><td><code>hotkeys.favorite_mode_slots</code></td><td>array</td><td>(空)</td><td>お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>〜<kbd>9</kbd> / <kbd>F1</kbd>〜<kbd>F11</kbd>。空文字で無効)</td></tr>
-<tr><td><code>regex.pattern</code></td><td>string</td><td><code>""</code></td><td>正規表現パターン (最大 8 KiB)</td></tr>
-<tr><td><code>regex.replacement</code></td><td>string</td><td><code>""</code></td><td>置換文字列 (<code>regex-replace</code> で使用。<code>$1</code> 形式のキャプチャ参照可)</td></tr>
-<tr><td><code>regex.case_insensitive</code></td><td>bool</td><td><code>false</code></td><td>大文字小文字を無視 (<code>(?i)</code> 相当)</td></tr>
-<tr><td><code>regex.multiline</code></td><td>bool</td><td><code>false</code></td><td>複数行モード (<code>(?m)</code> 相当)</td></tr>
-<tr><td><code>[[clips]]</code></td><td>array</td><td>(空)</td><td>登録クリップ (<code>label</code> / <code>text</code> / <code>image_file</code>)。最大 100 件</td></tr>
-</tbody>
-</table>
-
-### ホットキー形式
-
-<p><code>Alt+Shift+S</code> のように、<code>+</code> 区切りで修飾キーとキーを指定します。</p>
-
-<ul>
-<li><strong>修飾キー</strong>: <code>Alt</code>, <code>Shift</code>, <code>Ctrl</code> (<code>Control</code> 可), <code>Meta</code> (<code>Super</code> / <code>Win</code> 可)</li>
-<li><strong>キー</strong>: <code>A</code>〜<code>Z</code>, <code>F1</code>〜<code>F12</code></li>
-</ul>
-
-<p>不正な値は読み込み時にデフォルトへ置き換えられます (お気に入りスロットの空文字は意図的な無効化として維持)。</p>
-
-### 加工パイプライン (`pipeline`)
-
-<p><code>pipeline</code> に複数の加工モードを指定すると、クリップボード監視時に左から順に連鎖適用されます。空の場合は従来どおり <code>mode</code> のみが適用されます。トレイメニューからモードを選択すると <code>pipeline</code> はクリアされ、単一モードへ切り替わります。</p>
-
-```toml
-mode = "UrlDecode"
-pipeline = ["UrlDecode", "Trim", "JsonFormat"]
-```
-
-<ul>
-<li><strong>最大段数</strong>: 10 段まで</li>
-<li><strong>画像出力</strong>: <code>ExcelToImage</code> はパイプライン末尾へ自動移動 (Windows のみ)</li>
-<li><strong>通知</strong>: 連鎖適用時は <code>URLデコード → 全体をトリム → JSON整形</code> のようにモード名を連結して表示</li>
-</ul>
-
-<p>常駐中は監視ループが約 2 秒ごとに設定ファイルの更新時刻を確認し、外部編集を検知したら自動で再読み込みします (アプリ自身の保存直後は誤検知を避けるため約 2 秒間は抑制)。すぐに反映したい場合や形式の確認には、トレイの「設定を再読み込み」を使用してください。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。</p>
-
-### 監視方式 (<code>monitor_mode</code>)
-
-| 方式                 | 説明                                                                                                                                                                                                                              |
-| :------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <code>Polling</code> | 一定間隔 (<code>interval_ms</code>) でクリップボードの内容を読み取り、変更を検知。すべてのプラットフォームで動作する基本方式                                                                                                      |
-| <code>Event</code>   | OS の変更トークン (Windows: シーケンス番号、macOS: <code>changeCount</code>、Linux: X11 の CLIPBOARD オーナー / Wayland の data-control 選択イベント) を監視。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷 |
-
-<div style="border-left: 4px solid #ee5253; padding: 10px 14px; margin: 12px 0; background: rgba(238, 82, 83, 0.08); border-radius: 0 6px 6px 0;">
-<strong>Linux での注意:</strong> Wayland では <code>ext-data-control-v1</code> または <code>wlr-data-control-unstable-v1</code> に対応した compositor (GNOME、KDE、Sway、Hyprland など) で <code>Event</code> 方式が利用できます。いずれのバックエンドも利用できない環境では、自動的にポーリングへフォールバックします。
-</div>
-
----
-
-## 📋 ログ
-
-<p>ログファイルは設定ディレクトリ内の <code>logs/</code> フォルダに日次ローテーションで保存されます。不具合報告時は該当する日付のログファイルを添付してください。</p>
-
-<table>
-<tbody>
-<tr>
-<td width="140"><strong>Windows</strong></td>
-<td><code>%APPDATA%\ClipRefiner\logs\</code></td>
-</tr>
-<tr>
-<td><strong>Linux / macOS</strong></td>
-<td><code>~/.config/clip-refiner/logs/</code></td>
-</tr>
-</tbody>
-</table>
-
-<p>ログレベルの詳細設定 (<code>RUST_LOG</code> など) は <a href="DEVELOPMENT.md#ログ">DEVELOPMENT.md</a> を参照してください。</p>
+<p>設定項目の一覧、ホットキー形式、加工パイプライン、監視方式、処理上限、ログの保存場所などは <strong><a href="CONFIG.md">CONFIG.md</a></strong> (設定リファレンス) にまとめています。</p>
 
 ---
 
@@ -929,10 +834,6 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 <p>
 <a href="LICENSE">All Rights Reserved</a>
-</p>
-
-<p>
-<sub><a href="DEVELOPMENT.md">開発者向けドキュメント</a></sub>
 </p>
 
 </div>
