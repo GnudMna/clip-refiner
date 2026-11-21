@@ -1,6 +1,7 @@
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![cfg_attr(windows, windows_subsystem = "windows")] // Windowsでコンソールを出さないための設定
 
 mod config;
+mod consts;
 mod notification;
 mod refiner;
 mod tray;
@@ -70,12 +71,12 @@ fn setup_console() {
 /// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す。
 ///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを終了する。
 fn ensure_single_instance() -> Result<SingleInstance> {
-    let instance = SingleInstance::new("com.y_hirata.clip-refiner")
+    let instance = SingleInstance::new(consts::APP_ID)
         .context("多重起動防止のインスタンス作成に失敗しました")?;
 
     if !instance.is_single() {
-        let msg = "ClipRefinerは既に実行されています。";
-        notification::error::show_error_notification("多重起動", msg);
+        let msg = format!("{}は既に実行されています。", consts::APP_NAME);
+        notification::show_simple_notification("多重起動", &msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
     }

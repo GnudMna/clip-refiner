@@ -1,13 +1,14 @@
-use anyhow::{Context, Result};
 use std::sync::Mutex;
-use tray_icon::{
-    Icon, TrayIcon, TrayIconBuilder,
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
-};
 
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
+
+use anyhow::{Context, Result};
+use tray_icon::{
+    Icon, TrayIcon, TrayIconBuilder,
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+};
 
 /// 変換モードのカテゴリごとのグループ
 pub struct CategoryGroup {
@@ -72,6 +73,7 @@ pub struct TrayMenu {
     pub interval: IntervalMenu,
     pub history: HistoryMenu,
     pub show_success_notification_item: CheckMenuItem,
+    pub shortcut_list_item: MenuItem,
 }
 
 impl TrayMenu {
@@ -102,9 +104,10 @@ impl TrayMenu {
         let show_success_notification_item =
             CheckMenuItem::new("成功通知を表示", true, show_success_notification, None);
 
-        // 一時停止・終了メニュー
+        // その他のメニュー
         let pause_item =
             CheckMenuItem::new("一時停止", true, state.paused.load(Ordering::Relaxed), None);
+        let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
         // メインメニューの組み立て
@@ -117,6 +120,8 @@ impl TrayMenu {
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &show_success_notification_item as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -142,6 +147,7 @@ impl TrayMenu {
             interval,
             history,
             show_success_notification_item,
+            shortcut_list_item,
         };
 
         // カテゴリラベルの初期更新
@@ -178,6 +184,7 @@ impl TrayMenu {
         // 期待されるサブメニューの順序
         let category_order = [
             RefineCategory::UrlActions,
+            RefineCategory::Path,
             RefineCategory::LineActions,
             RefineCategory::Trim,
             RefineCategory::Escape,

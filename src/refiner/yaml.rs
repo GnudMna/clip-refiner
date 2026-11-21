@@ -52,9 +52,6 @@ mod tests {
     use super::*;
     use serde_yaml::Value;
 
-    // ---------------------------
-    // yaml_to_json
-    // ---------------------------
     #[test]
     fn test_yaml_to_json_valid() {
         let input = "b: 1\na: 2\n";
@@ -74,9 +71,6 @@ mod tests {
         assert_eq!(output, input);
     }
 
-    // ---------------------------
-    // yaml_to_json_preserve_order
-    // ---------------------------
     #[test]
     fn test_yaml_to_json_preserve_order_valid() {
         let input = "z: 1\na: 2\nm: 3\n";

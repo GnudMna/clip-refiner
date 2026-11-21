@@ -1,17 +1,19 @@
 use std::sync::{Arc, atomic::Ordering};
 
+use super::menu::TrayMenu;
+use super::monitor::{init_clipboard, spawn_monitor_thread, update_monitor_mode_impl};
+use super::selector::init_selector;
+use super::state::{AppEvent, AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::notification;
 use crate::refiner::{RefineMode, process_clipboard};
 
-use super::menu::TrayMenu;
-use super::monitor::{
-    init_clipboard, show_process_notification, spawn_monitor_thread, update_monitor_mode_impl,
-};
-use super::state::{AppEvent, AppState, LockExt};
-
 use anyhow::Result;
 use arboard::Clipboard;
+use global_hotkey::{
+    GlobalHotKeyEvent, GlobalHotKeyManager,
+    hotkey::{Code, HotKey, Modifiers},
+};
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 #[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
@@ -28,6 +30,38 @@ pub fn run_loop() -> Result<()> {
     let state = Arc::new(AppState::new(proxy.clone()));
     let menu = TrayMenu::build(&state)?;
 
+    // グローバルショートカットの初期化
+    let hotkey_manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
+    let selector_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS);
+    let notification_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN);
+    let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
+    let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
+
+    hotkey_manager
+        .register(selector_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    hotkey_manager
+        .register(notification_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    hotkey_manager
+        .register(pause_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    hotkey_manager
+        .register(quit_hotkey)
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    // ホットキーイベントをイベントループに転送するスレッドを開始
+    let hotkey_proxy = proxy.clone();
+    std::thread::spawn(move || {
+        let receiver = GlobalHotKeyEvent::receiver();
+        while let Ok(event) = receiver.recv() {
+            let _ = hotkey_proxy.send_event(AppEvent::Hotkey(event));
+        }
+    });
+
+    // クイックセレクターの初期化
+    let selector = init_selector(&event_loop, proxy.clone())?;
+
     // 初期状態で履歴メニューを更新
     menu.refresh_history(&state)?;
 
@@ -37,15 +71,79 @@ pub fn run_loop() -> Result<()> {
 
     let menu_channel = MenuEvent::receiver();
     let mut clipboard = init_clipboard()?;
+    let mut last_selector_show = std::time::Instant::now();
 
     // イベントループの実行
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         match event {
+            tao::event::Event::UserEvent(AppEvent::RequestModeChange(mode)) => {
+                selector.hide();
+                update_refine(&state, &menu, &mut clipboard, mode);
+            }
+            tao::event::Event::UserEvent(AppEvent::HideSelector) => {
+                selector.hide();
+            }
             tao::event::Event::UserEvent(AppEvent::RefreshHistory) => {
                 let _ = menu.refresh_history(&state);
             }
+            tao::event::Event::UserEvent(AppEvent::Hotkey(event)) => {
+                if event.state == global_hotkey::HotKeyState::Pressed {
+                    if event.id == selector_hotkey.id() {
+                        if selector.is_visible() {
+                            selector.hide();
+                        } else {
+                            last_selector_show = std::time::Instant::now();
+                            selector.show(state.get_mode());
+                        }
+                    } else if event.id == notification_hotkey.id() {
+                        let new_val = !state.show_success_notification.load(Ordering::Relaxed);
+                        state
+                            .show_success_notification
+                            .store(new_val, Ordering::Relaxed);
+                        menu.show_success_notification_item.set_checked(new_val);
+                        state.save_config();
+                        notification::show_simple_notification(
+                            "ショートカット",
+                            if new_val {
+                                "成功通知を有効にしました"
+                            } else {
+                                "成功通知を無効にしました"
+                            },
+                        );
+                    } else if event.id == pause_hotkey.id() {
+                        let new_paused = !state.paused.load(Ordering::Relaxed);
+                        state.paused.store(new_paused, Ordering::Relaxed);
+                        menu.pause_item.set_checked(new_paused);
+                        if state.show_success_notification.load(Ordering::Relaxed) {
+                            notification::show_simple_notification(
+                                "ショートカット",
+                                if new_paused {
+                                    "一時停止しました"
+                                } else {
+                                    "再開しました"
+                                },
+                            );
+                        }
+                    } else if event.id == quit_hotkey.id() {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
+            }
+            tao::event::Event::WindowEvent {
+                window_id, event, ..
+            } => match event {
+                tao::event::WindowEvent::Focused(focused) => {
+                    if !focused && window_id == selector.id() && selector.is_visible() {
+                        // 表示直後のフォーカスロスト（WindowsのAltキーイベント等によるもの）を無視する
+                        if last_selector_show.elapsed().as_millis() > 200 {
+                            selector.hide();
+                        }
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
 
@@ -106,6 +204,11 @@ fn handle_menu_event(
             .show_success_notification
             .store(enabled, Ordering::Relaxed);
         state.save_config();
+    } else if event.id == menu.shortcut_list_item.id() {
+        notification::show_simple_notification(
+            "ショートカット一覧",
+            "Alt + Shift + S: クイックセレクター\nAlt + Shift + N: 成功通知の切替\nAlt + Shift + P: 一時停止/再開\nAlt + Shift + Q: 終了",
+        );
     } else if let Some((_, text)) = menu
         .history
         .records
@@ -116,22 +219,23 @@ fn handle_menu_event(
         match Clipboard::new() {
             Ok(mut cb) => {
                 if let Err(e) = cb.set_text(text.clone()) {
-                    notification::error::show_anyhow_error(
+                    notification::show_anyhow_error(
                         "クリップボード設定エラー",
                         &anyhow::anyhow!(e),
                     );
                 } else {
                     state.set_last_processed_text(text.clone());
-                    notification::success::show_success_debug_notification(
-                        "履歴から復元",
-                        "クリップボードにコピーしました",
-                    );
+                    if state.show_success_notification.load(Ordering::Relaxed) {
+                        notification::show_simple_notification(
+                            "履歴から復元",
+                            "クリップボードにコピーしました",
+                        );
+                    }
                 }
             }
-            Err(e) => notification::error::show_anyhow_error(
-                "クリップボード初期化エラー",
-                &anyhow::anyhow!(e),
-            ),
+            Err(e) => {
+                notification::show_anyhow_error("クリップボード初期化エラー", &anyhow::anyhow!(e))
+            }
         }
     } else if let Some((_, mode)) = menu
         .refine
@@ -188,7 +292,9 @@ fn update_refine(
     state.save_config();
     if let Some(processed) = process_clipboard(clipboard, mode) {
         state.set_last_processed_text(processed.clone());
-        show_process_notification(mode, &processed);
+        if state.show_success_notification.load(Ordering::Relaxed) {
+            notification::show_process_notification(mode, &processed);
+        }
     }
 }
 

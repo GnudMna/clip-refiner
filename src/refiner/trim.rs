@@ -18,14 +18,10 @@ pub fn trim_text(input: &str) -> String {
 /// * `String` - 各行の前後の空白が削除された文字列。
 pub fn trim_lines(input: &str) -> String {
     input
-        .split_inclusive(|c| c == '\n' || c == '\r')
-        .map(|chunk| {
-            // 改行コード部分と本文部分を分離
-            let trimmed = chunk.trim_matches(['\n', '\r']);
-            let newline = &chunk[trimmed.len()..];
-            format!("{}{}", trimmed.trim(), newline)
-        })
-        .collect()
+        .split('\n')
+        .map(|line| line.trim_matches(['\r', ' ', '\t']))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -41,7 +37,8 @@ mod tests {
     #[test]
     fn test_trim_lines() {
         let input = "  hello  \n  world \r\n  rust ";
-        let expected = "hello\nworld\r\nrust";
-        assert_eq!(trim_lines(input), expected);
+        let expected = "hello\nworld\nrust";
+        let actual = trim_lines(input);
+        assert_eq!(actual, expected);
     }
 }

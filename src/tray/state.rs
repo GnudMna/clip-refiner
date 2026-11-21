@@ -2,16 +2,23 @@ use std::sync::{
     Mutex, MutexGuard,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
-use tao::event_loop::EventLoopProxy;
 
 use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::RefineMode;
 
+use tao::event_loop::EventLoopProxy;
+
 /// アプリケーション内でのカスタムイベント
 #[derive(Debug, Clone, Copy)]
 pub enum AppEvent {
+    /// モード変更要求
+    RequestModeChange(RefineMode),
+    /// セレクターを閉じる
+    HideSelector,
     /// 履歴メニューの更新要求
     RefreshHistory,
+    /// ホットキーイベント
+    Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
 
 /// 履歴の最大保持数
@@ -177,10 +184,18 @@ impl AppState {
 mod tests {
     use super::*;
     use tao::event_loop::EventLoopBuilder;
+    #[cfg(windows)]
+    use tao::platform::windows::EventLoopBuilderExtWindows;
 
     #[test]
     fn test_app_state_helpers() {
+        #[cfg(windows)]
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        #[cfg(not(windows))]
         let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+
         let state = AppState {
             mode: Mutex::new(RefineMode::Trim),
             paused: AtomicBool::new(false),
