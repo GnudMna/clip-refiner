@@ -180,14 +180,14 @@ mod tests {
         assert!(a_pos < z_pos, "serde_json はキーをソートするはず");
     }
 
-    /// 不正 JSON は preserve_order でも元の文字列を返すこと
+    /// 不正 JSON は `preserve_order` でも元の文字列を返すこと
     #[test]
     fn test_format_json_preserve_order_invalid() {
         let input = r#"{"a":1,}"#;
         assert_eq!(format_json_preserve_order(input), input);
     }
 
-    /// json_to_yaml: JSONをYAMLに変換できること
+    /// `json_to_yaml`: JSONをYAMLに変換できること
     #[test]
     fn test_json_to_yaml_valid() {
         let input = r#"{"name":"Alice","age":30}"#;
@@ -196,14 +196,14 @@ mod tests {
         assert!(output.contains("age: 30"));
     }
 
-    /// json_to_yaml: 不正 JSON は元の文字列を返すこと
+    /// `json_to_yaml`: 不正 JSON は元の文字列を返すこと
     #[test]
     fn test_json_to_yaml_invalid() {
         let input = r#"{"a":}"#;
         assert_eq!(json_to_yaml(input), input);
     }
 
-    /// json_to_yaml_preserve_order: キー順序が維持されること
+    /// `json_to_yaml_preserve_order`: キー順序が維持されること
     #[test]
     fn test_json_to_yaml_preserve_order() {
         let input = r#"{"z":1,"a":2,"m":3}"#;
@@ -217,7 +217,7 @@ mod tests {
     /// 配列を含む JSON の変換
     #[test]
     fn test_json_to_yaml_array() {
-        let input = r#"[1,2,3]"#;
+        let input = r"[1,2,3]";
         let output = json_to_yaml(input);
         assert!(output.contains("- 1"));
         assert!(output.contains("- 2"));

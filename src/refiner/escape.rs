@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Write;
 
 // ======================================================================
 // エスケープ
@@ -108,8 +109,8 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                                     {
                                         // サロゲートペアをUnicodeスカラー値に変換
                                         let scalar = 0x10000u32
-                                            + ((code as u32 - 0xD800) << 10)
-                                            + (low as u32 - 0xDC00);
+                                            + ((u32::from(code) - 0xD800) << 10)
+                                            + (u32::from(low) - 0xDC00);
                                         if let Some(ch) = char::from_u32(scalar) {
                                             // 消費済みの分だけ chars を進める
                                             chars.next(); // '\'
@@ -124,19 +125,19 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                                     }
                                 }
                                 // サロゲートペアでない場合はそのまま出力
-                                result.push_str(&format!("\\u{}", hex));
-                            } else if let Some(ch) = char::from_u32(code as u32) {
+                                let _ = write!(result, "\\u{hex}");
+                            } else if let Some(ch) = char::from_u32(u32::from(code)) {
                                 result.push(ch);
                                 changed = true;
                                 continue;
                             } else {
-                                result.push_str(&format!("\\u{}", hex));
+                                let _ = write!(result, "\\u{hex}");
                             }
                         } else {
-                            result.push_str(&format!("\\u{}", hex));
+                            let _ = write!(result, "\\u{hex}");
                         }
                     } else {
-                        result.push_str(&format!("\\u{}", hex));
+                        let _ = write!(result, "\\u{hex}");
                     }
                     changed = true;
                     continue;
@@ -252,7 +253,7 @@ mod tests {
         assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
     }
 
-    /// regex_escape の基本動作
+    /// `regex_escape` の基本動作
     #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("h.w"), "h\\.w");
@@ -260,7 +261,7 @@ mod tests {
         assert!(matches!(regex_escape("plain"), Cow::Borrowed(_)));
     }
 
-    /// regex_unescape の基本動作
+    /// `regex_unescape` の基本動作
     #[test]
     fn test_regex_unescape() {
         assert_eq!(regex_unescape("h\\.w"), "h.w");
@@ -268,7 +269,7 @@ mod tests {
         assert!(matches!(regex_unescape("plain"), Cow::Borrowed(_)));
     }
 
-    /// escape_string: すべての対象文字が正しくエスケープされること
+    /// `escape_string`: すべての対象文字が正しくエスケープされること
     #[test]
     fn test_escape_string_all_chars() {
         assert_eq!(escape_string("\""), "\\\"");
@@ -281,13 +282,13 @@ mod tests {
         assert_eq!(escape_string("\t"), "\\t");
     }
 
-    /// escape_string: 空文字列は Borrowed を返すこと
+    /// `escape_string`: 空文字列は Borrowed を返すこと
     #[test]
     fn test_escape_string_empty() {
         assert!(matches!(escape_string(""), Cow::Borrowed(_)));
     }
 
-    /// unescape_string: すべての対象シーケンスが正しくアンエスケープされること
+    /// `unescape_string`: すべての対象シーケンスが正しくアンエスケープされること
     #[test]
     fn test_unescape_string_all_sequences() {
         assert_eq!(unescape_string("\\\""), "\"");
@@ -300,20 +301,20 @@ mod tests {
         assert_eq!(unescape_string("\\t"), "\t");
     }
 
-    /// unescape_string: バックスラッシュを含まない文字列は Borrowed を返すこと
+    /// `unescape_string`: バックスラッシュを含まない文字列は Borrowed を返すこと
     #[test]
     fn test_unescape_string_no_backslash() {
         assert!(matches!(unescape_string("hello world"), Cow::Borrowed(_)));
     }
 
-    /// regex_unescape: メタ文字以外のバックスラッシュはそのまま残ること
+    /// `regex_unescape`: メタ文字以外のバックスラッシュはそのまま残ること
     #[test]
     fn test_regex_unescape_non_meta() {
         // 'a' は正規表現メタ文字でないのでそのまま
         assert_eq!(regex_unescape("\\a"), "\\a");
     }
 
-    /// regex_escape / regex_unescape の往復変換
+    /// `regex_escape` / `regex_unescape` の往復変換
     #[test]
     fn test_regex_escape_unescape_roundtrip() {
         let original = "a.b*c+d?e";

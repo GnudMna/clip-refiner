@@ -117,9 +117,8 @@ fn is_likely_csv(text: &str) -> bool {
     let mut records = rdr.records();
 
     // 1行目取得・パース失敗はCSVでない
-    let first = match records.next() {
-        Some(Ok(r)) => r,
-        _ => return false,
+    let Some(Ok(first)) = records.next() else {
+        return false;
     };
 
     // カラムが2つ未満はCSVでない
@@ -130,10 +129,8 @@ fn is_likely_csv(text: &str) -> bool {
 
     // 2行目が必須: 1行だけではCSVと断定しない
     // パースエラー(列数不一致含む)はCSVでないと判断する
-    let second = match records.next() {
-        Some(Ok(r)) => r,
-        Some(Err(_)) => return false,
-        None => return false,
+    let Some(Ok(second)) = records.next() else {
+        return false;
     };
     if second.len() != col_count {
         return false;
@@ -172,8 +169,8 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
 
     let mut records: Vec<Vec<String>> = rdr
         .records()
-        .filter_map(|r| r.ok())
-        .map(|r| r.iter().map(|s| s.to_string()).collect())
+        .filter_map(std::result::Result::ok)
+        .map(|r| r.iter().map(std::string::ToString::to_string).collect())
         .collect();
 
     // 全体の内容でソート(大文字小文字無視)
@@ -200,13 +197,11 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
         let _ = wtr.write_record(&record);
     }
 
-    let bytes = match wtr.into_inner() {
-        Ok(b) => b,
-        Err(_) => return Cow::Borrowed(text),
+    let Ok(bytes) = wtr.into_inner() else {
+        return Cow::Borrowed(text);
     };
-    let result = match String::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(_) => return Cow::Borrowed(text),
+    let Ok(result) = String::from_utf8(bytes) else {
+        return Cow::Borrowed(text);
     };
     if result == text {
         Cow::Borrowed(text)
@@ -321,7 +316,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), "single");
     }
 
-    /// is_likely_csv: カンマ区切りで複数列かつ行数が一致すればCSV判定
+    /// `is_likely_csv`: カンマ区切りで複数列かつ行数が一致すればCSV判定
     #[test]
     fn test_is_likely_csv_true() {
         // 2列 × 2行
@@ -332,20 +327,20 @@ mod tests {
         assert!(is_likely_csv("banana,2\napple,1\ncherry,3"));
     }
 
-    /// is_likely_csv: 1列しかない場合はCSVでない
+    /// `is_likely_csv`: 1列しかない場合はCSVでない
     #[test]
     fn test_is_likely_csv_false_single_column() {
         assert!(!is_likely_csv("apple\nbanana\ncherry"));
     }
 
-    /// is_likely_csv: 1行だけではCSVと断定しない
+    /// `is_likely_csv`: 1行だけではCSVと断定しない
     #[test]
     fn test_is_likely_csv_false_single_row() {
         assert!(!is_likely_csv("a,b,c"));
         assert!(!is_likely_csv("hello,world"));
     }
 
-    /// is_likely_csv: 列数が揃っていない場合はCSVでない
+    /// `is_likely_csv`: 列数が揃っていない場合はCSVでない
     #[test]
     fn test_is_likely_csv_false_inconsistent_columns() {
         assert!(!is_likely_csv("a,b,c\nd,e"));

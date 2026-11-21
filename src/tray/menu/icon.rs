@@ -34,7 +34,7 @@ pub fn create_icon() -> Result<Icon> {
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Grayscale => bytes.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        other => anyhow::bail!("サポート外PNGカラータイプ: {:?}", other),
+        png::ColorType::Indexed => anyhow::bail!("サポート外PNGカラータイプ: Indexed"),
     };
 
     Icon::from_rgba(rgba, info.width, info.height).context("アイコンデータの作成に失敗しました")

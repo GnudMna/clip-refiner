@@ -65,9 +65,8 @@ pub fn url_decode(input: &str) -> Result<String> {
 pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");
-    let query_and_fragment = match parts.next() {
-        Some(q) => q,
-        None => return Cow::Borrowed(input),
+    let Some(query_and_fragment) = parts.next() else {
+        return Cow::Borrowed(input);
     };
 
     // クエリ文字列とフラグメント(#以降)を分離する
@@ -180,7 +179,7 @@ mod tests {
     }
 
     /// スペースや特殊文字が含まれる場合のURLエンコードテスト
-    /// プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認
+    /// `プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認`
     #[test]
     fn test_url_encode_space_special() {
         assert_eq!(url_encode("foo bar"), "foo%20bar");

@@ -24,7 +24,7 @@ pub enum AppEvent {
 
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
-/// 1ループあたり `config` RwLock の取得を1回に削減するために使用する
+/// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
     /// 現在の加工モード
     pub mode: RefineMode,
@@ -56,7 +56,8 @@ pub trait LockExt<T> {
 
 impl<T> LockExt<T> for Mutex<T> {
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|e| e.into_inner())
+        self.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -70,11 +71,13 @@ pub trait RwLockExt<T> {
 
 impl<T> RwLockExt<T> for RwLock<T> {
     fn read_ignore_poison(&self) -> RwLockReadGuard<'_, T> {
-        self.read().unwrap_or_else(|e| e.into_inner())
+        self.read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn write_ignore_poison(&self) -> RwLockWriteGuard<'_, T> {
-        self.write().unwrap_or_else(|e| e.into_inner())
+        self.write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -91,6 +94,8 @@ pub struct AppState {
     pub monitor_generation: AtomicU64,
     /// 二重加工防止用の監視状態
     processed_state: Mutex<ProcessedState>,
+    /// 直近の加工前テキスト (取り消し用)
+    undo_text: Mutex<Option<String>>,
     /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
     history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
@@ -111,6 +116,7 @@ impl AppState {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
+            undo_text: Mutex::new(None),
             history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
         }
@@ -118,7 +124,7 @@ impl AppState {
 
     /// 現在の設定をファイルへ保存する
     pub fn save_config(&self) {
-        if let Err(e) = self.with_config(|c| c.save()) {
+        if let Err(e) = self.with_config(super::super::config::AppConfig::save) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
         }
     }
@@ -140,7 +146,7 @@ impl AppState {
 impl AppState {
     /// 監視ループ向けに設定フィールドをまとめて一括取得する
     ///
-    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
+    /// `config` `RwLock` の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
             mode: config.mode,
@@ -178,6 +184,19 @@ impl AppState {
         });
     }
 
+    /// 加工成功時に取り消し用の元テキストを記録する
+    pub fn record_undo_source(&self, text: &str) {
+        *self.undo_text.lock_ignore_poison() = Some(text.to_string());
+    }
+
+    /// 取り消し用の元テキストを取り出す
+    ///
+    /// # Returns
+    /// * `Option<String>` - 取り消し可能な加工があれば `Some(元テキスト)`
+    pub fn take_undo_source(&self) -> Option<String> {
+        self.undo_text.lock_ignore_poison().take()
+    }
+
     /// 履歴を復号してすべて取得する
     ///
     /// メニュー表示など、一時的に平文が必要な場合に使用する
@@ -213,7 +232,8 @@ impl AppState {
     ///
     /// # Arguments
     /// * `text` - 履歴へ追加するクリップボード本文
-    pub fn add_to_history(&self, text: String) {
+    pub fn add_to_history(&self, text: impl AsRef<str>) {
+        let text = text.as_ref();
         if text.trim().is_empty() {
             return;
         }
@@ -243,13 +263,16 @@ pub(crate) fn test_app_state() -> AppState {
     #[cfg(not(windows))]
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
 
-    let mut config = AppConfig::default();
-    config.mode = RefineMode::Trim;
+    let config = AppConfig {
+        mode: RefineMode::Trim,
+        ..Default::default()
+    };
 
     AppState {
         config: RwLock::new(config),
         monitor_generation: AtomicU64::new(0),
         processed_state: Mutex::new(ProcessedState::default()),
+        undo_text: Mutex::new(None),
         history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
     }
@@ -264,7 +287,7 @@ mod tests {
     use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
 
-    /// with_config / with_processed_state / monitor_generation の基本動作
+    /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作
     #[test]
     fn test_app_state_helpers() {
         let state = test_app_state();
@@ -273,8 +296,10 @@ mod tests {
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
         assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
 
-        let mut ps = ProcessedState::default();
-        ps.last_seen_text = "hello".to_string();
+        let ps = ProcessedState {
+            last_seen_text: "hello".to_string(),
+            ..Default::default()
+        };
         state.with_processed_state(|s| *s = ps.clone());
         assert_eq!(
             state.with_processed_state(|s| s.last_seen_text.clone()),
@@ -356,13 +381,13 @@ mod tests {
         let limit = crate::consts::DEFAULT_HISTORY_LIMIT;
 
         // 空白は無視
-        state.add_to_history("   ".to_string());
+        state.add_to_history("   ");
         assert!(state.get_history().is_empty());
 
         // 重複するエントリは先頭に移動する
-        state.add_to_history("first".to_string());
-        state.add_to_history("second".to_string());
-        state.add_to_history("first".to_string());
+        state.add_to_history("first");
+        state.add_to_history("second");
+        state.add_to_history("first");
         let h = state.get_history();
         assert_eq!(h[0], "first");
         assert_eq!(h[1], "second");
@@ -391,7 +416,7 @@ mod tests {
         assert_eq!(ps.last_written_text.as_deref(), Some("processed"));
     }
 
-    /// 観測のみの場合は last_written_text を変更しないこと
+    /// 観測のみの場合は `last_written_text` を変更しないこと
     #[test]
     fn test_record_clipboard_observed() {
         let state = test_app_state();
@@ -421,5 +446,17 @@ mod tests {
         let ps = state.with_processed_state(|s| s.clone());
         assert_eq!(ps.last_seen_text, "restored");
         assert_eq!(ps.last_written_text, None);
+    }
+
+    /// 加工取り消し用テキストの記録と取得
+    #[test]
+    fn test_undo_source_record_and_take() {
+        let state = test_app_state();
+
+        assert!(state.take_undo_source().is_none());
+
+        state.record_undo_source("original");
+        assert_eq!(state.take_undo_source().as_deref(), Some("original"));
+        assert!(state.take_undo_source().is_none());
     }
 }

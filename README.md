@@ -5,7 +5,7 @@
   </p>
 
   [![License: All Rights Reserved](https://img.shields.io/badge/License-All%20Rights%20Reserved-yellow.svg)](LICENSE)
-  [![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust)](https://www.rust-lang.org/)
+  [![Rust](https://img.shields.io/badge/Rust-1.96%20%7C%202024_edition-orange?logo=rust)](https://www.rust-lang.org/)
   [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 </div>
 
@@ -13,21 +13,36 @@
 
 ## 📌 目次
 
-- [主な機能](#主な機能)
-- [加工モード一覧](#加工モード一覧)
-- [使用方法](#使用方法)
+- [📌 目次](#-目次)
+- [✨ 主な機能](#-主な機能)
+- [🛠️ 加工モード一覧](#️-加工モード一覧)
+- [🚀 使用方法](#-使用方法)
   - [監視モード（常駐）](#監視モード常駐)
   - [ワンショットモード](#ワンショットモード)
   - [コマンドラインオプション](#コマンドラインオプション)
-- [システムトレイメニュー](#システムトレイメニュー)
-- [クイックセレクタ](#クイックセレクタ)
-- [グローバルホットキー](#グローバルホットキー)
-- [クリップボード履歴](#クリップボード履歴)
-- [加工モードの使用例](#加工モードの使用例)
-- [インストール・ビルド](#インストールビルド)
-- [設定](#設定)
-- [ログ](#ログ)
-- [ライセンス](#ライセンス)
+- [🖥️ システムトレイメニュー](#️-システムトレイメニュー)
+- [🪟 クイックセレクタ](#-クイックセレクタ)
+- [⌨️ グローバルホットキー](#️-グローバルホットキー)
+- [↩️ 加工の取り消し](#️-加工の取り消し)
+- [🕘 クリップボード履歴](#-クリップボード履歴)
+  - [🔒 セキュリティ](#-セキュリティ)
+- [🚀 ログイン時の自動起動](#-ログイン時の自動起動)
+- [📝 加工モードの使用例](#-加工モードの使用例)
+  - [UTMパラメータの削除 (`remove-utm`)](#utmパラメータの削除-remove-utm)
+  - [ExcelからMarkdownへ (`excel-to-markdown`)](#excelからmarkdownへ-excel-to-markdown)
+  - [タイムスタンプ変換 (`timestamp-to-datetime`)](#タイムスタンプ変換-timestamp-to-datetime)
+  - [カンマ区切り付与 (`add-comma`)](#カンマ区切り付与-add-comma)
+- [🛠️ インストール・ビルド](#️-インストールビルド)
+  - [前提条件](#前提条件)
+    - [Linux の追加パッケージ](#linux-の追加パッケージ)
+  - [ビルド](#ビルド)
+    - [Windows MSI インストーラー（任意）](#windows-msi-インストーラー任意)
+- [⚙️ 設定](#️-設定)
+  - [設定項目](#設定項目)
+  - [ホットキー形式](#ホットキー形式)
+  - [監視方式（`monitor_mode`）](#監視方式monitor_mode)
+- [📋 ログ](#-ログ)
+- [📄 ライセンス](#-ライセンス)
 
 ---
 
@@ -39,6 +54,8 @@
 - 🕘 **クリップボード履歴**: 過去の加工結果をトレイメニューから呼び出せます。履歴はメモリ上で暗号化され、プロセス終了時に破棄されます（ディスクには保存しません）。
 - 🔔 **デスクトップ通知**: 加工結果やモード変更、一時停止の状態変化をシステム通知で確認できます。
 - ⌨️ **グローバルホットキー**: アプリを問わず、どのウィンドウからでもキー操作で機能を呼び出せます。
+- ↩️ **加工の取り消し**: 直近の加工をホットキーで元のテキストに戻せます。
+- 🚀 **ログイン時の自動起動**: トレイメニューから OS ネイティブの仕組みでログイン時起動を切り替えられます。
 - 🖥️ **クロスプラットフォーム**: Windows / macOS / Linux で動作します。
 - 🔂 **多重起動防止**: 二重に起動した場合は通知を表示し、後続のプロセスは即座に終了します。
 
@@ -48,30 +65,30 @@
 
 `--mode` に渡す値（CLI名）と、トレイメニュー・クイックセレクタでの表示は次のとおりです。全 31 モードに対応しています。
 
-| カテゴリ | モード名 (`--mode`) | 説明 |
-| :--- | :--- | :--- |
-| **URL操作** | `url-encode` / `url-decode` | URLのエンコード・デコード |
-| | `remove-utm` | URLから `utm_*` 計測パラメータを削除 |
-| **パス操作** | `extract-basename` / `extract-basename-quoted` | パスからファイル名のみを抽出（引用符付きオプションあり） |
-| | `add-path-quotes` / `remove-path-quotes` | パスへの引用符 (`"`) の付与・削除 |
-| | `path-to-slash` / `path-to-backslash` | パス区切り文字をスラッシュ/バックスラッシュに変換 |
-| **行操作** | `sort-lines-asc` / `sort-lines-desc` | 行単位での昇順・降順ソート（CSV対応） |
-| | `remove-empty-lines` | 空行を削除 |
-| | `remove-duplicate-lines` | 重複行を削除 |
-| **トリム** | `trim` | テキスト全体の前後の空白・改行を削除 |
-| | `trim-lines` | 行ごとに前後の空白を削除 |
-| **エスケープ** | `escape` / `unescape` | バックスラッシュエスケープの付与・解除 |
-| | `regex-escape` / `regex-unescape` | 正規表現メタ文字のエスケープ・解除 |
-| **JSON整形** | `json-format` | JSONをインデント整形（キー順序不定） |
-| | `json-format-preserve-order` | JSONをインデント整形（キー順序保持） |
-| **JSONへ変換** | `yaml-to-json` | YAMLをJSONへ変換（キー順序不定） |
-| | `yaml-to-json-preserve-order` | YAMLをJSONへ変換（キー順序保持） |
-| **YAMLへ変換** | `json-to-yaml` | JSONをYAMLへ変換（キー順序不定） |
-| | `json-to-yaml-preserve-order` | JSONをYAMLへ変換（キー順序保持） |
-| **その他** | `markdown-to-html` | MarkdownをHTMLへ変換 |
-| | `excel-to-markdown` | ExcelコピーデータをMarkdownテーブルへ変換 |
-| | `timestamp-to-datetime` / `datetime-to-timestamp` | Unixタイムスタンプ ↔ 日時文字列の変換 |
-| | `add-comma` / `remove-comma` | 数値への3桁カンマ区切り付与・削除 |
+| カテゴリ       | モード名 (`--mode`)                               | 説明                                                     |
+| :------------- | :------------------------------------------------ | :------------------------------------------------------- |
+| **URL操作**    | `url-encode` / `url-decode`                       | URLのエンコード・デコード                                |
+|                | `remove-utm`                                      | URLから `utm_*` 計測パラメータを削除                     |
+| **パス操作**   | `extract-basename` / `extract-basename-quoted`    | パスからファイル名のみを抽出（引用符付きオプションあり） |
+|                | `add-path-quotes` / `remove-path-quotes`          | パスへの引用符 (`"`) の付与・削除                        |
+|                | `path-to-slash` / `path-to-backslash`             | パス区切り文字をスラッシュ/バックスラッシュに変換        |
+| **行操作**     | `sort-lines-asc` / `sort-lines-desc`              | 行単位での昇順・降順ソート（CSV対応）                    |
+|                | `remove-empty-lines`                              | 空行を削除                                               |
+|                | `remove-duplicate-lines`                          | 重複行を削除                                             |
+| **トリム**     | `trim`                                            | テキスト全体の前後の空白・改行を削除                     |
+|                | `trim-lines`                                      | 行ごとに前後の空白を削除                                 |
+| **エスケープ** | `escape` / `unescape`                             | バックスラッシュエスケープの付与・解除                   |
+|                | `regex-escape` / `regex-unescape`                 | 正規表現メタ文字のエスケープ・解除                       |
+| **JSON整形**   | `json-format`                                     | JSONをインデント整形（キー順序不定）                     |
+|                | `json-format-preserve-order`                      | JSONをインデント整形（キー順序保持）                     |
+| **JSONへ変換** | `yaml-to-json`                                    | YAMLをJSONへ変換（キー順序不定）                         |
+|                | `yaml-to-json-preserve-order`                     | YAMLをJSONへ変換（キー順序保持）                         |
+| **YAMLへ変換** | `json-to-yaml`                                    | JSONをYAMLへ変換（キー順序不定）                         |
+|                | `json-to-yaml-preserve-order`                     | JSONをYAMLへ変換（キー順序保持）                         |
+| **その他**     | `markdown-to-html`                                | MarkdownをHTMLへ変換                                     |
+|                | `excel-to-markdown`                               | ExcelコピーデータをMarkdownテーブルへ変換                |
+|                | `timestamp-to-datetime` / `datetime-to-timestamp` | Unixタイムスタンプ ↔ 日時文字列の変換                    |
+|                | `add-comma` / `remove-comma`                      | 数値への3桁カンマ区切り付与・削除                        |
 
 > 各モードの実際の入出力例は [加工モードの使用例](#加工モードの使用例) を参照してください。
 
@@ -102,11 +119,11 @@
 
 ### コマンドラインオプション
 
-| オプション | 説明 |
-| :--- | :--- |
+| オプション            | 説明                                                                             |
+| :-------------------- | :------------------------------------------------------------------------------- |
 | `-m`, `--mode <MODE>` | ワンショットで実行する加工モードを指定（[加工モード一覧](#加工モード一覧) 参照） |
-| `-h`, `--help` | ヘルプを表示 |
-| `-V`, `--version` | バージョンを表示 |
+| `-h`, `--help`        | ヘルプを表示                                                                     |
+| `-V`, `--version`     | バージョンを表示                                                                 |
 
 ---
 
@@ -114,16 +131,18 @@
 
 監視モードで常駐中は、トレイアイコンの右クリックメニューから各種操作が行えます。
 
-| メニュー | 内容 |
-| :--- | :--- |
-| **変換モード** | 加工モードをカテゴリ別のサブメニューから選択。現在のモードにはチェックが付きます |
-| **監視方式** | `ポーリング` / `イベント` を切り替え |
-| **監視周期** | `0.5秒` / `1秒` / `2秒` / `5秒` から選択（イベント方式では無効） |
-| **履歴** | 履歴機能の有効化・クリア、過去の加工結果の呼び出し |
-| **通知** | デスクトップ通知の有効化と、通知内容（モード変更・加工結果・一時停止）の個別設定 |
-| **ショートカット一覧** | 現在のグローバルホットキー割り当てを通知で表示 |
-| **一時停止** | クリップボード監視の一時停止・再開 |
-| **終了** | アプリケーションを終了 |
+| メニュー               | 内容                                                                             |
+| :--------------------- | :------------------------------------------------------------------------------- |
+| **変換モード**         | 加工モードをカテゴリ別のサブメニューから選択。現在のモードにはチェックが付きます |
+| **監視方式**           | `ポーリング` / `イベント` を切り替え                                             |
+| **監視周期**           | `0.5秒` / `1秒` / `2秒` / `5秒` から選択（イベント方式では無効）                 |
+| **履歴**               | 履歴機能の有効化・クリア、過去の加工結果の呼び出し                               |
+| **通知**               | デスクトップ通知の有効化と、通知内容（モード変更・加工結果・一時停止）の個別設定 |
+| **設定を開く**         | `config.json` を既定のアプリケーションで開く                                     |
+| **ショートカット一覧** | 現在のグローバルホットキー割り当てを通知で表示                                   |
+| **ログイン時に起動**   | OS のログイン時自動起動を有効化・無効化                                          |
+| **一時停止**           | クリップボード監視の一時停止・再開                                               |
+| **終了**               | アプリケーションを終了                                                           |
 
 ---
 
@@ -135,12 +154,12 @@
 - **検索**: モード名・カテゴリ・CLI名（`--mode` の値）のいずれにも部分一致で絞り込めます。
 - **現在のモード**: 表示時に現在選択中のモードがハイライトされます。
 
-| キー | 動作 |
-| :--- | :--- |
-| `↑` / `↓` | 候補の移動 |
-| `Home` / `End` | 先頭 / 末尾へ移動 |
-| `Enter` | 選択中のモードを決定 |
-| `Esc` | 検索文字列があればクリア、空ならウィンドウを閉じる |
+| キー           | 動作                                               |
+| :------------- | :------------------------------------------------- |
+| `↑` / `↓`      | 候補の移動                                         |
+| `Home` / `End` | 先頭 / 末尾へ移動                                  |
+| `Enter`        | 選択中のモードを決定                               |
+| `Esc`          | 検索文字列があればクリア、空ならウィンドウを閉じる |
 
 > マウスでのホバー選択・クリック決定にも対応しています。
 
@@ -150,12 +169,23 @@
 
 監視モード常駐時に、アクティブなウィンドウを問わず以下のホットキーが使用できます（`config.json` の `hotkeys` で変更可能。反映には再起動が必要です）。
 
-| ホットキー | 動作 |
-| :--- | :--- |
-| `Alt + Shift + S` | クイックセレクタの表示・非表示 |
-| `Alt + Shift + P` | クリップボード監視の一時停止・再開 |
-| `Alt + Shift + N` | デスクトップ通知のON/OFF切り替え |
-| `Alt + Shift + Q` | アプリケーションの終了 |
+| ホットキー        | 動作                                                         |
+| :---------------- | :----------------------------------------------------------- |
+| `Alt + Shift + S` | クイックセレクタの表示・非表示                               |
+| `Alt + Shift + P` | クリップボード監視の一時停止・再開                           |
+| `Alt + Shift + Z` | 直近の加工を取り消し、加工前のテキストをクリップボードへ復元 |
+| `Alt + Shift + N` | デスクトップ通知のON/OFF切り替え                             |
+| `Alt + Shift + Q` | アプリケーションの終了                                       |
+
+---
+
+## ↩️ 加工の取り消し
+
+監視モードで加工が成功した直後のみ、直近 1 件分の取り消しが可能です。ホットキー（既定で `Alt + Shift + Z`）またはトレイメニューの「ショートカット一覧」から割り当てを確認できます。
+
+- **対象**: 監視モードでの自動加工、または手動で実行した加工のうち、直前に成功した 1 件
+- **動作**: 加工前のテキストをクリップボードへ書き戻す
+- **制限**: 新しい加工が成功すると取り消し対象は上書きされる。取り消し可能な加工がない場合は通知で知らせる（通知が有効な場合）
 
 ---
 
@@ -178,6 +208,20 @@
 
 ---
 
+## 🚀 ログイン時の自動起動
+
+トレイメニューの「ログイン時に起動」から、OS ログイン時に ClipRefiner を自動起動するかどうかを切り替えられます。各プラットフォームのネイティブ機構を使用します。
+
+| プラットフォーム | 仕組み                                                  |
+| :--------------- | :------------------------------------------------------ |
+| **Windows**      | 現在のユーザー向けレジストリ `Run` キー                 |
+| **macOS**        | `~/Library/LaunchAgents/` への LaunchAgent 配置         |
+| **Linux**        | XDG `~/.config/autostart/` への `.desktop` ファイル配置 |
+
+> 実行ファイルのパスが変わった場合（再インストールや移動後など）は、一度オフにしてから再度オンにすると正しいパスで再登録されます。
+
+---
+
 ## 📝 加工モードの使用例
 
 ### UTMパラメータの削除 (`remove-utm`)
@@ -193,10 +237,10 @@
   ```
 - **出力**:
   ```markdown
-  | ID | Name | Price |
-  | --- | --- | --- |
-  | 1 | Apple | 150 |
-  | 2 | Banana | 100 |
+  | ID  | Name   | Price |
+  | --- | ------ | ----- |
+  | 1   | Apple  | 150   |
+  | 2   | Banana | 100   |
   ```
 
 ### タイムスタンプ変換 (`timestamp-to-datetime`)
@@ -213,7 +257,7 @@
 
 ### 前提条件
 
-- [Rust / Cargo](https://www.rust-lang.org/tools/install)（edition 2024、Rust 1.85 以上）
+- [Rust / Cargo](https://www.rust-lang.org/tools/install)（edition 2024、Rust 1.96 以上。`rust-toolchain.toml` でピン留め）
 
 #### Linux の追加パッケージ
 
@@ -231,7 +275,19 @@ cd clip-refiner
 cargo build --release
 ```
 
-バイナリは `target/release/ClipRefiner` (`ClipRefiner.exe` on Windows) に生成されます。
+バイナリは `target/release/ClipRefiner`（Windows では `ClipRefiner.exe`）に生成されます。
+
+#### Windows MSI インストーラー（任意）
+
+`cargo-wix` と WiX Toolset v3 を使って MSI を作成できます。
+
+```powershell
+# 前提: cargo install cargo-wix --locked
+#       winget install WiXToolset.WiXToolset
+./scripts/windows/build-msi.ps1
+```
+
+出力先: `target/wix/clip-refiner-{version}-{arch}.msi`（per-user インストール、日本語 UI）
 
 ---
 
@@ -248,23 +304,24 @@ cargo build --release
 
 ### 設定項目
 
-| キー | 型 | デフォルト | 説明 |
-| :--- | :--- | :--- | :--- |
-| `version` | number | `2` | 設定スキーマのバージョン |
-| `mode` | string | `"UrlDecode"` | 使用する加工モード |
-| `interval_ms` | number | `1000` | クリップボードのポーリング間隔（ミリ秒、100〜60000） |
-| `monitor_mode` | string | `"Polling"` | 監視方式。`"Polling"` または `"Event"` |
-| `is_paused` | bool | `false` | 監視を一時停止するかどうか |
-| `history_enabled` | bool | `false` | 加工履歴の有効・無効 |
-| `history_limit` | number | `10` | 履歴の最大保持件数（1〜100） |
-| `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 |
-| `notification_settings.notify_mode` | bool | `true` | モード変更時の通知 |
-| `notification_settings.notify_result` | bool | `true` | 加工結果の通知 |
-| `notification_settings.notify_pause` | bool | `true` | 一時停止切替時の通知 |
-| `hotkeys.selector` | string | `"Alt+Shift+S"` | クイックセレクタ表示 |
-| `hotkeys.notification` | string | `"Alt+Shift+N"` | 成功通知のON/OFF |
-| `hotkeys.pause` | string | `"Alt+Shift+P"` | 監視の一時停止・再開 |
-| `hotkeys.quit` | string | `"Alt+Shift+Q"` | アプリケーション終了 |
+| キー                                  | 型     | デフォルト      | 説明                                                 |
+| :------------------------------------ | :----- | :-------------- | :--------------------------------------------------- |
+| `version`                             | number | `2`             | 設定スキーマのバージョン                             |
+| `mode`                                | string | `"UrlDecode"`   | 使用する加工モード                                   |
+| `interval_ms`                         | number | `1000`          | クリップボードのポーリング間隔（ミリ秒、100〜60000） |
+| `monitor_mode`                        | string | `"Polling"`     | 監視方式。`"Polling"` または `"Event"`               |
+| `is_paused`                           | bool   | `false`         | 監視を一時停止するかどうか                           |
+| `history_enabled`                     | bool   | `false`         | 加工履歴の有効・無効                                 |
+| `history_limit`                       | number | `10`            | 履歴の最大保持件数（1〜100）                         |
+| `notification_settings.enabled`       | bool   | `false`         | デスクトップ通知の有効・無効                         |
+| `notification_settings.notify_mode`   | bool   | `true`          | モード変更時の通知                                   |
+| `notification_settings.notify_result` | bool   | `true`          | 加工結果の通知                                       |
+| `notification_settings.notify_pause`  | bool   | `true`          | 一時停止切替時の通知                                 |
+| `hotkeys.selector`                    | string | `"Alt+Shift+S"` | クイックセレクタ表示                                 |
+| `hotkeys.notification`                | string | `"Alt+Shift+N"` | 成功通知のON/OFF                                     |
+| `hotkeys.pause`                       | string | `"Alt+Shift+P"` | 監視の一時停止・再開                                 |
+| `hotkeys.undo`                        | string | `"Alt+Shift+Z"` | 直近の加工を取り消し                                 |
+| `hotkeys.quit`                        | string | `"Alt+Shift+Q"` | アプリケーション終了                                 |
 
 > 範囲外の数値（`interval_ms` / `history_limit`）は起動時に自動的に許容範囲へ丸められます。
 
@@ -279,12 +336,12 @@ cargo build --release
 
 ### 監視方式（`monitor_mode`）
 
-| 方式 | 説明 |
-| :--- | :--- |
-| `Polling` | 一定間隔（`interval_ms`）でクリップボードの内容を読み取り、変更を検知します。すべてのプラットフォームで動作する基本方式です。 |
-| `Event` | OS の変更トークン（Windows: シーケンス番号、macOS: `changeCount`、Linux: X11 の CLIPBOARD オーナー）を監視します。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷です。 |
+| 方式      | 説明                                                                                                                                                                                                                               |
+| :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Polling` | 一定間隔（`interval_ms`）でクリップボードの内容を読み取り、変更を検知します。すべてのプラットフォームで動作する基本方式です。                                                                                                      |
+| `Event`   | OS の変更トークン（Windows: シーケンス番号、macOS: `changeCount`、Linux: X11 の CLIPBOARD オーナー / Wayland の data-control 選択イベント）を監視します。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷です。 |
 
-> **Linux での注意**: X11 が利用できない環境（ネイティブ Wayland のみなど）では、`Event` 方式は自動的にポーリングへフォールバックします。
+> **Linux での注意**: Wayland では `ext-data-control-v1` または `wlr-data-control-unstable-v1` に対応した compositor（GNOME、KDE、Sway、Hyprland など）で `Event` 方式が利用できます。いずれのバックエンドも利用できない環境では、自動的にポーリングへフォールバックします。
 
 ---
 

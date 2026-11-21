@@ -91,12 +91,12 @@ impl EncryptedHistoryStore {
     /// # Arguments
     /// * `text` - 追加する履歴テキスト
     /// * `limit` - 履歴の最大保持数
-    pub fn add(&mut self, text: String, limit: usize) {
+    pub fn add(&mut self, text: &str, limit: usize) {
         if text.trim().is_empty() {
             return;
         }
 
-        let content_hash = Self::content_hash(&text);
+        let content_hash = Self::content_hash(text);
 
         if let Some(pos) = self
             .entries
@@ -106,7 +106,7 @@ impl EncryptedHistoryStore {
             self.entries.remove(pos);
         }
 
-        let Some((nonce, ciphertext)) = self.encrypt(&text) else {
+        let Some((nonce, ciphertext)) = self.encrypt(text) else {
             return;
         };
 
@@ -176,8 +176,8 @@ impl EncryptedHistoryStore {
         let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
         let plaintext = cipher
             .decrypt(Nonce::from_slice(&entry.nonce), entry.ciphertext.as_ref())
-            .map_err(|e| format!("履歴の復号に失敗: {:?}", e))?;
-        String::from_utf8(plaintext).map_err(|e| format!("履歴の UTF-8 変換に失敗: {:?}", e))
+            .map_err(|e| format!("履歴の復号に失敗: {e:?}"))?;
+        String::from_utf8(plaintext).map_err(|e| format!("履歴の UTF-8 変換に失敗: {e:?}"))
     }
 }
 
@@ -203,7 +203,7 @@ mod tests {
     fn test_encrypted_entries_do_not_contain_plaintext() {
         let mut store = EncryptedHistoryStore::new();
         let secret = "super-secret-password-12345";
-        store.add(secret.to_string(), 10);
+        store.add(secret, 10);
 
         assert_eq!(store.entries.len(), 1);
         assert_ne!(store.entries[0].ciphertext.as_slice(), secret.as_bytes());
@@ -216,20 +216,20 @@ mod tests {
         let mut store = EncryptedHistoryStore::new();
 
         // 空白は無視
-        store.add("   ".to_string(), 10);
+        store.add("   ", 10);
         assert!(store.entries_decrypted().is_empty());
 
         // 重複するエントリは先頭に移動する
-        store.add("first".to_string(), 10);
-        store.add("second".to_string(), 10);
-        store.add("first".to_string(), 10);
+        store.add("first", 10);
+        store.add("second", 10);
+        store.add("first", 10);
 
         let entries = store.entries_decrypted();
         assert_eq!(entries, vec!["first", "second"]);
 
         // 上限を超えた分は切り捨てられる
         for i in 0..7 {
-            store.add(format!("item-{i}"), 5);
+            store.add(&format!("item-{i}"), 5);
         }
         let entries = store.entries_decrypted();
         assert_eq!(entries.len(), 5);

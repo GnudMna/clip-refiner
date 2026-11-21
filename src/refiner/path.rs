@@ -29,7 +29,7 @@ pub fn extract_basename(text: &str) -> Cow<'_, str> {
 /// * `Cow<'_, str>` - ベースネームが抽出(引用符付き)されたテキスト
 pub fn extract_basename_quoted(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| {
-        extract_single_basename(line).map(|basename| Cow::Owned(format!("\"{}\"", basename)))
+        extract_single_basename(line).map(|basename| Cow::Owned(format!("\"{basename}\"")))
     })
 }
 
@@ -78,7 +78,7 @@ pub fn add_path_quotes(text: &str) -> Cow<'_, str> {
         if !(trimmed.is_empty() || trimmed.starts_with('"') && trimmed.ends_with('"'))
             && is_path_like_raw(trimmed)
         {
-            return Some(Cow::Owned(format!("\"{}\"", trimmed)));
+            return Some(Cow::Owned(format!("\"{trimmed}\"")));
         }
         None
     })
@@ -112,7 +112,7 @@ pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
 
 /// パス内のスラッシュをバックスラッシュに変換する
 ///
-/// Unix形式のパス区切り文字をWindows形式に変換する
+/// `Unix形式のパス区切り文字をWindows形式に変換する`
 /// 複数行の入力に対応している
 ///
 /// # Arguments

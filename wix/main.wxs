@@ -1,0 +1,155 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  ClipRefiner MSI インストーラー定義 (cargo-wix / WiX Toolset v3)
+
+  インストール先: %LOCALAPPDATA%\ClipRefiner
+  ブランド画像: wix/Banner.bmp (493x58), wix/Dialog.bmp (493x312, 左装飾+右白)
+                scripts/windows/generate-wix-assets.ps1 で再生成可能
+  ライセンス:   wix/Eula.rtf (同意画面、LICENSE から生成)
+-->
+
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <Product
+        Id='*'
+        Name='ClipRefiner'
+        UpgradeCode='A3C8E2F1-9B4D-4E7A-8C1F-2D5E6A9B0C3D'
+        Manufacturer='y_hirata'
+        Language='1041'
+        Codepage='932'
+        Version='$(var.Version)'>
+
+        <Package Id='*'
+            Keywords='Installer'
+            Description='クリップボードのテキストを加工するツール'
+            Manufacturer='y_hirata'
+            InstallerVersion='450'
+            Languages='1041'
+            Compressed='yes'
+            InstallScope='perUser'
+            SummaryCodepage='932'
+            />
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            AllowSameVersionUpgrades='yes'
+            DowngradeErrorMessage='[ProductName] の新しいバージョンが既にインストールされています。セットアップを終了します。'/>
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
+        <Property Id='DiskPrompt' Value='ClipRefiner インストール'/>
+
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='LocalAppDataFolder'>
+                <Directory Id='APPLICATIONFOLDER' Name='ClipRefiner'>
+
+                    <Component Id='License' Guid='A8C3E1F2-4B5D-4E6A-9C1F-2D5E6A9B0C4E'>
+                        <File Id='LicenseFile' Name='LICENSE' DiskId='1' Source='LICENSE'/>
+                        <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='license' Type='integer' Value='1' KeyPath='yes'/>
+                    </Component>
+
+                    <Directory Id='Bin' Name='bin'>
+                        <Component Id='Path' Guid='B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D'>
+                            <Environment
+                                Id='PATH'
+                                Name='PATH'
+                                Value='[Bin]'
+                                Permanent='no'
+                                Part='last'
+                                Action='set'
+                                System='no'/>
+                            <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='path' Type='integer' Value='1' KeyPath='yes'/>
+                        </Component>
+                        <Component Id='binary0' Guid='C4E8F2A1-7D3B-4F9E-B2C5-6A8D0E3F1B7C'>
+                            <File
+                                Id='exe0'
+                                Name='ClipRefiner.exe'
+                                DiskId='1'
+                                Source='$(var.CargoTargetBinDir)\ClipRefiner.exe'/>
+                            <RemoveFolder Id='RemoveBinFolder' Directory='Bin' On='uninstall'/>
+                            <RemoveFolder Id='RemoveApplicationFolder' Directory='APPLICATIONFOLDER' On='uninstall'/>
+                            <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='main' Type='integer' Value='1' KeyPath='yes'/>
+                        </Component>
+                    </Directory>
+                </Directory>
+            </Directory>
+            <Directory Id='ProgramMenuFolder'>
+                <Directory Id='ApplicationProgramsFolder' Name='ClipRefiner'/>
+            </Directory>
+        </Directory>
+
+        <DirectoryRef Id='APPLICATIONFOLDER'>
+            <Component Id='Autostart' Guid='D2E8A1F3-5C7B-4D9E-A6F2-8B1C0D4E5F6A'>
+                <RegistryValue
+                    Root='HKCU'
+                    Key='Software\Microsoft\Windows\CurrentVersion\Run'
+                    Name='ClipRefiner'
+                    Type='string'
+                    Value='[Bin]ClipRefiner.exe'
+                    KeyPath='yes'/>
+            </Component>
+        </DirectoryRef>
+
+        <DirectoryRef Id='ApplicationProgramsFolder'>
+            <Component Id='StartMenuShortcut' Guid='E1F2A3B4-5C6D-4E7F-8A9B-0C1D2E3F4A5B'>
+                <Shortcut
+                    Id='ClipRefinerStartMenuShortcut'
+                    Name='ClipRefiner'
+                    Description='クリップボードのテキストを加工するツール'
+                    Target='[Bin]ClipRefiner.exe'
+                    WorkingDirectory='Bin'
+                    Icon='ProductICO'/>
+                <RemoveFolder Id='RemoveApplicationProgramsFolder' Directory='ApplicationProgramsFolder' On='uninstall'/>
+                <RegistryValue Root='HKCU' Key='Software\y_hirata\ClipRefiner' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
+            </Component>
+        </DirectoryRef>
+
+        <Feature
+            Id='Binaries'
+            Title='アプリケーション'
+            Description='実行ファイルをインストールする'
+            Level='1'
+            ConfigurableDirectory='APPLICATIONFOLDER'
+            AllowAdvertise='no'
+            Display='expand'
+            Absent='disallow'>
+
+            <ComponentRef Id='binary0'/>
+            <ComponentRef Id='License'/>
+            <ComponentRef Id='StartMenuShortcut'/>
+
+            <Feature
+                Id='Environment'
+                Title='PATH 環境変数'
+                Description='[ProductName] のインストール先をユーザー PATH 環境変数に追加する。任意の場所から [ProductName] を実行できるようになる'
+                Level='1'
+                Absent='allow'>
+                <ComponentRef Id='Path'/>
+            </Feature>
+
+            <Feature
+                Id='Autostart'
+                Title='ログイン時に自動起動'
+                Description='Windows にログインしたときに [ProductName] を自動的に起動する'
+                Level='1'
+                Absent='allow'>
+                <ComponentRef Id='Autostart'/>
+            </Feature>
+        </Feature>
+
+        <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
+
+        <Icon Id='ProductICO' SourceFile='assets/icon.ico'/>
+        <Property Id='ARPPRODUCTICON' Value='ProductICO' />
+        <Property Id='ARPCOMMENTS' Value='クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工するツール'/>
+
+        <UI>
+            <UIRef Id='WixUI_FeatureTree'/>
+        </UI>
+
+        <WixVariable Id='WixUILicenseRtf' Value='wix\Eula.rtf'/>
+        <WixVariable Id='WixUIBannerBmp' Value='wix\Banner.bmp'/>
+        <WixVariable Id='WixUIDialogBmp' Value='wix\Dialog.bmp'/>
+
+    </Product>
+
+</Wix>

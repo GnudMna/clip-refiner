@@ -1,7 +1,7 @@
 // ======================================================================
 // アプリーケーション情報
 // ======================================================================
-/// アプリケーションの表示名 (PascalCase)
+/// アプリケーションの表示名 (`PascalCase`)
 ///
 /// ウィンドウタイトルやメニューの表示に使用される
 pub const APP_NAME: &str = "ClipRefiner";
@@ -9,7 +9,7 @@ pub const APP_NAME: &str = "ClipRefiner";
 /// アプリケーションの識別子 (kebab-case)
 ///
 /// 設定フォルダ名やデータ保存パスの生成に使用される
-#[allow(dead_code)]
+#[cfg_attr(windows, allow(dead_code))]
 pub const APP_NAME_KEBAB: &str = "clip-refiner";
 
 // ======================================================================
@@ -52,6 +52,9 @@ pub const DEFAULT_HOTKEY_PAUSE: &str = "Alt+Shift+P";
 
 /// 終了のデフォルトホットキー
 pub const DEFAULT_HOTKEY_QUIT: &str = "Alt+Shift+Q";
+
+/// 加工取り消しのデフォルトホットキー
+pub const DEFAULT_HOTKEY_UNDO: &str = "Alt+Shift+Z";
 
 // ======================================================================
 // ヘルパー関数
