@@ -152,9 +152,9 @@ fn sort_csv_records(text: &str, line_ending: &str, descending: bool) -> String {
 fn sort_plain_lines(text: &str, line_ending: &str, descending: bool) -> String {
     let mut lines: Vec<&str> = text.lines().collect();
     if descending {
-        lines.sort_by(|a, b| b.to_lowercase().cmp(&a.to_lowercase()));
+        lines.sort_by_key(|b| std::cmp::Reverse(b.to_lowercase()));
     } else {
-        lines.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        lines.sort_by_key(|a| a.to_lowercase());
     }
     lines.join(line_ending)
 }

@@ -34,13 +34,11 @@ pub fn add_commas(text: &str) -> String {
         integer_part
     };
 
-    let mut count = 0;
-    for c in abs_integer.chars().rev() {
+    for (count, c) in abs_integer.chars().rev().enumerate() {
         if count > 0 && count % 3 == 0 {
             result.push(',');
         }
         result.push(c);
-        count += 1;
     }
 
     let mut formatted_int: String = result.chars().rev().collect();
@@ -118,6 +116,7 @@ fn is_numeric_input(text: &str) -> bool {
 mod tests {
     use super::*;
 
+    /// 3桁区切りのカンマを追加する基本的なテスト
     #[test]
     fn test_add_commas() {
         assert_eq!(add_commas("1234"), "1,234");
@@ -130,6 +129,7 @@ mod tests {
         assert_eq!(add_commas(""), "");
     }
 
+    /// カンマを除去する基本的なテスト
     #[test]
     fn test_remove_commas() {
         assert_eq!(remove_commas("1,234"), "1234");
@@ -138,5 +138,28 @@ mod tests {
         assert_eq!(remove_commas("-1,234"), "-1234");
         assert_eq!(remove_commas("1,234 yen"), "1,234 yen");
         assert_eq!(remove_commas(""), "");
+    }
+
+    /// ゼロに対するカンマ追加のテスト
+    #[test]
+    fn test_add_commas_zero() {
+        assert_eq!(add_commas("0"), "0");
+        assert_eq!(add_commas("0.0"), "0.0");
+    }
+
+    /// 負の数に対するカンマ追加のテスト
+    #[test]
+    fn test_add_commas_negative() {
+        assert_eq!(add_commas("-1234.56"), "-1,234.56");
+        assert_eq!(add_commas("-.5"), "-.5");
+    }
+
+    /// 数値判定ロジックのテスト
+    /// 数字、カンマ、ピリオド、マイナス記号以外が含まれる場合はfalseとなることを確認
+    #[test]
+    fn test_is_numeric_input_check() {
+        assert!(!is_numeric_input("abc"));
+        assert!(!is_numeric_input("12.34.56"));
+        assert!(is_numeric_input("-1,234.5"));
     }
 }

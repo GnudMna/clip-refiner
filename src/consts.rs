@@ -9,3 +9,8 @@ pub const APP_NAME_KEBAB: &str = "clip-refiner";
 /// アプリケーションの一意な識別子
 /// 多重起動防止用などに使用される。
 pub const APP_ID: &str = "com.y_hirata.clip-refiner";
+
+/// Serdeのデフォルト値(true)を返すヘルパー関数
+pub fn default_true() -> bool {
+    true
+}

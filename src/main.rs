@@ -76,7 +76,7 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 
     if !instance.is_single() {
         let msg = format!("{}は既に実行されています。", consts::APP_NAME);
-        notification::show_simple_notification("多重起動", &msg);
+        notification::show_notification("多重起動", &msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
     }

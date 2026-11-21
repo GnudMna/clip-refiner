@@ -52,6 +52,7 @@ mod tests {
     use super::*;
     use serde_yaml::Value;
 
+    /// 有効なYAMLからJSONへの変換テスト
     #[test]
     fn test_yaml_to_json_valid() {
         let input = "b: 1\na: 2\n";
@@ -64,6 +65,7 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なYAMLからJSONへの変換テスト
     #[test]
     fn test_yaml_to_json_invalid() {
         let input = "a: 1\n  b: 2"; // インデント不正
@@ -71,6 +73,7 @@ mod tests {
         assert_eq!(output, input);
     }
 
+    /// 有効なYAMLからJSONへの変換（キー順序保持）テスト
     #[test]
     fn test_yaml_to_json_preserve_order_valid() {
         let input = "z: 1\na: 2\nm: 3\n";
@@ -86,6 +89,7 @@ mod tests {
         assert_eq!(output, expected);
     }
 
+    /// 無効なYAMLからJSONへの変換（キー順序保持）テスト
     #[test]
     fn test_yaml_to_json_preserve_order_invalid() {
         let input = "x: 1\n  y: 2"; // インデント不正
@@ -93,10 +97,27 @@ mod tests {
         assert_eq!(output, input);
     }
 
+    /// ネストされたYAMLのJSON変換テスト
     #[test]
     fn test_yaml_to_json_nested() {
         let input = "nested:\n  val: 1";
         let output = yaml_to_json(input);
         assert!(output.contains("\"nested\": {"));
+    }
+
+    /// リスト形式のYAMLのJSON変換テスト
+    #[test]
+    fn test_yaml_to_json_list() {
+        let input = "- a\n- b";
+        let output = yaml_to_json(input);
+        assert_eq!(output, "[\n  \"a\",\n  \"b\"\n]");
+    }
+
+    /// 空のYAMLのJSON変換テスト
+    #[test]
+    fn test_yaml_to_json_empty() {
+        let input = "{}";
+        let output = yaml_to_json(input);
+        assert_eq!(output, "{}");
     }
 }
