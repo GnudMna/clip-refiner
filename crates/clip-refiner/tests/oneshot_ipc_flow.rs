@@ -1,5 +1,6 @@
 //! ワンショット名前付きパイプ IPC の実パイプ往復テスト
 
+use std::fs::{File, OpenOptions};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -21,6 +22,19 @@ fn with_oneshot_ipc_lock<T>(f: impl FnOnce() -> T) -> T {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     f()
+}
+
+/// 待受が空くのを待ってから、要求を送らない接続を開く
+fn open_idle_connection(pipe_name: &str) -> File {
+    assert!(
+        clip_refiner::test_helpers::wait_for_oneshot_pipe(pipe_name, Duration::from_secs(2)),
+        "パイプ待受が開始されなかった"
+    );
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(pipe_name)
+        .expect("要求を送らない接続を開く")
 }
 
 // ======================================================================
@@ -255,5 +269,48 @@ fn oneshot_ipc_pipe_handles_sequential_requests() {
 
         assert_eq!(first.status, OneshotIpcStatus::Processed);
         assert_eq!(second.status, OneshotIpcStatus::Unchanged);
+    });
+}
+
+/// 要求を送らない接続が残っていても別の委譲を処理できるようにすること
+#[test]
+fn oneshot_ipc_pipe_serves_while_other_connection_is_idle() {
+    with_oneshot_ipc_lock(|| {
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+        let _responder = spawn_oneshot_stub_responder(rx, |_, _| OneshotProcessResult::Processed);
+        let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
+
+        // 先に接続したクライアントが要求を送らないまま接続を保持する
+        let _idle = open_idle_connection(&pipe_name);
+
+        let response =
+            process_oneshot_via_pipe(&pipe_name, &[RefineMode::Trim], &RefineContext::default())
+                .expect("IPC 往復");
+
+        assert_eq!(response.status, OneshotIpcStatus::Processed);
+    });
+}
+
+/// 処理枠が埋まっても、枠が空けば次の委譲を処理できるようにすること
+#[test]
+fn oneshot_ipc_pipe_recovers_after_connection_limit() {
+    with_oneshot_ipc_lock(|| {
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+        let _responder = spawn_oneshot_stub_responder(rx, |_, _| OneshotProcessResult::Processed);
+        let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
+
+        // 処理枠 (4) と枠待ちの 1 接続を、要求を送らない接続で埋める
+        let mut idle: Vec<File> = (0..5).map(|_| open_idle_connection(&pipe_name)).collect();
+
+        // 1 接続目を閉じると枠待ちの接続が枠に入り、2 接続目を閉じると委譲用の枠が空く
+        drop(idle.drain(..2));
+
+        let response =
+            process_oneshot_via_pipe(&pipe_name, &[RefineMode::Trim], &RefineContext::default())
+                .expect("IPC 往復");
+
+        assert_eq!(response.status, OneshotIpcStatus::Processed);
     });
 }

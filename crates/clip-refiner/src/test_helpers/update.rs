@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use crate::platform::update::{
     RELEASE_OWNER, RELEASE_REPO, apply_update_at, apply_update_at_with_key, check_for_update_at,
+    expected_trusted_comment, signature_asset_name,
 };
 
 use sha2::{Digest, Sha256};
@@ -205,14 +206,20 @@ pub fn check_update_at(
 /// # Arguments
 /// * `update` - 確認済み更新
 /// * `base_url` - モックのベース URL
+/// * `trusted_keys` - 署名検証に使う minisign 公開鍵 (Base64)
 ///
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
-pub fn apply_update_for_test(update: &AvailableUpdate, base_url: &str) -> UpdateApplyOutcome {
+pub fn apply_update_for_test(
+    update: &AvailableUpdate,
+    base_url: &str,
+    trusted_keys: &[&str],
+) -> UpdateApplyOutcome {
     apply_update_at(
         update,
         base_url,
         crate::platform::update::ApplyOptions::TEST,
+        trusted_keys,
     )
 }
 
@@ -222,6 +229,7 @@ pub fn apply_update_for_test(update: &AvailableUpdate, base_url: &str) -> Update
 /// * `update` - 確認済み更新
 /// * `base_url` - モックのベース URL
 /// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+/// * `trusted_keys` - 署名検証に使う minisign 公開鍵 (Base64)
 ///
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
@@ -229,13 +237,40 @@ pub fn apply_update_for_test_with_key(
     update: &AvailableUpdate,
     base_url: &str,
     download_key: Option<&str>,
+    trusted_keys: &[&str],
 ) -> UpdateApplyOutcome {
     apply_update_at_with_key(
         update,
         base_url,
         crate::platform::update::ApplyOptions::TEST,
         download_key,
+        trusted_keys,
     )
+}
+
+/// 更新署名の信頼コメントとして期待する文字列を返す
+///
+/// # Arguments
+/// * `version` - 更新先バージョン (`SemVer`、`v` なし)
+/// * `asset_name` - アセット名
+///
+/// # Returns
+/// * `String` - リリース時に署名へ入れる信頼コメント
+#[must_use]
+pub fn update_signature_trusted_comment(version: &str, asset_name: &str) -> String {
+    expected_trusted_comment(version, asset_name)
+}
+
+/// アセットに対応する署名ファイル名を返す
+///
+/// # Arguments
+/// * `asset_name` - アセット名
+///
+/// # Returns
+/// * `String` - `<asset_name>.minisig`
+#[must_use]
+pub fn update_signature_asset_name(asset_name: &str) -> String {
+    signature_asset_name(asset_name)
 }
 
 /// ポータブル ZIP フィクスチャを組み立てる

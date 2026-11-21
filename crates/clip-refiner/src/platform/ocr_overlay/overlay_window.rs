@@ -1,6 +1,6 @@
 //! Win32 レイヤードウィンドウによる画面範囲選択オーバーレイ
 
-use std::ptr;
+use std::ptr::NonNull;
 
 use super::geometry;
 use super::layered::LayeredOverlay;
@@ -24,7 +24,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 /// Win32 レイヤードウィンドウによる画面範囲選択オーバーレイ
 pub(crate) struct OverlayWindow {
     hwnd: HWND,
-    state: Box<OverlayState>,
+    /// `Box::into_raw` で確保した状態 (`GWLP_USERDATA` と共有し、`Drop` で解放)
+    ///
+    /// ウィンドウプロシージャも同じポインタ経由で触るため、`Box` のまま保持せず生ポインタで持つ
+    state: NonNull<OverlayState>,
 }
 
 impl OverlayWindow {
@@ -44,6 +47,8 @@ impl OverlayWindow {
         }
 
         let class_name = geometry::str_to_wide(OVERLAY_CLASS_NAME);
+        // SAFETY: `class_name` は NUL 終端の UTF-16 で、呼び出し中は生存する
+        // `GWLP_USERDATA` は未設定 (0) のため、生成中のメッセージは `DefWindowProcW` へ流れる
         let hwnd = unsafe {
             CreateWindowExW(
                 WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
@@ -61,25 +66,46 @@ impl OverlayWindow {
             )
         }?;
 
-        let layered = LayeredOverlay::new(hwnd, width, height)?;
-        let mut state = Box::new(OverlayState {
+        let layered = match LayeredOverlay::new(hwnd, width, height) {
+            Ok(layered) => layered,
+            Err(err) => {
+                // SAFETY: 直前に作成した未破棄のウィンドウで、`GWLP_USERDATA` は未設定
+                unsafe {
+                    let _ = DestroyWindow(hwnd);
+                }
+                return Err(err);
+            }
+        };
+        let state = NonNull::from(Box::leak(Box::new(OverlayState {
             layered,
             selection: DragSelection::default(),
             virt_x,
             virt_y,
             on_complete,
             last_redraw_at: None,
-        });
+        })));
 
+        // SAFETY: `state` はヒープ上に固定され、`Drop` で `GWLP_USERDATA` を 0 に戻してから解放する
         unsafe {
-            SetWindowLongPtrW(
-                hwnd,
-                GWLP_USERDATA,
-                ptr::from_mut(state.as_mut()).cast::<()>() as isize,
-            );
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, state.as_ptr() as isize);
         }
 
         Ok(Self { hwnd, state })
+    }
+
+    /// 状態への可変参照を返す
+    ///
+    /// 戻り値の参照を保持したまま Win32 API を呼ばないこと (ウィンドウプロシージャが同じ状態を触るため)
+    ///
+    /// # Arguments
+    /// * `self` - この `OverlayWindow`
+    ///
+    /// # Returns
+    /// * `&mut OverlayState` - 状態
+    fn state_mut(&mut self) -> &mut OverlayState {
+        // SAFETY: `state` は `Drop` まで解放されない
+        // ウィンドウプロシージャはこのスレッドのメッセージ処理中にのみ動き、参照の生存中には呼ばれない
+        unsafe { self.state.as_mut() }
     }
 
     /// オーバーレイを表示する
@@ -87,11 +113,13 @@ impl OverlayWindow {
     /// # Arguments
     /// * `self` - この `OverlayWindow`
     pub fn show(&mut self) {
-        self.state.selection = DragSelection::default();
-        self.state.last_redraw_at = None;
-        if let Err(err) = self.state.layered.reset_to_dim() {
+        let state = self.state_mut();
+        state.selection = DragSelection::default();
+        state.last_redraw_at = None;
+        if let Err(err) = state.layered.reset_to_dim() {
             crate::log_warn!("オーバーレイの初期描画に失敗: {err:#}");
         }
+        // SAFETY: `hwnd` は `self` が所有する生存中のウィンドウ
         unsafe {
             let _ = ShowWindow(self.hwnd, SW_SHOW);
             let _ = SetWindowPos(
@@ -112,8 +140,9 @@ impl OverlayWindow {
     /// # Arguments
     /// * `self` - この `OverlayWindow`
     pub fn hide(&mut self) {
+        // SAFETY: `state` は `self` が所有する生存中の状態で、他に参照は生存していない
         unsafe {
-            hide_overlay(self.hwnd, self.state.as_mut());
+            hide_overlay(self.hwnd, self.state.as_ptr());
         }
     }
 
@@ -125,16 +154,20 @@ impl OverlayWindow {
     /// # Returns
     /// * `bool` - ウィンドウが表示中の場合は `true`
     pub fn is_visible(&self) -> bool {
+        // SAFETY: `hwnd` は `self` が所有する生存中のウィンドウ
         unsafe { IsWindowVisible(self.hwnd).as_bool() }
     }
 }
 
 impl Drop for OverlayWindow {
     fn drop(&mut self) {
+        // SAFETY: `state` の解放前に `GWLP_USERDATA` を 0 に戻し、ウィンドウも破棄して以降は参照させない
+        // `state` は `create` の `Box::leak` で確保したもので、ここで 1 度だけ `Box` へ戻して解放する
         unsafe {
             SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
             let _ = ReleaseCapture();
             let _ = DestroyWindow(self.hwnd);
+            drop(Box::from_raw(self.state.as_ptr()));
         }
     }
 }
@@ -164,15 +197,16 @@ mod tests {
         }
 
         /// テスト用に直前の選択プレビュー矩形を返す
-        fn last_preview_for_test(&self) -> Option<SelectionRect> {
-            self.state.layered.last_preview
+        fn last_preview_for_test(&mut self) -> Option<SelectionRect> {
+            self.state_mut().layered.last_preview
         }
 
         /// テスト用に選択枠の角ピクセル (BGRA) を返す
-        fn border_corner_pixel_for_test(&self) -> Option<[u8; 4]> {
-            let preview = self.state.layered.last_preview?;
-            let width = self.state.layered.width_for_test();
-            let bgra = self.state.layered.bgra_for_test();
+        fn border_corner_pixel_for_test(&mut self) -> Option<[u8; 4]> {
+            let layered = &self.state_mut().layered;
+            let preview = layered.last_preview?;
+            let width = layered.width_for_test();
+            let bgra = layered.bgra_for_test();
             let x = usize::try_from(preview.x).ok()?;
             let y = usize::try_from(preview.y).ok()?;
             let offset = y
@@ -207,6 +241,7 @@ mod tests {
         overlay.show();
 
         let hwnd = overlay.hwnd_for_test();
+        // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
         unsafe {
             let _ = SendMessageW(
                 hwnd,
@@ -233,6 +268,7 @@ mod tests {
         );
         assert_eq!(overlay.border_corner_pixel_for_test(), Some(BORDER_PIXEL));
 
+        // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
         unsafe {
             let _ = SendMessageW(
                 hwnd,
@@ -263,6 +299,7 @@ mod tests {
         overlay.show();
 
         let hwnd = overlay.hwnd_for_test();
+        // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
         unsafe {
             let _ = SendMessageW(
                 hwnd,

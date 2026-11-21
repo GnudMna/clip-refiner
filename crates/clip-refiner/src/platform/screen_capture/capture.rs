@@ -4,7 +4,8 @@ use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
-    DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
+    DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, RGBQUAD, ReleaseDC, SRCCOPY,
+    SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -15,6 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 // ======================================================================
 /// 仮想デスクトップ全体の境界 (物理ピクセル) を返す
 pub(crate) fn virtual_screen_bounds() -> (i32, i32, u32, u32) {
+    // SAFETY: 値を返すだけの API で、ポインタを受け取らない
     unsafe {
         let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
         let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -30,7 +32,15 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
 
     let width = i32::try_from(rect.width).context("キャプチャ幅が大きすぎる")?;
     let height = i32::try_from(rect.height).context("キャプチャ高さが大きすぎる")?;
+    // GDI リソース確保前に計算し、失敗時にハンドルを取りこぼさない
+    let pixel_count = rect
+        .width
+        .checked_mul(rect.height)
+        .context("ピクセル数の計算に失敗")?;
 
+    // SAFETY: 各ハンドルは取得失敗を確認してから使い、全経路で取得済みのものだけを解放する
+    // `bgra` は 32bpp トップダウンで `width * height * 4` バイト (行パディングなし) を確保し、
+    // `GetDIBits` が書き込む `rect.height` 行分を収められる
     unsafe {
         let hdc_screen = GetDC(Some(HWND::default()));
         if hdc_screen.is_invalid() {
@@ -85,13 +95,9 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
                 biClrUsed: 0,
                 biClrImportant: 0,
             },
-            bmiColors: [std::mem::zeroed(); 1],
+            bmiColors: [RGBQUAD::default(); 1],
         };
 
-        let pixel_count = rect
-            .width
-            .checked_mul(rect.height)
-            .context("ピクセル数の計算に失敗")?;
         let mut bgra = vec![0u8; pixel_count as usize * 4];
 
         let lines = GetDIBits(

@@ -37,6 +37,7 @@ app = [
     "dep:clap",
     "dep:global-hotkey",
     "dep:image",
+    "dep:minisign-verify",
     "dep:png",
     "dep:single-instance",
     "dep:tao",
@@ -158,6 +159,7 @@ chrono = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 global-hotkey = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
+minisign-verify = { workspace = true, optional = true }
 png = { workspace = true, optional = true }
 serde.workspace = true
 serde_json = { workspace = true, optional = true }
@@ -203,6 +205,8 @@ windows-future = { workspace = true, optional = true }
 winreg = { workspace = true, optional = true }
 
 [dev-dependencies]
+minisign.workspace = true
+sha2.workspace = true
 toml.workspace = true
 
 [build-dependencies]

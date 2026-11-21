@@ -80,6 +80,7 @@ fn simulate_ctrl_v() -> bool {
     let Ok(expected) = u32::try_from(inputs.len()) else {
         return false;
     };
+    // SAFETY: `inputs` はすべてキーボード入力として初期化済みで、`cbsize` は `INPUT` の実サイズ
     let sent = unsafe { SendInput(&inputs, cbsize) };
     sent == expected
 }

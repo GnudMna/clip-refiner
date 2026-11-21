@@ -9,8 +9,7 @@ use crate::consts;
 use crate::error::ConfigError;
 use crate::security::{decrypt_bytes, encrypt_bytes};
 
-use base64::{Engine, engine::general_purpose::STANDARD};
-use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
+use image::{ImageBuffer, ImageFormat, RgbaImage};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 
@@ -188,57 +187,6 @@ pub fn format_registered_image_label(width: u32, height: u32) -> String {
     format!("[画像] {width}×{height}")
 }
 
-/// セレクター表示用の JPEG サムネイル Data URL を生成する
-///
-/// 生成に失敗した場合やサイズ上限を超える場合は `None` を返す
-///
-/// # Arguments
-/// * `relative_filename` - `registered-images` 内の相対ファイル名
-/// * `max_dimension` - サムネイルの最大辺長 (ピクセル)
-///
-/// # Returns
-/// * `Option<String>` - `data:image/jpeg;base64,...` 形式の Data URL
-pub fn registered_image_thumbnail_data_url(
-    relative_filename: &str,
-    max_dimension: u32,
-) -> Option<String> {
-    registered_image_preview_data_url(
-        relative_filename,
-        max_dimension,
-        consts::MAX_SELECTOR_IMAGE_PREVIEW_BYTES,
-    )
-}
-
-/// セレクター hover プレビュー用の JPEG Data URL を生成する
-///
-/// # Arguments
-/// * `relative_filename` - `registered-images` 内の相対ファイル名
-/// * `max_dimension` - プレビューの最大辺長 (ピクセル)
-///
-/// # Returns
-/// * `Option<String>` - `data:image/jpeg;base64,...` 形式の Data URL
-pub fn registered_image_hover_preview_data_url(
-    relative_filename: &str,
-    max_dimension: u32,
-) -> Option<String> {
-    registered_image_preview_data_url(
-        relative_filename,
-        max_dimension,
-        consts::MAX_SELECTOR_IMAGE_HOVER_PREVIEW_BYTES,
-    )
-}
-
-/// セレクター表示用の JPEG Data URL を生成する
-fn registered_image_preview_data_url(
-    relative_filename: &str,
-    max_dimension: u32,
-    max_bytes: usize,
-) -> Option<String> {
-    let png = read_registered_image_png(relative_filename).ok()?;
-    let image = image::load_from_memory_with_format(&png, ImageFormat::Png).ok()?;
-    encode_thumbnail_data_url(&image, max_dimension, max_bytes)
-}
-
 // ======================================================================
 // プライベート関数
 // ======================================================================
@@ -345,23 +293,6 @@ fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
     Ok((width, height, rgba.into_raw()))
 }
 
-fn encode_thumbnail_data_url(
-    image: &DynamicImage,
-    max_dimension: u32,
-    max_bytes: usize,
-) -> Option<String> {
-    let thumbnail = image.thumbnail(max_dimension, max_dimension);
-    let mut jpeg = Vec::new();
-    thumbnail
-        .write_to(&mut Cursor::new(&mut jpeg), ImageFormat::Jpeg)
-        .ok()?;
-    if jpeg.is_empty() || jpeg.len() > max_bytes {
-        return None;
-    }
-
-    Some(format!("data:image/jpeg;base64,{}", STANDARD.encode(jpeg)))
-}
-
 // ======================================================================
 // テスト
 // ======================================================================
@@ -384,19 +315,6 @@ mod tests {
         let (width, height, decoded) = decode_png(&png).expect("decode");
         assert_eq!((width, height), (2, 2));
         assert_eq!(decoded, rgba);
-    }
-
-    /// サムネイル Data URL を生成できるようにすること
-    #[test]
-    fn thumbnail_data_url_starts_with_jpeg_prefix() {
-        let rgba = vec![
-            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
-        ];
-        let image = DynamicImage::ImageRgba8(ImageBuffer::from_raw(2, 2, rgba).expect("image"));
-        let data_url =
-            encode_thumbnail_data_url(&image, 64, consts::MAX_SELECTOR_IMAGE_PREVIEW_BYTES)
-                .expect("thumbnail");
-        assert!(data_url.starts_with("data:image/jpeg;base64,"));
     }
 
     /// 相対パス traversal を拒否すること

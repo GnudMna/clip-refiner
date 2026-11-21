@@ -52,7 +52,7 @@ pub use persistence::{
 #[cfg(feature = "config")]
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
-    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, ResolvedClip,
+    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegisteredClip, ResolvedClip,
     SelectorWebviewRetention, format_hotkey_fixes_message,
 };
 #[cfg(feature = "config")]
@@ -345,17 +345,16 @@ history_enabled = true
             }
             // 非機密の短い本文は preview に残るが、ストアには text_ciphertext のみ
             assert_eq!(config.clips[0].preview, "  hello  ");
-            let json = config.clips_to_json_list();
-            assert!(json.contains("\"preview\""));
-            assert!(!json.contains("text_ciphertext"));
 
-            // 機密らしい本文は preview がマスクされ、JSON に生本文が出ない
+            // 機密らしい本文は preview がマスクされる
             config.clips.clear();
             let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
             assert_eq!(config.add_registered_clip(jwt), Ok(()));
-            let masked_json = config.clips_to_json_list();
-            assert!(!masked_json.contains(jwt));
-            assert!(masked_json.contains(crate::consts::SENSITIVE_SNIPPET_LABEL));
+            assert!(!config.clips[0].preview.contains(jwt));
+            assert_eq!(
+                config.clips[0].preview,
+                crate::consts::SENSITIVE_SNIPPET_LABEL
+            );
 
             assert_eq!(
                 config.add_registered_clip("   ".to_string()),

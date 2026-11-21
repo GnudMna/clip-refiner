@@ -8,7 +8,7 @@ use windows::Win32::Foundation::{COLORREF, HWND, POINT, SIZE};
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION, CreateCompatibleDC,
     CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, HGDIOBJ,
-    ReleaseDC, SelectObject,
+    RGBQUAD, ReleaseDC, SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ULW_ALPHA, UpdateLayeredWindow};
 
@@ -33,7 +33,10 @@ struct LayeredPresenter {
     hdc_screen: HDC,
     hdc_mem: HDC,
     hbmp: HBITMAP,
+    /// DIB セクションのピクセル領域 (`bits_len` バイト)
     bits: *mut core::ffi::c_void,
+    /// `bits` が指す領域のバイト数 (`width * height * 4`)
+    bits_len: usize,
     saved_bitmap: HGDIOBJ,
 }
 
@@ -128,6 +131,8 @@ impl LayeredOverlay {
 
 impl Drop for LayeredPresenter {
     fn drop(&mut self) {
+        // SAFETY: 各ハンドルは `new` で取得した未解放のもので、ここで 1 度だけ解放する
+        // 元のビットマップを選択し直してから DIB を削除する
         unsafe {
             SelectObject(self.hdc_mem, self.saved_bitmap);
             let _ = DeleteObject(self.hbmp.into());
@@ -140,6 +145,14 @@ impl Drop for LayeredPresenter {
 impl LayeredPresenter {
     /// 再利用可能な DIB セクションを確保する
     fn new(width: u32, height: u32) -> Result<Self> {
+        let bits_len = usize::try_from(width)
+            .ok()
+            .and_then(|w| w.checked_mul(usize::try_from(height).ok()?))
+            .and_then(|pixels| pixels.checked_mul(4))
+            .context("DIB セクションのサイズ計算に失敗")?;
+
+        // SAFETY: 失敗時は取得済みのハンドルだけを解放して早期に返す
+        // `bmi` / `bits` は呼び出し中に生存するローカル変数を指す
         unsafe {
             let hdc_screen = GetDC(Some(HWND::default()));
             if hdc_screen.is_invalid() {
@@ -174,6 +187,7 @@ impl LayeredPresenter {
                 hdc_mem,
                 hbmp,
                 bits,
+                bits_len,
                 saved_bitmap,
             })
         }
@@ -181,6 +195,13 @@ impl LayeredPresenter {
 
     /// ビットマップをウィンドウへ反映する
     fn present(&mut self, hwnd: HWND, width: u32, height: u32, bgra: &[u8]) -> Result<()> {
+        if bgra.len() > self.bits_len {
+            bail!("描画バッファが DIB セクションより大きい");
+        }
+
+        // SAFETY: `bits` は `bits_len` バイトの DIB 領域で、`bgra` の長さはそれ以下であることを確認済み
+        // DIB 領域と `bgra` は別々の確保のため重ならない
+        // `size` / `point` / `blend` は呼び出し中に生存するローカル変数を指す
         unsafe {
             ptr::copy_nonoverlapping(bgra.as_ptr(), self.bits.cast(), bgra.len());
 
@@ -243,7 +264,7 @@ fn bitmap_info(width: u32, height: u32) -> Result<BITMAPINFO> {
             biClrUsed: 0,
             biClrImportant: 0,
         },
-        bmiColors: [unsafe { std::mem::zeroed() }; 1],
+        bmiColors: [RGBQUAD::default(); 1],
     })
 }
 

@@ -7,6 +7,7 @@ use windows::Win32::Security::Cryptography::{
     CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
 use windows::core::PCWSTR;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::ConfigError;
 
@@ -26,6 +27,7 @@ pub(crate) fn protect(data: &[u8]) -> Result<Vec<u8>> {
         pbData: ptr::null_mut(),
     };
 
+    // SAFETY: `input` は呼び出し中に生存する `data` を指し、DPAPI は入力を書き換えない
     unsafe {
         CryptProtectData(
             &raw const input,
@@ -39,8 +41,10 @@ pub(crate) fn protect(data: &[u8]) -> Result<Vec<u8>> {
     }
     .map_err(|e| ConfigError::dpapi(format!("DPAPI によるデータ保護に失敗: {e}")))?;
 
+    // SAFETY: 成功時の `output` は DPAPI が確保した `cbData` バイトの有効な領域を指す
     let protected =
         unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
+    // SAFETY: `output.pbData` は DPAPI が `LocalAlloc` で確保した領域で、コピー後は参照しない
     unsafe {
         let _ = LocalFree(Some(HLOCAL(output.pbData.cast())));
     }
@@ -48,7 +52,9 @@ pub(crate) fn protect(data: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// DPAPI 保護済みデータを平文へ復元する
-pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Vec<u8>> {
+///
+/// DPAPI が確保した平文領域は解放前にゼロ化し、戻り値も破棄時にゼロ化する
+pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Zeroizing<Vec<u8>>> {
     let input = CRYPT_INTEGER_BLOB {
         cbData: blob_len_u32(blob.len())?,
         pbData: blob.as_ptr().cast_mut(),
@@ -58,6 +64,7 @@ pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Vec<u8>> {
         pbData: ptr::null_mut(),
     };
 
+    // SAFETY: `input` は呼び出し中に生存する `blob` を指し、DPAPI は入力を書き換えない
     unsafe {
         CryptUnprotectData(
             &raw const input,
@@ -71,19 +78,20 @@ pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Vec<u8>> {
     }
     .map_err(|e| ConfigError::dpapi(format!("DPAPI によるデータ復号に失敗: {e}")))?;
 
-    let plain = unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) };
-    if plain.len() != expected_len {
-        unsafe {
-            let _ = LocalFree(Some(HLOCAL(output.pbData.cast())));
-        }
-        return Err(ConfigError::dpapi("DPAPI 復号データの長さが不正です"));
+    if output.pbData.is_null() {
+        return Err(ConfigError::dpapi("DPAPI 復号データが空です"));
     }
 
-    let data = plain.to_vec();
+    // SAFETY: 成功時の `output` は DPAPI が確保した `cbData` バイトの書き込み可能な領域を指す
+    // 他から参照されない領域で、`plain` は `LocalFree` より前にのみ使う
+    let plain = unsafe { std::slice::from_raw_parts_mut(output.pbData, output.cbData as usize) };
+    let data = (plain.len() == expected_len).then(|| Zeroizing::new(plain.to_vec()));
+    plain.zeroize();
+    // SAFETY: `output.pbData` は DPAPI が確保した領域で、ゼロ化後は `plain` を参照しない
     unsafe {
         let _ = LocalFree(Some(HLOCAL(output.pbData.cast())));
     }
-    Ok(data)
+    data.ok_or_else(|| ConfigError::dpapi("DPAPI 復号データの長さが不正です"))
 }
 
 // ======================================================================

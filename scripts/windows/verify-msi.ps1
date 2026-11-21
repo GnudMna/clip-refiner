@@ -49,7 +49,8 @@ Invoke-ScriptMain {
 
     $targetTriple = $null
     if (-not [string]::IsNullOrWhiteSpace($Target)) {
-        $resolved = Resolve-WindowsPackageTargets -Target $Target
+        # 1 件だとスカラー (文字列) で返り、.Count や [0] が期待どおりに動かないため配列に包む
+        $resolved = @(Resolve-WindowsPackageTargets -Target $Target)
         if ($resolved.Count -ne 1) {
             throw 'エラー: verify-msi.ps1 の -Target に All は指定できません。triple または x64 / arm64 を指定してください'
         }

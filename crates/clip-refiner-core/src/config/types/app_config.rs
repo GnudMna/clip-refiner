@@ -217,49 +217,6 @@ impl AppConfig {
         }
     }
 
-    /// 登録クリップをクイックセレクター向け JSON 配列へ変換する
-    ///
-    /// テキスト件はキャッシュ済み `preview` のみを使い、本文は復号しない
-    ///
-    /// # Arguments
-    /// * `self` - 変換元の設定
-    ///
-    /// # Returns
-    /// * `String` - セレクター向け JSON 配列文字列
-    pub fn clips_to_json_list(&self) -> String {
-        let list: Vec<serde_json::Value> = self
-            .clips
-            .iter()
-            .enumerate()
-            .map(|(index, entry)| {
-                let preview = if entry.is_image() {
-                    entry.label.clone()
-                } else {
-                    entry.preview.clone()
-                };
-                let thumbnail = entry.image_file.as_ref().and_then(|image_file| {
-                    super::super::registered_images::registered_image_thumbnail_data_url(
-                        image_file,
-                        consts::SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION,
-                    )
-                });
-                let hover_preview = entry.image_file.as_ref().and_then(|image_file| {
-                    super::super::registered_images::registered_image_hover_preview_data_url(
-                        image_file,
-                        consts::SELECTOR_IMAGE_HOVER_PREVIEW_MAX_DIMENSION,
-                    )
-                });
-                entry.to_clip_selector_json(
-                    index,
-                    &preview,
-                    thumbnail.as_deref(),
-                    hover_preview.as_deref(),
-                )
-            })
-            .collect();
-        serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
-    }
-
     /// 指定インデックスの登録クリップボード内容を返す
     ///
     /// テキスト件は都度復号し、`SecretString` として返す (平文はストアに残さない)
@@ -523,16 +480,5 @@ impl AppConfig {
         };
         self.favorite_modes.swap(index, target);
         true
-    }
-
-    /// クイックセレクター向けの変換モード JSON 配列を生成する
-    ///
-    /// # Arguments
-    /// * `self` - 参照元の設定
-    ///
-    /// # Returns
-    /// * `String` - お気に入り変換モードの JSON 配列文字列
-    pub fn modes_to_json_list(&self) -> String {
-        RefineMode::to_json_list(&self.favorite_modes)
     }
 }

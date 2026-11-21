@@ -2,9 +2,41 @@
 
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) の形式に従う。
 
-バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) に準拠する。各リリースの **設定** 節は `config.toml` の `version` (設定スキーマ) に関する変更を示す。
+バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) に準拠する。
+
+各リリースは次の節で分類する (該当が無い節は省略する)。
+
+| 節 | 内容 |
+| :--- | :--- |
+| **Breaking changes** | 互換性のない変更 (公開 API・設定・操作) と移行方法 |
+| **Settings** | `config.toml` の `version` (設定スキーマ) に関する変更と移行内容 |
+| **Added** | 新機能 |
+| **Changed** | 既存機能の変更 |
+| **Fixed** | 不具合修正 |
+| **Security** | 脆弱性・防御の強化 |
+| **Removed** | 削除した機能 |
+
+1.0.0 以前の一部リリースには **Improved** 節がある (現在は **Changed** に含める)。
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-10-03
+
+### Changed
+
+- 品質チェック: UI バンドル (`*.bundle.js`) の先頭に入力ファイル一覧と SHA-256 を記録し、`cargo test` (`ui_bundle_flow.rs`) が Node.js なしでソースとの不一致を検出するようにした。`check.ps1` は git の未ステージ差分ではなく `npm run build:ui:check` (書き込みなしの再生成比較) で判定する。従来はステージ済みなら未コミットでも通過し、`cargo test` 単体では古いバンドルに気づけなかった
+- ドキュメント (README / CONFIG / DEVELOPMENT) を整理した。CONFIG の文体を常体へ統一し、連続記録・処理の制限の重複説明をまとめた。DEVELOPMENT に `check.ps1` の実行順・パニックのログ記録・Git 運用を追記した
+
+### Fixed
+
+- ログ: パニックがログファイルに残らなかったのを修正した。発生スレッド・メッセージ・位置をログファイルへ同期で書き込む (`RUST_BACKTRACE` 指定時はバックトレースも含む)。従来は GUI ビルドでは出力先の無い標準エラーにしか出ず、クリップボードワーカーの停止原因などを追えなかった
+
+### Security
+
+- アプリ更新: MSI / ポータブル ZIP の minisign 署名 (`<アセット名>.minisig`) を、ビルド時に埋め込んだ公開鍵で検証してから適用するようにした。署名の信頼コメントに含まれる更新先バージョン・アセット名が一致しない場合も適用しない。配信経路や version API の digest を差し替えられても、正規の秘密鍵で署名されていないアセットは適用しない。署名を検証しない旧版からこの版への更新は従来どおり SHA-256 の確認のみで行われる
+- 依存関係: アプリ更新の HTTPS 通信で使う `rustls` を 0.23.45 へ更新した (RUSTSEC-2026-0285)。取り下げ (yanked) された `chacha20` 0.10.1 を 0.10.2 へ更新した
+- ワンショット IPC: 要求・応答の 1 行を上限 (64 KiB) までしか読み込まないようにした。従来は行全体を読み込んでから上限を確認しており、改行を送らない巨大な入力でメモリを確保し続けていた。本文がちょうど 64 KiB の要求を誤って破棄していた点も修正した
+- ワンショット IPC: 常駐側が 1 接続の処理を終えるまで次の接続を受け付けなかったのを改め、接続ごとに処理スレッドへ渡すようにした (同時処理は 4 接続まで)。要求を送らない接続や応答待ちの接続が残っていても、別のワンショット委譲が「すべてのパイプ インスタンスがビジー」で失敗しない
 
 ## [1.0.0] - 2026-08-14
 
@@ -611,7 +643,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.0.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.1.0...develop
+[1.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.0.0...v1.1.0
 [1.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.1...v1.0.0
 [0.15.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...v0.15.1
 [0.15.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...v0.15.0

@@ -1,5 +1,8 @@
 //! コンソールアタッチとロギング初期化
 
+use std::sync::Arc;
+
+use super::panic_hook::install_panic_hook;
 use crate::config;
 use crate::logger;
 use crate::{log_info, log_warn};
@@ -18,6 +21,7 @@ use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 /// これにより、コンソール(`cmd.exe` や `PowerShell`)から `cargo run` などで起動した場合に、
 /// アプリケーションからの標準出力がコンソール上に表示される
 pub(super) fn setup_console() {
+    // SAFETY: ポインタ引数を取らない API で、親コンソールが無い場合は失敗を返すだけ
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
     }
@@ -30,6 +34,7 @@ pub(super) fn setup_console() {
 ///
 /// 設定ディレクトリ内の `logs` フォルダにローカル日付の日次ログファイルを作成し、
 /// 標準出力とファイルの両方にログを出力するように設定する
+/// パニックを同じログファイルへ記録するフックも登録する
 /// また、システム全体のグローバルロガーもここで初期化される
 ///
 /// # Returns
@@ -49,8 +54,13 @@ pub(super) fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGu
         log_warn!("ログファイルのパーミッション設定に失敗: {:?}", e);
     }
 
-    let file_appender = logger::LocalDailyFileAppender::new(&log_dir, "clip-refiner.log")?;
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let file_appender = Arc::new(logger::LocalDailyFileAppender::new(
+        &log_dir,
+        "clip-refiner.log",
+    )?);
+    let (non_blocking, guard) =
+        tracing_appender::non_blocking(logger::SharedLogAppender(Arc::clone(&file_appender)));
+    install_panic_hook(file_appender);
 
     let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
 

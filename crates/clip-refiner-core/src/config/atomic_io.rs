@@ -103,6 +103,7 @@ fn replace_file_windows(tmp: &Path, dest: &Path) -> io::Result<()> {
 
     let tmp_wide = path_to_wide(tmp)?;
     let dest_wide = path_to_wide(dest)?;
+    // SAFETY: `tmp_wide` / `dest_wide` は NUL 終端の UTF-16 で、呼び出し中は生存する
     let result = unsafe {
         MoveFileExW(
             PCWSTR(tmp_wide.as_ptr()),

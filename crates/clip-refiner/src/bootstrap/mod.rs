@@ -6,6 +6,7 @@ mod args;
 mod instance;
 mod logging;
 mod oneshot;
+mod panic_hook;
 mod portable;
 
 use crate::log_error;

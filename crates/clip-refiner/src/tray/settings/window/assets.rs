@@ -13,6 +13,22 @@ pub(super) const CLOSE_FROM_OS_SCRIPT: &str =
 pub(super) const FLUSH_PENDING_APPLY_SCRIPT: &str =
     "typeof window.flushPendingApply==='function'&&window.flushPendingApply();";
 const IPC_LOG_PREVIEW_MAX_LEN: usize = 200;
+/// 設定ウィンドウ用 CSS (`src/ui/settings/css/*.css` を記載順に連結する)
+///
+/// 後のファイルほどカスケードで優先されるため、並び順を変えない
+const SETTINGS_CSS: &str = concat!(
+    include_str!("../../../ui/settings/css/base.css"),
+    "\n",
+    include_str!("../../../ui/settings/css/layout.css"),
+    "\n",
+    include_str!("../../../ui/settings/css/fields.css"),
+    "\n",
+    include_str!("../../../ui/settings/css/regex.css"),
+    "\n",
+    include_str!("../../../ui/settings/css/controls.css"),
+    "\n",
+    include_str!("../../../ui/settings/css/lists.css"),
+);
 
 /// 解釈に失敗した IPC メッセージを警告ログへ出力する
 pub(super) fn log_unparsed_settings_ipc(msg: &str) {
@@ -34,12 +50,11 @@ pub(super) fn assemble_settings_js() -> String {
 
 /// 設定ウィンドウ HTML 内のアセットをインライン展開する
 fn embed_settings_assets(html: &str) -> String {
-    let css = include_str!("../../../ui/settings.css");
     let js = assemble_settings_js();
 
     apply_webview_csp(
         &html
-            .replace(SETTINGS_CSS_IMPORT, css)
+            .replace(SETTINGS_CSS_IMPORT, SETTINGS_CSS)
             .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
             .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url()),
     )
@@ -191,5 +206,27 @@ mod tests {
         assert!(html.contains("default-src 'none'"));
         assert!(html.contains(r#"http-equiv="Content-Security-Policy""#));
         assert!(!html.contains("__WEBVIEW_CSP__"));
+    }
+
+    /// 分割した CSS が先頭 (変数定義) から末尾 (メディアクエリ) まで順に埋め込まれること
+    #[test]
+    fn assembled_settings_html_inlines_all_css_parts_in_order() {
+        let html = assemble_settings_html();
+        let markers = [
+            "--sidebar-width:",
+            "#header-brand {",
+            ".field-hint {",
+            ".regex-step-header {",
+            ".pipeline-item {",
+            "@media (max-width: 640px)",
+        ];
+        let positions: Vec<usize> = markers
+            .iter()
+            .map(|marker| {
+                html.find(marker)
+                    .unwrap_or_else(|| panic!("CSS に {marker} が含まれること"))
+            })
+            .collect();
+        assert!(positions.is_sorted(), "CSS の連結順: {positions:?}");
     }
 }

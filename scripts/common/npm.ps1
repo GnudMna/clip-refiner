@@ -126,55 +126,17 @@ function Invoke-NpmScript {
     Assert-LastExitCode -CommandLabel "npm run $Name"
 }
 
-# 設定 / セレクター UI バンドルが再生成後も作業ツリーと index で一致することを検証する
+# 設定 / セレクター UI バンドルがソースからの再生成結果と一致することを検証する
 #
 # `*.bundle.js` は `include_str!` で埋め込むためリポジトリにコミットする。
-# ソースだけ更新してバンドルを忘れると、品質チェックは再生成で緑になっても
-# 配布物の UI が古いままになる。再生成直後に未ステージ差分が残っていれば失敗させる。
-# ステージ済みのみの変更 (`M `) はコミット前の正当な状態として許容する
+# ソースだけ更新してバンドルを忘れると配布物の UI が古いままになるため、
+# 作業ツリーを書き換えずに再生成結果と比較し、差分があれば失敗させる。
+# コミット済みのバンドルとソースの整合は `cargo test` (`tests/ui_bundle_flow.rs`) が Node なしで検証する
 function Assert-UiBundlesSynced {
     [CmdletBinding()]
     param()
 
-    $relativePaths = @(
-        'crates/clip-refiner/src/ui/settings/settings.bundle.js',
-        'crates/clip-refiner/src/ui/quick_selector.bundle.js',
-        'crates/clip-refiner/src/ui/clip_selector.bundle.js'
-    )
-
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        throw @(
-            'エラー: git が見つかりません',
-            'UI バンドルのコミットずれ検出には git が必要です'
-        ) -join [Environment]::NewLine
-    }
-
-    foreach ($relativePath in $relativePaths) {
-        $status = git status --porcelain --untracked-files=all -- $relativePath 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "エラー: git status の実行に失敗しました: $status"
-        }
-
-        $statusText = if ($null -eq $status) { '' } else { "$status".TrimEnd() }
-        if (-not $statusText) {
-            continue
-        }
-
-        # 許容: ステージ済みのみ (porcelain の XY が "M ")。未ステージ・未追跡・削除は拒否
-        if ($statusText.StartsWith('M  ')) {
-            continue
-        }
-
-        throw @(
-            "エラー: $relativePath がソースと同期していません",
-            'UI のソース変更後はバンドルを再生成し、生成物をステージ / コミットしてください:',
-            '  npm run build:ui',
-            "  git add $relativePath",
-            '',
-            'git status:',
-            $statusText
-        ) -join [Environment]::NewLine
-    }
+    Invoke-NpmScript -Name 'build:ui:check'
 }
 
 # ESLint と Prettier 整形チェックを実行する
@@ -182,7 +144,6 @@ function Invoke-JavaScriptLintCheck {
     [CmdletBinding()]
     param()
 
-    Invoke-NpmScript -Name 'build:ui'
     Assert-UiBundlesSynced
     Invoke-NpmScript -Name 'lint'
     Invoke-NpmScript -Name 'format:check'

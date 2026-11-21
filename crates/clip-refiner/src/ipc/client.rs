@@ -1,13 +1,14 @@
 //! ワンショット IPC クライアント (CLI 側)
 
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Write};
 use std::os::windows::io::AsRawHandle;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::protocol::{
-    MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request, parse_response,
+    BoundedLine, MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request,
+    parse_response, read_bounded_line,
 };
 use crate::consts;
 use crate::refiner::{RefineContext, RefineMode};
@@ -171,6 +172,7 @@ pub(crate) fn wait_for_named_pipe(pipe_name: &str, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         // 未作成時は即失敗するため、1 回あたりの待ちは短くする
+        // SAFETY: `name` は NUL 終端の UTF-16 で、呼び出し中は生存する
         if unsafe { WaitNamedPipeW(PCWSTR(name.as_ptr()), 50) }.as_bool() {
             return true;
         }
@@ -224,18 +226,17 @@ fn read_response_line(stream: &mut std::fs::File) -> Result<OneshotIpcResponse, 
     }
 
     let mut reader = BufReader::new(stream);
-    let mut line = String::new();
     loop {
-        line.clear();
-        let read = reader
-            .read_line(&mut line)
-            .map_err(|e| ClientError::Io(e.to_string()))?;
-        if read == 0 {
-            return Err(ClientError::Io("常駐プロセスが応答前に切断しました".into()));
-        }
-        if line.len() > MAX_IPC_MESSAGE_BYTES {
-            return Err(ClientError::Protocol("応答が大きすぎます".into()));
-        }
+        let line = match read_bounded_line(&mut reader) {
+            Ok(BoundedLine::Line(line)) => line,
+            Ok(BoundedLine::Eof) => {
+                return Err(ClientError::Io("常駐プロセスが応答前に切断しました".into()));
+            }
+            Ok(BoundedLine::TooLarge) => {
+                return Err(ClientError::Protocol("応答が大きすぎます".into()));
+            }
+            Err(e) => return Err(ClientError::Io(e.to_string())),
+        };
         let trimmed = line.trim();
         if trimmed.is_empty() {
             if started.elapsed() > RESPONSE_READ_TIMEOUT {
@@ -249,6 +250,7 @@ fn read_response_line(stream: &mut std::fs::File) -> Result<OneshotIpcResponse, 
 
 fn pipe_has_pending_data(stream: &std::fs::File) -> bool {
     let mut avail = 0u32;
+    // SAFETY: `stream` が所有する有効なパイプハンドルを借用し、`avail` は呼び出し中に生存する
     let ok = unsafe {
         PeekNamedPipe(
             HANDLE(stream.as_raw_handle()),
@@ -264,6 +266,7 @@ fn pipe_has_pending_data(stream: &std::fs::File) -> bool {
 
 fn pipe_is_still_connected(stream: &std::fs::File) -> bool {
     let mut avail = 0u32;
+    // SAFETY: `stream` が所有する有効なパイプハンドルを借用し、`avail` は呼び出し中に生存する
     unsafe {
         PeekNamedPipe(
             HANDLE(stream.as_raw_handle()),

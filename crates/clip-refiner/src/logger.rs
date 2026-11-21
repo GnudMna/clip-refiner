@@ -1,7 +1,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, TryLockError};
 
 use anyhow::{Context, Result};
 use chrono::{Local, NaiveDate};
@@ -102,6 +102,16 @@ impl LocalDailyFileAppender {
 
 impl Write for LocalDailyFileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        (&*self).write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        (&*self).flush()
+    }
+}
+
+impl Write for &LocalDailyFileAppender {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut state = self
             .state
             .lock()
@@ -117,6 +127,50 @@ impl Write for LocalDailyFileAppender {
             .map_err(|e| io::Error::other(format!("ログ Appender のロックに失敗: {e}")))?;
         self.rotate_if_needed(&mut state)?;
         state.file.flush()
+    }
+}
+
+impl LocalDailyFileAppender {
+    /// 非同期キューを経由せず、記録を直ちにファイルへ書き込む
+    ///
+    /// パニックフックから呼ぶ前提で、ロック中の同スレッドからの再入でデッドロックしないよう
+    /// `try_lock` を使う。ロックを取れない場合は書き込まずにエラーを返す
+    ///
+    /// # Arguments
+    /// * `&self` - 書き込み先の Appender
+    /// * `record` - 書き込む記録 (末尾の改行を含む)
+    ///
+    /// # Returns
+    /// * `io::Result<()>` - 書き込みとフラッシュに成功した場合は `Ok(())`
+    pub fn write_immediately(&self, record: &str) -> io::Result<()> {
+        let mut state = match self.state.try_lock() {
+            Ok(state) => state,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "ログ Appender が使用中",
+                ));
+            }
+        };
+        self.rotate_if_needed(&mut state)?;
+        state.file.write_all(record.as_bytes())?;
+        state.file.flush()
+    }
+}
+
+/// `Arc` で共有した [`LocalDailyFileAppender`] への書き込み口
+///
+/// `tracing_appender::non_blocking` に渡しつつ、パニックフックからも同じ Appender へ書き込むために使う
+pub struct SharedLogAppender(pub Arc<LocalDailyFileAppender>);
+
+impl Write for SharedLogAppender {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        (&*self.0).write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        (&*self.0).flush()
     }
 }
 
@@ -258,6 +312,66 @@ mod tests {
         assert!(!base.join(old_name).exists(), "古いログが残っている");
         assert!(base.join(recent_name).exists(), "新しいログが削除された");
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// 共有した Appender への通常書き込みと即時書き込みが同じファイルに残ること
+    #[test]
+    fn shared_appender_and_immediate_write_use_same_file() {
+        let base = temp_log_dir("shared");
+        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let appender = Arc::new(
+            LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
+                .expect("Appender の作成に失敗"),
+        );
+
+        // 非同期キュー経由を想定した書き込み口
+        let mut shared = SharedLogAppender(Arc::clone(&appender));
+        shared
+            .write_all(
+                b"queued
+",
+            )
+            .expect("共有書き込みに失敗");
+        shared.flush().expect("flush に失敗");
+
+        // パニックフックを想定した即時書き込み
+        appender
+            .write_immediately(
+                "panic record
+",
+            )
+            .expect("即時書き込みに失敗");
+
+        let content = fs::read_to_string(base.join("clip-refiner.log.2026-07-12"))
+            .expect("ログの読み取りに失敗");
+        assert_eq!(
+            content,
+            "queued
+panic record
+"
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// 同じスレッドがロック中でも即時書き込みがデッドロックせずエラーを返すこと
+    #[test]
+    fn immediate_write_does_not_block_while_locked() {
+        let base = temp_log_dir("immediate-locked");
+        let appender =
+            LocalDailyFileAppender::new(&base, "clip-refiner.log").expect("Appender の作成に失敗");
+
+        let held = appender.state.lock().expect("ロックの取得に失敗");
+        let err = appender
+            .write_immediately(
+                "panic record
+",
+            )
+            .expect_err("ロック中は書き込まないこと");
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
+
+        drop(held);
         let _ = fs::remove_dir_all(&base);
     }
 

@@ -1,7 +1,6 @@
 ---
-description: Rust ソースコードの use 文の記述規約
-globs: **/*.rs
-alwaysApply: true
+paths:
+  - "**/*.rs"
 ---
 
 # use 文規約

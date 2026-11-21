@@ -8,6 +8,8 @@
 #
 # 前提:
 #   - 環境変数 CLIP_REFINER_KEY を設定すること (gh-release-bridge ダウンロードキー。ビルド時埋め込み)
+#   - 環境変数 CLIP_REFINER_SIGNING_KEY に更新署名用 minisign 秘密鍵のパスを設定すること
+#     (keys/update-signing/*.pub に対応する公開鍵があり、minisign コマンドが使えること)
 #   - release/v{version} ブランチ上で実行すること (ブランチ名と更新バージョンが一致必須)
 #   - Git タグは Gitea 上で付与する (本スクリプトでは作成しない)
 #
@@ -57,6 +59,7 @@ Invoke-ScriptMain {
     # プロジェクトルートへ移動
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
     . (Join-Path $PSScriptRoot '..\common\release-version.ps1')
+    . (Join-Path $PSScriptRoot '..\common\update-signing.ps1')
 
     if ($Date -notmatch '^\d{4}-\d{2}-\d{2}$') {
         throw "エラー: -Date は yyyy-MM-dd 形式で指定してください: $Date"
@@ -70,6 +73,12 @@ Invoke-ScriptMain {
     $bridgeDownloadKey = [Environment]::GetEnvironmentVariable('CLIP_REFINER_KEY')
     if ([string]::IsNullOrWhiteSpace($bridgeDownloadKey)) {
         throw 'エラー: 環境変数 CLIP_REFINER_KEY が未設定または空です (gh-release-bridge のダウンロードキー。ビルド時に埋め込まれます)'
+    }
+
+    # 署名なしのアセットはアプリが適用しないため、ビルド前に署名の準備を確認する
+    $needsSigning = -not ($SkipMsi -and $SkipPortable)
+    $signingSecretKey = if ($needsSigning) {
+        Assert-UpdateSigningReady -ProjectRoot $ProjectRoot
     }
 
     $currentVersion = Get-WorkspaceVersion -ProjectRoot $ProjectRoot
@@ -192,6 +201,12 @@ Invoke-ScriptMain {
         Write-Host ''
     }
 
+    if ($needsSigning) {
+        Write-Host '更新アセットへ署名します (minisign)...'
+        Invoke-UpdateAssetSigning -ProjectRoot $ProjectRoot -Version $newVersion -SecretKeyPath $signingSecretKey
+        Write-Host ''
+    }
+
     Write-Host 'リリース手順が完了しました'
     Write-Host ''
     Write-Host '次の作業 (手動):'
@@ -199,8 +214,9 @@ Invoke-ScriptMain {
     Write-Host '  - consts::CONFIG_VERSION を変更した場合は CHANGELOG の設定節を追記'
     Write-Host "  - リモートへ push: git push -u origin $releaseBranch"
     Write-Host "  - Gitea 上で v$newVersion タグを付与する"
-    Write-Host '  - GitHub Release へ MSI / ポータブル ZIP をアップロードする'
-    Write-Host '      MSI:      target\wix\clip-refiner-{version}-{target-triple}.msi'
-    Write-Host '      Portable: target\portable\clip-refiner-{version}-{target-triple}-portable.zip'
+    Write-Host '  - GitHub Release へ MSI / ポータブル ZIP と署名ファイル (.minisig) をアップロードする'
+    Write-Host '      MSI:      target\wix\clip-refiner-{version}-{target-triple}.msi (+ .msi.minisig)'
+    Write-Host '      Portable: target\portable\clip-refiner-{version}-{target-triple}-portable.zip (+ .zip.minisig)'
+    Write-Host '      (署名ファイルが無いとアプリは更新を適用しない)'
     Write-Host '      (x64 と ARM64 の両方を出す場合は -Target All)'
 }

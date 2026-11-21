@@ -1,7 +1,6 @@
 ---
-description: Rust ソースコードのコメント記述規約
-globs: **/*.rs
-alwaysApply: true
+paths:
+  - "**/*.rs"
 ---
 
 # コメント規約
@@ -100,6 +99,17 @@ alwaysApply: true
 - アルゴリズムの意図・手順
 - UI 組み立ての段階
 - テスト内の検証ステップ
+
+## `unsafe` の根拠
+
+`unsafe` ブロック・`unsafe impl` の直前には `// SAFETY:` で、その操作が安全である理由 (ポインタの有効期間・ハンドルの所有・サイズの前提など) を書く。`clippy::undocumented_unsafe_blocks` で強制する。
+
+`unsafe fn` には `/// # Safety` で呼び出し側が守る条件を書く。
+
+```rust
+// SAFETY: `wide` は NUL 終端の UTF-16 で、呼び出し中は生存する
+let handle = unsafe { CreateFileW(PCWSTR(wide.as_ptr()), /* ... */) };
+```
 
 ## テスト
 

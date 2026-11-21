@@ -55,7 +55,8 @@ pub use tray::TrayTestContext;
 pub use update::{
     AvailableUpdate, MockReleaseBridge, UpdateApplyOutcome, UpdateCheckOutcome, UpdatePackageKind,
     apply_update_for_test, apply_update_for_test_with_key, build_portable_zip_fixture,
-    check_update_at, sha256_hex, version_api_json,
+    check_update_at, sha256_hex, update_signature_asset_name, update_signature_trusted_comment,
+    version_api_json,
 };
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use worker::{

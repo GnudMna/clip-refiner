@@ -108,7 +108,8 @@ pub struct OwnerOnlySecurityAttributes {
     dacl: *mut ACL,
 }
 
-// `dacl` の生ポインタは `LocalFree` 専用で、スレッド間共有しない
+// SAFETY: `dacl` の生ポインタは `LocalFree` 専用で、別スレッドへ移動しても所有権は 1 つに限られる
+// `attrs` が指す記述子は `_descriptor` の `Box` が所有するため、移動後もアドレスは変わらない
 unsafe impl Send for OwnerOnlySecurityAttributes {}
 
 impl OwnerOnlySecurityAttributes {
@@ -124,6 +125,8 @@ impl OwnerOnlySecurityAttributes {
         let mut descriptor = Box::new(SECURITY_DESCRIPTOR::default());
         let descriptor_ptr = ptr::from_mut(descriptor.as_mut()).cast();
 
+        // SAFETY: `descriptor_ptr` は `Box` で確保した有効な `SECURITY_DESCRIPTOR` を指す
+        // `dacl` は `build_owner_only_acl` が確保した有効な ACL で、`self` の破棄まで解放しない
         unsafe {
             InitializeSecurityDescriptor(
                 PSECURITY_DESCRIPTOR(descriptor_ptr),
@@ -174,6 +177,7 @@ impl OwnerOnlySecurityAttributes {
 impl Drop for OwnerOnlySecurityAttributes {
     fn drop(&mut self) {
         if !self.dacl.is_null() {
+            // SAFETY: `dacl` は `SetEntriesInAclW` が確保した未解放の ACL で、解放後に null へ戻す
             unsafe {
                 let _ = LocalFree(Some(HLOCAL(self.dacl.cast())));
             }
@@ -198,6 +202,7 @@ fn apply_owner_only_dacl(path: &Path, is_directory: bool) -> Result<()> {
     let new_dacl = build_owner_only_acl(inheritance)?;
 
     let security_info = DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION;
+    // SAFETY: `wide_path` は NUL 終端の UTF-16 で、`new_dacl` は構築済みの有効な ACL
     let set_security_result = unsafe {
         SetNamedSecurityInfoW(
             PCWSTR(wide_path.as_ptr()),
@@ -210,6 +215,7 @@ fn apply_owner_only_dacl(path: &Path, is_directory: bool) -> Result<()> {
         )
     };
 
+    // SAFETY: `new_dacl` は `SetEntriesInAclW` が確保した ACL で、以降は参照しない
     unsafe {
         let _ = LocalFree(Some(HLOCAL(new_dacl.cast())));
     }
@@ -256,6 +262,7 @@ fn build_owner_only_acl(inheritance: ACE_FLAGS) -> Result<*mut ACL> {
     };
 
     let mut new_dacl = ptr::null_mut();
+    // SAFETY: `explicit` の SID ポインタは `sid` を指し、`sid` は呼び出し完了まで生存する
     let set_acl_result = unsafe { SetEntriesInAclW(Some(&[explicit]), None, &raw mut new_dacl) };
     if !set_acl_result.is_ok() {
         return Err(dacl_err(format!(
@@ -269,6 +276,9 @@ fn build_owner_only_acl(inheritance: ACE_FLAGS) -> Result<*mut ACL> {
 
 /// 現在のプロセスを実行しているユーザーの SID を返す
 fn current_process_user_sid() -> Result<Vec<u8>> {
+    // SAFETY: トークンハンドルは取得成功後に必ず閉じる
+    // `buffer` は 1 回目の呼び出しで得た必要サイズで確保し、2 回目の成功時のみ `TOKEN_USER` として読む
+    // `sid` は `buffer` 内を指し、`buffer` が生存している間にコピーする
     unsafe {
         let mut token = HANDLE::default();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token).is_err() {
@@ -367,9 +377,11 @@ mod tests {
         let attrs = OwnerOnlySecurityAttributes::new().expect("OwnerOnlySecurityAttributes::new");
         assert!(!attrs.as_ptr().is_null());
         assert_eq!(
+            // SAFETY: `as_ptr` は生存中の `attrs` 内のフィールドを指す
             unsafe { (*attrs.as_ptr()).nLength },
             u32::try_from(size_of::<SECURITY_ATTRIBUTES>()).expect("size fits u32")
         );
+        // SAFETY: 同上
         assert!(!unsafe { (*attrs.as_ptr()).lpSecurityDescriptor.is_null() });
     }
 }

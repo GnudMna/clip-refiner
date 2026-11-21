@@ -1,6 +1,6 @@
 # ClipRefiner 開発者向けドキュメント
 
-利用者向けの機能説明・操作方法は [README.md](README.md)、設定リファレンスは [CONFIG.md](CONFIG.md)、バージョンごとの変更内容は [CHANGELOG.md](CHANGELOG.md) を参照。本ドキュメントはビルド・テスト・カバレッジ・ライブラリ利用 (`clip-refiner-core`) など開発者向け情報をまとめる。
+利用者向けの機能説明・操作方法は [README.md](README.md)、設定リファレンスは [CONFIG.md](CONFIG.md)、バージョンごとの変更内容は [CHANGELOG.md](CHANGELOG.md) を参照。本ドキュメントはビルド・テスト・リリース・ライブラリ利用 (`clip-refiner-core`) など開発者向け情報をまとめる。
 
 ## 目次
 
@@ -9,15 +9,20 @@
 - [ソースからのビルド](#ソースからのビルド)
 - [Windows パッケージ作成](#windows-パッケージ作成)
 - [開発・テスト](#開発テスト)
+  - [WebView E2E (Playwright)](#webview-e2e-playwright)
+  - [テスト用ヘルパー (`test_helpers`)](#テスト用ヘルパー-test_helpers)
 - [品質チェック](#品質チェック)
   - [Rust カバレッジ (`cargo-llvm-cov`)](#rust-カバレッジ-cargo-llvm-cov)
+  - [Git フック](#git-フック)
+  - [JavaScript リンター (ESLint / Prettier)](#javascript-リンター-eslint--prettier)
+  - [サプライチェーン監査 (`cargo-deny`)](#サプライチェーン監査-cargo-deny)
 - [ライブラリとしての利用](#ライブラリとしての利用)
 - [プロジェクト構成](#プロジェクト構成)
 - [スレッドモデル](#スレッドモデル)
 - [ログ](#ログ)
 - [環境変数](#環境変数)
 - [リリースと変更履歴](#リリースと変更履歴)
-- [コーディング規約](#コーディング規約)
+- [Git 運用とコーディング規約](#git-運用とコーディング規約)
 - [ドキュメント同期](#ドキュメント同期)
 
 ---
@@ -70,9 +75,9 @@ cargo install cargo-llvm-cov --locked
 
 ## ソースからのビルド
 
+[初回セットアップ](#初回セットアップ) のあと、リポジトリルートで実行する。ビルドだけなら Node.js は不要。
+
 ```powershell
-git clone <repository_url>
-Set-Location clip-refiner
 cargo build -p clip-refiner --release
 ```
 
@@ -179,36 +184,26 @@ Remove-Item Env:CLIP_REFINER_SKIP_E2E
 ./scripts/windows/check.ps1
 ```
 
-```bash
+```powershell
 # 単体テスト・統合テストを実行 (デフォルト feature `app` で統合テストも含む)
 cargo test
 
 # 特定の統合テストのみ実行
 cargo test --test monitor_flow
 cargo test --test settings_flow
-cargo test --test clips_flow
-cargo test --test worker_recovery_flow
 
 # UI 純粋ロジック (Node.js。未インストール時はスキップ)
 cargo test --test settings_shared_logic
-cargo test --test settings_panels_logic
-cargo test --test settings_ui_logic
 cargo test --test selector_logic
-cargo test --test regex_preview_logic
+
+# core をテキスト変換のみ (feature なし) で検証
+cargo test -p clip-refiner-core --no-default-features --all-targets
 
 # ライブラリ API のドキュメントを生成
 cargo doc -p clip-refiner-core --no-deps --open
 ```
 
-加工ロジックは `clip_refiner_core` クレートとして利用できる。
-
-```rust
-use clip_refiner_core::{RefineContext, RefineMode, Refiner};
-
-let ctx = RefineContext::default();
-let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
-assert_eq!(output, "hello world");
-```
+UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run build:ui` でバンドルを再生成し、`*.bundle.js` も同じコミットに含める。再生成を忘れると `cargo test` の `ui_bundle_flow` が失敗する ([JavaScript リンター](#javascript-リンター-eslint--prettier))。
 
 統合テスト (`crates/clip-refiner/tests/`) では監視ループ・ワーカー・履歴・正規表現・連続記録・登録クリップの主要経路を検証する。`ClipboardHarness` が監視ループとワーカーコマンドを横断的に駆動する。
 
@@ -225,14 +220,15 @@ assert_eq!(output, "hello world");
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止・`config.toml` 永続化往復 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
-| `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・応答本文の宣言サイズ超過による途中打ち切り・API 404・キー必須 DL の成功 / 認証失敗含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
+| `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・キー必須 DL の成功 / 認証失敗含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
 | `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
 | `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
 | `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
 | `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
+| `ui_bundle_flow.rs` | コミット済み `*.bundle.js` 先頭の入力一覧・SHA-256 をソースから再計算し、バンドルの再生成忘れを検出 (Node.js 不要) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
-| `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 複数ステッププリセット / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
+| `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 複数ステッププリセット / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲 / 無応答接続の並行 / 同時処理上限からの回復)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
 
 OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
 
@@ -414,7 +410,7 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 
 ## 品質チェック
 
-Windows の `check` スクリプト (`scripts/windows/check.ps1`) で、整形・Clippy・サプライチェーン監査・テスト・WebView E2E を一括実行できる。コード整形のみ行う場合は `format` スクリプト (`scripts/windows/format.ps1`) で rustfmt と Prettier を適用できる。
+`scripts/windows/check.ps1` で品質チェック一式を実行する。コード整形だけなら `scripts/windows/format.ps1` で rustfmt と Prettier を適用する。
 
 ```powershell
 ./scripts/windows/check.ps1
@@ -425,6 +421,36 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 ./scripts/windows/check.ps1 -Coverage
 # または
 $env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
+```
+
+`check.ps1` は次の順に実行し、最初の失敗で止まる。
+
+| 順 | 内容 | 相当するコマンド |
+| :- | :--- | :--------------- |
+| 1 | Rust の整形検証 | `cargo fmt --check` |
+| 2 | Clippy (アプリ全体 + core の feature なし) | `cargo clippy ... -- -D warnings` |
+| 3 | サプライチェーン監査 | `cargo deny check` |
+| 4 | Node.js の確認 (`CLIP_REFINER_REQUIRE_NODE=1` を設定) | — |
+| 5 | UI バンドルの最新性・ESLint・Prettier | `npm run build:ui:check` / `npm run lint` / `npm run format:check` |
+| 6 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
+| 7 | WebView E2E (`CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build` → `npm run test:e2e` |
+
+個別に実行する場合:
+
+```powershell
+cargo fmt --check
+cargo clippy --all-targets --features test-helpers -- -D warnings
+cargo clippy -p clip-refiner-core --no-default-features --all-targets -- -D warnings
+cargo deny check
+npm ci
+npm run build:ui:check
+npm run lint
+npm run format:check
+cargo test --all-targets --features test-helpers
+cargo test -p clip-refiner-core --no-default-features --all-targets
+cargo test --doc --features test-helpers
+# カバレッジ (任意。coverage.ps1 と同条件)
+cargo llvm-cov --all-targets --features test-helpers --ignore-filename-regex '(^|[/\\])(tests|test_helpers)([/\\]|$)|[/\\][^/\\]*_tests\.rs$|[/\\]tests\.rs$'
 ```
 
 ### Rust カバレッジ (`cargo-llvm-cov`)
@@ -495,25 +521,6 @@ git hook run pre-commit
 git hook run pre-push
 ```
 
-個別コマンド:
-
-```bash
-cargo fmt
-./scripts/windows/format.ps1
-cargo fmt --check
-cargo clippy --all-targets --features test-helpers -- -D warnings
-cargo clippy -p clip-refiner-core --no-default-features --all-targets -- -D warnings
-cargo deny check
-npm ci
-npm run lint
-npm run format:check
-cargo test --all-targets --features test-helpers
-cargo test -p clip-refiner-core --no-default-features --all-targets
-cargo test --doc --features test-helpers
-# カバレッジ (任意。coverage.ps1 と同条件)
-cargo llvm-cov --all-targets --features test-helpers --ignore-filename-regex '(^|[/\\])(tests|test_helpers)([/\\]|$)|[/\\][^/\\]*_tests\.rs$|[/\\]tests\.rs$'
-```
-
 ### JavaScript リンター (ESLint / Prettier)
 
 UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refiner/tests/`) は ESLint と Prettier で検証する。`check.ps1` / `format.ps1` は `scripts/common/npm.ps1` 経由で実行する。
@@ -534,6 +541,7 @@ npm ci
 
 ```powershell
 npm run build:ui           # 設定 / セレクター UI バンドル再生成
+npm run build:ui:check     # 設定 / セレクター UI バンドルが最新か検証 (書き込みなし)
 npm run lint               # ESLint
 npm run lint:fix           # ESLint (自動修正)
 npm run format:check       # Prettier 整形チェック
@@ -542,7 +550,7 @@ npm run format             # Prettier 整形適用
 
 設定ファイル: [`package.json`](package.json), [`eslint.config.js`](eslint.config.js), [`.prettierrc.json`](.prettierrc.json)
 
-設定画面とセレクターの JavaScript は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.mjs` / esbuild) で IIFE バンドルする (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`)。Rust (`tray/settings/window/assets.rs` / `tray/selector/window.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。`check.ps1` の JS チェック前にバンドルを再生成し、再生成後に未ステージ差分が残っていれば失敗する (ソースだけ更新してバンドルを忘れる事故を防ぐ。ステージ済みのみの変更はコミット前として許容)。設定 UI の共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する (`render` / `refreshActivePanel` も含む)。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
+設定画面とセレクターの JavaScript は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.mjs` / esbuild) で IIFE バンドルする (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`)。Rust (`tray/settings/window/assets.rs` / `tray/selector/window.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。ソースだけ更新してバンドルを忘れる事故は 2 段で防ぐ: (1) バンドル先頭に入力ファイル一覧 (`build-ui.mjs` 自身を含む) と SHA-256 を刻み、`cargo test` の `ui_bundle_flow.rs` が Node.js なしで再計算して照合する。(2) `check.ps1` は `npm run build:ui:check` で作業ツリーを書き換えずに再生成結果とバイト比較し、手編集や esbuild の版差も検出する。設定 UI の共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する (`render` / `refreshActivePanel` も含む)。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
 
 ### スクリプト構成
 
@@ -560,6 +568,7 @@ npm run format             # Prettier 整形適用
 | `verify-msi.ps1` | MSI メタデータ・展開内容の検証ロジック |
 | `generate-third-party-notices.ps1` | `THIRD_PARTY_NOTICES` 生成 |
 | `release-version.ps1` | リリース時のバージョン更新ヘルパー |
+| `update-signing.ps1` | 更新アセットの minisign 署名と埋め込み公開鍵での検証 (`release.ps1` から使用) |
 | `cd-project-root.ps1` | リポジトリルートへ移動 |
 | `wait-if-double-clicked.ps1` | エクスプローラー起動時の Enter 待ち (`Invoke-ScriptMain`) |
 
@@ -617,7 +626,7 @@ npm run format             # Prettier 整形適用
 
 以前の `clip-refiner` (`default-features = false`) による facade 経路は廃止済み。ライブラリ利用は依存先を `clip-refiner-core` へ切り替える。アプリ起動だけなら従来どおり `clip_refiner::run` (feature `app`) を使う。
 
-ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョンにある **Breaking changes** / **Changed** / **Removed** 節へ明記し、設定スキーマ変更は **設定** 節にも移行方法を記載する。アプリ (`clip-refiner`) と加工・設定 (`clip-refiner-core`) の semver はクレートごとに独立して扱う。
+ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョンにある **Breaking changes** / **Changed** / **Removed** 節へ明記し、設定スキーマ変更は **Settings** 節にも移行方法を記載する。アプリ (`clip-refiner`) と加工・設定 (`clip-refiner-core`) の semver はクレートごとに独立して扱う。
 
 ### 依存の追加
 
@@ -720,10 +729,10 @@ clip-refiner/
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)。core API は re-export しない
 │   │   ├── src/
-│   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / instance / oneshot / portable)
+│   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / panic_hook / instance / oneshot / portable)
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC (`protocol` / `client` / `server`。`ClientError` は test-helpers / debug 向け)
 │   │   │   ├── platform/    # デスクトップ常駐向け OS 連携 (通知・自動起動・OCR・WebView2・更新)
-│   │   │   │   └── update/  # 確認 (check/) / 埋め込みキー復号 (bridge_key) / digest 検証 / MSI・ポータブル適用
+│   │   │   │   └── update/  # 確認 (check/) / 埋め込みキー復号 (bridge_key) / digest・署名検証 (signature) / MSI・ポータブル適用
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
 │   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event、`update.rs` 含む)
@@ -746,20 +755,28 @@ clip-refiner/
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
 │           └── test_helpers/ # コア単体テスト用
+├── .claude/rules/       # Rust ソースのコーディング規約 (comments.md / imports.md)
 ├── assets/
+├── keys/
+│   └── update-signing/  # 更新署名の minisign 公開鍵 (`*.pub`。build.rs が埋め込む)
 ├── scripts/
 │   ├── common/          # 実装ヘルパー (cargo / npm / build-ui.mjs / wix / MSI 検証など)
 │   ├── git/hooks/       # Git フック (pre-commit / pre-push)
+│   ├── templates/       # THIRD_PARTY_NOTICES のテンプレート
 │   └── windows/         # 開発者向けエントリポイント (check.ps1, format.ps1 など)
-├── CONFIG.md
+├── wix/                 # MSI 定義 (main.wxs)
+├── about.toml           # cargo-about 設定
+├── deny.toml            # cargo-deny 設定
+├── CLAUDE.md            # Claude Code 向けの作業指針
 ├── CHANGELOG.md
+├── CONFIG.md
 ├── DEVELOPMENT.md
-└── wix/
+└── README.md
 ```
 
 第三者クレートと `clip-refiner-core` の版はルート `Cargo.toml` の `[workspace.dependencies]` に置く。メンバ側は `workspace = true` とし、`optional` や追加 `features` だけを各 `Cargo.toml` に書く。
 
-`clip-refiner` の `platform/` はデスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード (`CLIP_REFINER_KEY` を ChaCha20-Poly1305 で暗号化して埋め込み、利用時に復号して `Authorization: Bearer`)・`digest` (`sha256:<hex>`) 検証・宣言サイズ / 絶対上限でのダウンロード打ち切り・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `native/` は feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く (`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける)。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
+`clip-refiner` の `platform/` はデスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード (`CLIP_REFINER_KEY` を ChaCha20-Poly1305 で暗号化して埋め込み、利用時に復号して `Authorization: Bearer`)・`digest` (`sha256:<hex>`) 検証・minisign 署名検証 (`keys/update-signing/*.pub` を埋め込み)・宣言サイズ / 絶対上限でのダウンロード打ち切り・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `native/` は feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く (`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける)。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
 
 セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
 
@@ -793,7 +810,9 @@ clip-refiner/
 | `paste_watcher/` | 連続記録の貼り付け補助: キュー先頭書き込みロジックと `SendInput` による `Ctrl+V`。書き込み自体はワーカーの `PasteContinuousRecordFront` が担当 |
 | `ocr/` | 画面 OCR キャプチャ連携 (`OcrJobGate` で同時 1 本・旧結果破棄) |
 | `app/` | `App` 構造体と起動時初期化 |
+| `runner.rs` | tao イベントループの起動と `App` への委譲 |
 | `dispatch.rs` | ワーカー・イベントループへの送信ヘルパー |
+| `e2e.rs` | `--e2e-window` ハーネス (Playwright E2E 専用) |
 
 `features/` のドメイン一覧:
 
@@ -829,6 +848,7 @@ clip-refiner/
 | `settings_patch.js` | パッチ組み立て (DOM 非依存 / ESM) |
 | `regex_preview.js` | プレビュー表示ロジック (DOM 非依存 / ESM) |
 | `settings.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:ui` で再生成) |
+| `css/*.css` | スタイル。`tray/settings/window/assets.rs` が `base` → `layout` → `fields` → `regex` → `controls` → `lists` の順に連結して埋め込む (カスケード順のため並びを変えない) |
 
 `shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー・セレクター WebView) に分割されている。設定変更の反映はパッチ側が `AppConfig` を更新し、実際の `WebView` 破棄同期は `loop_event` の `sync_selector_retention` が担う。
 
@@ -851,8 +871,9 @@ clip-refiner/
 | `check/` | gh-release-bridge version API の取得 (`mod.rs`) と判定 (`evaluate`) / アセット選択 (`asset`) / SemVer (`version`)。アーキテクチャ不一致はエラー |
 | `bridge_key` | ビルド時 `CLIP_REFINER_KEY` の ChaCha20-Poly1305 暗号化 blob を XOR 解除して復号する。`bridge_key_obfuscate` の XOR は `build.rs` と共有 |
 | `verify` | ダウンロード (`CLIP_REFINER_KEY` があれば Bearer) と `digest` (`sha256:<hex>`) / サイズ検証。宣言サイズ超過・絶対上限 (512 MiB) で途中打ち切り。`401` は認証失敗 |
-| `apply` | MSI なら `msiexec`、ポータブル ZIP なら展開後に差し替えヘルパーを起動 |
-| `replace` | `--apply-portable-update` ヘルパー (引数検証 → 旧 PID 待機 → 実行フォルダへコピー → 新版起動。`data\` は保持)。差し替え先は既存のポータブルフォルダ (`ClipRefiner.exe` + `portable` マーカー)、展開元と `--cleanup-dir` は `%TEMP%\clip-refiner-update\` 配下。生存中の `--wait-pid` は `ClipRefiner.exe` に限る |
+| `signature` | `<asset>.minisig` の取得と minisign 署名検証。公開鍵は `build.rs` が `keys/update-signing/*.pub` から埋め込む。信頼コメント `clip-refiner-update version={version} file={asset}` が更新先と一致しなければ拒否する (古い版の正規アセットへのすり替え対策) |
+| `apply` | 署名 → アセット本体の順に取得し、サイズ・SHA-256・署名を検証してから、MSI なら `msiexec`、ポータブル ZIP なら展開後に差し替えヘルパーを起動。署名検証に失敗したアセットは削除する |
+| `replace` | `--apply-portable-update` ヘルパー (引数検証 → 旧 PID 待機 → 実行フォルダへコピー → 新版起動。`data\` は保持)。差し替え先は既存のポータブルフォルダ (`ClipRefiner.exe` + `portable` マーカー)、展開元と `--cleanup-dir` は `%TEMP%\clip-refiner-update\` 配下。生存中の `--wait-pid` は `ClipRefiner.exe` に限る。`validate` (引数検証)・`files` (探索・コピー)・`process` (PID 待機・削除予約・エラー通知) に分割 |
 | `error` | `UpdateError` (`thiserror`)。ユーザー向け文言は `Display` に集約し、Outcome / 通知 / MessageBox へ渡す |
 | `types` | `AvailableUpdate` / UI 応答型など |
 
@@ -934,7 +955,7 @@ flowchart TB
 | **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
 | **Clipboard Listener** (`tray/worker/clipboard_listener.rs`) | 専用 | メッセージ専用ウィンドウで `AddClipboardFormatListener` を登録し、`WM_CLIPBOARDUPDATE` を `ClipboardCommand::ClipboardChanged` としてワーカーへ送る。連打は未処理フラグで束ねる。初期化失敗時はワーカーがシーケンストークンの短周期 peek にフォールバックする |
 | **Config Watcher** (`tray/worker/config_watcher.rs`) | 専用 | 設定ディレクトリを `FindFirstChangeNotification` で監視し、`ConfigFileChanged` でワーカーを起床する。変更の有無は `config_sync` の本文指紋 (BLAKE3) で判定する。初期化失敗時は約 2 秒ごとの指紋確認にフォールバックする |
-| **Oneshot IPC Server** (`ipc/`) | 専用 | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。現在ユーザー専用 DACL + リモート拒否。接続・送受信失敗は `ClientError`。待受スレッド起動失敗は `Result` で返し、常駐は監視を継続したまま通知する。常駐未検出時は CLI 側がローカル実行する |
+| **Oneshot IPC Server** (`ipc/`) | 専用 (+ 接続ごとの一時スレッド) | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。待受スレッドは接続を一時スレッドへ渡し、処理中の接続を保持したまま次インスタンスを作って待受を続ける (同時処理は `MAX_ACTIVE_CONNECTIONS` = 4。上限中は枠が空くまで次の接続を保留)。手持ちインスタンスが無いときだけ `FILE_FLAG_FIRST_PIPE_INSTANCE` で作成し、名前の先取りを避ける。現在ユーザー専用 DACL + リモート拒否。接続・送受信失敗は `ClientError`。待受スレッド起動失敗は `Result` で返し、常駐は監視を継続したまま通知する。常駐未検出時は CLI 側がローカル実行する |
 | **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き (`OwnedClipboard`)、監視ループ、設定ファイルの外部変更検知。`recv_timeout` でコマンド受信と監視チックを交互に処理。Event / 連続記録かつリスナ稼働時は `ClipboardChanged` / `ConfigFileChanged` で起床する。再起動・破棄時は `Shutdown` 後にリスナ・設定監視とワーカーを join してから戻る |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、監視世代、イベントプロキシ。履歴・Undo・二重加工防止は `clipboard_session()`、ワーカー稼働は `worker()`、設定ディスク同期は `config_sync()`、設定 UI 適用待ちは `settings_pending()` 経由 |
 
@@ -965,7 +986,7 @@ flowchart TB
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
-| **platform** | `platform/update/` | 更新確認・digest 検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
+| **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
 | **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
 | **features** | `tray/features/notification/` | トレイメニュー「通知」の構築・クリック処理 |
@@ -991,6 +1012,8 @@ flowchart TB
 | デバッグビルド (`cargo build` / `cargo run`) | ログファイル + 標準出力 |
 | リリースビルド | ログファイルのみ |
 
+通常のログは非同期キュー経由で書き込む。パニックは `bootstrap/panic_hook.rs` のフックが発生スレッド・メッセージ・位置をログファイルへ**同期で**書き込み、その後に既定フックへ委譲する (GUI サブシステムでは標準エラーの出力先が無く、abort で非同期キューも失われうるため)。`RUST_BACKTRACE=1` を指定するとバックトレースも記録する。
+
 ---
 
 ## 環境変数
@@ -998,8 +1021,11 @@ flowchart TB
 | 変数 | 用途 |
 | :--- | :--- |
 | `RUST_LOG` | ログレベル (例: `debug`, `clip_refiner=trace`) |
+| `RUST_BACKTRACE` | `1` のときパニック記録にバックトレースを含める ([ログ](#ログ)) |
+| `CARGO_TARGET_DIR` | ビルド出力先。`build-portable.ps1` / `check.ps1` / E2E はこの配下の `ClipRefiner.exe` を探す |
 | `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`) |
 | `CLIP_REFINER_KEY` | **ビルド時**に埋め込む gh-release-bridge ダウンロードキー。`build.rs` が ChaCha20-Poly1305 で暗号化し XOR 難読化してからバイナリへ入れる (`option_env!` による平文埋め込みはしない)。Worker Secret `CLIP_REFINER_KEY` と同値。未設定なら無認証 GET (開発向け)。`release.ps1` では必須。クライアント共有シークレットのため漏洩前提で運用する |
+| `CLIP_REFINER_SIGNING_KEY` | `release.ps1` が更新アセットへ署名するときの minisign 秘密鍵ファイルのパス。リポジトリ外に置く ([更新署名鍵](#更新署名鍵)) |
 | `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |
 | `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき JS ロジックテストをスキップ |
 | `CLIP_REFINER_SKIP_E2E` | `1` のとき Playwright E2E をスキップ (`check.ps1` / pre-push) |
@@ -1020,16 +1046,16 @@ flowchart TB
 
 ```powershell
 # リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
-git checkout -b release/v0.14.0
+git switch -c release/v1.1.0
 
 # 明示的なバージョン指定
-./scripts/windows/release.ps1 -Version 0.14.0
+./scripts/windows/release.ps1 -Version 1.1.0
 
-# パッチリリース (0.13.0 -> 0.13.1)。事前に release/v0.13.1 ブランチへ checkout すること
+# パッチリリース (1.0.0 -> 1.0.1)。事前に release/v1.0.1 ブランチへ checkout すること
 ./scripts/windows/release.ps1 -Bump Patch
 
 # 変更内容の確認のみ (ファイル・Git・MSI・ポータブル ZIP は触らない)
-./scripts/windows/release.ps1 -Version 0.14.0 -DryRun
+./scripts/windows/release.ps1 -Version 1.1.0 -DryRun
 ```
 
 **自動で行うこと:**
@@ -1044,6 +1070,7 @@ git checkout -b release/v0.14.0
 8. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
 9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
 10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)。`-Target All` なら x64 と ARM64 の両方
+11. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
 
 **主なオプション:**
 
@@ -1063,33 +1090,63 @@ git checkout -b release/v0.14.0
 **前提:**
 
 - 環境変数 `CLIP_REFINER_KEY` を設定しておく (gh-release-bridge の Worker Secret と同値。`-DryRun` でも検証する)
-- `release/v{version}` ブランチ上で実行すること (例: `release/v0.14.0` で `-Version 0.14.0`)
+- MSI / ポータブル ZIP を作る場合は `minisign` をインストールし、環境変数 `CLIP_REFINER_SIGNING_KEY` に秘密鍵のパスを設定しておく ([更新署名鍵](#更新署名鍵)。`-DryRun` でも検証する)
+- `release/v{version}` ブランチ上で実行すること (例: `release/v1.1.0` で `-Version 1.1.0`)
 - リリース前に [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
 - 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
 - MSI / ポータブル作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3。ポータブルのみなら `cargo-about` で可)
 
 **手動で残る作業:**
 
-1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
-2. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する。設定スキーマ番号・既定値・上限のずれは `crates/clip-refiner-core/src/config/spec.rs` のテストが検出する ([ドキュメント同期](#ドキュメント同期))
+1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **Settings** 節に移行内容を書く
+2. 利用者向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する。設定スキーマ番号・既定値・上限のずれは `crates/clip-refiner-core/src/config/spec.rs` のテストが検出する ([ドキュメント同期](#ドキュメント同期))
 3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](#手動確認が残る範囲) に該当する変更だけ実機確認する (旧手動スモークチェックリストは自動化済み)
 4. `release.ps1` を実行する (または同等の手順でタグ付けと MSI / ポータブル ZIP 作成)
 5. `git push -u origin release/v{version}` でリモートへ反映する
 6. Gitea 上で `v{version}` タグを付与する
-7. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返すことを確認する。アプリ更新は digest 必須で、保護範囲の DL には埋め込みキー (`Authorization: Bearer`) を使い、ダウンロード中の宣言サイズ / 絶対上限打ち切りと完了後のサイズ・SHA-256 検証を行う (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
+7. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返し、署名ファイルも同じ URL 形式 (`/{owner}/{repo}/{tag}/{asset}.minisig`) で取得できることを確認する。アプリ更新は digest と署名が必須で、保護範囲の DL には埋め込みキー (`Authorization: Bearer`) を使い、ダウンロード中の宣言サイズ / 絶対上限打ち切りと完了後のサイズ・SHA-256・署名検証を行う (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
+
+### 更新署名鍵
+
+アプリ更新のアセットは minisign (Ed25519) で署名する。公開鍵は `keys/update-signing/*.pub` に置き、`build.rs` がビルド時にすべて埋め込む。秘密鍵はリポジトリ・CI に置かない。
+
+```powershell
+# minisign の導入
+winget install jedisct1.minisign
+
+# 鍵ペアの生成 (秘密鍵はリポジトリ外。パスワード保護を推奨)
+minisign -G -p keys/update-signing/release-2026.pub -s "$env:USERPROFILE\.minisign\clip-refiner-release.key"
+
+# release.ps1 で使う秘密鍵のパス
+$env:CLIP_REFINER_SIGNING_KEY = "$env:USERPROFILE\.minisign\clip-refiner-release.key"
+```
+
+- 公開鍵を追加・変更した版を配布してから、その鍵で署名した更新を出す。利用者の手元のアプリは自分に埋め込まれた公開鍵でしか検証できない
+- 鍵の入れ替えは、新旧の公開鍵を両方置いた版を一度配布し、以降の版で旧鍵を外す。秘密鍵を紛失した場合や漏洩した場合も同じ手順で、旧鍵を外した版は手動で配布する
+- 公開鍵が 1 つも無いビルドは更新を適用しない (開発ビルドでの誤適用を防ぐ)。`release.ps1` は公開鍵が無いと失敗する
 
 ---
 
-## コーディング規約
+## Git 運用とコーディング規約
 
-リポジトリ内の `.cursor/rules/` に、次の規約が定義されている。
+### Git 運用
+
+- 作業ブランチは `develop` から切り、Pull Request の向き先も `develop`
+- ブランチ名は `<type>/<kebab-case>` (例: `fix/ipc-line-limit`, `refactor/split-large-files`, `docs/...`)
+- コミットメッセージは `<Type>: <日本語の要約>`。主な Type は `Feat` / `Update` / `Fix` / `Refactor` / `Test` / `Docs` / `Chore` / `Security` (リリースは `Release: v{version}`)
+- 利用者に影響する変更は [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` に同じ変更で追記する
+- Pull Request 前に [品質チェック](#品質チェック) を通す
+
+### コーディング規約
+
+Rust ソースの規約は `.claude/rules/` に置く (Claude Code では対象ファイルを扱うときに自動で読み込まれる)。
 
 | ファイル | 内容 |
 | :------- | :--- |
-| `imports.mdc` | `use` 文のグループ順・空行・アルファベット順 |
-| `comments.mdc` | コメントの文体 (常体)、セクション区切り、`///` の書き方 |
+| `comments.md` | コメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
+| `imports.md` | `use` 文のグループ順 (`std` → `super` / `crate` → 外部クレート)・空行・アルファベット順 |
 
-Pull Request 前に [品質チェック](#品質チェック) を通すこと。
+JavaScript は ESLint / Prettier の設定に従う ([JavaScript リンター](#javascript-リンター-eslint--prettier))。
 
 ---
 
@@ -1103,5 +1160,6 @@ Pull Request 前に [品質チェック](#品質チェック) を通すこと。
 | `consts` の処理上限 | CONFIG.md の [処理の制限](CONFIG.md#処理の制限)、生成 TOML コメント (`config/serialize/docs.rs`) |
 | 既定ホットキー | README のホットキー表、CONFIG.md の `[hotkeys]` |
 | 利用者向けの挙動 | README / CONFIG の該当節、[CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` |
+| UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`ui_bundle_flow.rs` が検出) |
 
-公開 API の破壊的変更は CHANGELOG の **Breaking changes** / **Changed** / **Removed** へ書き、設定スキーマ変更は **設定** 節にも移行方法を記載する。
+公開 API の破壊的変更は CHANGELOG の **Breaking changes** / **Changed** / **Removed** へ書き、設定スキーマ変更は **Settings** 節にも移行方法を記載する。

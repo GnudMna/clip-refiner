@@ -57,39 +57,6 @@ impl RegisteredClip {
     pub fn is_image(&self) -> bool {
         self.image_file.is_some()
     }
-
-    /// 登録クリップセレクター向けの JSON オブジェクトを生成する
-    ///
-    /// # Arguments
-    /// * `self` - 変換元の登録クリップ
-    /// * `index` - セレクター内のインデックス
-    /// * `preview` - 一覧表示用プレビュー文字列
-    /// * `thumbnail` - サムネイル Data URL (`None` の場合は省略)
-    /// * `hover_preview` - hover プレビュー Data URL (`None` の場合は省略)
-    ///
-    /// # Returns
-    /// * `serde_json::Value` - セレクター向け JSON オブジェクト
-    pub fn to_clip_selector_json(
-        &self,
-        index: usize,
-        preview: &str,
-        thumbnail: Option<&str>,
-        hover_preview: Option<&str>,
-    ) -> serde_json::Value {
-        let mut value = serde_json::json!({
-            "id": index.to_string(),
-            "label": self.label,
-            "preview": preview,
-            "kind": if self.is_image() { "image" } else { "text" },
-        });
-        if let Some(thumbnail) = thumbnail {
-            value["thumbnail"] = serde_json::Value::String(thumbnail.to_string());
-        }
-        if let Some(hover_preview) = hover_preview {
-            value["hover_preview"] = serde_json::Value::String(hover_preview.to_string());
-        }
-        value
-    }
 }
 
 // ======================================================================

@@ -1,0 +1,280 @@
+#header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-color);
+    flex-shrink: 0;
+}
+
+#header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+#header-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+#header h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+#header-subtitle {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+#header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.apply-feedback {
+    flex-shrink: 0;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.apply-feedback[hidden] {
+    display: none;
+}
+
+.apply-feedback--ok {
+    background: rgba(90, 168, 255, 0.12);
+    color: #9ecfff;
+    border-bottom-color: rgba(90, 168, 255, 0.25);
+}
+
+.apply-feedback--error {
+    background: var(--danger-soft);
+    color: #ff9b9b;
+    border-bottom-color: rgba(255, 107, 107, 0.3);
+}
+
+.confirm-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.confirm-dialog[hidden] {
+    display: none;
+}
+
+.confirm-dialog__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.confirm-dialog__panel {
+    position: relative;
+    width: min(100%, 420px);
+    padding: 20px 22px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.confirm-dialog__message {
+    margin: 0 0 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-color);
+    white-space: pre-wrap;
+}
+
+.confirm-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.info-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border-radius: var(--border-radius);
+    background: var(--accent-soft);
+    border: 1px solid rgba(90, 168, 255, 0.28);
+    color: #b8d9ff;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.info-banner strong {
+    color: var(--text-color);
+    font-weight: 700;
+}
+
+#layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+#sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    padding: 12px 10px;
+    border-right: 1px solid var(--border-subtle);
+    background: var(--surface-color);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nav-btn {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.nav-btn:hover {
+    background: var(--hover-bg);
+    color: var(--text-color);
+}
+
+.nav-btn.active {
+    background: var(--active-bg);
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.nav-btn:focus {
+    outline: none;
+}
+
+.nav-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+#content {
+    flex: 1;
+    overflow: auto;
+    padding: 24px 28px 32px;
+    scroll-behavior: smooth;
+}
+
+#content::-webkit-scrollbar {
+    width: 10px;
+}
+
+#content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 999px;
+    border: 2px solid var(--bg-color);
+}
+
+.panel {
+    display: none;
+    max-width: var(--content-max-width);
+    animation: panelIn 0.18s ease-out;
+}
+
+.panel.active {
+    display: block;
+}
+
+@keyframes panelIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.panel-intro {
+    margin-bottom: 20px;
+}
+
+.panel-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.panel-desc {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.status-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    border-radius: var(--border-radius);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.status-banner::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-paused {
+    background: var(--warning-soft);
+    border: 1px solid rgba(240, 180, 41, 0.35);
+    color: #f5d06a;
+}
+
+.status-paused::before {
+    background: var(--warning-color);
+}
+
+.status-continuous-record {
+    background: var(--accent-soft);
+    border: 1px solid rgba(90, 168, 255, 0.35);
+    color: #b8d9ff;
+}
+
+.status-continuous-record::before {
+    background: var(--accent-color);
+}

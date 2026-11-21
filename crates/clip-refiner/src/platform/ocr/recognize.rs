@@ -88,6 +88,7 @@ fn write_rgba_as_bgra(bitmap: &SoftwareBitmap, rgba: &[u8]) -> Result<()> {
 
     let mut data = ptr::null_mut();
     let mut capacity = 0u32;
+    // SAFETY: `access` は生存中の `reference` から得たインターフェースで、出力先はローカル変数
     unsafe {
         access
             .GetBuffer(ptr::from_mut(&mut data), ptr::from_mut(&mut capacity))
@@ -99,6 +100,8 @@ fn write_rgba_as_bgra(bitmap: &SoftwareBitmap, rgba: &[u8]) -> Result<()> {
         bail!("ビットマップバッファの容量が不足");
     }
 
+    // SAFETY: `data` は `GetBuffer` が返した `capacity` バイトの書き込み可能な領域
+    // `buffer` / `reference` がロックを保持する間 (この関数の終わりまで) 有効で、他から参照されない
     let slice = unsafe { slice::from_raw_parts_mut(data, capacity) };
     copy_rgba_to_bgra(rgba, slice);
     Ok(())

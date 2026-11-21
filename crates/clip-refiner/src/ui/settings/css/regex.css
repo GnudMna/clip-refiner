@@ -1,0 +1,160 @@
+.regex-status {
+    margin: 12px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.regex-status--ok {
+    color: #7dcea0;
+}
+
+.regex-status--empty {
+    color: var(--text-muted);
+}
+
+.regex-status--error {
+    color: var(--danger-color);
+}
+
+.regex-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.regex-preview-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.regex-preview-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.regex-preview-result {
+    display: block;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-color);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+#regex-preview-sample {
+    min-height: 64px;
+}
+
+.regex-presets {
+    margin-bottom: 4px;
+}
+
+.regex-preset-active {
+    width: 44px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.regex-active-radio {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent-color);
+    cursor: pointer;
+}
+
+.regex-preset-select {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+}
+
+.regex-preset-select:hover {
+    color: var(--accent-color);
+}
+
+.regex-preset-row--selected td {
+    background: var(--accent-soft);
+}
+
+.regex-preset-row--selected .regex-preset-select {
+    color: #b8d9ff;
+    font-weight: 600;
+}
+
+.regex-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.regex-step {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+}
+
+.regex-step-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.regex-step-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent-color);
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.regex-step-label {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color);
+    min-width: 0;
+}
+
+.regex-step .option-list {
+    margin-top: 0;
+}
+
+.regex-step .field:last-of-type {
+    margin-bottom: 0;
+}
+
+.regex-presets .card-actions,
+.regex-steps + .card-actions {
+    margin-top: 12px;
+}
+
+.regex-preview-result--error {
+    color: var(--danger-color);
+}

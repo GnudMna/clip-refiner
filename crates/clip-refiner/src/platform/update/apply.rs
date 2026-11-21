@@ -4,11 +4,14 @@ use std::path::{Path, PathBuf};
 
 use super::error::UpdateError;
 use super::replace::{current_install_dir, launch_portable_replace_helper};
+use super::signature::{
+    download_signature, embedded_signing_keys, signature_asset_name, verify_file_signature,
+};
 use super::types::{AvailableUpdate, UpdateApplyOutcome};
-use super::verify::download_and_verify;
-#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use super::verify::download_and_verify_with_key;
-use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME};
+use super::{
+    BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME, bridge_download_key,
+};
 
 use zip::ZipArchive;
 
@@ -45,7 +48,8 @@ impl ApplyOptions {
 
 /// 更新アセットをダウンロードして適用する
 ///
-/// MSI は `msiexec` を起動する。ポータブル ZIP は展開し、差し替えヘルパーを起動する
+/// 署名・サイズ・SHA-256 を検証してから、MSI は `msiexec` を起動する。
+/// ポータブル ZIP は展開し、差し替えヘルパーを起動する
 ///
 /// # Arguments
 /// * `update` - 確認済みの更新アセット情報
@@ -53,7 +57,12 @@ impl ApplyOptions {
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
 pub(crate) fn apply_update(update: &AvailableUpdate) -> UpdateApplyOutcome {
-    apply_update_at(update, BRIDGE_BASE_URL, ApplyOptions::PRODUCTION)
+    apply_update_at(
+        update,
+        BRIDGE_BASE_URL,
+        ApplyOptions::PRODUCTION,
+        embedded_signing_keys(),
+    )
 }
 
 /// 指定した bridge ベース URL で更新アセットをダウンロードして適用する
@@ -65,6 +74,7 @@ pub(crate) fn apply_update(update: &AvailableUpdate) -> UpdateApplyOutcome {
 /// * `update` - 確認済みの更新アセット情報
 /// * `base_url` - bridge のベース URL (末尾スラッシュなし)
 /// * `options` - 外部プロセス起動の有無
+/// * `trusted_keys` - 署名検証に使う minisign 公開鍵 (Base64)
 ///
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
@@ -72,21 +82,16 @@ pub(crate) fn apply_update_at(
     update: &AvailableUpdate,
     base_url: &str,
     options: ApplyOptions,
+    trusted_keys: &[&str],
 ) -> UpdateApplyOutcome {
-    let download_url = asset_download_url(base_url, &update.tag, &update.asset_name);
-    let work_dir = match update_work_dir(&update.latest_version) {
-        Ok(dir) => dir,
-        Err(err) => return err.into(),
-    };
-
-    let archive_path = work_dir.join(&update.asset_name);
-    // ビルド埋め込みキーを使う
-    if let Err(err) = download_and_verify(&download_url, &archive_path, update.size, &update.sha256)
-    {
-        return err.into();
-    }
-
-    apply_downloaded_asset(update, &archive_path, &work_dir, options)
+    let download_key = bridge_download_key();
+    apply_update_with(
+        update,
+        base_url,
+        options,
+        download_key.as_ref().map(|key| key.as_str()),
+        trusted_keys,
+    )
 }
 
 /// 指定キーで bridge から更新アセットをダウンロードして適用する
@@ -98,6 +103,7 @@ pub(crate) fn apply_update_at(
 /// * `base_url` - bridge のベース URL (末尾スラッシュなし)
 /// * `options` - 外部プロセス起動の有無
 /// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+/// * `trusted_keys` - 署名検証に使う minisign 公開鍵 (Base64)
 ///
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
@@ -107,25 +113,87 @@ pub(crate) fn apply_update_at_with_key(
     base_url: &str,
     options: ApplyOptions,
     download_key: Option<&str>,
+    trusted_keys: &[&str],
 ) -> UpdateApplyOutcome {
-    let download_url = asset_download_url(base_url, &update.tag, &update.asset_name);
+    apply_update_with(update, base_url, options, download_key, trusted_keys)
+}
+
+/// ダウンロード・検証・適用を順に行う
+fn apply_update_with(
+    update: &AvailableUpdate,
+    base_url: &str,
+    options: ApplyOptions,
+    download_key: Option<&str>,
+    trusted_keys: &[&str],
+) -> UpdateApplyOutcome {
     let work_dir = match update_work_dir(&update.latest_version) {
         Ok(dir) => dir,
         Err(err) => return err.into(),
     };
 
     let archive_path = work_dir.join(&update.asset_name);
-    if let Err(err) = download_and_verify_with_key(
-        &download_url,
-        &archive_path,
-        update.size,
-        &update.sha256,
-        download_key,
-    ) {
+    if let Err(err) =
+        download_verified_asset(update, base_url, &archive_path, download_key, trusted_keys)
+    {
         return err.into();
     }
 
     apply_downloaded_asset(update, &archive_path, &work_dir, options)
+}
+
+/// アセットと署名をダウンロードし、サイズ・SHA-256・署名を検証する
+///
+/// 署名は小さいため先に取得し、欠落時はアセット本体をダウンロードしない
+/// 署名検証に失敗した場合は保存済みアセットを削除する
+///
+/// # Arguments
+/// * `update` - 確認済みの更新アセット情報
+/// * `base_url` - bridge のベース URL (末尾スラッシュなし)
+/// * `archive_path` - アセットの保存先
+/// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+/// * `trusted_keys` - 署名検証に使う minisign 公開鍵 (Base64)
+///
+/// # Returns
+/// * `Result<(), UpdateError>` - すべての検証に成功した場合は `Ok(())`
+fn download_verified_asset(
+    update: &AvailableUpdate,
+    base_url: &str,
+    archive_path: &Path,
+    download_key: Option<&str>,
+    trusted_keys: &[&str],
+) -> Result<(), UpdateError> {
+    if trusted_keys.is_empty() {
+        crate::log_warn!("更新署名の公開鍵がビルドに埋め込まれていない");
+        return Err(UpdateError::SignatureKeyMissing);
+    }
+
+    let signature_url = asset_download_url(
+        base_url,
+        &update.tag,
+        &signature_asset_name(&update.asset_name),
+    );
+    let signature = download_signature(&signature_url, download_key)?;
+
+    let download_url = asset_download_url(base_url, &update.tag, &update.asset_name);
+    download_and_verify_with_key(
+        &download_url,
+        archive_path,
+        update.size,
+        &update.sha256,
+        download_key,
+    )?;
+
+    let verified = verify_file_signature(
+        archive_path,
+        &signature,
+        &update.latest_version,
+        &update.asset_name,
+        trusted_keys,
+    );
+    if verified.is_err() {
+        let _ = fs::remove_file(archive_path);
+    }
+    verified
 }
 
 /// ダウンロード済みアセットを MSI / ポータブルへ振り分ける

@@ -3,6 +3,7 @@ use crate::config::AppConfig;
 use crate::consts;
 use crate::refiner::{REGEX_PREVIEW_SAMPLE, RefineMode};
 use crate::tray::hotkey::settings::shortcut_list_entries;
+use crate::tray::selector::{clip_selector_json, clip_selector_value, quick_selector_value};
 
 use serde::Serialize;
 
@@ -109,19 +110,14 @@ impl SettingsSnapshot {
     /// # Returns
     /// * `Self` - 設定ウィンドウの初期表示用データ
     pub fn from_config(config: &AppConfig) -> Self {
-        let modes: serde_json::Value =
-            serde_json::from_str(&config.modes_to_json_list()).unwrap_or(serde_json::json!([]));
-        let clips: serde_json::Value =
-            serde_json::from_str(&config.clips_to_json_list()).unwrap_or(serde_json::json!([]));
-
         Self {
             writable: SettingsWritable::from_config(config),
             app_version: env!("CARGO_PKG_VERSION"),
             portable_mode: crate::config::is_portable_mode(),
             regex_preview_sample: REGEX_PREVIEW_SAMPLE,
             favorite_modes: config.favorite_modes.clone(),
-            modes,
-            clips,
+            modes: quick_selector_value(config),
+            clips: clip_selector_value(config),
             shortcuts: shortcut_list_entries(&config.hotkeys, &config.favorite_modes),
             limits: SettingsLimits::from_consts(),
         }
@@ -146,9 +142,7 @@ impl SettingsSnapshot {
     /// # Returns
     /// * `String` - 登録クリップ一覧 JSON
     pub fn clips_json(config: &AppConfig) -> String {
-        serde_json::from_str::<serde_json::Value>(&config.clips_to_json_list())
-            .unwrap_or(serde_json::json!([]))
-            .to_string()
+        clip_selector_json(config)
     }
 
     /// お気に入りとショートカット一覧の JSON 文字列を生成する

@@ -2,7 +2,6 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
-use super::bridge_download_key;
 use super::error::UpdateError;
 
 use sha2::{Digest, Sha256};
@@ -72,39 +71,10 @@ pub(crate) fn validate_declared_download_size(expected_size: u64) -> Result<(), 
     Ok(())
 }
 
-/// URL からファイルへダウンロードし、サイズと SHA-256 を検証する
+/// 指定キーで URL からファイルへダウンロードし、サイズと SHA-256 を検証する
 ///
 /// 期待サイズ超過または絶対上限超過の時点で読み取りを打ち切る
 /// 検証に失敗した場合は保存済みファイルを削除する
-/// ビルド埋め込みキーがあれば `Authorization: Bearer` を付与する
-///
-/// # Arguments
-/// * `url` - ダウンロード URL
-/// * `dest` - 保存先パス
-/// * `expected_size` - 期待バイト数 (0 は拒否)
-/// * `expected_sha256` - 期待する SHA-256 (小文字16進 64 桁)
-///
-/// # Returns
-/// * `Result<(), UpdateError>` - 成功時 `Ok(())`
-pub(crate) fn download_and_verify(
-    url: &str,
-    dest: &Path,
-    expected_size: u64,
-    expected_sha256: &str,
-) -> Result<(), UpdateError> {
-    let download_key = bridge_download_key();
-    download_and_verify_with_key(
-        url,
-        dest,
-        expected_size,
-        expected_sha256,
-        download_key.as_ref().map(|key| key.as_str()),
-    )
-}
-
-/// 指定キーで URL からダウンロードし、サイズと SHA-256 を検証する
-///
-/// テストからキーを差し替えるときに使う。本番は `download_and_verify` 経由
 ///
 /// # Arguments
 /// * `url` - ダウンロード URL

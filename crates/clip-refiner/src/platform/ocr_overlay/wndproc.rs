@@ -9,7 +9,7 @@ use super::types::{
 };
 
 use anyhow::Result;
-use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, WIN32_ERROR, WPARAM};
+use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, RECT, WIN32_ERROR, WPARAM};
 use windows::Win32::Graphics::Gdi::{HBRUSH, ValidateRect};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, VK_ESCAPE};
@@ -49,14 +49,18 @@ pub(crate) fn register_overlay_class() -> Result<()> {
             lpfnWndProc: Some(overlay_wnd_proc),
             cbClsExtra: 0,
             cbWndExtra: 0,
+            // SAFETY: `None` は自プロセスのモジュールハンドルを返すだけで、ポインタを受け取らない
             hInstance: unsafe { GetModuleHandleW(None).map(Into::into).unwrap_or_default() },
             hIcon: HICON::default(),
+            // SAFETY: システム定義カーソルの読み込みで、インスタンスハンドルを渡さない
             hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
             hbrBackground: HBRUSH::default(),
             lpszMenuName: PCWSTR::null(),
             lpszClassName: PCWSTR(class_name.as_ptr()),
         };
+        // SAFETY: `wc` と `class_name` は呼び出し中に生存し、クラス名は NUL 終端の UTF-16
         if unsafe { RegisterClassW(&raw const wc) } == 0 {
+            // SAFETY: 引数を取らず、同じスレッドの直前の失敗コードを読むだけ
             let err = unsafe { GetLastError() };
             if err != WIN32_ERROR(ERROR_CLASS_ALREADY_EXISTS) {
                 failed = true;
@@ -70,12 +74,20 @@ pub(crate) fn register_overlay_class() -> Result<()> {
 }
 
 /// オーバーレイのウィンドウプロシージャ
+///
+/// # Safety
+/// OS からウィンドウメッセージとして呼ばれることを前提とする
+/// `GWLP_USERDATA` は 0 か、生存中の `OverlayState` を指していること
 unsafe extern "system" fn overlay_wnd_proc(
     hwnd: HWND,
     msg: u32,
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    // SAFETY: `GWLP_USERDATA` は `OverlayWindow::create` が `Box<OverlayState>` のアドレスを設定し、
+    // `OverlayWindow` の破棄と `WM_DESTROY` で 0 に戻す。0 以外のときは生存中の状態を指す
+    // ウィンドウはそれを作成したスレッドでのみメッセージを受けるため、状態へ並行アクセスしない
+    // `on_complete` はオーバーレイ自体を破棄しないため、呼び出し後に `state` がダングリングにならない
     unsafe {
         let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut OverlayState;
         if state.is_null() {
@@ -85,7 +97,7 @@ unsafe extern "system" fn overlay_wnd_proc(
         match msg {
             WM_ERASEBKGND => return LRESULT(1),
             WM_PAINT => {
-                let mut rect = std::mem::zeroed();
+                let mut rect = RECT::default();
                 if GetClientRect(hwnd, &raw mut rect).is_ok() {
                     let _ = ValidateRect(Some(hwnd), Some(&raw const rect));
                 }
@@ -142,7 +154,11 @@ unsafe extern "system" fn overlay_wnd_proc(
 }
 
 /// オーバーレイを再描画する
+///
+/// # Safety
+/// `state` は生存中の `OverlayState` を指し、呼び出し中に他から参照されないこと
 unsafe fn redraw_overlay(state: *mut OverlayState) {
+    // SAFETY: 呼び出し元が `state` の有効性と排他性を保証する
     unsafe {
         let Some(rect) = (*state)
             .selection
@@ -159,7 +175,13 @@ unsafe fn redraw_overlay(state: *mut OverlayState) {
 }
 
 /// 選択範囲を確定してオーバーレイを閉じる
+///
+/// # Safety
+/// `state` は生存中の `OverlayState` を指し、呼び出し中に他から参照されないこと
+/// `on_complete` はオーバーレイを破棄しないこと
 unsafe fn finish_selection(hwnd: HWND, state: *mut OverlayState) {
+    // SAFETY: 呼び出し元が `state` の有効性と排他性を保証する
+    // `selection` の参照は `start` / `cursor` のコピー後に使わず、`hide_overlay` の書き込みと重ならない
     unsafe {
         let selection = &(*state).selection;
         let (Some(start), Some(end)) = (selection.start, selection.cursor) else {
@@ -181,14 +203,18 @@ unsafe fn finish_selection(hwnd: HWND, state: *mut OverlayState) {
 }
 
 /// オーバーレイを非表示にする
+///
+/// # Safety
+/// `state` は生存中の `OverlayState` を指し、呼び出し中に他から参照されないこと
 pub(crate) unsafe fn hide_overlay(hwnd: HWND, state: *mut OverlayState) {
+    // SAFETY: 呼び出し元が `state` の有効性と排他性を保証する
     unsafe {
         (*state).selection = DragSelection::default();
         (*state).last_redraw_at = None;
         (*state).layered.last_preview = None;
         let _ = ReleaseCapture();
         let _ = ShowWindow(hwnd, SW_HIDE);
-        let mut rect = std::mem::zeroed();
+        let mut rect = RECT::default();
         if GetClientRect(hwnd, &raw mut rect).is_ok() {
             let _ = ValidateRect(Some(hwnd), Some(&raw const rect));
         }

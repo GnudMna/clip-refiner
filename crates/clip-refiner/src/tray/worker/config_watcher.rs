@@ -175,6 +175,7 @@ fn run_watch_loop(
         | FILE_NOTIFY_CHANGE_LAST_WRITE
         | FILE_NOTIFY_CHANGE_SIZE
         | FILE_NOTIFY_CHANGE_CREATION;
+    // SAFETY: `wide` は NUL 終端の UTF-16 で、呼び出し中は生存する
     let change = match unsafe {
         FindFirstChangeNotificationW(PCWSTR(wide.as_ptr()), false, notify_filter)
     } {
@@ -194,9 +195,11 @@ fn run_watch_loop(
         if stop.load(Ordering::SeqCst) {
             break;
         }
+        // SAFETY: `change` はループ終了後まで閉じない生存中の変更通知ハンドル
         let wait = unsafe { WaitForSingleObject(change, WATCH_WAIT_MS) };
         if wait == WAIT_OBJECT_0 {
             let _ = try_notify_config_changed(pending, tx);
+            // SAFETY: `change` は生存中の変更通知ハンドル
             if let Err(err) = unsafe { FindNextChangeNotification(change) } {
                 crate::log_warn!("設定ディレクトリ監視の継続に失敗: {err}");
                 break;
@@ -211,6 +214,7 @@ fn run_watch_loop(
 }
 
 fn close_change_notification(handle: HANDLE) {
+    // SAFETY: 呼び出し元は `FindFirstChangeNotificationW` で得たハンドルを 1 度だけ渡し、以降は使わない
     if let Err(err) = unsafe { FindCloseChangeNotification(handle) } {
         crate::log_warn!("設定ディレクトリ監視ハンドルの解放に失敗: {err}");
     }

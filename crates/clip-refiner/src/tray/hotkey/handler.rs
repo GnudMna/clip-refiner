@@ -11,13 +11,14 @@ use super::super::notify::{
     NotificationCategory, show_category_notification, show_pause_notification,
 };
 use super::super::ocr::OcrCaptureWindow;
-use super::super::selector::{ClipSelectorWindow, QuickSelectorWindow};
+use super::super::selector::{
+    ClipSelectorWindow, QuickSelectorWindow, clip_selector_json, hide_with_retention,
+    quick_selector_json,
+};
 use super::super::state::AppState;
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::register::HotkeyHandler;
-use crate::config::AppConfig;
 use crate::platform;
-use crate::tray::selector::hide_with_retention;
 use crate::tray::state::AppEvent;
 
 use global_hotkey::GlobalHotKeyEvent;
@@ -136,7 +137,7 @@ impl HotkeyHandler {
             let Some(event_loop) = ctx.event_loop else {
                 return;
             };
-            let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
+            let modes_json = ctx.state.with_config(quick_selector_json);
             quick_selector.show(event_loop, ctx.state.with_config(|c| c.mode), &modes_json);
         }
     }
@@ -160,7 +161,7 @@ impl HotkeyHandler {
             let Some(event_loop) = ctx.event_loop else {
                 return;
             };
-            let clips_json = ctx.state.with_config(AppConfig::clips_to_json_list);
+            let clips_json = ctx.state.with_config(clip_selector_json);
             clip_selector.show(event_loop, &clips_json);
         }
     }

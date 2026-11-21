@@ -245,11 +245,13 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("clip-refiner-env-config-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("create temp dir");
-        // SAFETY: テストプロセス内でのみ環境変数を一時変更する
+        // SAFETY: Windows の環境変数 API はスレッドセーフで、std 経由の読み書きは
+        // std 内部のロックで直列化される。環境変数を読む非 Rust コードはテスト中に動かない
         unsafe {
             std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
         }
         let resolved = get_config_dir().expect("get_config_dir");
+        // SAFETY: `set_var` と同じ理由で、他スレッドの読み取りと競合しない
         unsafe {
             std::env::remove_var(consts::ENV_CONFIG_DIR);
         }
@@ -351,11 +353,13 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("clip-refiner-portable-env-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("create temp dir");
-        // SAFETY: テストプロセス内でのみ環境変数を一時変更する
+        // SAFETY: Windows の環境変数 API はスレッドセーフで、std 経由の読み書きは
+        // std 内部のロックで直列化される。環境変数を読む非 Rust コードはテスト中に動かない
         unsafe {
             std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
         }
         let portable = is_portable_mode();
+        // SAFETY: `set_var` と同じ理由で、他スレッドの読み取りと競合しない
         unsafe {
             std::env::remove_var(consts::ENV_CONFIG_DIR);
         }

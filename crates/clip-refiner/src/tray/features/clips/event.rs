@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use crate::config::AppConfig;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
-use crate::tray::selector::ClipSelectorWindow;
+use crate::tray::selector::{ClipSelectorWindow, clip_selector_json};
 use crate::tray::state::{AppState, LockExt};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
@@ -94,7 +93,7 @@ pub(crate) fn refresh_clips_views(
         dispatch::log_menu_operation_error("登録クリップメニューの更新", err);
     }
     if clip_selector.is_visible() {
-        let clips_json = state.with_config(AppConfig::clips_to_json_list);
+        let clips_json = state.with_config(clip_selector_json);
         clip_selector.refresh_items(&clips_json);
     }
 }

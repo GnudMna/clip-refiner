@@ -5,6 +5,7 @@
   "description": "ClipRefiner UI JavaScript の品質チェック・バンドル用 (本番バイナリには npm 依存を同梱しない)",
   "scripts": {
     "build:ui": "node scripts/common/build-ui.mjs",
+    "build:ui:check": "node scripts/common/build-ui.mjs --check",
     "build:settings-ui": "node scripts/common/build-ui.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

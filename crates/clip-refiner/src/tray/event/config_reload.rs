@@ -9,7 +9,7 @@ use crate::config::{
     format_unsupported_config_version_message,
 };
 use crate::platform;
-use crate::tray::selector::ClipSelectorWindow;
+use crate::tray::selector::{ClipSelectorWindow, clip_selector_json};
 use crate::user_error::{UserNotification, titles};
 
 use thiserror::Error;
@@ -129,7 +129,7 @@ pub fn apply_config_reload(
     }
 
     if clip_selector.is_visible() {
-        let clips_json = state.with_config(AppConfig::clips_to_json_list);
+        let clips_json = state.with_config(clip_selector_json);
         clip_selector.refresh_items(&clips_json);
     }
 

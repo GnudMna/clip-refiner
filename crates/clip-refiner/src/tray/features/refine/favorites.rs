@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
+use crate::config::{FavoriteMoveDirection, FavoriteToggleResult};
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
-use crate::tray::selector::QuickSelectorWindow;
+use crate::tray::selector::{QuickSelectorWindow, quick_selector_json};
 use crate::tray::state::{AppState, HotkeyEvent};
 
 // ======================================================================
@@ -122,7 +122,7 @@ pub(crate) fn refresh_quick_selector_modes(
     if let Some(quick_selector) = quick_selector
         && quick_selector.is_visible()
     {
-        let modes_json = state.with_config(AppConfig::modes_to_json_list);
+        let modes_json = state.with_config(quick_selector_json);
         let current_mode = state.with_config(|config| config.mode);
         quick_selector.refresh_modes(&modes_json, current_mode);
     }
@@ -237,9 +237,9 @@ mod tests {
         );
 
         // クイックセレクター再オープン時と同じ JSON 経路で favoriteIndex が入れ替わること
-        let modes_json = ctx.state().with_config(AppConfig::modes_to_json_list);
+        let modes_json = ctx.state().with_config(quick_selector_json);
         let parsed: Vec<serde_json::Value> =
-            serde_json::from_str(&modes_json).expect("modes_to_json_list が JSON");
+            serde_json::from_str(&modes_json).expect("quick_selector_json が JSON");
         let url_decode = parsed
             .iter()
             .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("UrlDecode"))

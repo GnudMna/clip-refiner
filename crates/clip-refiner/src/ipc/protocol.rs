@@ -1,5 +1,7 @@
 //! ワンショット IPC の要求・応答プロトコル
 
+use std::io::{self, BufRead, Read};
+
 use crate::config::RegexStep;
 use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode};
 
@@ -10,6 +12,20 @@ use serde::{Deserialize, Serialize};
 // ======================================================================
 /// IPC メッセージ本文の最大バイト数
 pub(crate) const MAX_IPC_MESSAGE_BYTES: usize = 64 * 1024;
+
+// ======================================================================
+// 行の読み取り
+// ======================================================================
+/// 上限付きで 1 行読み取った結果
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BoundedLine {
+    /// 何も読まずに EOF へ達した
+    Eof,
+    /// 改行を除いた本文
+    Line(String),
+    /// 本文が `MAX_IPC_MESSAGE_BYTES` を超えた (超過分は読み取らない)
+    TooLarge,
+}
 
 // ======================================================================
 // ワーカー内部結果
@@ -325,6 +341,33 @@ pub fn parse_response(json: &str) -> Result<OneshotIpcResponse, serde_json::Erro
     serde_json::from_str(json)
 }
 
+/// IPC メッセージを 1 行読み取る
+///
+/// 本文 `MAX_IPC_MESSAGE_BYTES` と改行 1 バイトを超えて読み進めないため、
+/// 改行を送らない相手からの巨大な入力でもメモリを確保し続けない
+///
+/// # Arguments
+/// * `reader` - 読み取り元
+///
+/// # Returns
+/// * `io::Result<BoundedLine>` - 読み取り結果。UTF-8 として不正な場合は `InvalidData`
+pub(crate) fn read_bounded_line<R: BufRead>(reader: &mut R) -> io::Result<BoundedLine> {
+    let limit = MAX_IPC_MESSAGE_BYTES as u64 + 1;
+    let mut buf = Vec::new();
+    let read = reader.by_ref().take(limit).read_until(b'\n', &mut buf)?;
+    if read == 0 {
+        return Ok(BoundedLine::Eof);
+    }
+    if buf.last() == Some(&b'\n') {
+        buf.pop();
+    } else if read as u64 == limit {
+        return Ok(BoundedLine::TooLarge);
+    }
+    String::from_utf8(buf)
+        .map(BoundedLine::Line)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
 impl OneshotIpcRequest {
     /// 要求 ID を返す
     ///
@@ -364,6 +407,8 @@ impl OneshotIpcRequest {
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
     use crate::config::{RegexPreset, RegexSettings, RegexStep};
 
@@ -512,5 +557,56 @@ mod tests {
         assert_eq!(step.replacement, "bar");
         assert!(step.case_insensitive);
         assert_eq!(ctx.regex.active_steps().len(), 1);
+    }
+
+    /// 上限ちょうどの本文と改行を 1 行として読み取ること
+    #[test]
+    fn read_bounded_line_accepts_body_at_limit() {
+        let body = "x".repeat(MAX_IPC_MESSAGE_BYTES);
+        let mut reader = Cursor::new(format!("{body}\nnext\n"));
+        assert_eq!(
+            read_bounded_line(&mut reader).expect("read"),
+            BoundedLine::Line(body)
+        );
+        // 次の行は改行の直後から読める
+        assert_eq!(
+            read_bounded_line(&mut reader).expect("read"),
+            BoundedLine::Line("next".into())
+        );
+    }
+
+    /// 上限を超える本文は上限 + 1 バイトまでで読み取りを打ち切ること
+    #[test]
+    fn read_bounded_line_stops_reading_oversized_body() {
+        let mut reader = Cursor::new(vec![b'x'; MAX_IPC_MESSAGE_BYTES * 4]);
+        assert_eq!(
+            read_bounded_line(&mut reader).expect("read"),
+            BoundedLine::TooLarge
+        );
+        // 超過分は消費しない
+        assert_eq!(reader.position(), MAX_IPC_MESSAGE_BYTES as u64 + 1);
+    }
+
+    /// 改行で終わらない短い入力と空入力を区別すること
+    #[test]
+    fn read_bounded_line_handles_eof() {
+        let mut reader = Cursor::new(b"tail".to_vec());
+        assert_eq!(
+            read_bounded_line(&mut reader).expect("read"),
+            BoundedLine::Line("tail".into())
+        );
+        // 読み切った後は EOF
+        assert_eq!(
+            read_bounded_line(&mut reader).expect("read"),
+            BoundedLine::Eof
+        );
+    }
+
+    /// UTF-8 として不正な行は `InvalidData` とすること
+    #[test]
+    fn read_bounded_line_rejects_invalid_utf8() {
+        let mut reader = Cursor::new(b"\xff\xfe\n".to_vec());
+        let err = read_bounded_line(&mut reader).expect_err("不正な UTF-8");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 }

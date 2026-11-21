@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use super::misc::exit_if_e2e_selector_closed;
-use crate::config::{AppConfig, FavoriteMoveDirection};
+use crate::config::FavoriteMoveDirection;
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::e2e;
@@ -11,7 +11,7 @@ use crate::tray::event::{
     AppEventContext, copy_registered_clip, delete_registered_clip, move_favorite_mode,
     refresh_clips_views, toggle_favorite_mode, update_refine,
 };
-use crate::tray::selector::hide_with_retention;
+use crate::tray::selector::{clip_selector_json, hide_with_retention, quick_selector_json};
 use crate::tray::settings::{refresh_settings_clips, refresh_settings_favorites_and_shortcuts};
 use crate::tray::state::{ClipsEvent, FavoritesEvent, SelectorEvent};
 use crate::tray::worker::ClipboardCommand;
@@ -89,7 +89,7 @@ fn show_quick_selector(ctx: &mut AppEventContext<'_>) {
         hide_selector(ctx, SelectorKind::Clip);
     }
     *ctx.last_quick_selector_show = Instant::now();
-    let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
+    let modes_json = ctx.state.with_config(quick_selector_json);
     ctx.selectors.quick.show(
         ctx.event_loop,
         ctx.state.with_config(|c| c.mode),
@@ -104,7 +104,7 @@ fn show_clip_selector(ctx: &mut AppEventContext<'_>) {
         hide_selector(ctx, SelectorKind::Quick);
     }
     *ctx.last_clip_selector_show = Instant::now();
-    let clips_json = ctx.state.with_config(AppConfig::clips_to_json_list);
+    let clips_json = ctx.state.with_config(clip_selector_json);
     ctx.selectors.clip.show(ctx.event_loop, &clips_json);
     e2e::signal_ready();
 }

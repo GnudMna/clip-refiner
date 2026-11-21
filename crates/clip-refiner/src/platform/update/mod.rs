@@ -5,6 +5,8 @@
 //! 完了後にサイズと SHA-256 を検証してから適用する
 //! 保護対象タグのアセット DL にはビルド時埋め込みキー (`CLIP_REFINER_KEY`) を
 //! ChaCha20-Poly1305 で暗号化して埋め込み、復号した値を `Authorization: Bearer` で付与する
+//! 適用前に `<asset>.minisig` の minisign 署名を埋め込み公開鍵で検証し、
+//! 信頼コメントで更新先バージョンとアセット名が一致することを確かめる
 
 mod apply;
 mod bridge_key;
@@ -12,6 +14,7 @@ mod bridge_key_obfuscate;
 mod check;
 mod error;
 mod replace;
+mod signature;
 mod types;
 mod verify;
 
@@ -31,6 +34,8 @@ pub(crate) use apply::apply_update_at;
 pub(crate) use apply::apply_update_at_with_key;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use check::check_for_update_at;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use signature::{expected_trusted_comment, signature_asset_name};
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use types::UpdatePackageKind;
 
