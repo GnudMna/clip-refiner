@@ -11,6 +11,8 @@
             "cargo": {
                 "args": [
                     "run",
+                    "-p",
+                    "clip-refiner",
                     "--bin=ClipRefiner"
                 ]
             },

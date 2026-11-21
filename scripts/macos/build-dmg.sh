@@ -54,7 +54,7 @@ assert_cargo_bundle_installed
 echo "macOS インストーラーの作成を開始します..."
 echo
 
-bundle_args=(--release --bin ClipRefiner --format osx)
+bundle_args=(-p clip-refiner --release --bin ClipRefiner --format osx)
 if [[ "$SKIP_BUILD" == true ]]; then
     bundle_args+=(--no-build)
 fi
