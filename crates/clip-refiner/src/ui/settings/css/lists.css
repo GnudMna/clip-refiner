@@ -249,13 +249,24 @@ td.list-actions > * + * {
         flex-direction: column;
     }
 
-    #sidebar {
+    #side {
         width: 100%;
         flex-direction: row;
-        overflow-x: auto;
+        align-items: center;
         border-right: none;
         border-bottom: 1px solid var(--border-subtle);
+    }
+
+    #sidebar {
+        flex-direction: row;
+        overflow-x: auto;
         padding: 8px;
+    }
+
+    #side-actions {
+        flex-direction: row;
+        padding: 8px;
+        border-top: none;
     }
 
     .nav-btn {

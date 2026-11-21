@@ -6,11 +6,17 @@ mod assets;
 mod events;
 
 use std::cell::RefCell;
+use std::ffi::c_void;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowBuilder, WindowId};
+use tao::platform::windows::WindowExtWindows;
+use tao::window::{Theme, Window, WindowBuilder, WindowId};
+use windows::Win32::Foundation::{COLORREF, HWND};
+use windows::Win32::Graphics::Dwm::{
+    DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR, DWMWINDOWATTRIBUTE, DwmSetWindowAttribute,
+};
 
 use super::apply::{SettingsApplyFeedback, should_notify_apply_error_via_desktop};
 use super::geometry::{
@@ -312,11 +318,53 @@ impl SettingsWindow {
 // ======================================================================
 // ウィンドウ生成
 // ======================================================================
+/// タイトルバーの背景色 (`base.css` の `--bg-color` #25252b)
+const TITLE_BAR_BACKGROUND: COLORREF = COLORREF(0x002b_2525);
+/// タイトルバーの文字色 (`base.css` の `--text-color` #f2f2f4)
+const TITLE_BAR_TEXT: COLORREF = COLORREF(0x00f4_f2f2);
+/// `COLORREF` のバイト数 (DWM 属性の値サイズ)
+const COLORREF_SIZE: u32 = 4;
+
+/// タイトルバーの色を UI の配色へ合わせる
+///
+/// 色指定は Windows 11 以降のみ有効。未対応 OS では失敗を無視し、
+/// `Theme::Dark` による暗色タイトルバーに留まる
+fn apply_title_bar_colors(window: &Window) {
+    let hwnd = HWND(window.hwnd() as *mut c_void);
+    for (attribute, color) in [
+        (DWMWA_CAPTION_COLOR, TITLE_BAR_BACKGROUND),
+        (DWMWA_TEXT_COLOR, TITLE_BAR_TEXT),
+    ] {
+        if let Err(err) = set_dwm_color(hwnd, attribute, color) {
+            tracing::debug!("タイトルバーの色指定をスキップ: {err}");
+            return;
+        }
+    }
+}
+
+/// DWM のウィンドウ属性へ色を設定する
+fn set_dwm_color(
+    hwnd: HWND,
+    attribute: DWMWINDOWATTRIBUTE,
+    color: COLORREF,
+) -> windows::core::Result<()> {
+    // SAFETY: `hwnd` は生存中の `Window` のハンドルで、`color` は呼び出し中有効な `COLORREF` を指す
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            attribute,
+            std::ptr::from_ref(&color).cast::<c_void>(),
+            COLORREF_SIZE,
+        )
+    }
+}
+
 /// 画面中央に配置する非表示の設定ウィンドウを生成する
 fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) -> Result<Window> {
     let geometry = load_settings_window_geometry();
     let builder = WindowBuilder::new()
         .with_title(format!("{} 設定", consts::APP_NAME))
+        .with_theme(Some(Theme::Dark))
         .with_window_icon(Some(
             create_window_icon().context("ウィンドウアイコンの読み込みに失敗")?,
         ))
@@ -324,6 +372,7 @@ fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) ->
         .with_resizable(true)
         .with_min_inner_size(tao::dpi::LogicalSize::new(640.0, 480.0));
     let window = apply_geometry_to_builder(builder, geometry).build(event_loop)?;
+    apply_title_bar_colors(&window);
     apply_saved_position(&window, geometry);
     Ok(window)
 }

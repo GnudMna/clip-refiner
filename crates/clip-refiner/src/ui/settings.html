@@ -12,22 +12,15 @@
 
 <body>
     <div id="app">
-        <header id="header">
-            <div id="header-brand">
-                <img id="header-logo" src="__APP_ICON_SRC__" alt="" width="32" height="32">
-                <div>
-                    <h1>ClipRefiner</h1>
-                    <p id="header-subtitle">設定</p>
-                </div>
-            </div>
-            <div id="header-actions">
-                <button type="button" id="open-config-btn" class="ghost-btn">config.toml</button>
-                <button type="button" id="close-btn" class="primary-btn">閉じる</button>
-            </div>
-        </header>
         <div id="apply-feedback" class="apply-feedback" role="status" aria-live="polite" hidden></div>
         <div id="layout">
-            <div id="sidebar" role="tablist" aria-orientation="vertical" aria-label="設定カテゴリ"></div>
+            <aside id="side">
+                <div id="sidebar" role="tablist" aria-orientation="vertical" aria-label="設定カテゴリ"></div>
+                <div id="side-actions">
+                    <button type="button" id="open-config-btn" class="ghost-btn">config.toml</button>
+                    <button type="button" id="close-btn" class="primary-btn">閉じる</button>
+                </div>
+            </aside>
             <main id="content"></main>
         </div>
     </div>

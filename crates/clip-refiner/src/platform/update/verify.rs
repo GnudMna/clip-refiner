@@ -5,6 +5,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use super::error::UpdateError;
+use super::http;
 
 // ======================================================================
 // 定数
@@ -158,7 +159,7 @@ fn download_and_verify_inner(
 ) -> Result<(), UpdateError> {
     validate_declared_download_size(expected_size)?;
 
-    let mut request = ureq::get(url);
+    let mut request = http::download_agent().get(url);
     if let Some(key) = download_key {
         request = request.header("Authorization", &format!("Bearer {key}"));
     }

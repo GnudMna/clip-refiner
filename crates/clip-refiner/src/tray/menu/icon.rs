@@ -1,7 +1,6 @@
 use std::io::Cursor;
 
 use anyhow::{Context, Result};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use tao::window::Icon as WindowIcon;
 use tray_icon::Icon as TrayIcon;
 
@@ -58,14 +57,6 @@ pub fn create_window_icon() -> Result<WindowIcon> {
         .context("ウィンドウアイコンデータの作成に失敗しました")
 }
 
-/// 設定ウィンドウ HTML 用の `assets/icon.png` データ URL を返す
-pub(crate) fn app_icon_png_data_url() -> String {
-    format!(
-        "data:image/png;base64,{}",
-        STANDARD.encode(include_bytes!("../../../../../assets/icon.png"))
-    )
-}
-
 // ======================================================================
 // テスト
 // ======================================================================
@@ -83,13 +74,5 @@ mod tests {
     #[test]
     fn create_window_icon_from_embedded_png() {
         let _icon = create_window_icon().expect("ウィンドウアイコンの作成に失敗");
-    }
-
-    /// データ URL が PNG 形式となるようにすること
-    #[test]
-    fn app_icon_png_data_url_is_png_data_uri() {
-        let data_url = app_icon_png_data_url();
-        assert!(data_url.starts_with("data:image/png;base64,"));
-        assert!(data_url.len() > "data:image/png;base64,".len());
     }
 }

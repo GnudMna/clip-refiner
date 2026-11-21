@@ -1,4 +1,3 @@
-use crate::tray::menu::icon::app_icon_png_data_url;
 use crate::tray::selector::{apply_webview_csp, inline_script_block};
 
 // ======================================================================
@@ -6,7 +5,6 @@ use crate::tray::selector::{apply_webview_csp, inline_script_block};
 // ======================================================================
 const SETTINGS_CSS_IMPORT: &str = r#"@import url("settings.css");"#;
 const SETTINGS_JS_TAG: &str = r#"<script src="settings.js"></script>"#;
-const SETTINGS_ICON_PLACEHOLDER: &str = "__APP_ICON_SRC__";
 /// OS の閉じる操作から呼ぶ JS (未公開時は no-op)
 pub(super) const CLOSE_FROM_OS_SCRIPT: &str =
     "typeof window.closeWindow==='function'&&window.closeWindow();";
@@ -67,8 +65,7 @@ fn embed_settings_assets(html: &str) -> String {
     apply_webview_csp(
         &html
             .replace(SETTINGS_CSS_IMPORT, SETTINGS_CSS)
-            .replace(SETTINGS_JS_TAG, &inline_script_block(&js))
-            .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url()),
+            .replace(SETTINGS_JS_TAG, &inline_script_block(&js)),
         &js,
     )
 }
@@ -237,7 +234,6 @@ mod tests {
         let html = assemble_settings_html();
         assert!(!html.contains(r#"@import url("settings.css")"#));
         assert!(!html.contains(r#"<script src="settings.js"></script>"#));
-        assert!(!html.contains("__APP_ICON_SRC__"));
         assert!(html.contains("<script>"));
         assert!(html.contains("SettingsSharedLogic"));
         assert!(html.contains("default-src 'none'"));
@@ -252,7 +248,7 @@ mod tests {
         let html = assemble_settings_html();
         let markers = [
             "--sidebar-width:",
-            "#header-brand {",
+            "#side-actions {",
             ".field-hint {",
             ".regex-step-header {",
             ".pipeline-item {",

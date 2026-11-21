@@ -12,7 +12,7 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
     await expect(page.locator('#sidebar [role="tab"]').first()).toHaveAttribute('data-tab', 'general');
     await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
+    await expect(page.locator('#header')).toHaveCount(0);
     await expectWebViewCsp(page);
   });
 
@@ -34,8 +34,8 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#panel-general')).toBeVisible();
   });
 
-  test('ヘッダーに config.toml を開くボタンがある', async ({ page }) => {
-    await expect(page.locator('#open-config-btn')).toBeVisible();
+  test('サイドバー下部に config.toml を開くボタンがある', async ({ page }) => {
+    await expect(page.locator('#side-actions #open-config-btn')).toBeVisible();
     await expect(page.locator('#open-config-btn')).toContainText(/config\.toml/);
   });
 

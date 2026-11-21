@@ -13,6 +13,7 @@ mod bridge_key;
 mod bridge_key_obfuscate;
 mod check;
 mod error;
+mod http;
 mod replace;
 mod signature;
 mod types;

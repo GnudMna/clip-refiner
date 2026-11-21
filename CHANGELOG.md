@@ -29,6 +29,22 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-13
+
+### Changed
+
+- 設定ウィンドウ上部のアプリ名・アイコンのヘッダーを削除し、config.toml と閉じるボタンをサイドバー下部へ移動
+  - 空いた分だけ設定内容の表示領域が広がる
+
+### Fixed
+
+- 登録クリップを読み込めなかった起動後に設定を保存すると、登録クリップのファイルが削除される不具合を修正
+  - 読み込めなかったファイルは `registered-clips.dat.bak` へ退避し、登録クリップを追加して保存するまで上書きしない
+- 更新の確認やダウンロード中に通信が止まると「確認中」のまま戻らない不具合を修正
+  - 接続や応答が一定時間ない場合はエラーとして扱い、再試行できる
+- 設定ウィンドウのタイトルバーが UI の配色と合っていない問題を修正
+  - Windows 11 では UI と同じ色になり、Windows 10 では暗色のタイトルバーになる
+
 ## [1.4.0] - 2026-10-12
 
 ### Added
@@ -863,7 +879,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.1...develop
+[1.4.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.0...v1.4.1
 [1.4.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.2...v1.4.0
 [1.3.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.1...v1.3.2
 [1.3.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.0...v1.3.1

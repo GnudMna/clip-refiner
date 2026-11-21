@@ -7,6 +7,7 @@ mod evaluate;
 mod version;
 
 use super::error::UpdateError;
+use super::http;
 use super::types::{UpdateCheckOutcome, UpdatePackageKind, VersionApiResponse};
 use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, current_app_version};
 use evaluate::evaluate_update;
@@ -75,7 +76,7 @@ pub(crate) fn version_api_url(base_url: &str) -> String {
 
 /// version API を取得してデシリアライズする
 fn fetch_version_api(url: &str) -> Result<VersionApiResponse, UpdateError> {
-    let mut response = ureq::get(url).call().map_err(|err| {
+    let mut response = http::api_agent().get(url).call().map_err(|err| {
         crate::log_warn!("更新確認 HTTP 失敗: {err}");
         match err {
             ureq::Error::StatusCode(status) => UpdateError::CheckHttp { status },

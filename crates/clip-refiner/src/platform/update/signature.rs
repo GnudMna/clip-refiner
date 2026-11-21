@@ -10,6 +10,7 @@ use std::path::Path;
 use minisign_verify::{PublicKey, Signature};
 
 use super::error::UpdateError;
+use super::http;
 
 include!(concat!(env!("OUT_DIR"), "/update_signing_keys.rs"));
 
@@ -73,7 +74,7 @@ pub(crate) fn download_signature(
     url: &str,
     download_key: Option<&str>,
 ) -> Result<String, UpdateError> {
-    let mut request = ureq::get(url);
+    let mut request = http::api_agent().get(url);
     if let Some(key) = download_key {
         request = request.header("Authorization", &format!("Bearer {key}"));
     }

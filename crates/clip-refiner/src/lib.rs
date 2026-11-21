@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "1.4.0" }
+//! clip-refiner-core = { version = "1.4.1" }
 //! # テキスト変換のみ: default-features = false
 //! ```
 //!

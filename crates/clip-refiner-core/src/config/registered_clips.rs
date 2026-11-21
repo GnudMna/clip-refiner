@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +28,12 @@ fn clips_err(msg: impl Into<String>) -> ConfigError {
 // 定数
 // ======================================================================
 const REGISTERED_CLIPS_FILE: &str = "registered-clips.dat";
+const REGISTERED_CLIPS_BACKUP_FILE: &str = "registered-clips.dat.bak";
+
+/// 読み込みに失敗したまま、メモリ上の一覧と食い違っている可能性がある `registered-clips.dat` のパス
+///
+/// 該当パスへの保存は、退避コピーを作るまで削除・上書きしない
+static UNLOADED_CLIPS_FILES: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
 
 // ======================================================================
 // ファイルペイロード
@@ -66,6 +74,8 @@ struct RegisteredClipsPayloadWire {
 ///
 /// ファイルが無い場合は空配列を返す
 /// 平文 `text` フィールドを持つ旧形式は暗号文へ移行する
+/// ファイルがあるのに読み込めなかった場合は `registered-clips.dat.bak` へ退避し、
+/// 次回以降の保存で空の一覧によるファイル削除や上書きが起きないようにする
 ///
 /// # Returns
 /// * `Result<(Vec<RegisteredClip>, bool)>` - 登録クリップ一覧と、形式移行が発生したか
@@ -73,6 +83,24 @@ struct RegisteredClipsPayloadWire {
 /// # Errors
 /// 鍵取得、ファイル読み込み、復号、JSON 解析、本文暗号化のいずれかに失敗した場合
 pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
+    let result = read_registered_clips();
+    match (&result, registered_clips_path()) {
+        (Ok(_), Ok(path)) => mark_clips_file_loaded(&path),
+        (Err(_), Ok(path)) if path.is_file() => {
+            mark_clips_file_unloaded(&path);
+            if backup_registered_clips_file(&path).is_ok() {
+                tracing::warn!(
+                    "読み込めなかった登録クリップファイルを退避した: {}",
+                    backup_path_of(&path).display()
+                );
+            }
+        }
+        _ => {}
+    }
+    result
+}
+
+fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
     ensure_clip_store_key()?;
 
     let path = registered_clips_path()?;
@@ -119,6 +147,8 @@ pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
 ///
 /// 空の場合はファイルを削除する
 /// 平文本文はシリアライズしない (暗号文フィールドのみ)
+/// 直前の読み込みに失敗したファイルは、空の一覧では削除せず、
+/// 一覧がある場合も退避コピーを作ってから上書きする
 ///
 /// # Arguments
 /// * `clips` - 保存する登録クリップ一覧
@@ -127,13 +157,16 @@ pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
 /// * `Result<()>` - 保存または削除に成功した場合は `Ok(())`
 ///
 /// # Errors
-/// 鍵取得、シリアライズ、暗号化、ファイル書き込みのいずれかに失敗した場合
+/// 鍵取得、シリアライズ、暗号化、退避コピー、ファイル書き込みのいずれかに失敗した場合
 pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     ensure_clip_store_key()?;
 
     let path = registered_clips_path()?;
+    let unloaded = is_clips_file_unloaded(&path);
     if clips.is_empty() {
-        if path.is_file() {
+        if unloaded {
+            tracing::warn!("登録クリップファイルを読み込めていないため、削除せず残す");
+        } else if path.is_file() {
             let _ = fs::remove_file(path);
         }
         return Ok(());
@@ -160,12 +193,16 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(ConfigError::CreateDir)?;
     }
+    if unloaded {
+        backup_registered_clips_file(&path)?;
+    }
     write_bytes_atomically(&path, &encrypted).map_err(|e| {
         clips_err(format!(
             "登録クリップファイルの書き込みに失敗: {}: {e}",
             path.display()
         ))
     })?;
+    mark_clips_file_loaded(&path);
     if let Err(e) = restrict_private_file_permissions(&path) {
         tracing::warn!("登録クリップファイルのパーミッション設定に失敗: {:?}", e);
     }
@@ -273,6 +310,58 @@ pub(crate) fn registered_clip_from_plain_text(label: String, text: &str) -> Resu
 // ======================================================================
 fn registered_clips_path() -> Result<PathBuf> {
     Ok(get_config_dir()?.join(REGISTERED_CLIPS_FILE))
+}
+
+fn backup_path_of(path: &Path) -> PathBuf {
+    path.with_file_name(REGISTERED_CLIPS_BACKUP_FILE)
+}
+
+/// 読み込めなかった登録クリップファイルを `registered-clips.dat.bak` へ退避する
+///
+/// 存在しないファイルは退避不要なので成功扱いにする
+fn backup_registered_clips_file(path: &Path) -> Result<()> {
+    if !path.is_file() {
+        return Ok(());
+    }
+    let backup_path = backup_path_of(path);
+    fs::copy(path, &backup_path).map_err(|e| {
+        tracing::warn!("登録クリップファイルの退避に失敗: {:?}", e);
+        clips_err(format!(
+            "登録クリップファイルの退避に失敗: {}: {e}",
+            backup_path.display()
+        ))
+    })?;
+    if let Err(e) = restrict_private_file_permissions(&backup_path) {
+        tracing::warn!(
+            "登録クリップ退避ファイルのパーミッション設定に失敗: {:?}",
+            e
+        );
+    }
+    Ok(())
+}
+
+fn unloaded_clips_files() -> MutexGuard<'static, Option<HashSet<PathBuf>>> {
+    UNLOADED_CLIPS_FILES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+fn mark_clips_file_unloaded(path: &Path) {
+    unloaded_clips_files()
+        .get_or_insert_with(HashSet::new)
+        .insert(path.to_path_buf());
+}
+
+fn mark_clips_file_loaded(path: &Path) {
+    if let Some(paths) = unloaded_clips_files().as_mut() {
+        paths.remove(path);
+    }
+}
+
+fn is_clips_file_unloaded(path: &Path) -> bool {
+    unloaded_clips_files()
+        .as_ref()
+        .is_some_and(|paths| paths.contains(path))
 }
 
 fn is_encrypted_image_filename(filename: &str) -> bool {
@@ -411,6 +500,78 @@ mod tests {
             assert!(inner_str.contains("text_ciphertext"));
             // preview には表示用断片が残るが、平文本文フィールドは無い
             assert!(inner_str.contains("\"preview\""));
+        });
+    }
+
+    /// 復号できない `registered-clips.dat` を `.bak` へ退避し、空の一覧で保存しても削除しないこと
+    #[test]
+    fn load_failure_backs_up_and_empty_save_keeps_file() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            ensure_clip_store_key().expect("key");
+            fs::write(&path, b"not-a-valid-ciphertext").expect("write");
+
+            assert!(load_registered_clips().is_err());
+            assert_eq!(
+                fs::read(backup_path_of(&path)).expect("backup"),
+                b"not-a-valid-ciphertext"
+            );
+
+            save_registered_clips(&[]).expect("save empty");
+            assert_eq!(
+                fs::read(&path).expect("kept"),
+                b"not-a-valid-ciphertext",
+                "読み込み失敗後の空保存でファイルが残ること"
+            );
+        });
+    }
+
+    /// 読み込みに失敗した後に一覧を保存すると上書きし、以降の空保存では通常どおり削除すること
+    #[test]
+    fn save_after_load_failure_overwrites_then_resumes_normal_delete() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            ensure_clip_store_key().expect("key");
+            fs::write(&path, b"broken").expect("write");
+            assert!(load_registered_clips().is_err());
+
+            let clip = registered_clip_from_plain_text("l".into(), "body").expect("enc");
+            save_registered_clips(&[clip]).expect("save");
+            assert_eq!(fs::read(backup_path_of(&path)).expect("backup"), b"broken");
+            assert_eq!(load_registered_clips().expect("load").0.len(), 1);
+
+            save_registered_clips(&[]).expect("save empty");
+            assert!(!path.exists(), "復旧後の空保存で削除されること");
+        });
+    }
+
+    /// 退避コピーを作れない場合は、読み込めなかったファイルを上書きしないこと
+    ///
+    /// `.bak` の位置にディレクトリを置いてコピー失敗を再現する
+    #[test]
+    fn save_aborts_when_backup_of_unloaded_file_fails() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            ensure_clip_store_key().expect("key");
+            fs::write(&path, b"broken").expect("write");
+            fs::create_dir_all(backup_path_of(&path)).expect("backup dir");
+            assert!(load_registered_clips().is_err());
+
+            let clip = registered_clip_from_plain_text("l".into(), "body").expect("enc");
+            assert!(save_registered_clips(&[clip]).is_err());
+            assert_eq!(fs::read(&path).expect("kept"), b"broken");
+        });
+    }
+
+    /// ファイルが存在しない場合は退避もマークもせず、空保存は何もしないこと
+    #[test]
+    fn missing_file_is_not_treated_as_load_failure() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            let (clips, migrated) = load_registered_clips().expect("load");
+            assert!(clips.is_empty() && !migrated);
+            assert!(!backup_path_of(&path).exists());
+            assert!(!is_clips_file_unloaded(&path));
         });
     }
 

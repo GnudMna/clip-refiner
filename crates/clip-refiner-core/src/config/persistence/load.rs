@@ -343,6 +343,28 @@ mod tests {
         });
     }
 
+    /// 登録クリップファイルを読み込めなかった起動後の設定保存で、ファイルを削除しないこと
+    #[test]
+    fn save_after_clips_load_failure_keeps_registered_clips_file() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let dir = crate::config::paths::get_config_dir().expect("dir");
+            let dat = dir.join("registered-clips.dat");
+            AppConfig::default().save().expect("初回保存");
+            fs::write(&dat, b"broken").expect("write");
+
+            let outcome = AppConfig::load();
+            assert!(outcome.config.clips.is_empty());
+            assert!(outcome.fallback.is_none());
+            assert_eq!(
+                fs::read(dir.join("registered-clips.dat.bak")).expect("backup"),
+                b"broken"
+            );
+
+            outcome.config.save().expect("save");
+            assert_eq!(fs::read(&dat).expect("kept"), b"broken");
+        });
+    }
+
     /// 未知キーがあっても既知キーは読み込み、警告一覧に含めるようにすること
     #[test]
     fn load_keeps_known_values_and_reports_unknown_keys() {
