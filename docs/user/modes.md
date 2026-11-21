@@ -28,7 +28,7 @@
 |                        | `regex-split`                                                                                      | パターンで分割し改行で結合                                                                                      |
 | **JSON 整形**          | `json-format`                                                                                      | JSON をインデント整形 (キーを辞書順にソート)                                                                    |
 |                        | `json-format-preserve-order`                                                                       | JSON をインデント整形 (キー順序保持)                                                                            |
-| **YAML→JSON**          | `yaml-to-json`                                                                                     | YAML を JSON へ変換 (キー順序不定)                                                                              |
+| **YAML→JSON**          | `yaml-to-json`                                                                                     | YAML を JSON へ変換 (キー順序不同)                                                                              |
 |                        | `yaml-to-json-preserve-order`                                                                      | YAML を JSON へ変換 (キー順序保持)                                                                              |
 | **JSON→YAML**          | `json-to-yaml`                                                                                     | JSON を YAML へ変換 (キーを辞書順にソート)                                                                      |
 |                        | `json-to-yaml-preserve-order`                                                                      | JSON を YAML へ変換 (キー順序保持)                                                                              |
@@ -56,6 +56,133 @@
 正規表現モードは `[regex]` セクションの**有効プリセット**のステップを上から順に適用する。トレイで選んだ操作 (`regex-replace` / `extract` / `delete` / `split`) が全ステップに同じ操作として適用される。パイプライン内の正規表現モードも同じ有効プリセットを参照する。
 
 ## 変換モードの使用例
+
+<details>
+<summary><strong>URL デコード</strong> (<code>url-decode</code>)</summary>
+<br>
+
+|          |                                                                   |
+| :------- | :---------------------------------------------------------------- |
+| **入力** | `https://example.com/search?q=%E3%83%86%E3%82%B9%E3%83%88&page=2` |
+| **出力** | `https://example.com/search?q=テスト&page=2`                      |
+
+</details>
+
+<details>
+<summary><strong>JSON 整形</strong> (<code>json-format</code>)</summary>
+<br>
+
+**入力:**
+
+```json
+{"name":"ClipRefiner","tags":["a","b"],"nested":{"x":1}}
+```
+
+**出力 (キーを辞書順にソート):**
+
+```json
+{
+  "name": "ClipRefiner",
+  "nested": {
+    "x": 1
+  },
+  "tags": [
+    "a",
+    "b"
+  ]
+}
+```
+
+</details>
+
+<details>
+<summary><strong>YAML から JSON へ</strong> (<code>yaml-to-json</code>)</summary>
+<br>
+
+**入力:**
+
+```yaml
+name: ClipRefiner
+items:
+  - a
+  - b
+```
+
+**出力:**
+
+```json
+{
+  "name": "ClipRefiner",
+  "items": [
+    "a",
+    "b"
+  ]
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Markdown から HTML へ</strong> (<code>markdown-to-html</code>)</summary>
+<br>
+
+**入力:**
+
+```markdown
+# 見出し
+
+- 項目1
+- 項目2
+```
+
+**出力 (HTML ソース):**
+
+```html
+<h1>見出し</h1>
+<ul>
+<li>項目1</li>
+<li>項目2</li>
+</ul>
+```
+
+</details>
+
+<details>
+<summary><strong>行の並べ替え・重複削除</strong> (<code>sort-lines-asc</code> / <code>remove-duplicate-lines</code>)</summary>
+<br>
+
+| モード                   | 入力                          | 出力                          |
+| :----------------------- | :---------------------------- | :---------------------------- |
+| `sort-lines-asc`         | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
+| `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b`   | `a` / `b` / `c`               |
+
+(`/` は行の区切りを表す)
+
+</details>
+
+<details>
+<summary><strong>ファイルパス</strong> (<code>extract-basename</code> / <code>add-path-quotes</code>)</summary>
+<br>
+
+| モード             | 入力                                       | 出力                                  |
+| :----------------- | :----------------------------------------- | :------------------------------------ |
+| `extract-basename` | `C:\Users\sample\Documents\report.txt`     | `report.txt`                          |
+| `add-path-quotes`  | `C:\Program Files\App\app.exe`             | `"C:\Program Files\App\app.exe"`      |
+
+</details>
+
+<details>
+<summary><strong>空白・空行の除去</strong> (<code>trim-lines</code> / <code>remove-empty-lines</code>)</summary>
+<br>
+
+| モード               | 入力                                         | 出力            |
+| :------------------- | :------------------------------------------- | :-------------- |
+| `trim-lines`         | `  foo  ` / `    bar   `                     | `foo` / `bar`   |
+| `remove-empty-lines` | `a` / (空行) / `b` / (空行 2 行) / `c`       | `a` / `b` / `c` |
+
+(`/` は行の区切りを表す)
+
+</details>
 
 <details>
 <summary><strong>UTM パラメータの削除</strong> (<code>remove-utm</code>)</summary>

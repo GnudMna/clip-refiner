@@ -197,7 +197,8 @@ function createItem(item, index, query) {
     };
     div.appendChild(deleteBtn);
 
-    div.onmouseenter = () => selection.setSelectedIndex(index, false);
+    // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
+    div.onmousemove = () => selection.setSelectedIndex(index, false);
     div.onclick = () => select(item.id);
 
     return div;
@@ -246,7 +247,8 @@ function createRegisterRow(index, query) {
 
     div.innerHTML = buildRegisterRowInnerHtml(query, highlightText);
 
-    div.onmouseenter = () => selection.setSelectedIndex(index, false);
+    // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
+    div.onmousemove = () => selection.setSelectedIndex(index, false);
     div.onclick = () => register();
     return div;
 }

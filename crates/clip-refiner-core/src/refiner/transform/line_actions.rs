@@ -265,9 +265,9 @@ fn push_blank_lines(entries: &mut Vec<(String, &str)>, gap: &str, after_record: 
 fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
     let mut lines: Vec<&str> = text.lines().collect();
     if descending {
-        lines.sort_by_key(|b| std::cmp::Reverse(b.to_lowercase()));
+        lines.sort_by_cached_key(|b| std::cmp::Reverse(b.to_lowercase()));
     } else {
-        lines.sort_by_key(|a| a.to_lowercase());
+        lines.sort_by_cached_key(|a| a.to_lowercase());
     }
     let result = super::utils::join_lines(&lines, line_ending);
     if result == text {

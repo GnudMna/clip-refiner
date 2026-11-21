@@ -1,0 +1,20 @@
+/* 本文の最大幅。mdBook 既定は 750px で、設定項目の表など横長の内容が窮屈になる */
+:root {
+    --content-max-width: 1200px;
+}
+
+/* 箇条書きの行間: 同じ階層の項目は少し離し、入れ子の補足は親項目に寄せる。
+   補足を持つ項目の次は大きく離して、まとまりを区別しやすくする */
+.content li + li {
+    margin-top: 0.4em;
+}
+
+.content li > ul,
+.content li > ol {
+    margin-top: 0.3em;
+    margin-bottom: 0;
+}
+
+.content li:has(> ul, > ol) + li {
+    margin-top: 1em;
+}

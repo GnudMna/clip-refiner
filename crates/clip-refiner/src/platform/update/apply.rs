@@ -366,12 +366,15 @@ fn extract_zip_archive(zip_path: &Path, dest_dir: &Path) -> Result<(), UpdateErr
             UpdateError::ZipExtract
         })?;
         let Some(enclosed) = entry.enclosed_name() else {
-            crate::log_warn!("不正な ZIP エントリ名をスキップ: {}", entry.name());
+            crate::log_warn!(
+                "不正な ZIP エントリ名をスキップ: {}",
+                String::from_utf8_lossy(entry.name_raw())
+            );
             continue;
         };
         let out_path = dest_dir.join(enclosed);
 
-        if entry.name().ends_with('/') {
+        if entry.name_raw().ends_with(b"/") {
             fs::create_dir_all(&out_path).map_err(|err| {
                 crate::log_warn!("ZIP ディレクトリ作成失敗: {err}");
                 UpdateError::ZipExtract

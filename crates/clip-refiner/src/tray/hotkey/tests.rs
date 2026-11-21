@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
 
+use super::register::HotkeyRegistrationFailure;
 use super::*;
 use crate::config::HotkeySettings;
 use crate::refiner::RefineMode;
@@ -76,22 +77,27 @@ impl HotkeyTestContext {
     }
 }
 
-/// 本番デフォルトや他アプリと衝突しにくい F キーを割り当てる
+/// 常駐中の本体や他アプリと衝突しにくいキーを割り当てる
 ///
-/// `Alt+Shift+F10` は環境によって OS / 他プロセスが占有していることがあるため使わない
+/// 本体の既定 (固定キー・お気に入りスロットとも `Alt+Shift` 系) と重ならないよう
+/// テスト用キーは `Alt+Ctrl+Shift` 系に限り、並列実行される他テストとも重ならない範囲を使う。
+/// お気に入りスロットは未指定だと既定キーになるため明示する
 fn test_hotkeys() -> HotkeySettings {
     HotkeySettings {
-        quick_selector: "Alt+Shift+F1".to_string(),
-        notification: "Alt+Shift+F2".to_string(),
-        pause: "Alt+Shift+F3".to_string(),
-        quit: "Alt+Shift+F4".to_string(),
-        undo: "Alt+Shift+F5".to_string(),
-        clip_selector: "Alt+Shift+F6".to_string(),
-        ocr: "Alt+Shift+F7".to_string(),
-        continuous_record: "Alt+Shift+F8".to_string(),
-        continuous_record_undo: "Alt+Shift+F9".to_string(),
-        continuous_record_paste: "Alt+Shift+F12".to_string(),
-        favorite_mode_slots: Vec::new(),
+        quick_selector: "Alt+Ctrl+Shift+A".to_string(),
+        notification: "Alt+Ctrl+Shift+B".to_string(),
+        pause: "Alt+Ctrl+Shift+C".to_string(),
+        quit: "Alt+Ctrl+Shift+D".to_string(),
+        undo: "Alt+Ctrl+Shift+E".to_string(),
+        clip_selector: "Alt+Ctrl+Shift+F".to_string(),
+        ocr: "Alt+Ctrl+Shift+G".to_string(),
+        continuous_record: "Alt+Ctrl+Shift+H".to_string(),
+        continuous_record_undo: "Alt+Ctrl+Shift+I".to_string(),
+        continuous_record_paste: "Alt+Ctrl+Shift+J".to_string(),
+        favorite_mode_slots: vec![
+            "Alt+Ctrl+Shift+K".to_string(),
+            "Alt+Ctrl+Shift+L".to_string(),
+        ],
     }
 }
 
@@ -110,6 +116,26 @@ fn ui_test_hotkeys() -> HotkeySettings {
         continuous_record_paste: "Alt+Ctrl+Shift+F10".to_string(),
         favorite_mode_slots: Vec::new(),
     }
+}
+
+/// ホットキー登録の失敗が無いことを検証する
+///
+/// 他プロセスが同じキーを占有していると登録に失敗するため、どのキーが何の理由で失敗したかを出す
+fn assert_registered(failures: &[HotkeyRegistrationFailure], context: &str) {
+    assert!(
+        failures.is_empty(),
+        "{context}: {}
+常駐中の ClipRefiner や他アプリが同じキーを登録していないか確認する",
+        format_registration_failures(failures)
+    );
+}
+
+/// テスト用ホットキーでハンドラを作り、全キーが登録されたことを検証する
+fn new_registered_handler(hotkeys: &HotkeySettings) -> HotkeyHandler {
+    let (handler, failures) =
+        HotkeyHandler::new(hotkeys, &[]).expect("テスト用ホットキーハンドラの初期化に失敗");
+    assert_registered(&failures, "テスト用ホットキーの登録に失敗");
+    handler
 }
 
 fn press_event(hotkey_id: u32) -> GlobalHotKeyEvent {
@@ -218,9 +244,10 @@ fn assert_favorite_hotkeys(
         config.mode = RefineMode::UrlDecode;
         config.pipeline = vec![RefineMode::UrlDecode, RefineMode::Trim];
     });
-    handler
+    let failures = handler
         .reload_favorite_slots(&test_hotkeys(), 2)
-        .expect("お気に入りホットキーの再登録に失敗");
+        .expect("お気に入りホットキーの登録解除に失敗");
+    assert_registered(&failures, "お気に入りホットキーの登録に失敗");
 
     let favorite_slot_one = handler
         .favorite_hotkey_id_at(1)
@@ -267,9 +294,7 @@ fn assert_quit_exits(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
 /// グローバルホットキーは OS に残るため 1 テストにまとめる
 #[test]
 fn hotkey_event_handling() {
-    let mut handler = HotkeyHandler::new(&test_hotkeys(), &[])
-        .expect("テスト用ホットキーの登録に失敗")
-        .0;
+    let mut handler = new_registered_handler(&test_hotkeys());
     let mut ctx = HotkeyTestContext::new();
 
     assert_release_ignored(&mut handler, &mut ctx);
@@ -313,36 +338,36 @@ fn toggle_notification_updates_state() {
 #[test]
 fn reload_updates_registered_hotkey_ids() {
     let initial = HotkeySettings {
-        quick_selector: "Alt+Ctrl+F1".to_string(),
-        notification: "Alt+Ctrl+F2".to_string(),
-        pause: "Alt+Ctrl+F3".to_string(),
-        quit: "Alt+Ctrl+F4".to_string(),
-        undo: "Alt+Ctrl+F5".to_string(),
-        clip_selector: "Alt+Ctrl+F6".to_string(),
-        ocr: "Alt+Ctrl+F7".to_string(),
-        continuous_record: "Alt+Ctrl+F8".to_string(),
-        continuous_record_undo: "Alt+Ctrl+F10".to_string(),
-        continuous_record_paste: "Alt+Ctrl+F9".to_string(),
+        quick_selector: "Alt+Ctrl+Shift+M".to_string(),
+        notification: "Alt+Ctrl+Shift+N".to_string(),
+        pause: "Alt+Ctrl+Shift+O".to_string(),
+        quit: "Alt+Ctrl+Shift+P".to_string(),
+        undo: "Alt+Ctrl+Shift+Q".to_string(),
+        clip_selector: "Alt+Ctrl+Shift+R".to_string(),
+        ocr: "Alt+Ctrl+Shift+S".to_string(),
+        continuous_record: "Alt+Ctrl+Shift+T".to_string(),
+        continuous_record_undo: "Alt+Ctrl+Shift+U".to_string(),
+        continuous_record_paste: "Alt+Ctrl+Shift+V".to_string(),
         favorite_mode_slots: Vec::new(),
     };
-    let mut handler = HotkeyHandler::new(&initial, &[])
-        .expect("テスト用ホットキーの登録に失敗")
-        .0;
+    let mut handler = new_registered_handler(&initial);
     let quit_before = handler.quit_hotkey_id();
 
     let mut updated = initial.clone();
-    updated.quit = "Alt+Ctrl+F12".to_string();
-    handler
+    updated.quit = "Alt+Ctrl+Shift+W".to_string();
+    let failures = handler
         .reload(&updated, &[])
-        .expect("ホットキーの再登録に失敗");
+        .expect("ホットキーの登録解除に失敗");
+    assert_registered(&failures, "ホットキーの再登録に失敗");
 
     assert_ne!(handler.quit_hotkey_id(), quit_before);
 
     let ocr_before = handler.ocr_hotkey_id();
-    updated.ocr = "Alt+Ctrl+F11".to_string();
-    handler
+    updated.ocr = "Alt+Ctrl+Shift+Y".to_string();
+    let failures = handler
         .reload(&updated, &[])
-        .expect("OCR ホットキーの再登録に失敗");
+        .expect("ホットキーの登録解除に失敗");
+    assert_registered(&failures, "OCR ホットキーの再登録に失敗");
     assert_ne!(handler.ocr_hotkey_id(), ocr_before);
 }
 
@@ -351,9 +376,7 @@ fn reload_updates_registered_hotkey_ids() {
 /// グローバルホットキーは OS に残るため 1 テストにまとめる。実 `WebView` / HWND は作らない
 #[test]
 fn hotkey_ui_overlay_mutual_exclusion() {
-    let handler = HotkeyHandler::new(&ui_test_hotkeys(), &[])
-        .expect("テスト用ホットキーの登録に失敗")
-        .0;
+    let handler = new_registered_handler(&ui_test_hotkeys());
     let mut ctx = HotkeyTestContext::with_ui_shells();
     let ocr_id = handler.ocr_hotkey_id();
     let quick_id = handler.quick_selector_hotkey_id();

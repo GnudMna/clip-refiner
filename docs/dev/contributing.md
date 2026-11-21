@@ -7,7 +7,7 @@
 - 作業ブランチは `develop` から切り、Pull Request の向き先も `develop`
 - ブランチ名は `<type>/<kebab-case>` (例: `fix/ipc-line-limit`, `refactor/split-large-files`, `docs/...`)
 - コミットメッセージは `<Type>: <日本語の要約>`。主な Type は `Feat` / `Update` / `Fix` / `Refactor` / `Test` / `Docs` / `Chore` / `Security` (リリースは `Release: v{version}`)
-- 利用者に影響する変更は [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` に同じ変更で追記する
+- 利用者に影響する変更は [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` に同じ変更で追記する。書き方は CHANGELOG.md 冒頭の規約に従う (1 項目 1 文・体言止め・症状と変更後の挙動を書く。テスト・リファクタリング・ドキュメント整理など利用者に見えない変更は書かない)
 - Pull Request 前に [品質チェック](testing.md#品質チェック) を通す
 
 ## コーディング規約
@@ -33,9 +33,17 @@ JavaScript は ESLint / Prettier の設定に従う ([JavaScript リンター](t
 | `docs/user/modes.md` | 利用者 | 変換モードの一覧と使用例 |
 | `docs/user/security.md` | 利用者 | 保護の仕組みと、保護の対象外となる範囲 |
 | `docs/user/troubleshooting.md` | 利用者 | 症状別の確認事項 |
+| `docs/user/introduction.md` | 利用者 | 同梱ドキュメントの表紙 (概要・はじめて使う手順・ページ一覧) |
 | `docs/dev/` | 開発者 | 環境構築・テスト・アーキテクチャ・リリース・開発規約 |
 | `crates/clip-refiner-core/README.md` | ライブラリ利用者 | `clip-refiner-core` の feature・公開 API・使用例 |
 | `CHANGELOG.md` | 利用者・開発者 | バージョンごとの変更 (`release.ps1` が `[Unreleased]` 節を読むため移動しない) |
+
+`docs/user/` は mdBook の原稿として MSI / ポータブル ZIP に HTML で同梱する ([利用者向けドキュメントの同梱](setup.md#利用者向けドキュメントの同梱))。そのため次を守る。
+
+- 開発者向けの内容 (内部構造・テスト・開発用の環境変数など) は書かず、`docs/dev/` へもリンクしない
+- `docs/user/` の外へはリンクしない。変更履歴は `changelog.md` へリンクする
+- 「変換」と「加工」の使い分けは、`docs/user/introduction.md` の「用語」に従う
+- ページを足したら `docs/user/SUMMARY.md` と、`scripts/common/verify-msi.ps1` の `$MsiRequiredDocPages` にも足す
 
 ## ドキュメント同期
 
@@ -47,6 +55,7 @@ JavaScript は ESLint / Prettier の設定に従う ([JavaScript リンター](t
 | `consts` の処理上限 | `docs/user/configuration.md` の [処理の制限](../user/configuration.md#処理の制限)、生成 TOML コメント (`config/serialize/docs.rs`) |
 | 既定ホットキー | README のホットキー表、`docs/user/configuration.md` の `[hotkeys]` |
 | 利用者向けの挙動 | README / `docs/user/` の該当節、[CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` |
+| README のクイックスタート | `docs/user/introduction.md` の「はじめて使う」 |
 | UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`ui_bundle_flow.rs` が検出) |
 | ディレクトリ・ファイルの移動 / 改名 / 削除 | [アーキテクチャ](architecture.md) の構成図と表 (`architecture_doc_flow.rs` が実在しないパスを検出) |
 

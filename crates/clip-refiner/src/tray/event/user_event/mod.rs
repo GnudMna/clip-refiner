@@ -62,7 +62,7 @@ mod tests {
         let selectors = SelectorUi::new(&state.proxy, Arc::clone(&clipboard_worker));
         let settings = SettingsWindow::new_shell(state.proxy.clone(), Arc::clone(&state));
 
-        // 他テスト (Alt+Shift / Alt+Ctrl / Alt+Ctrl+Shift+F*) と衝突しないキー
+        // 他テスト (Alt+Ctrl+Shift+F* / 英字) と衝突しないキー
         let hotkeys = HotkeySettings {
             quick_selector: "Ctrl+Alt+Shift+1".to_string(),
             notification: "Ctrl+Alt+Shift+2".to_string(),

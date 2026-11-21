@@ -38,21 +38,21 @@ pub fn query_webview2_runtime_available() -> bool {
     crate::platform::webview2::is_runtime_available()
 }
 
-/// 本番デフォルトや他アプリと衝突しにくい F キー割り当てを返す
+/// 常駐中の本体や他アプリと衝突しにくいキー割り当てを返す
 ///
-/// `Alt+Shift+F10` は環境によって OS / 他プロセスが占有していることがあるため使わない
+/// 本体の既定 (固定キー・お気に入りスロットとも `Alt+Shift` 系) と重ならないよう `Alt+Ctrl+Shift` 系を使う
 fn test_hotkey_settings() -> HotkeySettings {
     HotkeySettings {
-        quick_selector: "Alt+Shift+F1".to_string(),
-        notification: "Alt+Shift+F2".to_string(),
-        pause: "Alt+Shift+F3".to_string(),
-        quit: "Alt+Shift+F4".to_string(),
-        undo: "Alt+Shift+F5".to_string(),
-        clip_selector: "Alt+Shift+F6".to_string(),
-        ocr: "Alt+Shift+F7".to_string(),
-        continuous_record: "Alt+Shift+F8".to_string(),
-        continuous_record_undo: "Alt+Shift+F9".to_string(),
-        continuous_record_paste: "Alt+Shift+F12".to_string(),
+        quick_selector: "Alt+Ctrl+Shift+A".to_string(),
+        notification: "Alt+Ctrl+Shift+B".to_string(),
+        pause: "Alt+Ctrl+Shift+C".to_string(),
+        quit: "Alt+Ctrl+Shift+D".to_string(),
+        undo: "Alt+Ctrl+Shift+E".to_string(),
+        clip_selector: "Alt+Ctrl+Shift+F".to_string(),
+        ocr: "Alt+Ctrl+Shift+G".to_string(),
+        continuous_record: "Alt+Ctrl+Shift+H".to_string(),
+        continuous_record_undo: "Alt+Ctrl+Shift+I".to_string(),
+        continuous_record_paste: "Alt+Ctrl+Shift+J".to_string(),
         favorite_mode_slots: Vec::new(),
     }
 }

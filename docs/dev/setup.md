@@ -14,7 +14,7 @@
 | WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | サプライチェーン監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) |
 | Rust カバレッジ | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) と `rustup component add llvm-tools-preview` (`coverage.ps1` / `check.ps1 -Coverage`) |
-| MSI 作成 | `cargo-wix`、`cargo-about`、WiX Toolset v3.14.1 以上 |
+| MSI / ポータブル ZIP 作成 | `cargo-about`、[mdBook](https://rust-lang.github.io/mdBook/) ([利用者向けドキュメントの同梱](#利用者向けドキュメントの同梱) の固定版)。MSI はさらに `cargo-wix` と WiX Toolset v3.14.1 以上 |
 
 `cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する (カバレッジは任意)。通常の `cargo test` は Node.js が無い場合に JS ロジックテストを `note:` 付きでスキップする。
 
@@ -68,11 +68,12 @@ x64 ホストから ARM64 をクロスコンパイルする場合は、Visual St
 
 ### Windows MSI
 
-`cargo-wix` と WiX Toolset v3 を使って MSI を作成できる。第三者ライセンス文書の生成に `cargo-about` も必要。
+`cargo-wix` と WiX Toolset v3 を使って MSI を作成できる。第三者ライセンス文書の生成に `cargo-about`、利用者向けドキュメントの生成に mdBook も必要。
 
 ```powershell
 cargo install cargo-wix --locked
 cargo install cargo-about --locked --features cli
+# mdBook は固定版が必要。未導入や版違いのときは、ビルドが導入コマンドを表示して止まる
 winget install WiXToolset.WiXToolset
 
 ./scripts/windows/build-msi.ps1
@@ -96,17 +97,18 @@ winget install WiXToolset.WiXToolset
 | :--- | :--- |
 | メタデータ | `Cargo.toml` の `upgrade-guid` と `wix/main.wxs` の `UpgradeCode` の一致 |
 | MSI Property | `ProductName`, `ProductVersion`, `UpgradeCode`, `Manufacturer`, per-user (`ALLUSERS`) |
-| MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`)、Feature (`Binaries`, `Environment`, `Autostart`) |
-| 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致・PE アーキテクチャ (x64 / ARM64) を確認 |
+| MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`, `index.html`)、Feature (`Binaries`, `Environment`, `Autostart`) |
+| 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致・PE アーキテクチャ (x64 / ARM64)・利用者向けドキュメント (`docs\`) の各ページを確認 |
 
 `-SkipExtract` でデータベース検証のみに省略できる。`build-msi.ps1 -SkipVerify` でビルド後検証をスキップできる。
 
 ### ポータブル ZIP
 
-インストール不要の配布物 (実行ファイル + `portable` マーカー) を作成できる。第三者ライセンス文書の生成に `cargo-about` が必要 (`-SkipNotices` で省略可)。
+インストール不要の配布物 (実行ファイル + `portable` マーカー) を作成できる。第三者ライセンス文書の生成に `cargo-about` (`-SkipNotices` で省略可)、利用者向けドキュメントの生成に mdBook が必要。
 
 ```powershell
 cargo install cargo-about --locked --features cli
+# mdBook は固定版が必要。未導入や版違いのときは、ビルドが導入コマンドを表示して止まる
 
 ./scripts/windows/build-portable.ps1
 ./scripts/windows/build-portable.ps1 -Target arm64
@@ -120,7 +122,7 @@ cargo install cargo-about --locked --features cli
 | 配布フォルダ | `target/portable/clip-refiner-{version}-{target-triple}-portable/` |
 | ZIP | `target/portable/clip-refiner-{version}-{target-triple}-portable.zip` |
 
-同梱内容: `ClipRefiner.exe` / `portable` / `LICENSE` / `THIRD_PARTY_NOTICES` / `PORTABLE.txt`
+同梱内容: `ClipRefiner.exe` / `portable` / `LICENSE` / `THIRD_PARTY_NOTICES` / `PORTABLE.txt` / `docs\` (利用者向けドキュメント)
 
 | オプション | 効果 |
 | :--- | :--- |
@@ -151,6 +153,21 @@ cargo install cargo-about --locked --features cli
 | :--------------- | :----- |
 | **Windows MSI** | `%LOCALAPPDATA%\ClipRefiner\THIRD_PARTY_NOTICES` (`build-msi.ps1` が生成後に同梱) |
 | **ポータブル ZIP** | 配布フォルダ直下の `THIRD_PARTY_NOTICES` (`build-portable.ps1` が生成後に同梱) |
+
+## 利用者向けドキュメントの同梱
+
+`docs/user/` を原稿とする mdBook の本を HTML にし、MSI / ポータブル ZIP の `docs\` に同梱する。MSI はスタートメニューに「ClipRefiner ドキュメント」(`docs\index.html`) を追加する。
+
+| 項目 | 内容 |
+| :--- | :--- |
+| 原稿 | `docs/user/` (設定 [`book.toml`](../user/book.toml)、目次 [`SUMMARY.md`](../user/SUMMARY.md)、表紙 `introduction.md`) |
+| 生成 | `scripts/common/build-user-docs.ps1` (`build-msi.ps1` / `build-portable.ps1` が呼ぶ)。出力は `target/user-docs/` |
+| mdBook の版 | `build-user-docs.ps1` の `$UserDocsMdBookVersion` に固定し、異なる版では失敗する (0.5 以降は静的ファイル名にハッシュが付き、版で出力が変わるため)。版の指定はこの定数だけにあり、他の文書には書かない |
+| 変更履歴 | 原稿を `target/user-docs-src/` へ複製し、`changelog.md` を `CHANGELOG.md` の内容で置き換えてからビルドする。先頭の記載規約 (開発者向け) は除く。`docs/user/...` へのリンクは本のページへ書き換え、本に含めない相対リンクはリンクを外す。箇条書きは「。」の位置で折り返す |
+| リンク検証 | 出力 HTML の相対リンクについて、リンク先ファイルとアンカーが存在しなければ失敗する |
+| MSI への収録 | ファイル名が版で変わるため、出力から WiX 断片 `target/wix/user-docs.wxs` (ComponentGroup `UserDocs`) を生成し、`cargo wix` に追加の `-I` で渡す。per-user 構成のため、ディレクトリごとに HKCU の値を KeyPath とする Component を作る |
+
+執筆中のプレビューは `mdbook serve docs/user --open` で行える。このとき変更履歴ページは `CHANGELOG.md` をそのまま取り込むため、ページ内の相対リンクは辿れない (配布物では書き換わる)。
 
 ## 環境変数
 

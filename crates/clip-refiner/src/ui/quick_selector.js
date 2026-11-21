@@ -168,7 +168,8 @@ function createCategoryRow(row, index) {
     count.textContent = String(row.count);
     div.appendChild(count);
 
-    div.onmouseenter = () => selection.setSelectedIndex(index, false);
+    // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
+    div.onmousemove = () => selection.setSelectedIndex(index, false);
     div.onclick = () => {
         selection.index = index;
         setCategoryExpanded(row.category, !row.expanded);
@@ -198,7 +199,8 @@ function createItem(mode, index, query) {
     }
     div.appendChild(createFavoriteButton(mode));
 
-    div.onmouseenter = () => selection.setSelectedIndex(index, false);
+    // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
+    div.onmousemove = () => selection.setSelectedIndex(index, false);
     div.onclick = (e) => select(mode.id, e.ctrlKey || e.metaKey);
     return div;
 }

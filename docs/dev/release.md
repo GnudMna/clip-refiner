@@ -30,7 +30,7 @@ git switch -c release/v1.1.0
 6. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
 7. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test / e2e)
 8. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
-9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
+9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
 10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)。`-Target All` なら x64 と ARM64 の両方
 11. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
 
@@ -56,7 +56,7 @@ git switch -c release/v1.1.0
 - `release/v{version}` ブランチ上で実行すること (例: `release/v1.1.0` で `-Version 1.1.0`)
 - リリース前に [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
 - 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
-- MSI / ポータブル作成には [Windows パッケージ作成](setup.md#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3。ポータブルのみなら `cargo-about` で可)
+- MSI / ポータブル作成には [Windows パッケージ作成](setup.md#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、mdBook、WiX Toolset v3。ポータブルのみなら `cargo-about` と mdBook で可)
 
 **手動で残る作業:**
 

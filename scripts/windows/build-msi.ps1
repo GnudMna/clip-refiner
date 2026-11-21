@@ -2,11 +2,12 @@
 # Script Name : build-msi.ps1
 # Description : Windows 向け MSI インストーラー作成 (cargo-wix)
 # Usage       : ./build-msi.ps1 [-SkipBuild] [-SkipVerify] [-Target arm64]
-# Requires    : PowerShell 7.0+, cargo-wix, WiX Toolset v3.14.1+
+# Requires    : PowerShell 7.0+, cargo-wix, WiX Toolset v3.14.1+, mdBook
 #
 # 前提:
 #   - cargo install cargo-wix --locked
 #   - cargo install cargo-about --locked --features cli
+#   - cargo install mdbook --locked --version <scripts/common/build-user-docs.ps1 の固定版>
 #   - winget install WiXToolset.WiXToolset  (WiX v3。コード署名は不要)
 #   - wix/main.wxs, wix/Banner.bmp, wix/Dialog.bmp, wix/Eula.rtf が存在すること
 #     (画像・Eula.rtf は scripts/windows/generate-wix-assets.ps1 で再生成可能)
@@ -57,6 +58,12 @@ Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\generate-third-party-notices.ps1')
     . (Join-Path $PSScriptRoot '..\common\release-version.ps1')
     . (Join-Path $PSScriptRoot '..\common\verify-msi.ps1')
+    . (Join-Path $PSScriptRoot '..\common\build-user-docs.ps1')
+
+    $userDocsDir = Invoke-UserDocsBuild -ProjectRoot $ProjectRoot
+    $userDocsWxsPath = Join-Path $ProjectRoot 'target\wix\user-docs.wxs'
+    New-UserDocsWixFragment -DocsDir $userDocsDir -OutputPath $userDocsWxsPath
+    Write-Host ''
 
     $targets = Resolve-WindowsPackageTargets -Target $Target
     $wixDir = Join-Path $ProjectRoot 'target\wix'
@@ -72,7 +79,7 @@ Invoke-ScriptMain {
         Write-Host "MSI インストーラーの作成を開始します ($triple)..."
         Write-Host ''
 
-        $wixArgs = @('-p', 'clip-refiner', '-I', 'wix/main.wxs', '--nocapture')
+        $wixArgs = @('-p', 'clip-refiner', '-I', 'wix/main.wxs', '-I', $userDocsWxsPath, '--nocapture')
         if (-not $implicitHost) {
             $wixArgs += @('-t', $triple)
         }

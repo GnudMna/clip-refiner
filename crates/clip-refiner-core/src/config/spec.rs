@@ -386,9 +386,7 @@ fn config_md_schema_version_matches_consts() {
     let md = read_workspace_file(CONFIG_DOC);
     let version = consts::CONFIG_VERSION;
     assert!(
-        md.contains(&format!(
-            "現行の設定スキーマは `version = {version}` (`CONFIG_VERSION`)"
-        )),
+        md.contains(&format!("現行の設定スキーマは `version = {version}`")),
         "configuration.md 冒頭のスキーマ番号が {version} ではない"
     );
     assert!(

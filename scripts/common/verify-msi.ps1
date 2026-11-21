@@ -19,7 +19,19 @@ $script:MsiExpectedLanguageId = '1041'
 $script:MsiRequiredFileNames = @(
     'ClipRefiner.exe',
     'LICENSE',
-    'THIRD_PARTY_NOTICES'
+    'THIRD_PARTY_NOTICES',
+    'index.html'
+)
+# 利用者向けドキュメント (docs\) の各ページ。docs/user/SUMMARY.md の章に対応する
+$script:MsiRequiredDocPages = @(
+    'index.html',
+    'introduction.html',
+    'usage.html',
+    'configuration.html',
+    'modes.html',
+    'security.html',
+    'troubleshooting.html',
+    'changelog.html'
 )
 $script:MsiRequiredFeatureIds = @(
     'Binaries',
@@ -481,6 +493,17 @@ function Assert-ExtractedMsiContents {
         throw 'エラー: THIRD_PARTY_NOTICES に期待するヘッダーが含まれていません'
     }
 
+    $docsDirs = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -Directory -Filter 'docs' |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'index.html') })
+    if ($docsDirs.Count -ne 1) {
+        throw "エラー: 展開結果に利用者向けドキュメント (docs\index.html) が見つかりません ($ExtractDir)"
+    }
+    foreach ($page in $script:MsiRequiredDocPages) {
+        if (-not (Test-Path -LiteralPath (Join-Path $docsDirs[0].FullName $page) -PathType Leaf)) {
+            throw "エラー: 利用者向けドキュメントに $page がありません ($($docsDirs[0].FullName))"
+        }
+    }
+
     $sourceNoticesPath = Join-Path $ProjectRoot 'THIRD_PARTY_NOTICES'
     if (Test-Path -LiteralPath $sourceNoticesPath) {
         $sourceInfo = Get-Item -LiteralPath $sourceNoticesPath
@@ -546,7 +569,7 @@ function Invoke-MsiPackageVerification {
         -ExpectedUpgradeCode $expectedUpgradeCode `
         -TargetTriple $TargetTriple
     Write-Host '  ProductName / ProductVersion / UpgradeCode / Manufacturer'
-    Write-Host '  必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES)'
+    Write-Host '  必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES, docs\index.html)'
     Write-Host '  必須 Feature (Binaries, Environment, Autostart)'
     Write-Host '  per-user インストール (ALLUSERS)'
     if ($TargetTriple) {
@@ -575,6 +598,7 @@ function Invoke-MsiPackageVerification {
             -TargetTriple $TargetTriple
         Write-Host '  実行ファイル・ライセンス・THIRD_PARTY_NOTICES の存在とサイズ'
         Write-Host '  THIRD_PARTY_NOTICES ヘッダーと生成物サイズの一致'
+        Write-Host '  利用者向けドキュメント (docs\) の各ページ'
         if ($TargetTriple) {
             Write-Host "  ClipRefiner.exe の PE アーキテクチャ ($TargetTriple)"
         }

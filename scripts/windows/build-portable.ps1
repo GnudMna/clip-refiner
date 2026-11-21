@@ -3,7 +3,7 @@
 # Description : Windows 向けポータブル配布物の作成
 # Usage       : ./build-portable.ps1 [-SkipBuild] [-SkipZip] [-SkipNotices]
 #               ./build-portable.ps1 -Target arm64
-# Requires    : PowerShell 7.0+, Rust / Cargo
+# Requires    : PowerShell 7.0+, Rust / Cargo, mdBook (利用者向けドキュメントの生成)
 #               (既定では cargo-about も必要。-SkipNotices で省略可)
 #               ARM64 クロスコンパイル時は VS の ARM64 C++ ビルドツール
 #
@@ -49,6 +49,7 @@ Invoke-ScriptMain {
     $LicenseName = 'LICENSE'
     $NoticesName = 'THIRD_PARTY_NOTICES'
     $ReadmeName = 'PORTABLE.txt'
+    $DocsDirName = 'docs'
 
     # パスを削除する。失敗時は利用中プロセスの可能性を案内する
     function Remove-PathIfExists {
@@ -141,6 +142,10 @@ $($_.Exception.Message)
         $noticesSource = $null
     }
 
+    . (Join-Path $PSScriptRoot '..\common\build-user-docs.ps1')
+    $userDocsSource = Invoke-UserDocsBuild -ProjectRoot $ProjectRoot
+    Write-Host ''
+
     $version = Get-WorkspaceVersion -ProjectRoot $ProjectRoot
     $portableRoot = Join-Path $ProjectRoot 'target\portable'
     New-Item -ItemType Directory -Path $portableRoot -Force | Out-Null
@@ -191,6 +196,7 @@ $($_.Exception.Message)
         if ($noticesSource) {
             Copy-Item -LiteralPath $noticesSource -Destination (Join-Path $stagingWorkDir $NoticesName) -Force
         }
+        Copy-Item -LiteralPath $userDocsSource -Destination (Join-Path $stagingWorkDir $DocsDirName) -Recurse -Force
 
         $markerPath = Join-Path $stagingWorkDir $MarkerName
         New-Item -ItemType File -Path $markerPath -Force | Out-Null
@@ -214,12 +220,12 @@ ClipRefiner ポータブル版
 注意:
 - ログイン時の自動起動はレジストリに絶対パスを書くため、USB 用途には向きません
 - 登録クリップの鍵は Windows DPAPI で保護されるため、別ユーザー / 別 PC では復号できない場合があります
-- 詳細はプロジェクトの docs/user/configuration.md (ポータブルモード) を参照してください
+- 使い方・設定の詳細は docs\index.html をブラウザで開いて参照してください (ポータブルモードは「設定リファレンス」)
 "@
         Set-Content -LiteralPath (Join-Path $stagingWorkDir $ReadmeName) -Value $portableReadme.TrimEnd() -Encoding utf8
 
         $requiredNames = [System.Collections.Generic.List[string]]::new()
-        $requiredNames.AddRange([string[]]@($ExeName, $MarkerName, $LicenseName, $ReadmeName))
+        $requiredNames.AddRange([string[]]@($ExeName, $MarkerName, $LicenseName, $ReadmeName, "$DocsDirName\index.html"))
         if ($noticesSource) {
             $requiredNames.Add($NoticesName)
         }

@@ -11,6 +11,8 @@
                 scripts/windows/generate-wix-assets.ps1 で再生成可能
   ライセンス:   wix/Eula.rtf (同意画面、LICENSE から生成)
   同梱文書:     THIRD_PARTY_NOTICES (scripts/common/generate-third-party-notices.* で生成)
+                docs\ 利用者向けドキュメント (mdBook の HTML。ComponentGroup UserDocs は
+                scripts/common/build-user-docs.ps1 が target/wix/user-docs.wxs に生成する)
 -->
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
@@ -56,6 +58,8 @@
                         <File Id='ThirdPartyNoticesFile' Name='THIRD_PARTY_NOTICES' DiskId='1' Source='THIRD_PARTY_NOTICES'/>
                         <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='third_party_notices' Type='integer' Value='1' KeyPath='yes'/>
                     </Component>
+
+                    <Directory Id='DocsDir' Name='docs'/>
 
                     <Directory Id='Bin' Name='bin'>
                         <Component Id='Path' Guid='B7D1F4A2-6E8C-4B9F-A3D2-1C4E7F8A9B0D'>
@@ -111,6 +115,15 @@
                 <RemoveFolder Id='RemoveApplicationProgramsFolder' Directory='ApplicationProgramsFolder' On='uninstall'/>
                 <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
             </Component>
+            <Component Id='DocsShortcut' Guid='7C2E9A4B-1D3F-4B6E-8A5C-9E0F1B2D3C4A'>
+                <Shortcut
+                    Id='ClipRefinerDocsShortcut'
+                    Name='ClipRefiner ドキュメント'
+                    Description='ClipRefiner の使い方・設定・変換モード'
+                    Target='[DocsDir]index.html'
+                    WorkingDirectory='DocsDir'/>
+                <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='docs_shortcut' Type='integer' Value='1' KeyPath='yes'/>
+            </Component>
         </DirectoryRef>
 
         <Feature
@@ -127,6 +140,8 @@
             <ComponentRef Id='License'/>
             <ComponentRef Id='ThirdPartyNotices'/>
             <ComponentRef Id='StartMenuShortcut'/>
+            <ComponentRef Id='DocsShortcut'/>
+            <ComponentGroupRef Id='UserDocs'/>
 
             <Feature
                 Id='Environment'
