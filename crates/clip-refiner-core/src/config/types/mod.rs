@@ -10,7 +10,7 @@ mod registered_clip;
 
 pub use app_config::AppConfig;
 pub use favorites::{FavoriteMoveDirection, FavoriteToggleResult};
-pub use hotkeys::HotkeySettings;
+pub use hotkeys::{HotkeyFix, HotkeyFixKind, HotkeySettings, format_hotkey_fixes_message};
 pub use monitor::MonitorMode;
 pub use notification::NotificationSettings;
 pub use regex::RegexSettings;

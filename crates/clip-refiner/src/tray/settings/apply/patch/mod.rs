@@ -81,7 +81,7 @@ pub(crate) fn apply_settings_patch_without_ui(
         &mut config_dirty,
     );
     let regex_feedback = apply_regex_patch(patch, state, &mut config_dirty);
-    let hotkeys_changed = apply_hotkeys_patch(patch, state, &mut config_dirty);
+    let hotkeys_outcome = apply_hotkeys_patch(patch, state, &mut config_dirty);
     apply_refine_patch(
         patch,
         state,
@@ -101,10 +101,17 @@ pub(crate) fn apply_settings_patch_without_ui(
         bump_monitor_generation(state);
     }
 
-    let feedback = regex_feedback.or(system_outcome.feedback);
+    // 正規表現エラーを優先し、次にホットキー正規化、最後にシステム系
+    let feedback = regex_feedback
+        .or(hotkeys_outcome.feedback)
+        .or(system_outcome.feedback);
 
     SettingsPatchApplyResult {
-        refresh: refresh_plan_after_patch(patch, system_outcome.force_refresh, hotkeys_changed),
+        refresh: refresh_plan_after_patch(
+            patch,
+            system_outcome.force_refresh,
+            hotkeys_outcome.changed,
+        ),
         feedback,
     }
 }
@@ -232,6 +239,32 @@ mod tests {
         };
         assert_eq!(
             refresh_plan_after_patch(&patch, false, true),
+            Some((SettingsRefreshScope::FavoritesAndShortcuts, false))
+        );
+    }
+
+    /// ホットキー正規化時に設定 UI 向けフィードバックを返すこと
+    #[test]
+    fn apply_without_ui_returns_hotkey_normalization_feedback() {
+        let ctx = TrayTestContext::new();
+        let patch = SettingsPatch {
+            hotkeys: Some(crate::config::HotkeySettings {
+                pause: "Bad+Key".to_string(),
+                ..crate::config::HotkeySettings::default()
+            }),
+            ..SettingsPatch::default()
+        };
+
+        let result =
+            apply_settings_patch_without_ui(&patch, ctx.state(), ctx.menu(), None, ctx.worker());
+        let feedback = result
+            .feedback
+            .expect("不正ホットキーで正規化フィードバックが返ること");
+        assert!(feedback.ok);
+        assert_eq!(feedback.field.as_deref(), Some("hotkeys"));
+        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert_eq!(
+            result.refresh,
             Some((SettingsRefreshScope::FavoritesAndShortcuts, false))
         );
     }

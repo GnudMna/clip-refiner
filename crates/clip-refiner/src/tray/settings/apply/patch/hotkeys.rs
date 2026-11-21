@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use super::super::feedback::SettingsApplyFeedback;
+
+use crate::config::format_hotkey_fixes_message;
 use crate::tray::dispatch;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::{AppEvent, AppState};
@@ -10,22 +13,39 @@ use crate::tray::state::{AppEvent, AppState};
 /// ホットキー設定のパッチを適用する
 ///
 /// 不正・重複は `fix_invalid` で正規化し、OS 再登録は `ReloadHotkeys` で行う
+/// 正規化が発生した場合は設定 UI 向けのフィードバックを返す
 pub(super) fn apply_hotkeys_patch(
     patch: &SettingsPatch,
     state: &Arc<AppState>,
     config_dirty: &mut bool,
-) -> bool {
+) -> HotkeysPatchOutcome {
     let Some(hotkeys) = patch.hotkeys.as_ref() else {
-        return false;
+        return HotkeysPatchOutcome::default();
     };
 
-    state.with_config_mut(|c| {
+    let fixes = state.with_config_mut(|c| {
         c.hotkeys = hotkeys.clone();
-        c.hotkeys.fix_invalid();
+        c.hotkeys.fix_invalid()
     });
     *config_dirty = true;
     dispatch::send_app_event(&state.proxy, AppEvent::ReloadHotkeys);
-    true
+
+    let feedback = format_hotkey_fixes_message(&fixes)
+        .map(|message| SettingsApplyFeedback::ok(message).with_field(Some("hotkeys")));
+
+    HotkeysPatchOutcome {
+        changed: true,
+        feedback,
+    }
+}
+
+/// ホットキーパッチ適用の結果
+#[derive(Debug, Default)]
+pub(super) struct HotkeysPatchOutcome {
+    /// 設定が更新されたかどうか
+    pub(super) changed: bool,
+    /// 正規化が発生した場合のユーザー向けフィードバック
+    pub(super) feedback: Option<SettingsApplyFeedback>,
 }
 
 // ======================================================================
@@ -54,7 +74,9 @@ mod tests {
         };
 
         let mut config_dirty = false;
-        assert!(apply_hotkeys_patch(&patch, &state, &mut config_dirty));
+        let outcome = apply_hotkeys_patch(&patch, &state, &mut config_dirty);
+        assert!(outcome.changed);
+        assert!(outcome.feedback.is_none());
         assert_eq!(
             state.with_config(|c| c.hotkeys.quick_selector.clone()),
             "Ctrl+Shift+S"
@@ -62,9 +84,9 @@ mod tests {
         assert!(config_dirty);
     }
 
-    /// 不正な固定ホットキーはデフォルトへ正規化されるようにすること
+    /// 不正な固定ホットキーはデフォルトへ正規化しフィードバックを返すこと
     #[test]
-    fn hotkeys_patch_fixes_invalid_binding() {
+    fn hotkeys_patch_fixes_invalid_binding_with_feedback() {
         let state = Arc::new(test_app_state());
         let patch = SettingsPatch {
             hotkeys: Some(HotkeySettings {
@@ -75,7 +97,37 @@ mod tests {
         };
 
         let mut config_dirty = false;
-        assert!(apply_hotkeys_patch(&patch, &state, &mut config_dirty));
+        let outcome = apply_hotkeys_patch(&patch, &state, &mut config_dirty);
+        assert!(outcome.changed);
+        let feedback = outcome.feedback.expect("正規化フィードバック");
+        assert!(feedback.ok);
+        assert_eq!(feedback.field.as_deref(), Some("hotkeys"));
+        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert_eq!(
+            state.with_config(|c| c.hotkeys.pause.clone()),
+            consts::DEFAULT_HOTKEY_PAUSE
+        );
+    }
+
+    /// 重複するホットキーは正規化しフィードバックを返すこと
+    #[test]
+    fn hotkeys_patch_fixes_duplicate_binding_with_feedback() {
+        let state = Arc::new(test_app_state());
+        let patch = SettingsPatch {
+            hotkeys: Some(HotkeySettings {
+                notification: "Ctrl+Shift+N".to_string(),
+                pause: "Ctrl+Shift+N".to_string(),
+                ..HotkeySettings::default()
+            }),
+            ..SettingsPatch::default()
+        };
+
+        let mut config_dirty = false;
+        let outcome = apply_hotkeys_patch(&patch, &state, &mut config_dirty);
+        let feedback = outcome.feedback.expect("重複フィードバック");
+        assert!(feedback.ok);
+        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert!(feedback.message.contains("成功通知の切替"));
         assert_eq!(
             state.with_config(|c| c.hotkeys.pause.clone()),
             consts::DEFAULT_HOTKEY_PAUSE
@@ -88,7 +140,9 @@ mod tests {
         let state = Arc::new(test_app_state());
         let patch = SettingsPatch::default();
         let mut config_dirty = false;
-        assert!(!apply_hotkeys_patch(&patch, &state, &mut config_dirty));
+        let outcome = apply_hotkeys_patch(&patch, &state, &mut config_dirty);
+        assert!(!outcome.changed);
+        assert!(outcome.feedback.is_none());
         assert!(!config_dirty);
     }
 }

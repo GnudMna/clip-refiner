@@ -37,7 +37,7 @@ function test_append_pipeline_mode() {
     assert.equal(SettingsPanelsLogic.appendPipelineMode(['a'], '', 3), null);
 }
 
-/** サイドバーナビ HTML を組み立てられること */
+/** サイドバー tablist HTML を組み立てられること */
 function test_build_sidebar_nav_inner_html() {
     const html = SettingsPanelsLogic.buildSidebarNavInnerHtml(
         [
@@ -47,10 +47,44 @@ function test_build_sidebar_nav_inner_html() {
         'monitor',
         SettingsSharedLogic.escapeHtml
     );
+    assert.ok(html.includes('role="tab"'));
+    assert.ok(html.includes('id="tab-monitor"'));
     assert.ok(html.includes('data-tab="monitor"'));
-    assert.ok(html.includes('aria-current="page"'));
+    assert.ok(html.includes('aria-controls="panel-monitor"'));
+    assert.ok(html.includes('aria-selected="true"'));
+    assert.ok(html.includes('tabindex="0"'));
     assert.ok(html.includes('class="nav-btn active"'));
     assert.ok(html.includes('一般'));
+    assert.ok(html.includes('id="tab-general"'));
+    assert.ok(html.includes('aria-selected="false"'));
+    assert.ok(html.includes('tabindex="-1"'));
+    assert.ok(!html.includes('aria-current'));
+}
+
+/** タブ選択状態の aria / tabindex を切り替えられること */
+function test_tab_selection_state() {
+    assert.deepEqual(SettingsPanelsLogic.tabSelectionState(true), {
+        ariaSelected: 'true',
+        tabIndex: '0',
+    });
+    assert.deepEqual(SettingsPanelsLogic.tabSelectionState(false), {
+        ariaSelected: 'false',
+        tabIndex: '-1',
+    });
+}
+
+/** 縦方向 tablist のキーボード移動先を計算できること */
+function test_next_tab_index_for_key() {
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(0, 3, 'ArrowDown'), 1);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(2, 3, 'ArrowDown'), 0);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(0, 3, 'ArrowRight'), 1);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(0, 3, 'ArrowUp'), 2);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(1, 3, 'ArrowLeft'), 0);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(2, 3, 'Home'), 0);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(0, 3, 'End'), 2);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(1, 3, 'Enter'), null);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(-1, 3, 'ArrowDown'), null);
+    assert.equal(SettingsPanelsLogic.nextTabIndexForKey(0, 0, 'ArrowDown'), null);
 }
 
 /** 登録クリップ行 HTML を組み立てられること */
@@ -246,6 +280,8 @@ const tests = [
     test_apply_pipeline_action,
     test_append_pipeline_mode,
     test_build_sidebar_nav_inner_html,
+    test_tab_selection_state,
+    test_next_tab_index_for_key,
     test_render_clip_row,
     test_build_favorite_rows_html,
     test_available_favorite_modes,

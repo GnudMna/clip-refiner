@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::thread;
 
-use crate::platform;
 use crate::platform::update::{
     UpdateApplyOutcome, UpdateApplyUiResponse, UpdateCheckSource, UpdateCheckUiResponse,
     apply_update, check_for_update,
@@ -9,7 +8,7 @@ use crate::platform::update::{
 use crate::tray::dispatch;
 use crate::tray::settings::SettingsWindow;
 use crate::tray::state::{AppEvent, AppState};
-use crate::user_error::titles;
+use crate::user_error::{UserNotification, titles};
 
 // ======================================================================
 // 更新操作の起動
@@ -35,7 +34,7 @@ pub(crate) fn start_update_check(
             settings.notify_update_check(&UpdateCheckUiResponse::Busy);
         }
         if matches!(source, UpdateCheckSource::Tray) {
-            platform::show_notification(titles::UPDATE, "更新確認はすでに実行中です");
+            UserNotification::static_message(titles::UPDATE, "更新確認はすでに実行中です").notify();
         }
         return false;
     }
@@ -133,36 +132,39 @@ pub(crate) fn handle_update_apply_finished(
 
     match &outcome {
         UpdateApplyOutcome::MsiStarted => {
-            platform::show_notification(
+            UserNotification::static_message(
                 titles::UPDATE,
                 "インストーラーを起動しました。アプリを終了します",
-            );
+            )
+            .notify();
             true
         }
         UpdateApplyOutcome::PortableExtracted {
             helper_launched: true,
             ..
         } => {
-            platform::show_notification(
+            UserNotification::static_message(
                 titles::UPDATE,
                 "差し替えを開始しました。アプリを終了し、新しい版を自動で起動します",
-            );
+            )
+            .notify();
             true
         }
         UpdateApplyOutcome::PortableExtracted {
             path,
             helper_launched: false,
         } => {
-            platform::show_notification(
+            UserNotification::new(
                 titles::UPDATE,
-                &format!(
+                format!(
                     "展開しました。アプリを終了し、次のフォルダの内容で差し替えて再起動してください: {path}"
                 ),
-            );
+            )
+            .notify();
             false
         }
         UpdateApplyOutcome::Error { message } => {
-            platform::show_notification(titles::UPDATE, message);
+            UserNotification::new(titles::UPDATE, message.clone()).notify();
             false
         }
     }
@@ -172,19 +174,21 @@ pub(crate) fn handle_update_apply_finished(
 fn notify_tray_check_result(response: &UpdateCheckUiResponse) {
     match response {
         UpdateCheckUiResponse::UpToDate { latest_version, .. } => {
-            platform::show_notification(titles::UPDATE, &format!("最新版です (v{latest_version})"));
+            UserNotification::new(titles::UPDATE, format!("最新版です (v{latest_version})"))
+                .notify();
         }
         UpdateCheckUiResponse::Available { latest_version, .. } => {
-            platform::show_notification(
+            UserNotification::new(
                 titles::UPDATE,
-                &format!("v{latest_version} が利用可能です。設定の一般タブから適用できます"),
-            );
+                format!("v{latest_version} が利用可能です。設定の一般タブから適用できます"),
+            )
+            .notify();
         }
         UpdateCheckUiResponse::Error { message } => {
-            platform::show_notification(titles::UPDATE, message);
+            UserNotification::new(titles::UPDATE, message.clone()).notify();
         }
         UpdateCheckUiResponse::Busy => {
-            platform::show_notification(titles::UPDATE, "更新確認はすでに実行中です");
+            UserNotification::static_message(titles::UPDATE, "更新確認はすでに実行中です").notify();
         }
     }
 }

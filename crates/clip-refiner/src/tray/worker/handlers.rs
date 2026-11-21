@@ -259,12 +259,14 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
     let clip = state.with_config(|config| config.resolve_registered_clip(index));
     match clip {
         Some(ResolvedClip::Text(text)) => {
-            if let Err(e) = clipboard.set_text(text.clone()) {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
                 ClipboardWriteContext::RegisteredClip
                     .notification()
                     .notify_with_debug(&e);
             } else {
-                state.clipboard_session().record_clipboard_set(&text);
+                state
+                    .clipboard_session()
+                    .record_clipboard_set(text.as_str());
                 show_category_notification(
                     state,
                     NotificationCategory::RegisteredClip,
@@ -360,7 +362,8 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
         Err(
             err @ (AddRegisteredClipError::Empty
             | AddRegisteredClipError::TooLarge
-            | AddRegisteredClipError::LimitReached),
+            | AddRegisteredClipError::LimitReached
+            | AddRegisteredClipError::EncryptFailed),
         ) => {
             let notification = registered_clip_register_failure(err);
             show_category_notification(

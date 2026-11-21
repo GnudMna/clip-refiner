@@ -49,7 +49,7 @@ pub struct AppConfig {
     pub pipeline: Vec<RefineMode>,
     /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
     pub interval_ms: u64,
-    /// 使用する監視方式(Polling または Event)
+    /// 使用する監視方式 (`Event` 既定。`Polling` も可)
     #[serde(default)]
     pub monitor_mode: MonitorMode,
     /// 履歴機能が有効かどうか
@@ -77,6 +77,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub regex: RegexSettings,
     /// クリップボードへコピーする登録クリップ (`registered-clips.dat` に保存)
+    ///
+    /// 本文は `text_ciphertext` のみ保持し、平文は常駐させない
     #[serde(skip)]
     pub clips: Vec<RegisteredClip>,
     /// お気に入り登録した変換モード (登録順)
@@ -160,17 +162,18 @@ impl AppConfig {
     }
 
     /// 登録クリップを許容範囲内に正規化する
+    ///
+    /// テキスト本文は暗号文の有無のみで判定し、平文へ復号しない
     pub(crate) fn normalize_clips(&mut self) {
         use super::super::registered_images::{
             format_registered_image_label, load_registered_image, registered_image_exists,
         };
-        use crate::security::{format_public_snippet, is_within_clipboard_limit};
 
         self.clips.retain(|entry| {
             if let Some(ref image_file) = entry.image_file {
                 registered_image_exists(image_file)
             } else {
-                !entry.text.trim().is_empty() && is_within_clipboard_limit(&entry.text)
+                !entry.text_ciphertext.is_empty()
             }
         });
         if self.clips.len() > consts::MAX_REGISTERED_CLIPS {
@@ -183,13 +186,10 @@ impl AppConfig {
                         |_| "登録画像".to_string(),
                         |(width, height, _)| format_registered_image_label(width, height),
                     )
+                } else if entry.preview.is_empty() {
+                    "登録クリップ".to_string()
                 } else {
-                    let preview = format_public_snippet(&entry.text, 20);
-                    if preview.is_empty() {
-                        "登録クリップ".to_string()
-                    } else {
-                        preview
-                    }
+                    entry.preview.chars().take(20).collect::<String>()
                 };
             }
             let char_count = entry.label.chars().count();
@@ -205,14 +205,14 @@ impl AppConfig {
 
     /// 登録クリップをクイックセレクター向け JSON 配列へ変換する
     ///
+    /// テキスト件はキャッシュ済み `preview` のみを使い、本文は復号しない
+    ///
     /// # Arguments
     /// * `self` - 変換元の設定
     ///
     /// # Returns
     /// * `String` - セレクター向け JSON 配列文字列
     pub fn clips_to_json_list(&self) -> String {
-        use crate::security::format_public_snippet;
-
         let list: Vec<serde_json::Value> = self
             .clips
             .iter()
@@ -221,7 +221,7 @@ impl AppConfig {
                 let preview = if entry.is_image() {
                     entry.label.clone()
                 } else {
-                    format_public_snippet(&entry.text, consts::REGISTERED_CLIP_PREVIEW_MAX_CHARS)
+                    entry.preview.clone()
                 };
                 let thumbnail = entry.image_file.as_ref().and_then(|image_file| {
                     super::super::registered_images::registered_image_thumbnail_data_url(
@@ -246,31 +246,16 @@ impl AppConfig {
         serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string())
     }
 
-    /// 指定インデックスの登録クリップ本文を返す
-    ///
-    /// 画像登録の場合は `None` を返す
-    ///
-    /// # Arguments
-    /// * `self` - 参照元の設定
-    /// * `index` - 登録クリップのインデックス
-    ///
-    /// # Returns
-    /// * `Option<&str>` - テキスト登録の本文。範囲外または画像登録の場合は `None`
-    pub fn registered_clip_text_at(&self, index: usize) -> Option<&str> {
-        self.clips
-            .get(index)
-            .filter(|entry| !entry.is_image())
-            .map(|entry| entry.text.as_str())
-    }
-
     /// 指定インデックスの登録クリップボード内容を返す
     ///
+    /// テキスト件は都度復号し、`SecretString` として返す (平文はストアに残さない)
+    ///
     /// # Arguments
     /// * `self` - 参照元の設定
     /// * `index` - 登録クリップのインデックス
     ///
     /// # Returns
-    /// * `Option<ResolvedClip>` - コピー用の解決済み内容。範囲外の場合は `None`
+    /// * `Option<ResolvedClip>` - コピー用の解決済み内容。範囲外や復号失敗の場合は `None`
     pub fn resolve_registered_clip(&self, index: usize) -> Option<ResolvedClip> {
         let entry = self.clips.get(index)?;
         if let Some(ref image_file) = entry.image_file {
@@ -282,11 +267,17 @@ impl AppConfig {
                 rgba,
             })
         } else {
-            Some(ResolvedClip::Text(entry.text.clone()))
+            let text = super::super::registered_clips::decrypt_registered_clip_text(
+                &entry.text_ciphertext,
+            )
+            .ok()?;
+            Some(ResolvedClip::Text(text))
         }
     }
 
     /// クリップボードの内容を登録クリップとして追加する
+    ///
+    /// 検証後に本文を暗号化し、平文は保持しない
     ///
     /// # Arguments
     /// * `self` - 追加先の設定
@@ -296,7 +287,7 @@ impl AppConfig {
     /// * `Result<(), AddRegisteredClipError>` - 追加に成功した場合は `Ok(())`
     ///
     /// # Errors
-    /// 空文字、サイズ超過、件数上限のいずれか
+    /// 空文字、サイズ超過、件数上限、暗号化失敗のいずれか
     pub fn add_registered_clip(
         &mut self,
         text: impl Into<String>,
@@ -314,9 +305,16 @@ impl AppConfig {
             return Err(AddRegisteredClipError::LimitReached);
         }
 
+        let (text_ciphertext, preview) =
+            super::super::registered_clips::encrypt_registered_clip_text(&text).map_err(|err| {
+                tracing::error!("登録クリップの暗号化に失敗: {:?}", err);
+                AddRegisteredClipError::EncryptFailed
+            })?;
+
         self.clips.push(RegisteredClip {
             label: String::new(),
-            text,
+            preview,
+            text_ciphertext,
             image_file: None,
         });
         self.normalize_clips();
@@ -360,7 +358,8 @@ impl AppConfig {
 
         self.clips.push(RegisteredClip {
             label: String::new(),
-            text: String::new(),
+            preview: String::new(),
+            text_ciphertext: Vec::new(),
             image_file: Some(image_file),
         });
         self.normalize_clips();

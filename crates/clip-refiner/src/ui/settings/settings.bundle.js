@@ -349,7 +349,8 @@
           payload,
           latestRequestId,
           pendingRequest,
-          domSettings
+          domSettings,
+          domSample
         }) {
           if (payload.requestId !== latestRequestId) {
             return { action: "ignore" };
@@ -357,7 +358,7 @@
           if (!pendingRequest || pendingRequest.requestId !== payload.requestId) {
             return { action: "ignore" };
           }
-          if (!regexSettingsEqual(domSettings, pendingRequest.settings)) {
+          if (!regexSettingsEqual(domSettings, pendingRequest.settings) || (domSample ?? "") !== (pendingRequest.sample ?? "")) {
             return { action: "stale" };
           }
           const lastRegexPreview = {
@@ -458,11 +459,37 @@
           }
           return current.concat([modeId]);
         }
+        function tabSelectionState(isActive) {
+          return {
+            ariaSelected: isActive ? "true" : "false",
+            tabIndex: isActive ? "0" : "-1"
+          };
+        }
         function buildSidebarNavInnerHtml2(tabs, activeTab, escapeHtml2) {
           return tabs.map((tab) => {
-            const active = tab.id === activeTab ? " active" : "";
-            return '<button type="button" class="nav-btn' + active + '" data-tab="' + tab.id + '"' + (tab.id === activeTab ? ' aria-current="page"' : "") + ">" + escapeHtml2(tab.label) + "</button>";
+            const isActive = tab.id === activeTab;
+            const active = isActive ? " active" : "";
+            const selection = tabSelectionState(isActive);
+            return '<button type="button" role="tab" class="nav-btn' + active + '" id="tab-' + tab.id + '" data-tab="' + tab.id + '" aria-selected="' + selection.ariaSelected + '" aria-controls="panel-' + tab.id + '" tabindex="' + selection.tabIndex + '">' + escapeHtml2(tab.label) + "</button>";
           }).join("");
+        }
+        function nextTabIndexForKey(currentIndex, tabCount, key) {
+          if (tabCount <= 0 || currentIndex < 0 || currentIndex >= tabCount) {
+            return null;
+          }
+          if (key === "ArrowDown" || key === "ArrowRight") {
+            return (currentIndex + 1) % tabCount;
+          }
+          if (key === "ArrowUp" || key === "ArrowLeft") {
+            return (currentIndex - 1 + tabCount) % tabCount;
+          }
+          if (key === "Home") {
+            return 0;
+          }
+          if (key === "End") {
+            return tabCount - 1;
+          }
+          return null;
         }
         function renderClipRow2(clip, escapeHtml2) {
           const label = clip.label || clip.preview || "(無題)";
@@ -571,7 +598,9 @@
         return {
           applyPipelineAction,
           appendPipelineMode,
+          tabSelectionState,
           buildSidebarNavInnerHtml: buildSidebarNavInnerHtml2,
+          nextTabIndexForKey,
           renderClipRow: renderClipRow2,
           buildFavoriteRowsHtml,
           availableFavoriteModes,
@@ -609,7 +638,7 @@
     /** @type {number} */
     latestRegexPreviewId: 0,
     /**
-     * @type {{ requestId: number, settings: import('./regex_preview').RegexSettings }|null}
+     * @type {import('./regex_preview').RegexPreviewPending|null}
      */
     pendingRegexPreviewRequest: null,
     /** @type {import('./regex_preview').RegexPreviewCache} */
@@ -734,8 +763,9 @@
   }
   function panelWrap(tabId, bodyHtml) {
     const tab = tabMeta(tabId);
-    const activeClass = tabId === ctx.activeTab ? " active" : "";
-    return '<div class="panel' + activeClass + '" id="panel-' + tabId + '"><header class="panel-intro"><h2 class="panel-title">' + escapeHtml(tab.label) + '</h2><p class="panel-desc">' + escapeHtml(tab.description) + "</p></header>" + bodyHtml + "</div>";
+    const isActive = tabId === ctx.activeTab;
+    const activeClass = isActive ? " active" : "";
+    return '<div class="panel' + activeClass + '" id="panel-' + tabId + '" role="tabpanel" aria-labelledby="tab-' + tabId + '"' + (isActive ? "" : " hidden") + '><header class="panel-intro"><h2 class="panel-title">' + escapeHtml(tab.label) + '</h2><p class="panel-desc">' + escapeHtml(tab.description) + "</p></header>" + bodyHtml + "</div>";
   }
   function card(title, bodyHtml) {
     return '<section class="card"><h3 class="card-title">' + escapeHtml(title) + '</h3><div class="card-body">' + bodyHtml + "</div></section>";
@@ -946,6 +976,7 @@
     content.querySelectorAll(".panel").forEach((panel) => {
       const isActive = panel.id === "panel-" + ctx.activeTab;
       panel.classList.toggle("active", isActive);
+      panel.hidden = !isActive;
     });
     content.scrollTop = ctx.tabScrollPositions[ctx.activeTab] || 0;
   }
@@ -1020,6 +1051,9 @@
       multiline: document.getElementById("regex-ml")?.checked ?? ctx.state.regex.multiline
     };
   }
+  function readRegexSampleFromDom() {
+    return document.getElementById("regex-preview-sample")?.value ?? ctx.state.regexPreviewSample ?? "";
+  }
   function validateRegexSettings(settings) {
     return import_regex_preview.default.validateRegexSettings(
       settings,
@@ -1027,12 +1061,13 @@
       maxRegexPatternBytes()
     );
   }
-  function requestRegexPreview(settings) {
+  function requestRegexPreview(settings, sample) {
     const requestId = ++ctx.regexPreviewRequestId;
     ctx.latestRegexPreviewId = requestId;
     ctx.pendingRegexPreviewRequest = {
       requestId,
-      settings: import_regex_preview.default.copyRegexSettings(settings)
+      settings: import_regex_preview.default.copyRegexSettings(settings),
+      sample
     };
     postIpcEnvelope({
       type: "regex-preview",
@@ -1042,7 +1077,8 @@
         replacement: settings.replacement,
         caseInsensitive: settings.caseInsensitive,
         multiline: settings.multiline
-      }
+      },
+      sample
     });
     const previewEl = document.getElementById("regex-preview-result");
     if (previewEl) {
@@ -1061,7 +1097,8 @@
       payload,
       latestRequestId: ctx.latestRegexPreviewId,
       pendingRequest: ctx.pendingRegexPreviewRequest,
-      domSettings: readRegexFromDom()
+      domSettings: readRegexFromDom(),
+      domSample: readRegexSampleFromDom()
     });
     if (result.action === "ignore") {
       return;
@@ -1081,7 +1118,7 @@
     previewEl.classList.toggle("regex-preview-result--error", ui.previewError);
   }
   function updateRegexFeedback() {
-    requestRegexPreview(readRegexFromDom());
+    requestRegexPreview(readRegexFromDom(), readRegexSampleFromDom());
   }
   function scheduleRegexFeedback() {
     clearTimeout(ctx.regexFeedbackTimer);
@@ -1355,6 +1392,7 @@
       el?.addEventListener("input", scheduleRegexFeedback);
       el?.addEventListener("blur", applyRegex);
     });
+    document.getElementById("regex-preview-sample")?.addEventListener("input", scheduleRegexFeedback);
     ["regex-ci", "regex-ml"].forEach((id) => {
       document.getElementById(id)?.addEventListener("change", () => {
         scheduleRegexFeedback();
@@ -1542,18 +1580,28 @@
     if (!sidebar) {
       return;
     }
-    sidebar.querySelectorAll(".nav-btn").forEach((button) => {
+    sidebar.querySelectorAll('[role="tab"]').forEach((button) => {
       const isActive = button.dataset.tab === ctx.activeTab;
+      const selection = import_panels_logic2.default.tabSelectionState(isActive);
       button.classList.toggle("active", isActive);
-      if (isActive) {
-        button.setAttribute("aria-current", "page");
-      } else {
-        button.removeAttribute("aria-current");
-      }
+      button.setAttribute("aria-selected", selection.ariaSelected);
+      button.tabIndex = Number(selection.tabIndex);
     });
   }
   function buildSidebarNavInnerHtml() {
     return import_panels_logic2.default.buildSidebarNavInnerHtml(TABS, ctx.activeTab, escapeHtml);
+  }
+  function activateTab(tabId, options = {}) {
+    const focus = options.focus !== false;
+    if (tabId !== ctx.activeTab) {
+      ctx.activeTab = tabId;
+      render();
+    } else {
+      syncSidebarActiveTab();
+    }
+    if (focus) {
+      document.getElementById("tab-" + tabId)?.focus();
+    }
   }
   function ensureSidebar() {
     const content = document.getElementById("content");
@@ -1567,12 +1615,29 @@
     if (!ctx.sidebarInitialized) {
       sidebar.innerHTML = buildSidebarNavInnerHtml();
       sidebar.addEventListener("click", (event) => {
-        const button = event.target.closest(".nav-btn");
-        if (!button || button.dataset.tab === ctx.activeTab) {
+        const button = event.target.closest('[role="tab"]');
+        if (!button || !sidebar.contains(button)) {
           return;
         }
-        ctx.activeTab = button.dataset.tab;
-        render();
+        activateTab(button.dataset.tab, { focus: true });
+      });
+      sidebar.addEventListener("keydown", (event) => {
+        const button = event.target.closest('[role="tab"]');
+        if (!button || !sidebar.contains(button)) {
+          return;
+        }
+        const tabs = Array.from(sidebar.querySelectorAll('[role="tab"]'));
+        const currentIndex = tabs.indexOf(button);
+        const nextIndex = import_panels_logic2.default.nextTabIndexForKey(
+          currentIndex,
+          tabs.length,
+          event.key
+        );
+        if (nextIndex === null) {
+          return;
+        }
+        event.preventDefault();
+        activateTab(tabs[nextIndex].dataset.tab, { focus: true });
       });
       ctx.sidebarInitialized = true;
       return;
@@ -1653,7 +1718,7 @@
         ctx.state.historyEnabled,
         "履歴を有効にする",
         "加工したテキストを暗号化して保持する"
-      ) + '</div><div class="field"><label for="history-limit">最大保持件数</label><input type="number" id="history-limit" min="' + historyBounds.min + '" max="' + historyBounds.max + '" value="' + ctx.state.historyLimit + '"><p class="field-hint">有効範囲: ' + historyBounds.min + "〜" + historyBounds.max + '</p></div><p class="hint">トレイ履歴のラベルでは機密らしい内容を表示のみマスクする。復元時はクリップボードへ元の本文を載せる</p><div class="card-actions"><button type="button" class="danger-btn" id="clear-history-btn">履歴をクリア</button></div>'
+      ) + '</div><div class="field"><label for="history-limit">最大保持件数</label><input type="number" id="history-limit" min="' + historyBounds.min + '" max="' + historyBounds.max + '" value="' + ctx.state.historyLimit + '"><p class="field-hint">有効範囲: ' + historyBounds.min + "〜" + historyBounds.max + '</p></div><p class="hint">トレイ履歴のラベルでは機密らしい内容を表示のみマスクする。復元時はクリップボードへ元の本文を載せる</p><p class="hint">保護境界は現在の Windows ユーザー単位。同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうる</p><div class="card-actions"><button type="button" class="danger-btn" id="clear-history-btn">履歴をクリア</button></div>'
     );
     const recordCard = card(
       "連続記録",
@@ -1673,7 +1738,7 @@
       '<div class="field"><label for="regex-pattern">パターン</label><textarea id="regex-pattern">' + escapeHtml(regex.pattern) + '</textarea></div><div class="field"><label for="regex-replacement">置換文字列</label><textarea id="regex-replacement">' + escapeHtml(regex.replacement) + '</textarea></div><div class="option-list">' + optionCheckbox("regex-ci", regex.caseInsensitive, "大文字小文字を無視") + optionCheckbox("regex-ml", regex.multiline, "複数行モード") + '</div><p id="regex-status" class="regex-status" role="status" aria-live="polite"></p>'
     ) + card(
       "プレビュー",
-      '<div class="regex-preview"><div class="regex-preview-row"><span class="regex-preview-label">サンプル</span><code class="regex-preview-sample">' + escapeHtml(ctx.state.regexPreviewSample) + '</code></div><div class="regex-preview-row"><span class="regex-preview-label">結果</span><code class="regex-preview-result" id="regex-preview-result">—</code></div></div><p class="hint">プレビューは ClipRefiner 実行時と同じ Rust 正規表現エンジンで表示</p>'
+      '<div class="field"><label for="regex-preview-sample">サンプル</label><textarea id="regex-preview-sample" rows="3">' + escapeHtml(ctx.state.regexPreviewSample) + '</textarea></div><div class="regex-preview"><div class="regex-preview-row"><span class="regex-preview-label">結果</span><code class="regex-preview-result" id="regex-preview-result">—</code></div></div><p class="hint">プレビューは ClipRefiner 実行時と同じ Rust 正規表現エンジンで表示</p>'
     );
     return panelWrap("regex", body);
   }
@@ -1755,7 +1820,7 @@
     const registerBtn = import_panels_logic2.default.clipRegisterButtonState(ctx.clipRegisterPending);
     const body = card(
       "登録クリップ",
-      '<div class="toolbar"><button type="button" class="' + registerBtn.className + '" id="clip-register-btn"' + (registerBtn.disabled ? " disabled" : "") + ">" + escapeHtml(registerBtn.label) + "</button></div>" + listHtml + '<p class="hint">最大 ' + maxRegisteredClips() + ' 件。画像はクリップボードに画像がある場合を優先</p><p class="hint">プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる</p>'
+      '<div class="toolbar"><button type="button" class="' + registerBtn.className + '" id="clip-register-btn"' + (registerBtn.disabled ? " disabled" : "") + ">" + escapeHtml(registerBtn.label) + "</button></div>" + listHtml + '<p class="hint">最大 ' + maxRegisteredClips() + ' 件。画像はクリップボードに画像がある場合を優先</p><p class="hint">プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる</p><p class="hint">鍵は現在ユーザーの DPAPI で保護する。同一ユーザーの他プロセスからは設定・鍵に到達しうる</p>'
     );
     return panelWrap("clips", body);
   }
@@ -1801,7 +1866,8 @@
     const editingTab = wasEditing ? ctx.activeTab : null;
     if (editingTab === "regex" && !opts.externalSync) {
       snapshot = Object.assign({}, snapshot, {
-        regex: readRegexFromDom()
+        regex: readRegexFromDom(),
+        regexPreviewSample: readRegexSampleFromDom()
       });
     }
     ctx.state = snapshot;

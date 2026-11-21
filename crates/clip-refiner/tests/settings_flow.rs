@@ -148,6 +148,8 @@ fn dequeue_and_apply_merged_patch() {
 #[test]
 fn apply_ipc_skips_interval_when_switching_to_event() {
     let ctx = SettingsTestContext::new();
+    ctx.state()
+        .with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
     let default_interval = ctx.state().with_config(|c| c.interval_ms);
 
     assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"monitorMode":"Event","intervalMs":500}}"#,));

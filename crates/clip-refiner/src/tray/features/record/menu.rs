@@ -1,22 +1,21 @@
 use std::sync::Mutex;
 
-use crate::tray::menu::{ContinuousRecordMenu, TrayMenu};
-
 use crate::security::format_public_snippet;
+use crate::tray::menu::{
+    ContinuousRecordMenu, DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, TrayMenu,
+    rebuild_toggle_records_submenu,
+};
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;
-use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
-
-/// 連続記録メニュー表示用スニペットの最大文字数
-const RECORD_MENU_SNIPPET_MAX_CHARS: usize = 30;
+use tray_icon::menu::{CheckMenuItem, IsMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 /// 連続記録メニュー表示用にテキストを短縮する
 pub(crate) fn format_record_menu_label(index: usize, text: &str) -> String {
     format!(
         "{}. {}",
         index + 1,
-        format_public_snippet(text, RECORD_MENU_SNIPPET_MAX_CHARS)
+        format_public_snippet(text, DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS)
     )
 }
 
@@ -46,10 +45,10 @@ impl TrayMenu {
         let records = Mutex::new(Vec::new());
 
         main_submenu.append_items(&[
-            &enabled_item as &dyn tray_icon::menu::IsMenuItem,
-            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-            &undo_item as &dyn tray_icon::menu::IsMenuItem,
-            &clear_item as &dyn tray_icon::menu::IsMenuItem,
+            &enabled_item as &dyn IsMenuItem,
+            &PredefinedMenuItem::separator() as &dyn IsMenuItem,
+            &undo_item as &dyn IsMenuItem,
+            &clear_item as &dyn IsMenuItem,
         ])?;
 
         Ok(ContinuousRecordMenu {
@@ -75,42 +74,24 @@ impl TrayMenu {
     /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_continuous_record(&self, state: &AppState) -> Result<()> {
         let record_len = state.clipboard_session().continuous_record_len();
+        let entry_labels = (0..record_len).filter_map(|index| {
+            let text = state
+                .clipboard_session()
+                .get_continuous_record_entry(index)?;
+            Some((index, format_record_menu_label(index, &text)))
+        });
+
         let mut records = self.continuous_record.records.lock_ignore_poison();
-        records.clear();
-
-        for _ in 0..self.continuous_record.main_submenu.items().len() {
-            self.continuous_record.main_submenu.remove_at(0);
-        }
-
-        self.continuous_record.main_submenu.append_items(&[
-            &self.continuous_record.enabled_item as &dyn tray_icon::menu::IsMenuItem,
-            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-        ])?;
-
-        if record_len > 0 {
-            for index in 0..record_len {
-                let Some(text) = state.clipboard_session().get_continuous_record_entry(index)
-                else {
-                    continue;
-                };
-                let label = format_record_menu_label(index, &text);
-                let item = MenuItem::new(label, true, None);
-                records.push((item.id().clone(), index));
-                self.continuous_record
-                    .main_submenu
-                    .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;
-            }
-            self.continuous_record.main_submenu.append_items(&[
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-            ])?;
-        }
-
-        self.continuous_record.main_submenu.append_items(&[
-            &self.continuous_record.undo_item as &dyn tray_icon::menu::IsMenuItem,
-            &self.continuous_record.clear_item as &dyn tray_icon::menu::IsMenuItem,
-        ])?;
-
-        Ok(())
+        rebuild_toggle_records_submenu(
+            &self.continuous_record.main_submenu,
+            &mut records,
+            &self.continuous_record.enabled_item,
+            entry_labels,
+            &[
+                &self.continuous_record.undo_item as &dyn IsMenuItem,
+                &self.continuous_record.clear_item as &dyn IsMenuItem,
+            ],
+        )
     }
 }
 

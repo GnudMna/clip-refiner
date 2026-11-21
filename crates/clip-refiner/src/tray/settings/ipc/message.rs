@@ -56,6 +56,9 @@ enum SettingsIpcMessage {
         request_id: u64,
         /// プレビュー対象の正規表現設定
         settings: RegexSettings,
+        /// プレビューに使うサンプル文字列
+        #[serde(default)]
+        sample: String,
     },
     /// アプリ更新を確認する
     CheckUpdate,
@@ -109,7 +112,7 @@ pub(crate) enum SettingsIpcAction {
     /// お気に入り変換モードの表示順を変更する
     FavoriteMove(RefineMode, FavoriteMoveDirection),
     /// 正規表現置換のプレビューを要求する
-    RegexPreview(u64, RegexSettings),
+    RegexPreview(u64, RegexSettings, String),
     /// アプリ更新を確認する
     CheckUpdate,
     /// 確認済みの更新をダウンロードして適用する
@@ -134,7 +137,8 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
             SettingsIpcMessage::RegexPreview {
                 request_id,
                 settings,
-            } => Self::RegexPreview(request_id, settings),
+                sample,
+            } => Self::RegexPreview(request_id, settings, sample),
             SettingsIpcMessage::CheckUpdate => Self::CheckUpdate,
             SettingsIpcMessage::ApplyUpdate => Self::ApplyUpdate,
         }

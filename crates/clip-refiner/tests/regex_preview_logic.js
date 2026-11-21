@@ -9,6 +9,7 @@ const path = require('node:path');
 const RegexPreview = require(path.join(__dirname, '../src/ui/settings/regex_preview.js'));
 
 const MAX_PATTERN_BYTES = 8 * 1024;
+const SAMPLE = 'Hello world 123';
 
 /** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
 const validSettings = {
@@ -39,17 +40,41 @@ function previewPayload(requestId, valid, message, result) {
     return { requestId, valid, message, result };
 }
 
+/**
+ * @param {number} requestId
+ * @param {import('../src/ui/settings/regex_preview').RegexSettings} settings
+ * @param {string} [sample]
+ * @returns {import('../src/ui/settings/regex_preview').RegexPreviewPending}
+ */
+function pendingRequest(requestId, settings, sample = SAMPLE) {
+    return { requestId, settings, sample };
+}
+
 /** 応答到着時に DOM がリクエスト送信時から変わっている場合は stale となること */
 function test_stale_response_when_dom_changed() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'Hello world #'),
         latestRequestId: 1,
-        pendingRequest: { requestId: 1, settings: validSettings },
+        pendingRequest: pendingRequest(1, validSettings),
         domSettings: invalidSettings,
+        domSample: SAMPLE,
     });
 
     assert.equal(result.action, 'stale');
     assert.equal(result.lastRegexPreview, undefined);
+}
+
+/** サンプル文字列が変わっている場合は stale となること */
+function test_stale_response_when_sample_changed() {
+    const result = RegexPreview.resolveRegexPreviewResponse({
+        payload: previewPayload(1, true, 'パターンは有効です', 'Hello world #'),
+        latestRequestId: 1,
+        pendingRequest: pendingRequest(1, validSettings),
+        domSettings: validSettings,
+        domSample: 'other sample',
+    });
+
+    assert.equal(result.action, 'stale');
 }
 
 /** DOM が一致する場合のみキャッシュと UI が更新されること */
@@ -57,8 +82,9 @@ function test_apply_response_when_dom_matches_request() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(2, true, 'パターンは有効です', 'Hello world #'),
         latestRequestId: 2,
-        pendingRequest: { requestId: 2, settings: validSettings },
+        pendingRequest: pendingRequest(2, validSettings),
         domSettings: validSettings,
+        domSample: SAMPLE,
     });
 
     assert.equal(result.action, 'apply');
@@ -73,8 +99,9 @@ function test_ignore_outdated_response() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'x'),
         latestRequestId: 2,
-        pendingRequest: { requestId: 1, settings: validSettings },
+        pendingRequest: pendingRequest(1, validSettings),
         domSettings: validSettings,
+        domSample: SAMPLE,
     });
 
     assert.equal(result.action, 'ignore');
@@ -85,8 +112,9 @@ function test_validate_pending_after_stale_response() {
     const stale = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'x'),
         latestRequestId: 1,
-        pendingRequest: { requestId: 1, settings: validSettings },
+        pendingRequest: pendingRequest(1, validSettings),
         domSettings: invalidSettings,
+        domSample: SAMPLE,
     });
     assert.equal(stale.action, 'stale');
 
@@ -104,8 +132,9 @@ function test_validate_uses_cache_after_apply() {
     const applied = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(3, false, 'パターンが無効です: ...', null),
         latestRequestId: 3,
-        pendingRequest: { requestId: 3, settings: invalidSettings },
+        pendingRequest: pendingRequest(3, invalidSettings),
         domSettings: invalidSettings,
+        domSample: SAMPLE,
     });
     assert.equal(applied.action, 'apply');
 
@@ -152,6 +181,7 @@ function test_regex_settings_equal() {
 
 const tests = [
     test_stale_response_when_dom_changed,
+    test_stale_response_when_sample_changed,
     test_apply_response_when_dom_matches_request,
     test_ignore_outdated_response,
     test_validate_pending_after_stale_response,

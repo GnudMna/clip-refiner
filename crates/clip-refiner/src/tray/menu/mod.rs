@@ -4,10 +4,12 @@
 
 mod build;
 pub(crate) mod icon;
+mod rebuild;
 mod sync;
 mod types;
 
 pub use icon::create_window_icon;
+pub(crate) use rebuild::{DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, rebuild_toggle_records_submenu};
 pub use types::{
     CategoryGroup, ClipsMenu, ContinuousRecordMenu, HistoryMenu, IntervalMenu, MonitorMenu,
     NotificationMenu, RefineMenu, TrayMenu,

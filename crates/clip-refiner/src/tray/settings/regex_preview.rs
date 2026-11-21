@@ -1,4 +1,4 @@
-use crate::refiner::{REGEX_PREVIEW_SAMPLE, preview_regex_replace};
+use crate::refiner::preview_regex_replace;
 use crate::tray::state::RegexPreviewRequest;
 
 use serde::Serialize;
@@ -24,7 +24,7 @@ pub(crate) struct RegexPreviewResponse {
 impl RegexPreviewResponse {
     /// プレビュー要求を評価して応答を生成する
     pub(crate) fn from_request(request: &RegexPreviewRequest) -> Self {
-        let preview = preview_regex_replace(REGEX_PREVIEW_SAMPLE, &request.settings);
+        let preview = preview_regex_replace(&request.sample, &request.settings);
         Self {
             request_id: request.request_id,
             valid: preview.valid,
@@ -42,6 +42,7 @@ mod tests {
     use super::*;
 
     use crate::config::RegexSettings;
+    use crate::refiner::REGEX_PREVIEW_SAMPLE;
 
     /// 有効なパターンでプレビュー応答が生成されるようにすること
     #[test]
@@ -53,9 +54,26 @@ mod tests {
                 replacement: "#".to_string(),
                 ..RegexSettings::default()
             },
+            sample: REGEX_PREVIEW_SAMPLE.to_string(),
         });
         assert!(response.valid);
         assert_eq!(response.request_id, 7);
         assert_eq!(response.result.as_deref(), Some("Hello world #"));
+    }
+
+    /// 任意サンプル文字列でプレビューできるようにすること
+    #[test]
+    fn preview_response_uses_request_sample() {
+        let response = RegexPreviewResponse::from_request(&RegexPreviewRequest {
+            request_id: 8,
+            settings: RegexSettings {
+                pattern: r"foo".to_string(),
+                replacement: "bar".to_string(),
+                ..RegexSettings::default()
+            },
+            sample: "foo baz".to_string(),
+        });
+        assert!(response.valid);
+        assert_eq!(response.result.as_deref(), Some("bar baz"));
     }
 }

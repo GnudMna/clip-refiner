@@ -6,6 +6,29 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-07-29
+
+### Security
+
+- アプリ更新: ダウンロード中に宣言サイズ超過または絶対上限 (512 MiB) を超えた応答を途中打ち切りし、不完全なファイルを削除するようにした。宣言サイズ 0 / 上限超過は更新確認時点でも拒否する
+- 登録クリップ: ランタイムの `AppConfig.clips` に本文平文を常駐させず、エントリ単位の AEAD 暗号文とコピー時のみの `SecretString` 復号へ変更した。ディスク上の外側暗号化は維持し、旧形式 (平文 `text`) は読み込み時に移行する。UI はキャッシュ済み `preview` のみを参照する
+
+### Added
+
+- 設定 UI: 正規表現プレビューのサンプル文字列を任意入力可能にした (初期値は従来どおり。設定には保存しない)
+- 設定 UI: ホットキーの不正・重複を補正したとき、どの割り当てを直したかを適用フィードバックで表示するようにした
+
+### Changed
+
+- 監視方式 (`monitor_mode`) の既定を `Polling` から `Event` へ変更。既存の `config.toml` に保存済みの値がある場合は維持し、キー欠落時のみ新既定を適用する
+- 設定 UI: サイドバーを WAI-ARIA の `tablist` / `tab` / `tabpanel` パターンに準拠させ、上下・左右矢印と Home / End でタブ移動できるようにした
+- 品質チェック (`check.ps1`): 設定 UI バンドル再生成後に `settings.bundle.js` の未ステージ差分を検出し、ソースと生成物のコミットずれを防ぐようにした
+- リリース手順 (`release.ps1`): MSI に加え `build-portable.ps1` でポータブル ZIP も一括作成するようにした (`-SkipPortable` で省略可。MSI 作成済みならビルドと `THIRD_PARTY_NOTICES` を再利用)
+- 同一ユーザー脅威モデルを明示した: CONFIG に [信頼境界 (同一ユーザー前提)](CONFIG.md#信頼境界-同一ユーザー前提) を追加し、README・設定 UI (履歴 / 登録クリップ)・ワンショット IPC 節から参照するようにした。保護境界は現在の Windows ユーザー単位で、同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうることを案内する
+- アプリ更新: 確認・ダウンロード・適用・差し替えの失敗を `UpdateError` (`thiserror`) に集約し、Outcome / デスクトップ通知 / MessageBox へは `Display` 経由で渡すようにした。更新通知は `UserNotification` 経由に統一した
+- トレイメニュー同期で `MenuSnapshot` により `AppConfig` 全体の clone を避け、履歴と連続記録のメニュー再構築を `menu/rebuild.rs` に共通化した
+- ドキュメント (README / CONFIG / DEVELOPMENT) を監視既定・設定 UI・更新エラー経路・信頼境界に合わせて更新した
+
 ## [0.14.0] - 2026-07-26
 
 ### Added
@@ -35,7 +58,7 @@
 
 ### Security
 
-- ワンショット IPC の名前付きパイプを現在ユーザー専用 DACL で作成するようにした。既定 ACL (Everyone 読み取り・管理者フルコントロール等) をやめ、他ユーザーからのローカル接続を拒否する (`PIPE_REJECT_REMOTE_CLIENTS` は従来どおり)。脅威モデルは [CONFIG.md](CONFIG.md#ワンショット-ipc) に記載
+- ワンショット IPC の名前付きパイプを現在ユーザー専用 DACL で作成するようにした。既定 ACL (Everyone 読み取り・管理者フルコントロール等) をやめ、他ユーザーからのローカル接続を拒否する (`PIPE_REJECT_REMOTE_CLIENTS` は従来どおり)。脅威モデルは [CONFIG.md の信頼境界](CONFIG.md#信頼境界-同一ユーザー前提) / [ワンショット IPC](CONFIG.md#ワンショット-ipc) に記載
 
 ### Added
 
@@ -477,7 +500,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...develop
+[0.14.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...v0.14.1
 [0.14.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...v0.14.0
 [0.13.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...v0.13.1
 [0.13.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...v0.13.0

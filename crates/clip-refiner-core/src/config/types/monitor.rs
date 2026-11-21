@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
     /// 一定間隔でクリップボードの内容を確認するポーリング方式
-    #[default]
     Polling,
     /// OS のクリップボード変更通知 (`AddClipboardFormatListener`) で起床する方式
     /// 変更時のみ本文を読み取り、アイドル時の周期 peek を避ける
+    #[default]
     Event,
 }

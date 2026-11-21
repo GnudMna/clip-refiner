@@ -1,3 +1,5 @@
+use super::error::UpdateError;
+
 use serde::{Deserialize, Serialize};
 
 // ======================================================================
@@ -101,9 +103,36 @@ pub enum UpdateCheckOutcome {
     Available(AvailableUpdate),
     /// 確認に失敗
     Error {
-        /// ユーザー向けメッセージ
+        /// ユーザー向けメッセージ (`UpdateError` の `Display`)
         message: String,
     },
+}
+
+impl UpdateCheckOutcome {
+    /// 型付きエラーから確認失敗 Outcome を組み立てる
+    ///
+    /// # Arguments
+    /// * `err` - 更新確認の失敗理由
+    ///
+    /// # Returns
+    /// * `Self` - `Error { message }`
+    pub(crate) fn from_error(err: &UpdateError) -> Self {
+        Self::Error {
+            message: err.to_string(),
+        }
+    }
+}
+
+impl From<UpdateError> for UpdateCheckOutcome {
+    fn from(err: UpdateError) -> Self {
+        Self::from_error(&err)
+    }
+}
+
+impl From<&UpdateError> for UpdateCheckOutcome {
+    fn from(err: &UpdateError) -> Self {
+        Self::from_error(err)
+    }
 }
 
 /// 設定 UI / IPC へ返す更新確認レスポンス
@@ -180,9 +209,36 @@ pub enum UpdateApplyOutcome {
     },
     /// 適用に失敗
     Error {
-        /// ユーザー向けメッセージ
+        /// ユーザー向けメッセージ (`UpdateError` の `Display`)
         message: String,
     },
+}
+
+impl UpdateApplyOutcome {
+    /// 型付きエラーから適用失敗 Outcome を組み立てる
+    ///
+    /// # Arguments
+    /// * `err` - 更新適用の失敗理由
+    ///
+    /// # Returns
+    /// * `Self` - `Error { message }`
+    pub(crate) fn from_error(err: &UpdateError) -> Self {
+        Self::Error {
+            message: err.to_string(),
+        }
+    }
+}
+
+impl From<UpdateError> for UpdateApplyOutcome {
+    fn from(err: UpdateError) -> Self {
+        Self::from_error(&err)
+    }
+}
+
+impl From<&UpdateError> for UpdateApplyOutcome {
+    fn from(err: &UpdateError) -> Self {
+        Self::from_error(err)
+    }
 }
 
 /// 設定 UI へ返す更新適用レスポンス

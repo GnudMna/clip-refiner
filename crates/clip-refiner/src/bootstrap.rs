@@ -170,10 +170,10 @@ fn run_portable_update_helper(args: &Args) -> Result<()> {
     };
 
     platform::init_notifications();
-    if let Err(message) =
+    if let Err(err) =
         platform::update::run_portable_replace(wait_pid, &install_dir, args.cleanup_dir.as_deref())
     {
-        bail!(message);
+        bail!("{err}");
     }
     Ok(())
 }

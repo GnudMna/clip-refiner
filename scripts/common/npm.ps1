@@ -126,12 +126,58 @@ function Invoke-NpmScript {
     Assert-LastExitCode -CommandLabel "npm run $Name"
 }
 
+# 設定 UI バンドルが再生成後も作業ツリーと index で一致することを検証する
+#
+# `settings.bundle.js` は `include_str!` で埋め込むためリポジトリにコミットする。
+# ソースだけ更新してバンドルを忘れると、品質チェックは再生成で緑になっても
+# 配布物の UI が古いままになる。再生成直後に未ステージ差分が残っていれば失敗させる。
+# ステージ済みのみの変更 (`M `) はコミット前の正当な状態として許容する
+function Assert-SettingsUiBundleSynced {
+    [CmdletBinding()]
+    param()
+
+    $relativePath = 'crates/clip-refiner/src/ui/settings/settings.bundle.js'
+
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw @(
+            'エラー: git が見つかりません',
+            'settings.bundle.js のコミットずれ検出には git が必要です'
+        ) -join [Environment]::NewLine
+    }
+
+    $status = git status --porcelain --untracked-files=all -- $relativePath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "エラー: git status の実行に失敗しました: $status"
+    }
+
+    $statusText = if ($null -eq $status) { '' } else { "$status".TrimEnd() }
+    if (-not $statusText) {
+        return
+    }
+
+    # 許容: ステージ済みのみ (porcelain の XY が "M ")。未ステージ・未追跡・削除は拒否
+    if ($statusText.StartsWith('M  ')) {
+        return
+    }
+
+    throw @(
+        "エラー: $relativePath がソースと同期していません",
+        '設定 UI のソース変更後はバンドルを再生成し、生成物をステージ / コミットしてください:',
+        '  npm run build:settings-ui',
+        "  git add $relativePath",
+        '',
+        'git status:',
+        $statusText
+    ) -join [Environment]::NewLine
+}
+
 # ESLint と Prettier 整形チェックを実行する
 function Invoke-JavaScriptLintCheck {
     [CmdletBinding()]
     param()
 
     Invoke-NpmScript -Name 'build:settings-ui'
+    Assert-SettingsUiBundleSynced
     Invoke-NpmScript -Name 'lint'
     Invoke-NpmScript -Name 'format:check'
 }

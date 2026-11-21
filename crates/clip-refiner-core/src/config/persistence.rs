@@ -6,13 +6,16 @@ use super::atomic_io::write_text_atomically;
 use super::paths::{config_file_modified_time, get_config_file_path};
 use super::permissions::restrict_private_file_permissions;
 use super::registered_clips::{
-    load_registered_clips, migrate_legacy_clip_images, save_registered_clips,
+    load_registered_clips, migrate_legacy_clip_images, registered_clip_from_plain_text,
+    save_registered_clips,
 };
 use super::serialize::config_to_toml;
 use super::types::{AppConfig, RegisteredClip};
 use super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 
 use crate::error::ConfigError;
+
+use serde::Deserialize;
 
 // ======================================================================
 // 設定の永続化
@@ -327,10 +330,21 @@ impl AppConfig {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// `config.toml` のレガシー `[[clips]]` (平文 `text`)
+#[derive(Debug, Deserialize)]
+struct LegacyTomlRegisteredClip {
+    #[serde(default)]
+    label: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    image_file: Option<String>,
+}
+
 /// `config.toml` の解析結果
 struct ParsedConfigToml {
     config: AppConfig,
-    legacy_clips: Vec<RegisteredClip>,
+    legacy_clips: Vec<LegacyTomlRegisteredClip>,
     unknown_keys: Vec<String>,
 }
 
@@ -350,23 +364,52 @@ fn parse_config_toml(content: &str) -> anyhow::Result<ParsedConfigToml> {
     })
 }
 
+/// レガシー TOML の平文クリップを暗号文保持の `RegisteredClip` へ変換する
+fn encrypt_legacy_toml_clips(legacy_clips: Vec<LegacyTomlRegisteredClip>) -> Vec<RegisteredClip> {
+    let mut clips = Vec::with_capacity(legacy_clips.len());
+    for legacy in legacy_clips {
+        if let Some(image_file) = legacy.image_file {
+            clips.push(RegisteredClip {
+                label: legacy.label,
+                preview: String::new(),
+                text_ciphertext: Vec::new(),
+                image_file: Some(image_file),
+            });
+            continue;
+        }
+        match registered_clip_from_plain_text(legacy.label, &legacy.text) {
+            Ok(clip) => clips.push(clip),
+            Err(err) => {
+                tracing::warn!("レガシー登録クリップの暗号化移行をスキップ: {:?}", err);
+            }
+        }
+    }
+    clips
+}
+
 /// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
-fn finish_loading(config: AppConfig, legacy_clips: Vec<RegisteredClip>) -> (AppConfig, bool, bool) {
+fn finish_loading(
+    config: AppConfig,
+    legacy_clips: Vec<LegacyTomlRegisteredClip>,
+) -> (AppConfig, bool, bool) {
     let migration = config.prepare_loaded();
     let mut config = migration.config;
     let schema_migrated = migration.migrated;
     let newer_version_clamped = migration.newer_version_clamped;
 
-    let file_clips = load_registered_clips().unwrap_or_else(|err| {
+    let (file_clips, file_format_migrated) = load_registered_clips().unwrap_or_else(|err| {
         tracing::warn!("登録クリップファイルの読み込みに失敗: {:?}", err);
-        Vec::new()
+        (Vec::new(), false)
     });
 
-    let mut clips_migrated = false;
+    let mut clips_migrated = file_format_migrated;
     if !file_clips.is_empty() {
         config.clips = file_clips;
+        if file_format_migrated {
+            tracing::info!("registered-clips.dat の本文を暗号文形式へ移行する");
+        }
     } else if !legacy_clips.is_empty() {
-        config.clips = legacy_clips;
+        config.clips = encrypt_legacy_toml_clips(legacy_clips);
         clips_migrated = true;
         tracing::info!("config.toml の [[clips]] を registered-clips.dat へ移行する");
     }
@@ -556,7 +599,13 @@ text = "secret-body"
                 finish_loading(parsed.config, parsed.legacy_clips);
             assert!(migrated);
             assert!(!newer_version_clamped);
-            assert_eq!(config.clips[0].text, "secret-body");
+            assert_eq!(config.clips.len(), 1);
+            assert!(!config.clips[0].text_ciphertext.is_empty());
+            let plain = super::super::registered_clips::decrypt_registered_clip_text(
+                &config.clips[0].text_ciphertext,
+            )
+            .expect("decrypt");
+            assert_eq!(plain.as_str(), "secret-body");
 
             config.save().expect("save");
             let content =
@@ -564,9 +613,14 @@ text = "secret-body"
             assert!(!content.contains("[[clips]]"));
             assert!(!content.contains("secret-body"));
 
-            let file_clips = load_registered_clips().expect("load clips file");
+            let (file_clips, format_migrated) = load_registered_clips().expect("load clips file");
+            assert!(!format_migrated);
             assert_eq!(file_clips.len(), 1);
-            assert_eq!(file_clips[0].text, "secret-body");
+            let plain = super::super::registered_clips::decrypt_registered_clip_text(
+                &file_clips[0].text_ciphertext,
+            )
+            .expect("decrypt file");
+            assert_eq!(plain.as_str(), "secret-body");
         });
     }
 }

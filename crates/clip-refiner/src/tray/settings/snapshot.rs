@@ -196,7 +196,7 @@ mod tests {
         let json: serde_json::Value =
             serde_json::from_str(&snapshot.to_json()).expect("スナップショット JSON のパース");
 
-        assert_eq!(json["monitorMode"], "Polling");
+        assert_eq!(json["monitorMode"], "Event");
         assert_eq!(json["notificationSettings"]["enabled"], true);
         assert_eq!(json["notificationSettings"]["notifyProcess"], false);
         assert_eq!(json["notificationSettings"]["notifyResult"], true);

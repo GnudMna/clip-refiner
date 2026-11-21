@@ -255,7 +255,7 @@ function test_collect_close_window_ipc_messages() {
 /** 設定シェル HTML の必須 DOM ID を検証できること */
 function test_settings_shell_has_required_ids() {
     const html =
-        '<div id="app"><nav id="sidebar"></nav><main id="content"></main>' +
+        '<div id="app"><div id="sidebar"></div><main id="content"></main>' +
         '<button id="open-config-btn"></button><button id="close-btn"></button>' +
         '<div id="apply-feedback"></div><div id="confirm-dialog"></div></div>';
     assert.equal(SettingsSharedLogic.settingsShellHasRequiredIds(html), true);

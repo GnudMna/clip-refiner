@@ -477,7 +477,7 @@ impl ClipboardHarness {
         self.state
             .with_config(|c| c.resolve_registered_clip(index))
             .and_then(|clip| match clip {
-                crate::config::ResolvedClip::Text(text) => Some(text),
+                crate::config::ResolvedClip::Text(text) => Some(text.to_string()),
                 crate::config::ResolvedClip::Image { .. } => None,
             })
     }

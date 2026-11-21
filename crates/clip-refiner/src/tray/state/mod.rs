@@ -5,6 +5,7 @@ mod app_state;
 mod clipboard_session;
 mod config_sync;
 mod lock_ext;
+mod menu_snapshot;
 mod monitor_snapshot;
 mod settings_pending;
 mod worker_state;
@@ -14,6 +15,7 @@ pub use app_state::AppState;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use app_state::{test_app_state, test_app_state_with_persistence};
 pub use lock_ext::LockExt;
+pub use menu_snapshot::MenuSnapshot;
 pub use monitor_snapshot::{MonitorSnapshot, ProcessedState};
 pub(crate) use settings_pending::RegexPreviewRequest;
 
@@ -38,7 +40,7 @@ mod tests {
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
         assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
 
-        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
+        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Event);
 
         state.with_config_mut(|c| c.interval_ms = 2000);
         assert_eq!(state.with_config(|c| c.interval_ms), 2000);
@@ -104,6 +106,44 @@ mod tests {
         assert_eq!(snap.interval_ms, 1500);
         assert!(snap.is_paused);
         assert!(snap.history_enabled);
+    }
+
+    /// `menu_snapshot` がメニュー用フィールドを正しく反映すること
+    #[test]
+    fn test_menu_snapshot_values() {
+        use crate::config::{HotkeySettings, MonitorMode};
+
+        let state = test_app_state();
+        state.with_config_mut(|c| {
+            c.mode = RefineMode::UrlEncode;
+            c.pipeline = vec![RefineMode::Trim, RefineMode::UrlEncode];
+            c.favorite_modes = vec![RefineMode::Trim];
+            c.hotkeys = HotkeySettings {
+                pause: "Ctrl+Alt+P".to_string(),
+                ..HotkeySettings::default()
+            };
+            c.monitor_mode = MonitorMode::Polling;
+            c.interval_ms = 2500;
+            c.history_enabled = true;
+            c.continuous_record_enabled = true;
+            c.notification_settings.enabled = true;
+            c.notification_settings.notify_result = true;
+            c.is_paused = true;
+        });
+
+        let snap: MenuSnapshot = state.menu_snapshot();
+        assert_eq!(snap.mode, RefineMode::UrlEncode);
+        assert!(snap.active_modes.contains(&RefineMode::Trim));
+        assert!(snap.active_modes.contains(&RefineMode::UrlEncode));
+        assert_eq!(snap.favorite_modes, vec![RefineMode::Trim]);
+        assert_eq!(snap.hotkeys.pause, "Ctrl+Alt+P");
+        assert_eq!(snap.monitor_mode, MonitorMode::Polling);
+        assert_eq!(snap.interval_ms, 2500);
+        assert!(snap.history_enabled);
+        assert!(snap.continuous_record_enabled);
+        assert!(snap.notification_settings.enabled);
+        assert!(snap.notification_settings.notify_result);
+        assert!(snap.is_paused);
     }
 
     /// `auto_processing_enabled` が連続記録と一時停止の状態を反映すること

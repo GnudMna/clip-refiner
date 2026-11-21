@@ -56,12 +56,13 @@ pub(crate) fn dispatch_settings_ipc(
         SettingsIpcAction::FavoriteMove(mode, direction) => {
             dispatch::send_app_event(proxy, AppEvent::RequestFavoriteMove(mode, direction));
         }
-        SettingsIpcAction::RegexPreview(request_id, settings) => {
+        SettingsIpcAction::RegexPreview(request_id, settings, sample) => {
             state
                 .settings_pending()
                 .set_regex_preview_request(RegexPreviewRequest {
                     request_id,
                     settings,
+                    sample,
                 });
             dispatch::send_app_event(proxy, AppEvent::SettingsRegexPreview);
         }

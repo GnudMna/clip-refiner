@@ -1,16 +1,19 @@
 //! gh-release-bridge 経由のアプリ更新確認・適用
 //!
 //! version API の各アセットに GitHub Release Asset の `digest` (`sha256:<hex>`) が
-//! 含まれることを前提とする。ダウンロード後にサイズと SHA-256 を検証してから適用する
+//! 含まれることを前提とする。ダウンロード中は宣言サイズ超過または絶対上限で打ち切り、
+//! 完了後にサイズと SHA-256 を検証してから適用する
 
 mod apply;
 mod check;
+mod error;
 mod replace;
 mod types;
 mod verify;
 
 pub(crate) use apply::apply_update;
 pub(crate) use check::check_for_update;
+pub(crate) use error::UpdateError;
 pub(crate) use replace::run_portable_replace;
 pub use types::{AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome};
 pub(crate) use types::{UpdateApplyUiResponse, UpdateCheckSource, UpdateCheckUiResponse};

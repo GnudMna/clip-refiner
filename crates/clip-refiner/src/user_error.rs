@@ -1,9 +1,11 @@
 //! アプリ層のユーザー向けエラー通知
 //!
-//! core の型付きエラーから通知タイトル・本文を生成し、ログとデスクトップ通知を一元化する
+//! core の型付きエラーおよび更新の `UpdateError` から通知タイトル・本文を生成し、
+//! ログとデスクトップ通知を一元化する
 
 use crate::config::AddRegisteredClipError;
 use crate::platform;
+use crate::platform::update::UpdateError;
 use crate::refiner::ClipboardProcessError;
 
 // ======================================================================
@@ -159,6 +161,18 @@ impl From<ClipboardProcessError> for UserNotification {
     }
 }
 
+impl From<&UpdateError> for UserNotification {
+    fn from(err: &UpdateError) -> Self {
+        Self::new(titles::UPDATE, err.to_string())
+    }
+}
+
+impl From<UpdateError> for UserNotification {
+    fn from(err: UpdateError) -> Self {
+        UserNotification::from(&err)
+    }
+}
+
 /// クリップボードからの登録失敗向け通知を返す
 ///
 /// # Arguments
@@ -174,6 +188,7 @@ pub fn registered_clip_register_failure(err: AddRegisteredClipError) -> UserNoti
         AddRegisteredClipError::LimitReached => "登録件数の上限に達しています",
         AddRegisteredClipError::ImageTooLarge => "画像が大きすぎるため登録できません",
         AddRegisteredClipError::ImageInvalid => "画像の形式が不正なため登録できません",
+        AddRegisteredClipError::EncryptFailed => "登録クリップの暗号化に失敗しました",
     };
     UserNotification::static_message(titles::REGISTERED_CLIP, body)
 }
@@ -332,12 +347,20 @@ mod tests {
         assert_eq!(restore.title(), titles::CLIPBOARD);
     }
 
-    /// 加工エラーは core の `user_message` を本文に使ようにすること
+    /// 加工エラーは core の `user_message` を本文に使うこと
     #[test]
     fn clipboard_process_error_maps_user_message() {
         let notification = UserNotification::from(ClipboardProcessError::NoText);
         assert_eq!(notification.title(), titles::PROCESS);
         assert_eq!(notification.body(), "クリップボードにテキストがありません");
+    }
+
+    /// 更新エラーは `UPDATE` タイトルと `Display` 本文になること
+    #[test]
+    fn update_error_maps_to_update_notification() {
+        let notification = UserNotification::from(UpdateError::IntegrityFailed);
+        assert_eq!(notification.title(), titles::UPDATE);
+        assert!(notification.body().contains("SHA-256"));
     }
 
     /// 設定保存失敗通知が固定の案内文を返すこと

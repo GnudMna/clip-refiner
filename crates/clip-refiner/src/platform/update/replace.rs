@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use super::error::UpdateError;
+
 use crate::consts::{APP_NAME, PORTABLE_DATA_DIR_NAME};
 
 use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
@@ -39,31 +41,33 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// * `cleanup_dir` - 終了後に削除する作業ディレクトリ (任意)
 ///
 /// # Returns
-/// * `Result<(), String>` - 成功時 `Ok(())`
+/// * `Result<(), UpdateError>` - 成功時 `Ok(())`
 pub(crate) fn run_portable_replace(
     wait_pid: u32,
     install_dir: &Path,
     cleanup_dir: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<(), UpdateError> {
     let source_dir = current_exe_dir()?;
     validate_replace_dirs(&source_dir, install_dir)?;
 
-    if let Err(message) = wait_for_pid_exit(wait_pid, WAIT_PID_TIMEOUT) {
-        show_replace_error(&message);
-        return Err(message);
+    if let Err(err) = wait_for_pid_exit(wait_pid, WAIT_PID_TIMEOUT) {
+        show_replace_error(&err);
+        return Err(err);
     }
 
-    if let Err(message) = copy_portable_payload(&source_dir, install_dir) {
-        show_replace_error(&message);
-        return Err(message);
+    if let Err(err) = copy_portable_payload(&source_dir, install_dir) {
+        show_replace_error(&err);
+        return Err(err);
     }
 
     let new_exe = install_dir.join(portable_exe_name());
     if let Err(err) = Command::new(&new_exe).current_dir(install_dir).spawn() {
-        let message = format!("更新後の起動に失敗しました: {err}");
-        crate::log_warn!("{message}");
-        show_replace_error(&message);
-        return Err(message);
+        let update_err = UpdateError::RestartFailed {
+            detail: err.to_string(),
+        };
+        crate::log_warn!("{update_err}");
+        show_replace_error(&update_err);
+        return Err(update_err);
     }
 
     if let Some(dir) = cleanup_dir {
@@ -81,16 +85,14 @@ pub(crate) fn run_portable_replace(
 /// * `cleanup_dir` - ヘルパー終了後に削除する作業ディレクトリ
 ///
 /// # Returns
-/// * `Result<(), String>` - 起動成功時 `Ok(())`
+/// * `Result<(), UpdateError>` - 起動成功時 `Ok(())`
 pub(crate) fn launch_portable_replace_helper(
     source_dir: &Path,
     install_dir: &Path,
     cleanup_dir: &Path,
-) -> Result<(), String> {
+) -> Result<(), UpdateError> {
     validate_replace_dirs(source_dir, install_dir)?;
-    let helper_exe = find_portable_exe(source_dir).ok_or_else(|| {
-        "展開先に ClipRefiner.exe が見つかりません。手動で差し替えてください".to_string()
-    })?;
+    let helper_exe = find_portable_exe(source_dir).ok_or(UpdateError::HelperExeMissing)?;
 
     let wait_pid = std::process::id().to_string();
     let install_dir_str = path_to_string(install_dir)?;
@@ -114,10 +116,7 @@ pub(crate) fn launch_portable_replace_helper(
         Ok(_) => Ok(()),
         Err(err) => {
             crate::log_warn!("ポータブル差し替えヘルパーの起動に失敗: {err}");
-            Err(
-                "差し替えヘルパーの起動に失敗しました。展開先を手動で差し替えてください"
-                    .to_string(),
-            )
+            Err(UpdateError::HelperLaunch)
         }
     }
 }
@@ -125,8 +124,8 @@ pub(crate) fn launch_portable_replace_helper(
 /// 現在の実行ファイルがあるディレクトリを返す
 ///
 /// # Returns
-/// * `Result<PathBuf, String>` - 実行ディレクトリ
-pub(crate) fn current_install_dir() -> Result<PathBuf, String> {
+/// * `Result<PathBuf, UpdateError>` - 実行ディレクトリ
+pub(crate) fn current_install_dir() -> Result<PathBuf, UpdateError> {
     current_exe_dir()
 }
 
@@ -139,25 +138,25 @@ pub(crate) fn current_install_dir() -> Result<PathBuf, String> {
 /// * `dest_dir` - 差し替え先
 ///
 /// # Returns
-/// * `Result<(), String>` - 成功時 `Ok(())`
-pub(crate) fn copy_portable_payload(source_dir: &Path, dest_dir: &Path) -> Result<(), String> {
+/// * `Result<(), UpdateError>` - 成功時 `Ok(())`
+pub(crate) fn copy_portable_payload(source_dir: &Path, dest_dir: &Path) -> Result<(), UpdateError> {
     if !source_dir.is_dir() {
-        return Err("展開元フォルダが見つかりません".to_string());
+        return Err(UpdateError::SourceMissing);
     }
     fs::create_dir_all(dest_dir).map_err(|err| {
         crate::log_warn!("差し替え先ディレクトリの作成に失敗: {err}");
-        "差し替え先フォルダの準備に失敗しました".to_string()
+        UpdateError::DestPrepare
     })?;
 
     let entries = fs::read_dir(source_dir).map_err(|err| {
         crate::log_warn!("展開元の列挙に失敗: {err}");
-        "展開元フォルダを読めませんでした".to_string()
+        UpdateError::SourceRead
     })?;
 
     for entry in entries {
         let entry = entry.map_err(|err| {
             crate::log_warn!("展開元エントリの取得に失敗: {err}");
-            "展開元フォルダを読めませんでした".to_string()
+            UpdateError::SourceRead
         })?;
         let name = entry.file_name();
         if name
@@ -175,7 +174,7 @@ pub(crate) fn copy_portable_payload(source_dir: &Path, dest_dir: &Path) -> Resul
             if let Some(parent) = to.parent() {
                 fs::create_dir_all(parent).map_err(|err| {
                     crate::log_warn!("差し替え先親ディレクトリの作成に失敗: {err}");
-                    "ファイルの差し替えに失敗しました".to_string()
+                    UpdateError::FileReplace
                 })?;
             }
             fs::copy(&from, &to).map_err(|err| {
@@ -184,10 +183,9 @@ pub(crate) fn copy_portable_payload(source_dir: &Path, dest_dir: &Path) -> Resul
                     from.display(),
                     to.display()
                 );
-                format!(
-                    "ファイルの差し替えに失敗しました ({})",
-                    name.to_string_lossy()
-                )
+                UpdateError::FileCopy {
+                    name: name.to_string_lossy().into_owned(),
+                }
             })?;
         }
     }
@@ -204,14 +202,14 @@ fn portable_exe_name() -> String {
 }
 
 /// 自身の実行ディレクトリを返す
-fn current_exe_dir() -> Result<PathBuf, String> {
+fn current_exe_dir() -> Result<PathBuf, UpdateError> {
     let exe = std::env::current_exe().map_err(|err| {
         crate::log_warn!("実行ファイルパスの取得に失敗: {err}");
-        "実行ファイルの場所を特定できませんでした".to_string()
+        UpdateError::ExePath
     })?;
     exe.parent()
         .map(Path::to_path_buf)
-        .ok_or_else(|| "実行ディレクトリを特定できませんでした".to_string())
+        .ok_or(UpdateError::ExeDir)
 }
 
 /// 展開ルート直下の `ClipRefiner.exe` を探す
@@ -238,24 +236,24 @@ fn find_portable_exe(source_dir: &Path) -> Option<PathBuf> {
 }
 
 /// 差し替え元と先が安全か検証する
-fn validate_replace_dirs(source_dir: &Path, install_dir: &Path) -> Result<(), String> {
+fn validate_replace_dirs(source_dir: &Path, install_dir: &Path) -> Result<(), UpdateError> {
     let source = fs::canonicalize(source_dir).unwrap_or_else(|_| source_dir.to_path_buf());
     let install = fs::canonicalize(install_dir).unwrap_or_else(|_| install_dir.to_path_buf());
     if source == install {
-        return Err("展開先と実行フォルダが同じため差し替えできません".to_string());
+        return Err(UpdateError::SameReplaceDirs);
     }
     Ok(())
 }
 
 /// パスをコマンドライン引数用の文字列にする
-fn path_to_string(path: &Path) -> Result<String, String> {
+fn path_to_string(path: &Path) -> Result<String, UpdateError> {
     path.to_str()
         .map(str::to_string)
-        .ok_or_else(|| "パスに不正な文字が含まれています".to_string())
+        .ok_or(UpdateError::PathInvalid)
 }
 
 /// 指定 PID の終了を待つ
-fn wait_for_pid_exit(pid: u32, timeout: Duration) -> Result<(), String> {
+fn wait_for_pid_exit(pid: u32, timeout: Duration) -> Result<(), UpdateError> {
     let Ok(handle) = (unsafe { OpenProcess(PROCESS_SYNCHRONIZE, false, pid) }) else {
         return Ok(());
     };
@@ -267,28 +265,28 @@ fn wait_for_pid_exit(pid: u32, timeout: Duration) -> Result<(), String> {
     if wait == WAIT_OBJECT_0 {
         Ok(())
     } else if wait == WAIT_TIMEOUT {
-        Err("旧プロセスの終了待ちがタイムアウトしました。手動で差し替えてください".to_string())
+        Err(UpdateError::WaitPidTimeout)
     } else {
-        Err("旧プロセスの終了待ちに失敗しました。手動で差し替えてください".to_string())
+        Err(UpdateError::WaitPidFailed)
     }
 }
 
 /// ディレクトリを再帰コピーする
-fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
+fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), UpdateError> {
     fs::create_dir_all(to).map_err(|err| {
         crate::log_warn!("ディレクトリ作成失敗: {}: {err}", to.display());
-        "フォルダの差し替えに失敗しました".to_string()
+        UpdateError::DirReplace
     })?;
 
     let entries = fs::read_dir(from).map_err(|err| {
         crate::log_warn!("ディレクトリ列挙失敗: {}: {err}", from.display());
-        "フォルダの差し替えに失敗しました".to_string()
+        UpdateError::DirReplace
     })?;
 
     for entry in entries {
         let entry = entry.map_err(|err| {
             crate::log_warn!("ディレクトリエントリ取得失敗: {err}");
-            "フォルダの差し替えに失敗しました".to_string()
+            UpdateError::DirReplace
         })?;
         let from_path = entry.path();
         let to_path = to.join(entry.file_name());
@@ -301,7 +299,7 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
                     from_path.display(),
                     to_path.display()
                 );
-                "ファイルの差し替えに失敗しました".to_string()
+                UpdateError::FileReplace
             })?;
         }
     }
@@ -324,11 +322,11 @@ fn schedule_dir_delete(dir: &Path) {
 }
 
 /// 差し替え失敗をユーザーへ通知する
-fn show_replace_error(message: &str) {
+fn show_replace_error(err: &UpdateError) {
     use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
 
     let title = wide_null(&format!("{APP_NAME} の更新"));
-    let body = wide_null(message);
+    let body = wide_null(&err.to_string());
     unsafe {
         let _ = MessageBoxW(
             None,

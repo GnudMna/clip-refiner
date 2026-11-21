@@ -1,19 +1,17 @@
 use std::sync::Mutex;
 
-use crate::tray::menu::{HistoryMenu, TrayMenu};
-
 use crate::security::format_public_snippet;
+use crate::tray::menu::{
+    DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, HistoryMenu, TrayMenu, rebuild_toggle_records_submenu,
+};
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;
-use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
-
-/// 履歴メニュー表示用スニペットの最大文字数
-const HISTORY_MENU_SNIPPET_MAX_CHARS: usize = 30;
+use tray_icon::menu::{CheckMenuItem, IsMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 /// 履歴メニュー表示用にテキストを短縮する
 pub(crate) fn format_history_menu_label(text: &str) -> String {
-    format_public_snippet(text, HISTORY_MENU_SNIPPET_MAX_CHARS)
+    format_public_snippet(text, DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS)
 }
 
 // ======================================================================
@@ -35,9 +33,9 @@ impl TrayMenu {
 
         // 初期の履歴メニュー構築
         main_submenu.append_items(&[
-            &enabled_item as &dyn tray_icon::menu::IsMenuItem,
-            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-            &clear_item as &dyn tray_icon::menu::IsMenuItem,
+            &enabled_item as &dyn IsMenuItem,
+            &PredefinedMenuItem::separator() as &dyn IsMenuItem,
+            &clear_item as &dyn IsMenuItem,
         ])?;
 
         Ok(HistoryMenu {
@@ -62,44 +60,19 @@ impl TrayMenu {
     /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
         let history_len = state.clipboard_session().history_len();
+        let entry_labels = (0..history_len).filter_map(|index| {
+            let text = state.clipboard_session().get_history_entry(index)?;
+            Some((index, format_history_menu_label(&text)))
+        });
+
         let mut records = self.history.records.lock_ignore_poison();
-        records.clear();
-
-        // 既存の履歴アイテムをクリア(有効化スイッチと区切り線以外)
-        for _ in 0..self.history.main_submenu.items().len() {
-            self.history.main_submenu.remove_at(0);
-        }
-
-        // 基本部分を再構築
-        self.history.main_submenu.append_items(&[
-            &self.history.enabled_item as &dyn tray_icon::menu::IsMenuItem,
-            &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-        ])?;
-
-        // 履歴が空でない場合は、履歴アイテムを追加
-        if history_len > 0 {
-            for index in 0..history_len {
-                let Some(text) = state.clipboard_session().get_history_entry(index) else {
-                    continue;
-                };
-                let label = format_history_menu_label(&text);
-                let item = MenuItem::new(label, true, None);
-                records.push((item.id().clone(), index));
-                self.history
-                    .main_submenu
-                    .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;
-            }
-            self.history.main_submenu.append_items(&[
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem
-            ])?;
-        }
-
-        // 「履歴をクリア」項目は常に最後に配置
-        self.history
-            .main_submenu
-            .append_items(&[&self.history.clear_item as &dyn tray_icon::menu::IsMenuItem])?;
-
-        Ok(())
+        rebuild_toggle_records_submenu(
+            &self.history.main_submenu,
+            &mut records,
+            &self.history.enabled_item,
+            entry_labels,
+            &[&self.history.clear_item as &dyn IsMenuItem],
+        )
     }
 }
 

@@ -77,7 +77,7 @@ mod tests {
         assert!(js.contains("更新を確認"));
     }
 
-    /// 設定 UI に表示マスキングがクリップボード本体を書き換えない旨が含まれるようにすること
+    /// 設定 UI に表示マスキングと同一ユーザー信頼境界の注意が含まれるようにすること
     #[test]
     fn assembled_settings_js_explains_display_only_masking() {
         let js = assemble_settings_js();
@@ -89,6 +89,12 @@ mod tests {
         ));
         assert!(js.contains(
             "プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる"
+        ));
+        assert!(js.contains(
+            "保護境界は現在の Windows ユーザー単位。同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうる"
+        ));
+        assert!(js.contains(
+            "鍵は現在ユーザーの DPAPI で保護する。同一ユーザーの他プロセスからは設定・鍵に到達しうる"
         ));
     }
 
@@ -106,6 +112,8 @@ mod tests {
         assert!(js.contains("shouldCloseSettingsOnEscape"));
         assert!(js.contains("applyPipelineAction"));
         assert!(js.contains("resolveContentClickAction"));
+        assert!(js.contains("nextTabIndexForKey"));
+        assert!(js.contains("tabSelectionState"));
     }
 
     /// OS の閉じる操作向けに `window.closeWindow` が公開されるようにすること
@@ -127,6 +135,8 @@ mod tests {
         for marker in [
             r#"id="app""#,
             r#"id="sidebar""#,
+            r#"role="tablist""#,
+            r#"aria-orientation="vertical""#,
             r#"id="content""#,
             r#"id="open-config-btn""#,
             r#"id="close-btn""#,

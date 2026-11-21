@@ -222,6 +222,15 @@ body {
     font-weight: 600;
 }
 
+.nav-btn:focus {
+    outline: none;
+}
+
+.nav-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
 #content {
     flex: 1;
     overflow: auto;
@@ -453,7 +462,6 @@ body {
     letter-spacing: 0.04em;
 }
 
-.regex-preview-sample,
 .regex-preview-result {
     display: block;
     padding: 10px 12px;
@@ -465,6 +473,10 @@ body {
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+#regex-preview-sample {
+    min-height: 64px;
 }
 
 .regex-preview-result--error {

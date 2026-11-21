@@ -1,9 +1,10 @@
 use std::path::Path;
 
+use super::error::UpdateError;
 use super::types::{
     AvailableUpdate, UpdateCheckOutcome, UpdatePackageKind, VersionApiAsset, VersionApiResponse,
 };
-use super::verify::parse_asset_digest;
+use super::verify::{parse_asset_digest, validate_declared_download_size};
 use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, current_app_version};
 
 use semver::Version;
@@ -43,15 +44,16 @@ pub(crate) fn check_for_update_at(
     arch: &str,
 ) -> UpdateCheckOutcome {
     let Ok(current) = parse_semver(current_raw) else {
-        return UpdateCheckOutcome::Error {
-            message: format!("現在のバージョンを解釈できません: {current_raw}"),
-        };
+        return UpdateError::CurrentVersionInvalid {
+            version: current_raw.to_string(),
+        }
+        .into();
     };
 
     let url = version_api_url(base_url);
     let response = match fetch_version_api(&url) {
         Ok(response) => response,
-        Err(message) => return UpdateCheckOutcome::Error { message },
+        Err(err) => return err.into(),
     };
 
     evaluate_update(current_raw, &current, &response, kind, arch)
@@ -77,9 +79,10 @@ pub(crate) fn evaluate_update(
 ) -> UpdateCheckOutcome {
     let latest_raw = strip_version_prefix(&response.tag);
     let Ok(latest) = parse_semver(latest_raw) else {
-        return UpdateCheckOutcome::Error {
-            message: format!("最新バージョンを解釈できません: {}", response.tag),
-        };
+        return UpdateError::LatestVersionInvalid {
+            tag: response.tag.clone(),
+        }
+        .into();
     };
 
     if latest <= *current {
@@ -90,40 +93,39 @@ pub(crate) fn evaluate_update(
     }
 
     let Some(asset) = select_asset(&response.assets, kind, arch) else {
-        let kind_label = match kind {
-            UpdatePackageKind::Msi => "MSI",
-            UpdatePackageKind::PortableZip => "ポータブル ZIP",
-        };
+        let kind_label = UpdateError::package_kind_label(kind).to_string();
         let has_kind = response
             .assets
             .iter()
             .any(|asset| asset_matches_kind(asset, kind));
-        let message = if has_kind {
-            format!(
-                "最新リリースにこの CPU ({arch}) 向けの{kind_label}アセットがありません (tag={})",
-                response.tag
-            )
+        let err = if has_kind {
+            UpdateError::AssetArchMissing {
+                arch: arch.to_string(),
+                kind_label,
+                tag: response.tag.clone(),
+            }
         } else {
-            format!(
-                "最新リリースに{kind_label}アセットがありません (tag={})",
-                response.tag
-            )
+            UpdateError::AssetMissing {
+                kind_label,
+                tag: response.tag.clone(),
+            }
         };
-        return UpdateCheckOutcome::Error { message };
+        return err.into();
     };
 
     let Some(raw_digest) = asset.integrity_raw() else {
-        return UpdateCheckOutcome::Error {
-            message: format!(
-                "最新リリースにアセットの完全性情報 (digest) がありません (asset={})",
-                asset.name
-            ),
-        };
+        return UpdateError::DigestMissing {
+            asset: asset.name.clone(),
+        }
+        .into();
     };
     let sha256 = match parse_asset_digest(raw_digest) {
         Ok(digest) => digest,
-        Err(message) => return UpdateCheckOutcome::Error { message },
+        Err(err) => return err.into(),
     };
+    if let Err(err) = validate_declared_download_size(asset.size) {
+        return err.into();
+    }
 
     UpdateCheckOutcome::Available(AvailableUpdate {
         current_version: current_raw.to_string(),
@@ -216,14 +218,12 @@ pub(crate) fn version_api_url(base_url: &str) -> String {
 }
 
 /// version API を取得してデシリアライズする
-fn fetch_version_api(url: &str) -> Result<VersionApiResponse, String> {
+fn fetch_version_api(url: &str) -> Result<VersionApiResponse, UpdateError> {
     let mut response = ureq::get(url).call().map_err(|err| {
         crate::log_warn!("更新確認 HTTP 失敗: {err}");
         match err {
-            ureq::Error::StatusCode(status) => {
-                format!("更新情報の取得に失敗しました (HTTP {status})")
-            }
-            _ => "更新情報の取得に失敗しました。ネットワーク接続を確認してください".to_string(),
+            ureq::Error::StatusCode(status) => UpdateError::CheckHttp { status },
+            _ => UpdateError::CheckNetwork,
         }
     })?;
 
@@ -232,7 +232,7 @@ fn fetch_version_api(url: &str) -> Result<VersionApiResponse, String> {
         .read_json::<VersionApiResponse>()
         .map_err(|err| {
             crate::log_warn!("更新確認 JSON 解釈失敗: {err}");
-            "更新情報の形式が不正です".to_string()
+            UpdateError::InvalidJson
         })
 }
 
@@ -317,6 +317,57 @@ mod tests {
                 assert_eq!(update.asset_name, "clip-refiner-0.13.1-x86_64.msi");
                 assert_eq!(update.size, 42);
                 assert_eq!(update.sha256, "a".repeat(64));
+            }
+            other => panic!("想定外: {other:?}"),
+        }
+    }
+
+    /// 宣言サイズ 0 のアセットは Available にしないこと
+    #[test]
+    fn evaluate_update_errors_when_size_is_zero() {
+        let current = Version::parse("0.13.0").expect("semver");
+        let response = VersionApiResponse {
+            tag: "v0.13.1".to_string(),
+            assets: vec![asset("clip-refiner-0.13.1-x86_64.msi", 0)],
+        };
+
+        let outcome = evaluate_update(
+            "0.13.0",
+            &current,
+            &response,
+            UpdatePackageKind::Msi,
+            "x86_64",
+        );
+        match outcome {
+            UpdateCheckOutcome::Error { message } => {
+                assert!(message.contains("サイズ") || message.contains('0'));
+            }
+            other => panic!("想定外: {other:?}"),
+        }
+    }
+
+    /// 絶対上限を超える宣言サイズは Available にしないこと
+    #[test]
+    fn evaluate_update_errors_when_size_exceeds_absolute_max() {
+        let current = Version::parse("0.13.0").expect("semver");
+        let response = VersionApiResponse {
+            tag: "v0.13.1".to_string(),
+            assets: vec![asset(
+                "clip-refiner-0.13.1-x86_64.msi",
+                super::super::verify::MAX_UPDATE_DOWNLOAD_BYTES + 1,
+            )],
+        };
+
+        let outcome = evaluate_update(
+            "0.13.0",
+            &current,
+            &response,
+            UpdatePackageKind::Msi,
+            "x86_64",
+        );
+        match outcome {
+            UpdateCheckOutcome::Error { message } => {
+                assert!(message.contains("上限"));
             }
             other => panic!("想定外: {other:?}"),
         }

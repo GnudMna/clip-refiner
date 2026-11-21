@@ -118,7 +118,7 @@ mod tests {
     /// イベント監視への切替と同時の周期パッチでは周期をスキップすること
     #[test]
     fn monitor_patch_skips_interval_when_switching_to_event() {
-        let ctx = TrayTestContext::new();
+        let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
         let default_interval = ctx.state().with_config(|c| c.interval_ms);
         let patch = SettingsPatch {
             monitor_mode: Some(MonitorMode::Event),

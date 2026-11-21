@@ -1,22 +1,49 @@
-use serde::{Deserialize, Serialize};
+use std::fmt;
+
+use crate::security::SecretString;
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 // ======================================================================
 // 登録クリップ
 // ======================================================================
 /// クリップボードへコピーするための登録クリップ (テキストまたは画像)
 ///
+/// 本文は `text_ciphertext` として AEAD 暗号文のみを保持し、平文は常駐させない
 /// `registered-clips.dat` に暗号化して保存される
 /// `image_file` が指定されている場合は画像登録として扱う
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RegisteredClip {
     /// 一覧表示用のラベル
     pub label: String,
-    /// クリップボードへコピーする本文 (画像登録時は空)
+    /// 表示用プレビュー (登録時に `format_public_snippet` で生成。平文本文ではない)
     #[serde(default)]
-    pub text: String,
+    pub preview: String,
+    /// 本文の AEAD 暗号文 (`nonce || ciphertext`)。画像登録時は空
+    #[serde(default, with = "text_ciphertext_serde")]
+    pub text_ciphertext: Vec<u8>,
     /// 登録画像ファイル名 (`registered-images` ディレクトリ内の相対パス)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_file: Option<String>,
+}
+
+impl fmt::Debug for RegisteredClip {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RegisteredClip")
+            .field("label", &self.label)
+            .field("preview", &self.preview)
+            .field(
+                "text_ciphertext",
+                &if self.text_ciphertext.is_empty() {
+                    "[]"
+                } else {
+                    "..."
+                },
+            )
+            .field("image_file", &self.image_file)
+            .finish()
+    }
 }
 
 impl RegisteredClip {
@@ -66,13 +93,44 @@ impl RegisteredClip {
 }
 
 // ======================================================================
+// text_ciphertext の base64 シリアライズ
+// ======================================================================
+mod text_ciphertext_serde {
+    use super::*;
+
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if bytes.is_empty() {
+            serializer.serialize_str("")
+        } else {
+            serializer.serialize_str(&STANDARD.encode(bytes))
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let encoded = String::deserialize(deserializer)?;
+        if encoded.is_empty() {
+            return Ok(Vec::new());
+        }
+        STANDARD
+            .decode(encoded.as_bytes())
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+// ======================================================================
 // 登録クリップボード内容
 // ======================================================================
 /// 登録済みクリップボード内容 (コピー用)
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ResolvedClip {
-    /// テキスト
-    Text(String),
+    /// テキスト (破棄時にゼロ化)
+    Text(SecretString),
     /// RGBA 画像
     Image {
         /// 画像幅 (ピクセル)
@@ -82,6 +140,24 @@ pub enum ResolvedClip {
         /// RGBA ピクセル列
         rgba: Vec<u8>,
     },
+}
+
+impl fmt::Debug for ResolvedClip {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Text(_) => f.debug_tuple("Text").field(&"...").finish(),
+            Self::Image {
+                width,
+                height,
+                rgba,
+            } => f
+                .debug_struct("Image")
+                .field("width", width)
+                .field("height", height)
+                .field("rgba_len", &rgba.len())
+                .finish(),
+        }
+    }
 }
 
 // ======================================================================
@@ -105,6 +181,9 @@ pub enum AddRegisteredClipError {
     /// 登録画像の形式または内容が不正
     #[error("登録画像の形式が不正です")]
     ImageInvalid,
+    /// 本文の暗号化に失敗
+    #[error("登録クリップの暗号化に失敗しました")]
+    EncryptFailed,
 }
 
 impl AddRegisteredClipError {
@@ -123,6 +202,7 @@ impl AddRegisteredClipError {
             Self::LimitReached => "登録クリップの件数が上限に達しています",
             Self::ImageTooLarge => "登録画像のサイズが上限を超えています",
             Self::ImageInvalid => "登録画像の形式が不正です",
+            Self::EncryptFailed => "登録クリップの暗号化に失敗しました",
         }
     }
 }

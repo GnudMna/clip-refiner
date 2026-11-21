@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use super::error::UpdateError;
 use super::replace::{current_install_dir, launch_portable_replace_helper};
 use super::types::{AvailableUpdate, UpdateApplyOutcome};
 use super::verify::download_and_verify;
@@ -72,14 +73,13 @@ pub(crate) fn apply_update_at(
     let download_url = asset_download_url(base_url, &update.tag, &update.asset_name);
     let work_dir = match update_work_dir(&update.latest_version) {
         Ok(dir) => dir,
-        Err(message) => return UpdateApplyOutcome::Error { message },
+        Err(err) => return err.into(),
     };
 
     let archive_path = work_dir.join(&update.asset_name);
-    if let Err(message) =
-        download_and_verify(&download_url, &archive_path, update.size, &update.sha256)
+    if let Err(err) = download_and_verify(&download_url, &archive_path, update.size, &update.sha256)
     {
-        return UpdateApplyOutcome::Error { message };
+        return err.into();
     }
 
     if Path::new(&update.asset_name)
@@ -100,9 +100,10 @@ pub(crate) fn apply_update_at(
         return extract_portable_zip(&archive_path, &work_dir, options);
     }
 
-    UpdateApplyOutcome::Error {
-        message: format!("未対応のアセット形式です: {}", update.asset_name),
+    UpdateError::UnsupportedAsset {
+        name: update.asset_name.clone(),
     }
+    .into()
 }
 
 /// アセットダウンロード URL を組み立てる
@@ -122,13 +123,13 @@ pub(crate) fn asset_download_url(base_url: &str, tag: &str, asset_name: &str) ->
 // プライベート関数
 // ======================================================================
 /// 更新作業用ディレクトリを用意する
-fn update_work_dir(version: &str) -> Result<PathBuf, String> {
+fn update_work_dir(version: &str) -> Result<PathBuf, UpdateError> {
     let base = std::env::temp_dir()
         .join("clip-refiner-update")
         .join(version);
     fs::create_dir_all(&base).map_err(|err| {
         crate::log_warn!("更新作業ディレクトリの作成に失敗: {err}");
-        "更新用一時フォルダの作成に失敗しました".to_string()
+        UpdateError::WorkDirCreate
     })?;
     Ok(base)
 }
@@ -136,9 +137,7 @@ fn update_work_dir(version: &str) -> Result<PathBuf, String> {
 /// MSI を `msiexec` で起動する
 fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
     let Some(path_str) = msi_path.to_str() else {
-        return UpdateApplyOutcome::Error {
-            message: "MSI パスに不正な文字が含まれています".to_string(),
-        };
+        return UpdateError::MsiPathInvalid.into();
     };
 
     match std::process::Command::new("msiexec")
@@ -148,9 +147,7 @@ fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
         Ok(_) => UpdateApplyOutcome::MsiStarted,
         Err(err) => {
             crate::log_warn!("msiexec の起動に失敗: {err}");
-            UpdateApplyOutcome::Error {
-                message: "インストーラーの起動に失敗しました".to_string(),
-            }
+            UpdateError::MsiLaunch.into()
         }
     }
 }
@@ -166,19 +163,15 @@ fn extract_portable_zip(
         && let Err(err) = fs::remove_dir_all(&extract_dir)
     {
         crate::log_warn!("旧展開ディレクトリの削除に失敗: {err}");
-        return UpdateApplyOutcome::Error {
-            message: "展開先フォルダの準備に失敗しました".to_string(),
-        };
+        return UpdateError::ExtractDirPrepare.into();
     }
     if let Err(err) = fs::create_dir_all(&extract_dir) {
         crate::log_warn!("展開ディレクトリの作成に失敗: {err}");
-        return UpdateApplyOutcome::Error {
-            message: "展開先フォルダの作成に失敗しました".to_string(),
-        };
+        return UpdateError::ExtractDirCreate.into();
     }
 
-    if let Err(message) = extract_zip_archive(zip_path, &extract_dir) {
-        return UpdateApplyOutcome::Error { message };
+    if let Err(err) = extract_zip_archive(zip_path, &extract_dir) {
+        return err.into();
     }
 
     let open_path = find_portable_root(&extract_dir).unwrap_or_else(|| extract_dir.clone());
@@ -188,13 +181,13 @@ fn extract_portable_zip(
             Ok(install_dir) => {
                 match launch_portable_replace_helper(&open_path, &install_dir, work_dir) {
                     Ok(()) => helper_launched = true,
-                    Err(message) => {
-                        crate::log_warn!("ポータブル差し替えヘルパー起動失敗: {message}");
+                    Err(err) => {
+                        crate::log_warn!("ポータブル差し替えヘルパー起動失敗: {err}");
                     }
                 }
             }
-            Err(message) => {
-                crate::log_warn!("実行フォルダの特定に失敗: {message}");
+            Err(err) => {
+                crate::log_warn!("実行フォルダの特定に失敗: {err}");
             }
         }
     }
@@ -210,20 +203,20 @@ fn extract_portable_zip(
 }
 
 /// ZIP を安全に展開する (Zip Slip 対策付き)
-fn extract_zip_archive(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
+fn extract_zip_archive(zip_path: &Path, dest_dir: &Path) -> Result<(), UpdateError> {
     let file = File::open(zip_path).map_err(|err| {
         crate::log_warn!("ZIP オープン失敗: {err}");
-        "更新 ZIP を開けませんでした".to_string()
+        UpdateError::ZipOpen
     })?;
     let mut archive = ZipArchive::new(file).map_err(|err| {
         crate::log_warn!("ZIP 解釈失敗: {err}");
-        "更新 ZIP の形式が不正です".to_string()
+        UpdateError::ZipInvalid
     })?;
 
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|err| {
             crate::log_warn!("ZIP エントリ取得失敗: {err}");
-            "更新 ZIP の展開に失敗しました".to_string()
+            UpdateError::ZipExtract
         })?;
         let Some(enclosed) = entry.enclosed_name() else {
             crate::log_warn!("不正な ZIP エントリ名をスキップ: {}", entry.name());
@@ -234,7 +227,7 @@ fn extract_zip_archive(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
         if entry.name().ends_with('/') {
             fs::create_dir_all(&out_path).map_err(|err| {
                 crate::log_warn!("ZIP ディレクトリ作成失敗: {err}");
-                "更新 ZIP の展開に失敗しました".to_string()
+                UpdateError::ZipExtract
             })?;
             continue;
         }
@@ -242,17 +235,17 @@ fn extract_zip_archive(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent).map_err(|err| {
                 crate::log_warn!("ZIP 親ディレクトリ作成失敗: {err}");
-                "更新 ZIP の展開に失敗しました".to_string()
+                UpdateError::ZipExtract
             })?;
         }
 
         let mut out_file = File::create(&out_path).map_err(|err| {
             crate::log_warn!("ZIP 出力ファイル作成失敗: {err}");
-            "更新 ZIP の展開に失敗しました".to_string()
+            UpdateError::ZipExtract
         })?;
         io::copy(&mut entry, &mut out_file).map_err(|err| {
             crate::log_warn!("ZIP 展開書き込み失敗: {err}");
-            "更新 ZIP の展開に失敗しました".to_string()
+            UpdateError::ZipExtract
         })?;
     }
 

@@ -329,9 +329,9 @@ mod tests {
     #[test]
     fn parse_ipc_regex_preview() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"regex-preview","requestId":3,"settings":{"pattern":"[0-9]+","replacement":"X","caseInsensitive":false,"multiline":true}}"#,
+            r#"{"type":"regex-preview","requestId":3,"settings":{"pattern":"[0-9]+","replacement":"X","caseInsensitive":false,"multiline":true},"sample":"abc 42"}"#,
         );
-        let Some(SettingsIpcAction::RegexPreview(request_id, settings)) = action else {
+        let Some(SettingsIpcAction::RegexPreview(request_id, settings, sample)) = action else {
             panic!("RegexPreview アクションとして解釈されること");
         };
         assert_eq!(request_id, 3);
@@ -339,6 +339,19 @@ mod tests {
         assert_eq!(settings.replacement, "X");
         assert!(!settings.case_insensitive);
         assert!(settings.multiline);
+        assert_eq!(sample, "abc 42");
+    }
+
+    /// `regex-preview` で sample 省略時は空文字になること
+    #[test]
+    fn parse_ipc_regex_preview_without_sample() {
+        let action = parse_settings_ipc_message(
+            r#"{"type":"regex-preview","requestId":4,"settings":{"pattern":"a","replacement":"","caseInsensitive":false,"multiline":false}}"#,
+        );
+        let Some(SettingsIpcAction::RegexPreview(_, _, sample)) = action else {
+            panic!("RegexPreview アクションとして解釈されること");
+        };
+        assert!(sample.is_empty());
     }
 
     /// `check-update` / `apply-update` メッセージを解釈できるようにすること

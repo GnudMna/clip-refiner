@@ -27,8 +27,9 @@ pub use persistence::{
     disk_config_modified_time,
 };
 pub use types::{
-    AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
-    MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
+    AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
+    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
+    format_hotkey_fixes_message,
 };
 pub use unknown_keys::format_unknown_config_keys_message;
 
@@ -293,66 +294,70 @@ history_enabled = true
         assert!(hotkeys.favorite_mode_slots[1].is_empty());
     }
 
-    /// `add_registered_clip` が登録・検証・上限チェックを行うとすること
+    /// `add_registered_clip` が登録・検証・上限チェックを行い、平文を常駐させないこと
     #[test]
     fn test_add_registered_clip() {
         use super::AddRegisteredClipError;
-        use super::types::RegisteredClip;
 
-        let mut config = AppConfig::default();
-        assert_eq!(config.add_registered_clip("  hello  "), Ok(()));
-        assert_eq!(config.clips.len(), 1);
-        assert_eq!(config.clips[0].text, "  hello  ");
-        assert!(!config.clips[0].label.is_empty());
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            assert_eq!(config.add_registered_clip("  hello  "), Ok(()));
+            assert_eq!(config.clips.len(), 1);
+            assert!(!config.clips[0].text_ciphertext.is_empty());
+            assert!(!config.clips[0].label.is_empty());
+            assert!(!config.clips[0].preview.is_empty());
+            let resolved = config.resolve_registered_clip(0).expect("resolve");
+            match resolved {
+                super::ResolvedClip::Text(text) => assert_eq!(text.as_str(), "  hello  "),
+                super::ResolvedClip::Image { .. } => panic!("text expected"),
+            }
+            // 非機密の短い本文は preview に残るが、ストアには text_ciphertext のみ
+            assert_eq!(config.clips[0].preview, "  hello  ");
+            let json = config.clips_to_json_list();
+            assert!(json.contains("\"preview\""));
+            assert!(!json.contains("text_ciphertext"));
 
-        assert_eq!(
-            config.add_registered_clip("   ".to_string()),
-            Err(AddRegisteredClipError::Empty)
-        );
+            // 機密らしい本文は preview がマスクされ、JSON に生本文が出ない
+            config.clips.clear();
+            let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+            assert_eq!(config.add_registered_clip(jwt), Ok(()));
+            let masked_json = config.clips_to_json_list();
+            assert!(!masked_json.contains(jwt));
+            assert!(masked_json.contains(crate::consts::SENSITIVE_SNIPPET_LABEL));
 
-        config.clips = vec![RegisteredClip {
-            label: "x".into(),
-            text: "y".into(),
-            image_file: None,
-        }];
-        for i in 0..consts::MAX_REGISTERED_CLIPS {
-            config.clips.push(RegisteredClip {
-                label: format!("l{i}"),
-                text: format!("t{i}"),
-                image_file: None,
-            });
-        }
-        assert_eq!(
-            config.add_registered_clip("overflow"),
-            Err(AddRegisteredClipError::LimitReached)
-        );
+            assert_eq!(
+                config.add_registered_clip("   ".to_string()),
+                Err(AddRegisteredClipError::Empty)
+            );
+
+            config.clips.clear();
+            for i in 0..consts::MAX_REGISTERED_CLIPS {
+                assert_eq!(config.add_registered_clip(format!("t{i}")), Ok(()));
+            }
+            assert_eq!(
+                config.add_registered_clip("overflow"),
+                Err(AddRegisteredClipError::LimitReached)
+            );
+        });
     }
 
     /// `remove_registered_clip` が指定項目を削除すること
     #[test]
     fn test_remove_registered_clip() {
-        use super::types::RegisteredClip;
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("a").expect("add a");
+            config.add_registered_clip("b").expect("add b");
 
-        let mut config = AppConfig {
-            clips: vec![
-                RegisteredClip {
-                    label: "first".into(),
-                    text: "a".into(),
-                    image_file: None,
-                },
-                RegisteredClip {
-                    label: "second".into(),
-                    text: "b".into(),
-                    image_file: None,
-                },
-            ],
-            ..Default::default()
-        };
-
-        assert!(config.remove_registered_clip(0));
-        assert_eq!(config.clips.len(), 1);
-        assert_eq!(config.clips[0].text, "b");
-        assert!(!config.remove_registered_clip(5));
+            assert!(config.remove_registered_clip(0));
+            assert_eq!(config.clips.len(), 1);
+            let resolved = config.resolve_registered_clip(0).expect("resolve");
+            match resolved {
+                super::ResolvedClip::Text(text) => assert_eq!(text.as_str(), "b"),
+                super::ResolvedClip::Image { .. } => panic!("text expected"),
+            }
+            assert!(!config.remove_registered_clip(5));
+        });
     }
 
     /// お気に入り変換モードの登録・解除と正規化が機能すること

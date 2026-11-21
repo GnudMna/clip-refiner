@@ -254,6 +254,9 @@ export function bindRegexEvents() {
         el?.addEventListener('input', scheduleRegexFeedback);
         el?.addEventListener('blur', applyRegex);
     });
+    document
+        .getElementById('regex-preview-sample')
+        ?.addEventListener('input', scheduleRegexFeedback);
     ['regex-ci', 'regex-ml'].forEach((id) => {
         document.getElementById(id)?.addEventListener('change', () => {
             scheduleRegexFeedback();

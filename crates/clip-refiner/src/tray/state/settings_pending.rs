@@ -19,6 +19,8 @@ pub(crate) struct RegexPreviewRequest {
     pub request_id: u64,
     /// プレビュー対象の正規表現設定
     pub settings: RegexSettings,
+    /// プレビューに使うサンプル文字列 (永続化しない)
+    pub sample: String,
 }
 
 // ======================================================================

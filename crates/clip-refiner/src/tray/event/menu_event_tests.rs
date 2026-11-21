@@ -65,7 +65,7 @@ fn update_refine_updates_config_and_sends_command() {
 /// `update_monitor_mode` が設定と監視周期メニューを更新すること
 #[test]
 fn update_monitor_mode_switches_to_event_and_disables_interval() {
-    let ctx = TrayTestContext::new();
+    let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
 
     update_monitor_mode(ctx.state(), ctx.menu(), MonitorMode::Event);
 
@@ -286,7 +286,7 @@ fn handle_menu_event_notification_clipboard_content_toggle() {
 /// 監視周期選択で `interval_ms` が更新されるようにすること
 #[test]
 fn handle_menu_event_interval_change() {
-    let ctx = TrayTestContext::new();
+    let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
     let (item, _) = ctx
         .menu()
         .interval
@@ -313,7 +313,10 @@ fn handle_menu_event_interval_change() {
 /// カスタム周期項目は設定ウィンドウを開き、周期値は変えないこと
 #[test]
 fn handle_menu_event_custom_interval_opens_settings() {
-    let ctx = TrayTestContext::with_config(|c| c.interval_ms = 750);
+    let ctx = TrayTestContext::with_config(|c| {
+        c.monitor_mode = MonitorMode::Polling;
+        c.interval_ms = 750;
+    });
     assert!(ctx.menu().interval.custom_item.is_checked());
     let mut control_flow = ControlFlow::Wait;
 
@@ -333,7 +336,7 @@ fn handle_menu_event_custom_interval_opens_settings() {
 /// 監視方式メニューで Event モードへ切り替わようにすること
 #[test]
 fn handle_menu_event_monitor_mode_change() {
-    let ctx = TrayTestContext::new();
+    let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
     let (item, _) = ctx
         .menu()
         .monitor

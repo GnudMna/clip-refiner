@@ -25,6 +25,17 @@ export function readRegexFromDom() {
 }
 
 /**
+ * 正規表現プレビュー用サンプル文字列を DOM から読み取る
+ *
+ * @returns {string}
+ */
+export function readRegexSampleFromDom() {
+    return (
+        document.getElementById('regex-preview-sample')?.value ?? ctx.state.regexPreviewSample ?? ''
+    );
+}
+
+/**
  * 正規表現設定を検証する
  *
  * @param {import('./regex_preview').RegexSettings} settings
@@ -42,13 +53,15 @@ export function validateRegexSettings(settings) {
  * Rust 側に正規表現プレビューをリクエストする
  *
  * @param {import('./regex_preview').RegexSettings} settings
+ * @param {string} sample
  */
-export function requestRegexPreview(settings) {
+export function requestRegexPreview(settings, sample) {
     const requestId = ++ctx.regexPreviewRequestId;
     ctx.latestRegexPreviewId = requestId;
     ctx.pendingRegexPreviewRequest = {
         requestId,
         settings: RegexPreview.copyRegexSettings(settings),
+        sample,
     };
     postIpcEnvelope({
         type: 'regex-preview',
@@ -59,6 +72,7 @@ export function requestRegexPreview(settings) {
             caseInsensitive: settings.caseInsensitive,
             multiline: settings.multiline,
         },
+        sample,
     });
 
     const previewEl = document.getElementById('regex-preview-result');
@@ -86,6 +100,7 @@ export function handleRegexPreview(payload) {
         latestRequestId: ctx.latestRegexPreviewId,
         pendingRequest: ctx.pendingRegexPreviewRequest,
         domSettings: readRegexFromDom(),
+        domSample: readRegexSampleFromDom(),
     });
 
     if (result.action === 'ignore') {
@@ -111,7 +126,7 @@ export function handleRegexPreview(payload) {
 
 /** DOM の正規表現設定でプレビューを即時更新する */
 export function updateRegexFeedback() {
-    requestRegexPreview(readRegexFromDom());
+    requestRegexPreview(readRegexFromDom(), readRegexSampleFromDom());
 }
 
 /** 正規表現プレビュー更新をデバウンスする */

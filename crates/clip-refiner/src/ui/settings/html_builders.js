@@ -79,14 +79,19 @@ export function tabMeta(tabId) {
  */
 export function panelWrap(tabId, bodyHtml) {
     const tab = tabMeta(tabId);
-    const activeClass = tabId === ctx.activeTab ? ' active' : '';
+    const isActive = tabId === ctx.activeTab;
+    const activeClass = isActive ? ' active' : '';
     return (
         '' +
         '<div class="panel' +
         activeClass +
         '" id="panel-' +
         tabId +
-        '">' +
+        '" role="tabpanel" aria-labelledby="tab-' +
+        tabId +
+        '"' +
+        (isActive ? '' : ' hidden') +
+        '>' +
         '<header class="panel-intro">' +
         '<h2 class="panel-title">' +
         escapeHtml(tab.label) +

@@ -40,6 +40,19 @@ impl SettingsApplyFeedback {
         }
     }
 
+    /// 対象フィールドを付与する
+    ///
+    /// # Arguments
+    /// * `self` - 付与対象のフィードバック
+    /// * `field` - 対象フィールド (`hotkeys` など)
+    ///
+    /// # Returns
+    /// * `Self` - フィールド付きのフィードバック
+    pub(crate) fn with_field(mut self, field: Option<&str>) -> Self {
+        self.field = field.map(str::to_string);
+        self
+    }
+
     /// デスクトップ通知を別経路で既に表示済みであることを記録する
     pub(crate) fn with_desktop_already_notified(mut self) -> Self {
         self.desktop_already_notified = true;

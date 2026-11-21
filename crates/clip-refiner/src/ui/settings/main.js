@@ -7,7 +7,7 @@ import { ctx } from './ctx.js';
 import { bindActivePanelEvents, bindContentDelegation } from './events.js';
 import { closeWindow, flushPendingApply, openConfigFile, showApplyFeedback } from './ipc_apply.js';
 import { PANEL_RENDERERS, ensureSidebar } from './panels.js';
-import { handleRegexPreview, readRegexFromDom } from './regex_feedback.js';
+import { handleRegexPreview, readRegexFromDom, readRegexSampleFromDom } from './regex_feedback.js';
 import {
     invalidateAllPanels,
     invalidatePanel,
@@ -91,6 +91,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
     if (editingTab === 'regex' && !opts.externalSync) {
         snapshot = Object.assign({}, snapshot, {
             regex: readRegexFromDom(),
+            regexPreviewSample: readRegexSampleFromDom(),
         });
     }
 

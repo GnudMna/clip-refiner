@@ -48,6 +48,13 @@
  */
 
 /**
+ * @typedef {Object} RegexPreviewPending
+ * @property {number} requestId - リクエスト ID
+ * @property {RegexSettings} settings - 送信時の正規表現設定
+ * @property {string} sample - 送信時のサンプル文字列
+ */
+
+/**
  * @typedef {Object} RegexPreviewResolveResult
  * @property {'ignore'|'stale'|'apply'} action - 応答の処理方針
  * @property {RegexPreviewCache} [lastRegexPreview] - キャッシュ更新 (action が `apply` のとき)
@@ -163,8 +170,9 @@ var RegexPreview = (function () {
      * @param {Object} options
      * @param {RegexPreviewPayload} options.payload - IPC 応答
      * @param {number} options.latestRequestId - 最新リクエスト ID
-     * @param {{ requestId: number, settings: RegexSettings }|null} options.pendingRequest - 送信中リクエスト
+     * @param {RegexPreviewPending|null} options.pendingRequest - 送信中リクエスト
      * @param {RegexSettings} options.domSettings - 現在の DOM 上の設定
+     * @param {string} options.domSample - 現在の DOM 上のサンプル文字列
      * @returns {RegexPreviewResolveResult}
      */
     function resolveRegexPreviewResponse({
@@ -172,6 +180,7 @@ var RegexPreview = (function () {
         latestRequestId,
         pendingRequest,
         domSettings,
+        domSample,
     }) {
         if (payload.requestId !== latestRequestId) {
             return { action: 'ignore' };
@@ -179,7 +188,10 @@ var RegexPreview = (function () {
         if (!pendingRequest || pendingRequest.requestId !== payload.requestId) {
             return { action: 'ignore' };
         }
-        if (!regexSettingsEqual(domSettings, pendingRequest.settings)) {
+        if (
+            !regexSettingsEqual(domSettings, pendingRequest.settings) ||
+            (domSample ?? '') !== (pendingRequest.sample ?? '')
+        ) {
             return { action: 'stale' };
         }
 

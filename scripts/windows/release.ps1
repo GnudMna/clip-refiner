@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : release.ps1
-# Description : リリース手順を一括実行する (バージョン更新 / CHANGELOG / 品質チェック / Git / MSI)
+# Description : リリース手順を一括実行する (バージョン更新 / CHANGELOG / 品質チェック / Git / MSI / ポータブル ZIP)
 # Usage       : git checkout -b release/v0.12.2
 #               ./release.ps1 -Version 0.12.2
 #               ./release.ps1 -Bump Patch -DryRun
@@ -17,6 +17,7 @@
 #   -DryRun                    変更内容を表示するのみ
 #   -SkipCheck                 check.ps1 (fmt / clippy / deny / eslint / test / e2e) をスキップ
 #   -SkipMsi                   build-msi.ps1 をスキップ
+#   -SkipPortable              build-portable.ps1 をスキップ
 #   -NoCommit                  Git コミットを作成しない
 #   -AllowDirty                未コミット変更があっても続行する
 # ========================================================================
@@ -35,6 +36,7 @@ param(
     [switch]$DryRun,
     [switch]$SkipCheck,
     [switch]$SkipMsi,
+    [switch]$SkipPortable,
     [switch]$NoCommit,
     [switch]$AllowDirty
 )
@@ -103,7 +105,7 @@ Invoke-ScriptMain {
     Write-Host ''
 
     if ($DryRun) {
-        Write-Host 'DryRun のため、品質チェック・Git・MSI は実行しません'
+        Write-Host 'DryRun のため、品質チェック・Git・MSI・ポータブル ZIP は実行しません'
         return
     }
 
@@ -132,6 +134,7 @@ Invoke-ScriptMain {
         Write-Host ''
     }
 
+    $msiBuilt = $false
     if (-not $SkipMsi) {
         Write-Host 'MSI インストーラーを作成します (build-msi.ps1)...'
         Write-Host ''
@@ -140,9 +143,30 @@ Invoke-ScriptMain {
         if ($LASTEXITCODE -ne 0) {
             throw "エラー: build-msi.ps1 が終了コード $LASTEXITCODE で失敗しました"
         }
+        $msiBuilt = $true
         Write-Host ''
     } else {
         Write-Host 'MSI 作成をスキップしました (-SkipMsi)'
+        Write-Host ''
+    }
+
+    if (-not $SkipPortable) {
+        Write-Host 'ポータブル ZIP を作成します (build-portable.ps1)...'
+        Write-Host ''
+        $portableScript = Join-Path $PSScriptRoot 'build-portable.ps1'
+        # MSI 作成済みならリリースビルドと THIRD_PARTY_NOTICES を再利用する
+        # (配列スプラットだと '-SkipBuild' が位置引数になりバインドに失敗する)
+        if ($msiBuilt) {
+            & $portableScript -SkipBuild -SkipNotices
+        } else {
+            & $portableScript
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "エラー: build-portable.ps1 が終了コード $LASTEXITCODE で失敗しました"
+        }
+        Write-Host ''
+    } else {
+        Write-Host 'ポータブル ZIP 作成をスキップしました (-SkipPortable)'
         Write-Host ''
     }
 
@@ -153,4 +177,7 @@ Invoke-ScriptMain {
     Write-Host '  - consts::CONFIG_VERSION を変更した場合は CHANGELOG の設定節を追記'
     Write-Host "  - リモートへ push: git push -u origin $releaseBranch"
     Write-Host "  - Gitea 上で v$newVersion タグを付与する"
+    Write-Host '  - GitHub Release へ MSI / ポータブル ZIP をアップロードする'
+    Write-Host '      MSI:      target\wix\clip-refiner-{version}-{arch}.msi'
+    Write-Host '      Portable: target\portable\clip-refiner-{version}-{host-triple}-portable.zip'
 }

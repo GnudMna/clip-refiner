@@ -249,6 +249,59 @@ fn update_flow_rejects_size_mismatch_on_apply() {
     cleanup_update_work_dir(&version);
 }
 
+/// 応答本文が宣言サイズを超える場合は途中で打ち切り適用しないこと
+#[test]
+fn update_flow_aborts_download_when_body_exceeds_declared_size() {
+    let version = unique_version();
+    let tag = format!("v{version}");
+    let asset_name = portable_asset_name(&version);
+    let (zip_bytes, digest, size) = build_portable_zip_fixture(b"oversized-body");
+    assert!(size > 1);
+
+    let mut oversized = zip_bytes;
+    oversized.extend_from_slice(&[0u8; 4096]);
+
+    let bridge = MockReleaseBridge::start();
+    // API の size / digest は正当な ZIP 側に合わせ、HTTP 本文だけ大きくする
+    bridge.set_version_json(version_api_json(
+        &tag,
+        &asset_name,
+        size,
+        Some(&format!("sha256:{digest}")),
+    ));
+    bridge.set_asset(&tag, &asset_name, oversized);
+
+    let update = match check_update_at(
+        bridge.base_url(),
+        "0.1.0",
+        UpdatePackageKind::PortableZip,
+        std::env::consts::ARCH,
+    ) {
+        UpdateCheckOutcome::Available(update) => update,
+        other => panic!("想定外の確認結果: {other:?}"),
+    };
+    assert_eq!(update.size, size);
+
+    let apply = apply_update_for_test(&update, bridge.base_url());
+    match apply {
+        UpdateApplyOutcome::Error { message } => {
+            assert!(message.contains("サイズ"));
+        }
+        other => panic!("想定外の適用結果: {other:?}"),
+    }
+
+    let archive_path = std::env::temp_dir()
+        .join("clip-refiner-update")
+        .join(&version)
+        .join(&asset_name);
+    assert!(
+        !archive_path.exists(),
+        "打ち切り時はダウンロードファイルを残さない"
+    );
+
+    cleanup_update_work_dir(&version);
+}
+
 /// version API が 404 のとき確認がエラーになること
 #[test]
 fn update_flow_errors_when_version_api_missing() {

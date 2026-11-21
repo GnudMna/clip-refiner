@@ -1,8 +1,7 @@
 use super::types::TrayMenu;
 use crate::tray::dispatch;
 
-use crate::refiner::RefineMode;
-use crate::tray::state::{AppState, LockExt};
+use crate::tray::state::{AppState, LockExt, MenuSnapshot};
 
 use anyhow::Result;
 
@@ -20,68 +19,64 @@ impl TrayMenu {
     /// # Returns
     /// * `Result<()>` - 同期成功時は `Ok(())`、失敗時は `Err`
     pub fn sync_from_config(&self, state: &AppState) -> Result<()> {
-        let config = state.with_config(std::clone::Clone::clone);
-        let active_modes: std::collections::HashSet<RefineMode> =
-            config.effective_pipeline().into_iter().collect();
+        let snap: MenuSnapshot = state.menu_snapshot();
 
         self.refine
             .favorite_records
             .lock_ignore_poison()
             .iter()
             .chain(self.refine.all_mode_items())
-            .for_each(|(item, mode)| item.set_checked(active_modes.contains(mode)));
-        self.refresh_category_labels(config.mode);
+            .for_each(|(item, mode)| item.set_checked(snap.active_modes.contains(mode)));
+        self.refresh_category_labels(snap.mode);
         self.refine
-            .sync_favorite_actions(config.mode, &config.favorite_modes);
-        self.refine.sync_mode_labels(&config.favorite_modes);
+            .sync_favorite_actions(snap.mode, &snap.favorite_modes);
+        self.refine.sync_mode_labels(&snap.favorite_modes);
         if let Err(err) =
             self.refine
-                .rebuild_favorites(&active_modes, &config.favorite_modes, &config.hotkeys)
+                .rebuild_favorites(&snap.active_modes, &snap.favorite_modes, &snap.hotkeys)
         {
             dispatch::log_menu_operation_error("お気に入りメニューの再構築", err);
         }
 
         for (item, monitor_mode) in &self.monitor.items {
-            item.set_checked(*monitor_mode == config.monitor_mode);
+            item.set_checked(*monitor_mode == snap.monitor_mode);
         }
-        super::super::clipboard_monitor::update_monitor_mode_impl(self, config.monitor_mode);
+        super::super::clipboard_monitor::update_monitor_mode_impl(self, snap.monitor_mode);
 
-        self.sync_interval_menu(config.interval_ms);
+        self.sync_interval_menu(snap.interval_ms);
 
-        self.history
-            .enabled_item
-            .set_checked(config.history_enabled);
+        self.history.enabled_item.set_checked(snap.history_enabled);
         self.continuous_record
             .enabled_item
-            .set_checked(config.continuous_record_enabled);
+            .set_checked(snap.continuous_record_enabled);
         self.notification
             .enabled_item
-            .set_checked(config.notification_settings.enabled);
+            .set_checked(snap.notification_settings.enabled);
         self.notification
             .notify_process_item
-            .set_checked(config.notification_settings.notify_process);
+            .set_checked(snap.notification_settings.notify_process);
         self.notification
             .notify_pause_item
-            .set_checked(config.notification_settings.notify_pause);
+            .set_checked(snap.notification_settings.notify_pause);
         self.notification
             .notify_history_restore_item
-            .set_checked(config.notification_settings.notify_history_restore);
+            .set_checked(snap.notification_settings.notify_history_restore);
         self.notification
             .notify_ocr_item
-            .set_checked(config.notification_settings.notify_ocr);
+            .set_checked(snap.notification_settings.notify_ocr);
         self.notification
             .notify_registered_clip_item
-            .set_checked(config.notification_settings.notify_registered_clip);
+            .set_checked(snap.notification_settings.notify_registered_clip);
         self.notification
             .notify_favorites_item
-            .set_checked(config.notification_settings.notify_favorites);
+            .set_checked(snap.notification_settings.notify_favorites);
         self.notification
             .notify_continuous_record_item
-            .set_checked(config.notification_settings.notify_continuous_record);
+            .set_checked(snap.notification_settings.notify_continuous_record);
         self.notification
             .notify_result_item
-            .set_checked(config.notification_settings.notify_result);
-        self.pause_item.set_checked(config.is_paused);
+            .set_checked(snap.notification_settings.notify_result);
+        self.pause_item.set_checked(snap.is_paused);
 
         self.refresh_clips(state)?;
         self.refresh_history(state)?;

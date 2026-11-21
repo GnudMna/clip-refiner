@@ -1,7 +1,7 @@
 use super::icon::create_icon;
 use super::types::TrayMenu;
 
-use crate::tray::state::AppState;
+use crate::tray::state::{AppState, MenuSnapshot};
 
 use anyhow::{Context, Result};
 use tray_icon::{
@@ -24,26 +24,23 @@ impl TrayMenu {
     /// # Returns
     /// * `Result<Self>` - メニューの構築に成功した場合は `Ok(Self)`、失敗した場合は `Err`
     pub fn build(state: &AppState) -> Result<Self> {
-        let config = state.with_config(std::clone::Clone::clone);
+        let snap: MenuSnapshot = state.menu_snapshot();
 
-        let active_modes: std::collections::HashSet<crate::refiner::RefineMode> =
-            config.effective_pipeline().into_iter().collect();
         let refine = Self::build_refine_menu(
-            config.mode,
-            &active_modes,
-            &config.favorite_modes,
-            &config.hotkeys,
+            snap.mode,
+            &snap.active_modes,
+            &snap.favorite_modes,
+            &snap.hotkeys,
         )?;
-        let monitor = Self::build_monitor_menu(config.monitor_mode)?;
-        let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
-        let history = Self::build_history_menu(config.history_enabled)?;
-        let continuous_record =
-            Self::build_continuous_record_menu(config.continuous_record_enabled)?;
+        let monitor = Self::build_monitor_menu(snap.monitor_mode)?;
+        let interval = Self::build_interval_menu(snap.interval_ms, snap.monitor_mode)?;
+        let history = Self::build_history_menu(snap.history_enabled)?;
+        let continuous_record = Self::build_continuous_record_menu(snap.continuous_record_enabled)?;
         let clips = Self::build_clips_menu(state)?;
-        let notification = Self::build_notification_menu(&config.notification_settings)?;
+        let notification = Self::build_notification_menu(&snap.notification_settings)?;
 
         // その他のメニュー
-        let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
+        let pause_item = CheckMenuItem::new("一時停止", true, snap.is_paused, None);
         let check_update_item = MenuItem::new("更新を確認…", true, None);
         let open_settings_window_item = MenuItem::new("設定を開く", true, None);
         let retry_clipboard_worker_item = MenuItem::new("クリップボード監視を再開", true, None);
@@ -103,7 +100,7 @@ impl TrayMenu {
         };
 
         // カテゴリラベルの初期更新
-        this.refresh_category_labels(config.mode);
+        this.refresh_category_labels(snap.mode);
         this.sync_auto_processing_state(state);
 
         Ok(this)

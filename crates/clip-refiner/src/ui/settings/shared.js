@@ -196,6 +196,7 @@ export function showActivePanel() {
     content.querySelectorAll('.panel').forEach((panel) => {
         const isActive = panel.id === 'panel-' + ctx.activeTab;
         panel.classList.toggle('active', isActive);
+        panel.hidden = !isActive;
     });
     content.scrollTop = ctx.tabScrollPositions[ctx.activeTab] || 0;
 }

@@ -4,10 +4,31 @@ test.use({ e2eWindow: 'settings' });
 
 test.describe('設定 WebView', () => {
   test('8 タブのサイドバーが表示される', async ({ page }) => {
-    await expect(page.locator('#sidebar .nav-btn')).toHaveCount(8);
-    await expect(page.locator('#sidebar .nav-btn[data-tab="general"]')).toBeVisible();
-    await expect(page.locator('#sidebar .nav-btn[data-tab="shortcuts"]')).toBeVisible();
+    await expect(page.locator('#sidebar')).toHaveAttribute('role', 'tablist');
+    await expect(page.locator('#sidebar')).toHaveAttribute('aria-orientation', 'vertical');
+    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(8);
+    await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toBeVisible();
+    await expect(page.locator('#sidebar [role="tab"][data-tab="shortcuts"]')).toBeVisible();
+    await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
     await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
+  });
+
+  test('矢印キーで設定タブを移動できる', async ({ page }) => {
+    const general = page.locator('#sidebar [role="tab"][data-tab="general"]');
+    await general.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#sidebar [role="tab"][data-tab="favorites"]')).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(page.locator('#panel-favorites')).toBeVisible();
+    await expect(page.locator('#panel-favorites')).toHaveAttribute('role', 'tabpanel');
+    await page.keyboard.press('End');
+    await expect(page.locator('#sidebar [role="tab"][data-tab="shortcuts"]')).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(page.locator('#panel-shortcuts')).toBeVisible();
   });
 
   test('ヘッダーに config.toml を開くボタンがある', async ({ page }) => {

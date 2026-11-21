@@ -5,6 +5,7 @@ use super::app_event::AppEvent;
 use super::clipboard_session::ClipboardSessionState;
 use super::config_sync::ConfigSyncState;
 use super::lock_ext::RwLockExt;
+use super::menu_snapshot::MenuSnapshot;
 use super::monitor_snapshot::MonitorSnapshot;
 use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
@@ -142,6 +143,28 @@ impl AppState {
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
             regex_settings: config.regex.clone(),
+        })
+    }
+
+    /// トレイメニュー構築・同期向けに設定フィールドを一括取得する
+    ///
+    /// 登録クリップ一覧を含む `AppConfig` 全体の clone を避け、メニュー表示に必要な
+    /// フィールドだけをコピーする
+    ///
+    /// # Returns
+    /// * `MenuSnapshot` - メニュー向け設定スナップショット
+    pub fn menu_snapshot(&self) -> MenuSnapshot {
+        self.with_config(|config| MenuSnapshot {
+            mode: config.mode,
+            active_modes: config.effective_pipeline().into_iter().collect(),
+            favorite_modes: config.favorite_modes.clone(),
+            hotkeys: config.hotkeys.clone(),
+            monitor_mode: config.monitor_mode,
+            interval_ms: config.interval_ms,
+            history_enabled: config.history_enabled,
+            continuous_record_enabled: config.continuous_record_enabled,
+            notification_settings: config.notification_settings.clone(),
+            is_paused: config.is_paused,
         })
     }
 

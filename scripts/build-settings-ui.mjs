@@ -2,7 +2,8 @@
  * 設定ウィンドウ用 JavaScript を esbuild で IIFE バンドルする
  *
  * 出力は Rust の `include_str!` で埋め込む。`cargo build` 単体では Node を要求しないため、
- * 生成物 `settings.bundle.js` はリポジトリにコミットする
+ * 生成物 `settings.bundle.js` はリポジトリにコミットする。
+ * `check.ps1` は再生成後に未ステージ差分が残っていないことを検証する
  */
 import * as esbuild from 'esbuild';
 import { dirname, join } from 'node:path';

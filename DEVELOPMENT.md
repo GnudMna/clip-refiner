@@ -208,11 +208,11 @@ assert_eq!(output, "hello world");
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止・`config.toml` 永続化往復 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
-| `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・API 404 含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
+| `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・応答本文の宣言サイズ超過による途中打ち切り・API 404 含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
 | `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
 | `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
 | `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
-| `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
+| `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
@@ -486,7 +486,7 @@ npm run format             # Prettier 整形適用
 
 設定ファイル: [`package.json`](package.json), [`eslint.config.js`](eslint.config.js), [`.prettierrc.json`](.prettierrc.json)
 
-設定画面の JavaScript は ESM (`import`/`export`) に分割し、`npm run build:settings-ui` (esbuild) で `src/ui/settings/settings.bundle.js` へ IIFE バンドルする。Rust (`tray/settings/window/assets.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。`check.ps1` の JS チェック前にバンドルを再生成する。共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
+設定画面の JavaScript は ESM (`import`/`export`) に分割し、`npm run build:settings-ui` (esbuild) で `src/ui/settings/settings.bundle.js` へ IIFE バンドルする。Rust (`tray/settings/window/assets.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。`check.ps1` の JS チェック前にバンドルを再生成し、再生成後に未ステージ差分が残っていれば失敗する (ソースだけ更新してバンドルを忘れる事故を防ぐ。ステージ済みのみの変更はコミット前として許容)。共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
 
 ### スクリプト構成
 
@@ -496,7 +496,7 @@ npm run format             # Prettier 整形適用
 | :---------------- | :--- |
 | `assert.ps1` | 外部コマンドの終了コード検証 (`Assert-LastExitCode`) |
 | `cargo.ps1` | `cargo fmt` / `clippy` / `test` のラッパー |
-| `npm.ps1` | `npm ci` / 設定 UI バンドル / ESLint / Prettier のラッパー |
+| `npm.ps1` | `npm ci` / 設定 UI バンドル / バンドルのコミットずれ検出 / ESLint / Prettier のラッパー |
 | `cargo-deny-check.ps1` | `cargo deny check` |
 | `wix.ps1` | `cargo-wix` / WiX Toolset v3 の存在確認 |
 | `verify-msi.ps1` | MSI メタデータ・展開内容の検証ロジック |
@@ -513,7 +513,7 @@ npm run format             # Prettier 整形適用
 | `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
 | `build.ps1` / `build-msi.ps1` / `build-portable.ps1` | ビルド・MSI / ポータブル ZIP 作成 |
 | `verify-msi.ps1` | MSI 検証の CLI ラッパー |
-| `release.ps1` | リリース手順一括実行 |
+| `release.ps1` | リリース手順一括実行 (MSI / ポータブル ZIP 含む) |
 | `install-hooks.ps1` / `uninstall-hooks.ps1` | Git フック管理 |
 | `generate-wix-assets.ps1` | WiX ブランド画像生成 |
 
@@ -657,16 +657,17 @@ clip-refiner/
 │   │   │   ├── bootstrap.rs # 常駐 / ワンショット起動分岐
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ・WebView2・アプリ更新)
-│   │   │   │   └── update/  # gh-release-bridge 経由の確認 / digest 検証 / MSI・ポータブル適用
+│   │   │   │   └── update/  # 確認 / digest 検証 / UpdateError / MSI・ポータブル適用
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
 │   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event、`update.rs` 含む)
-│   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期
+│   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期・履歴/連続記録 rebuild
 │   │   │   │   ├── event/       # イベントループ制御・ルーティング
 │   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView
 │   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc/, window/, apply/, snapshot など)
 │   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ・OS リスナ
 │   │   │   │   └── ...
+│   │   │   ├── user_error.rs # UpdateError 等から UserNotification を生成
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
 │   │   ├── tests/           # 統合テスト (`*_flow.rs`)
 │   │   └── build.rs
@@ -689,7 +690,7 @@ clip-refiner/
 └── wix/
 ```
 
-`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード・`digest` (`sha256:<hex>`) 検証・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
+`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード・`digest` (`sha256:<hex>`) 検証・宣言サイズ / 絶対上限でのダウンロード打ち切り・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
 
 セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
 
@@ -709,12 +710,12 @@ clip-refiner/
 | モジュール (`tray/`) | 責務 |
 | :------------------- | :--- |
 | `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う |
-| `menu/` | `TrayMenu` 型定義、`build.rs` (全体組み立て)、`sync.rs` (設定同期)、`icon.rs` |
+| `menu/` | `TrayMenu` 型定義、`build.rs` (全体組み立て)、`sync.rs` (設定同期)、`rebuild.rs` (履歴 / 連続記録メニュー再構築の共通化)、`icon.rs` |
 | `event/` | tao イベントループへの委譲 (`loop_event`, `user_event`)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング |
 | `selector/` | クイックセレクター・登録クリップセレクター・OCR オーバーレイの WebView 束 (`SelectorUi`) |
 | `settings/` | 設定ウィンドウ (下表参照) |
 | `worker/` | クリップボード I/O 集約・監視ループ。`clipboard_listener` (OS 通知)、`clipboard_seq` (シーケンストークン)、`monitor_loop` / `handlers` / `handle` |
-| `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、`AppEvent` |
+| `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、メニュー構築用の `MenuSnapshot` (必要フィールドのみ)、`AppEvent` |
 | `hotkey/` | グローバルホットキー登録・イベント変換 |
 | `clipboard_monitor/` | 監視ループの判断・世代管理 |
 | `notify/` | デスクトップ通知本文の組み立て (`NotificationSettings` 連動) |
@@ -752,7 +753,7 @@ clip-refiner/
 | `regex_feedback.js` | 正規表現プレビューの DOM 連携 |
 | `monitor_ui.js` | 監視バナー・加工パイプライン一覧の同期 |
 | `shared_logic.js` | 件数クランプ・パイプライン正規化・通知パッチ組み立て・スナップショット再描画判定 (DOM 非依存 / CJS) |
-| `panels_logic.js` | サイドバー / クリップ行 / パイプライン操作・クリック委譲 (DOM 非依存 / CJS) |
+| `panels_logic.js` | サイドバー (WAI-ARIA `tablist` / 矢印・Home / End) / クリップ行 / パイプライン操作・クリック委譲 (DOM 非依存 / CJS) |
 | `settings_patch.js` | パッチ組み立て (DOM 非依存 / CJS) |
 | `regex_preview.js` | プレビュー表示ロジック (DOM 非依存 / CJS) |
 | `settings.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:settings-ui` で再生成) |
@@ -764,8 +765,8 @@ clip-refiner/
 | `model` | `SettingsWritable` / `SettingsPatch` (マクロ定義による読み書き項目の一元化) |
 | `snapshot` | `SettingsSnapshot`, `SettingsLimits` (初期表示 JSON と UI 上限) |
 | `ipc/` | WebView IPC: `message` (解析) / `queue` (適用待ちマージ) / `dispatch` (イベント送信) |
-| `apply/` | パッチ適用のオーケストレーション (`patch/` でドメイン別、`feedback` でエラー通知) |
-| `regex_preview` | 正規表現プレビュー IPC 応答 (`REGEX_PREVIEW_SAMPLE` を使用) |
+| `apply/` | パッチ適用のオーケストレーション (`patch/` でドメイン別、`feedback` で成功 / エラー通知。ホットキー補正時は割り当て名付きメッセージ) |
+| `regex_preview` | 正規表現プレビュー IPC 応答 (UI から渡したサンプル文字列。未指定時は `REGEX_PREVIEW_SAMPLE`) |
 | `geometry` | 設定ウィンドウのサイズ・位置 (`settings-window.json` の読み書き) |
 | `window/` | WebView の組み立てと表示制御。`assets` (HTML/JS 埋め込み) / `events` (`AppEvent` 処理・更新 UI 通知) |
 
@@ -776,10 +777,13 @@ clip-refiner/
 | モジュール | 責務 |
 | :--------- | :--- |
 | `check` | gh-release-bridge version API の取得と SemVer / アセット選択 (アーキテクチャ不一致はエラー) |
-| `verify` | ダウンロードと `digest` (`sha256:<hex>`) / サイズ検証 |
+| `verify` | ダウンロードと `digest` (`sha256:<hex>`) / サイズ検証。宣言サイズ超過・絶対上限 (512 MiB) で途中打ち切り |
 | `apply` | MSI なら `msiexec`、ポータブル ZIP なら展開後に差し替えヘルパーを起動 |
 | `replace` | `--apply-portable-update` ヘルパー (旧 PID 待機 → 実行フォルダへコピー → 新版起動。`data\` は保持) |
+| `error` | `UpdateError` (`thiserror`)。ユーザー向け文言は `Display` に集約し、Outcome / 通知 / MessageBox へ渡す |
 | `types` | `AvailableUpdate` / UI 応答型など |
+
+確認・適用の失敗は `UpdateError` に集約する。トレイ / 設定 UI 側 (`tray/features/update.rs`) は `Display` 文字列を Outcome へ載せ、デスクトップ通知は `UserNotification` (`user_error.rs`) 経由で送る。
 
 統合テストは `update_flow.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
 
@@ -881,13 +885,15 @@ flowchart TB
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
-| **platform** | `platform/update/` | 更新確認・digest 検証・MSI / ポータブル適用 (通知は結果に応じて呼び出し元が送る) |
+| **platform** | `platform/update/` | 更新確認・digest 検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
+| **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
 | **features** | `tray/features/notification/` | トレイメニュー「通知」の構築・クリック処理 |
-| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / トーストへの結果反映 |
+| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
 
-- エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使う (`NotificationSettings.enabled` を経由しない)
+- エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)
 - 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
+- アプリ更新の失敗・案内は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
 - 起動時は `bootstrap.rs` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
 
 `NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [CONFIG.md の通知節](CONFIG.md#通知-notification_settings) を参照。
@@ -928,7 +934,7 @@ flowchart TB
 
 ### リリーススクリプト (`release.ps1`)
 
-`scripts/windows/release.ps1` で、バージョン更新から MSI 作成までを一括実行できる。
+`scripts/windows/release.ps1` で、バージョン更新から MSI / ポータブル ZIP 作成までを一括実行できる。
 
 ```powershell
 # リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
@@ -940,7 +946,7 @@ git checkout -b release/v0.14.0
 # パッチリリース (0.13.0 -> 0.13.1)。事前に release/v0.13.1 ブランチへ checkout すること
 ./scripts/windows/release.ps1 -Bump Patch
 
-# 変更内容の確認のみ (ファイル・Git・MSI は触らない)
+# 変更内容の確認のみ (ファイル・Git・MSI・ポータブル ZIP は触らない)
 ./scripts/windows/release.ps1 -Version 0.14.0 -DryRun
 ```
 
@@ -954,6 +960,7 @@ git checkout -b release/v0.14.0
 6. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test / e2e)
 7. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
 8. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
+9. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
 
 **主なオプション:**
 
@@ -965,6 +972,7 @@ git checkout -b release/v0.14.0
 | `-DryRun` | 更新予定を表示するのみ |
 | `-SkipCheck` | 品質チェックをスキップ |
 | `-SkipMsi` | MSI 作成をスキップ |
+| `-SkipPortable` | ポータブル ZIP 作成をスキップ |
 | `-NoCommit` | Git コミットをスキップ |
 | `-AllowDirty` | 未コミット変更があっても続行 |
 
@@ -973,17 +981,17 @@ git checkout -b release/v0.14.0
 - `release/v{version}` ブランチ上で実行すること (例: `release/v0.14.0` で `-Version 0.14.0`)
 - リリース前に [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
 - 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
-- MSI 作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3)
+- MSI / ポータブル作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3。ポータブルのみなら `cargo-about` で可)
 
 **手動で残る作業:**
 
 1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
 2. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
 3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](#手動確認が残る範囲) に該当する変更だけ実機確認する (旧手動スモークチェックリストは自動化済み)
-4. `release.ps1` を実行する (または同等の手順でタグ付けと MSI 作成)
+4. `release.ps1` を実行する (または同等の手順でタグ付けと MSI / ポータブル ZIP 作成)
 5. `git push -u origin release/v{version}` でリモートへ反映する
 6. Gitea 上で `v{version}` タグを付与する
-7. GitHub Release へ MSI / ポータブル ZIP をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返すことを確認する。アプリ更新は digest 必須で、ダウンロード後にサイズと SHA-256 を検証する (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
+7. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返すことを確認する。アプリ更新は digest 必須で、ダウンロード中の宣言サイズ / 絶対上限打ち切りと完了後のサイズ・SHA-256 検証を行う (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
 
 ---
 

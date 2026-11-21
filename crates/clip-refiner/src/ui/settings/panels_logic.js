@@ -73,7 +73,20 @@ var SettingsPanelsLogic = (function () {
     }
 
     /**
-     * サイドバーナビ HTML を組み立てる
+     * タブ選択状態に対応する `aria-selected` / `tabindex` を返す
+     *
+     * @param {boolean} isActive
+     * @returns {{ ariaSelected: 'true'|'false', tabIndex: '0'|'-1' }}
+     */
+    function tabSelectionState(isActive) {
+        return {
+            ariaSelected: isActive ? 'true' : 'false',
+            tabIndex: isActive ? '0' : '-1',
+        };
+    }
+
+    /**
+     * サイドバー tablist 内のタブボタン HTML を組み立てる
      *
      * @param {ReadonlyArray<{ id: string, label: string }>} tabs
      * @param {string} activeTab
@@ -83,20 +96,57 @@ var SettingsPanelsLogic = (function () {
     function buildSidebarNavInnerHtml(tabs, activeTab, escapeHtml) {
         return tabs
             .map((tab) => {
-                const active = tab.id === activeTab ? ' active' : '';
+                const isActive = tab.id === activeTab;
+                const active = isActive ? ' active' : '';
+                const selection = tabSelectionState(isActive);
                 return (
-                    '<button type="button" class="nav-btn' +
+                    '<button type="button" role="tab" class="nav-btn' +
                     active +
+                    '" id="tab-' +
+                    tab.id +
                     '" data-tab="' +
                     tab.id +
-                    '"' +
-                    (tab.id === activeTab ? ' aria-current="page"' : '') +
-                    '>' +
+                    '" aria-selected="' +
+                    selection.ariaSelected +
+                    '" aria-controls="panel-' +
+                    tab.id +
+                    '" tabindex="' +
+                    selection.tabIndex +
+                    '">' +
                     escapeHtml(tab.label) +
                     '</button>'
                 );
             })
             .join('');
+    }
+
+    /**
+     * 縦方向 tablist の矢印 / Home / End から次のタブインデックスを計算する
+     *
+     * 左右矢印も上下と同じ移動として扱う (縦リストでも片手操作しやすくするため)
+     *
+     * @param {number} currentIndex
+     * @param {number} tabCount
+     * @param {string} key
+     * @returns {number|null} 移動先インデックス。対象外キーは `null`
+     */
+    function nextTabIndexForKey(currentIndex, tabCount, key) {
+        if (tabCount <= 0 || currentIndex < 0 || currentIndex >= tabCount) {
+            return null;
+        }
+        if (key === 'ArrowDown' || key === 'ArrowRight') {
+            return (currentIndex + 1) % tabCount;
+        }
+        if (key === 'ArrowUp' || key === 'ArrowLeft') {
+            return (currentIndex - 1 + tabCount) % tabCount;
+        }
+        if (key === 'Home') {
+            return 0;
+        }
+        if (key === 'End') {
+            return tabCount - 1;
+        }
+        return null;
     }
 
     /**
@@ -343,7 +393,9 @@ var SettingsPanelsLogic = (function () {
     return {
         applyPipelineAction,
         appendPipelineMode,
+        tabSelectionState,
         buildSidebarNavInnerHtml,
+        nextTabIndexForKey,
         renderClipRow,
         buildFavoriteRowsHtml,
         availableFavoriteModes,

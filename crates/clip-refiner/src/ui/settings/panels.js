@@ -45,20 +45,37 @@ function syncSidebarActiveTab() {
     if (!sidebar) {
         return;
     }
-    sidebar.querySelectorAll('.nav-btn').forEach((button) => {
+    sidebar.querySelectorAll('[role="tab"]').forEach((button) => {
         const isActive = button.dataset.tab === ctx.activeTab;
+        const selection = SettingsPanelsLogic.tabSelectionState(isActive);
         button.classList.toggle('active', isActive);
-        if (isActive) {
-            button.setAttribute('aria-current', 'page');
-        } else {
-            button.removeAttribute('aria-current');
-        }
+        button.setAttribute('aria-selected', selection.ariaSelected);
+        button.tabIndex = Number(selection.tabIndex);
     });
 }
 
-/** サイドバーナビゲーションの内部 HTML を組み立てる */
+/** サイドバー tablist の内部 HTML を組み立てる */
 function buildSidebarNavInnerHtml() {
     return SettingsPanelsLogic.buildSidebarNavInnerHtml(TABS, ctx.activeTab, escapeHtml);
+}
+
+/**
+ * 指定タブへ切り替え、描画後にタブへフォーカスを移す
+ *
+ * @param {string} tabId
+ * @param {{ focus?: boolean }} [options]
+ */
+function activateTab(tabId, options = {}) {
+    const focus = options.focus !== false;
+    if (tabId !== ctx.activeTab) {
+        ctx.activeTab = tabId;
+        render();
+    } else {
+        syncSidebarActiveTab();
+    }
+    if (focus) {
+        document.getElementById('tab-' + tabId)?.focus();
+    }
 }
 
 /**
@@ -80,12 +97,29 @@ export function ensureSidebar() {
     if (!ctx.sidebarInitialized) {
         sidebar.innerHTML = buildSidebarNavInnerHtml();
         sidebar.addEventListener('click', (event) => {
-            const button = event.target.closest('.nav-btn');
-            if (!button || button.dataset.tab === ctx.activeTab) {
+            const button = event.target.closest('[role="tab"]');
+            if (!button || !sidebar.contains(button)) {
                 return;
             }
-            ctx.activeTab = button.dataset.tab;
-            render();
+            activateTab(button.dataset.tab, { focus: true });
+        });
+        sidebar.addEventListener('keydown', (event) => {
+            const button = event.target.closest('[role="tab"]');
+            if (!button || !sidebar.contains(button)) {
+                return;
+            }
+            const tabs = Array.from(sidebar.querySelectorAll('[role="tab"]'));
+            const currentIndex = tabs.indexOf(button);
+            const nextIndex = SettingsPanelsLogic.nextTabIndexForKey(
+                currentIndex,
+                tabs.length,
+                event.key
+            );
+            if (nextIndex === null) {
+                return;
+            }
+            event.preventDefault();
+            activateTab(tabs[nextIndex].dataset.tab, { focus: true });
         });
         ctx.sidebarInitialized = true;
         return;
@@ -274,6 +308,7 @@ function renderHistoryPanel() {
             historyBounds.max +
             '</p></div>' +
             '<p class="hint">トレイ履歴のラベルでは機密らしい内容を表示のみマスクする。復元時はクリップボードへ元の本文を載せる</p>' +
+            '<p class="hint">保護境界は現在の Windows ユーザー単位。同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうる</p>' +
             '<div class="card-actions"><button type="button" class="danger-btn" id="clear-history-btn">履歴をクリア</button></div>'
     );
 
@@ -334,11 +369,11 @@ function renderRegexPanel() {
         card(
             'プレビュー',
             '' +
-                '<div class="regex-preview">' +
-                '<div class="regex-preview-row"><span class="regex-preview-label">サンプル</span>' +
-                '<code class="regex-preview-sample">' +
+                '<div class="field"><label for="regex-preview-sample">サンプル</label>' +
+                '<textarea id="regex-preview-sample" rows="3">' +
                 escapeHtml(ctx.state.regexPreviewSample) +
-                '</code></div>' +
+                '</textarea></div>' +
+                '<div class="regex-preview">' +
                 '<div class="regex-preview-row"><span class="regex-preview-label">結果</span>' +
                 '<code class="regex-preview-result" id="regex-preview-result">—</code></div>' +
                 '</div>' +
@@ -560,7 +595,8 @@ function renderClipsPanel() {
             '<p class="hint">最大 ' +
             maxRegisteredClips() +
             ' 件。画像はクリップボードに画像がある場合を優先</p>' +
-            '<p class="hint">プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる</p>'
+            '<p class="hint">プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる</p>' +
+            '<p class="hint">鍵は現在ユーザーの DPAPI で保護する。同一ユーザーの他プロセスからは設定・鍵に到達しうる</p>'
     );
 
     return panelWrap('clips', body);

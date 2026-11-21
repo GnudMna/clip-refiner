@@ -27,7 +27,7 @@ export const ctx = {
     /** @type {number} */
     latestRegexPreviewId: 0,
     /**
-     * @type {{ requestId: number, settings: import('./regex_preview').RegexSettings }|null}
+     * @type {import('./regex_preview').RegexPreviewPending|null}
      */
     pendingRegexPreviewRequest: null,
     /** @type {import('./regex_preview').RegexPreviewCache} */
