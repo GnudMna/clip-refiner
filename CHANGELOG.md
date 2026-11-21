@@ -6,6 +6,51 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-14
+
+### Breaking changes
+
+- `clip-refiner-core` の既定 feature を `clipboard` (OS クリップボード I/O) と `config` (設定永続化・DPAPI・登録クリップ暗号) に分割した。テキスト変換だけ使う場合は `default-features = false` にする。`clipboard` / `config` は Windows 専用
+- `clip-refiner-core` から `anyhow` を外した。シリアライズ・DPAPI・AEAD の失敗は `ConfigError` / `CipherError` になる。`Error` に `Cipher` バリアントを追加した
+- `ConfigLoadOutcome` / `ConfigDiskReload` に `unsupported_version_kept` を追加した (移行手順が無いスキーマ `version` で既存項目を維持したか)
+
+### Settings
+
+- スキーマ番号は `3` のまま。移行手順が無い `version` はデフォルト設定へ置換せず、既存項目を維持して警告する (ディスク上の番号は自動では書き換えない)
+
+### Added
+
+- 公開エラー型 `CipherError` (鍵生成・ノンス生成・暗号化・復号の失敗理由)
+- 設定仕様の同期テスト (`config/spec.rs`): 実装の既定値・上限・生成 TOML コメントと CONFIG.md / README を突き合わせ、スキーマ番号のドリフトを検出する
+- Windows ARM64 (`aarch64-pc-windows-msvc`): ビルド・MSI / ポータブル ZIP を x64 に加えて作成できる。x64 ホストからは `-Target arm64` または `-Target All` でクロスコンパイルする。ARM64 MSI のため `InstallerVersion` を 500 (Windows Installer 5.0) にした (x64 も同じ定義)
+
+### Changed
+
+- 依存クレートを更新
+- ドキュメント (README / CONFIG / DEVELOPMENT) を ARM64 配布・正規表現プリセット・設定外部編集・core feature 分割・公開 API に合わせて更新・整理した
+
+### Fixed
+
+- 設定読み込み: 移行手順が無いスキーマ `version` をデフォルト設定へ置換していたのをやめ、既存項目を維持して警告するようにした。ディスク上の `version` は自動では書き換えない
+- ワンショット IPC: 常駐委譲時に正規表現プリセットの全ステップを送るようにした (従来は先頭 1 ステップだけが適用されていた)
+- CONFIG.md の設定スキーマ表記を現行の `version = 3` に合わせた
+- 設定 / セレクター WebView: `NavigateToString` が `data:text/html;base64` として発火する初期読み込みを、埋め込んだ HTML と一致する場合のみ許可するようにした (一致しない `data:` や `http(s)` は従来どおり拒否)
+- Windows パッケージスクリプト: `vcvarsall.bat` が終了コード 255 で失敗することがあった。親プロセスの長い PATH や ARM64 上の x64 rustc をホストと誤認していたのが原因。OS ネイティブのホストアーキテクチャで呼び出すようにした
+
+### Security
+
+- ポータブル差し替えヘルパー: `--install-dir` / `--cleanup-dir` / `--wait-pid` を検証するようにした。差し替え先は既存のポータブルフォルダ (`ClipRefiner.exe` と `portable` マーカー) に限り、展開元と削除対象は `%TEMP%\clip-refiner-update\` 配下のみ。生存中の待ち受け PID は ClipRefiner に限る。差し替え先ディレクトリは新規作成しない
+
+### Improved
+
+- 設定の外部編集検知: `config.toml` の更新時刻ポーリングをやめ、設定ディレクトリの変更通知 (`FindFirstChangeNotification`) と本文指紋 (BLAKE3) で判定するようにした。同一秒の上書きや時計ずれでも本文が変われば即時再読み込みし、アプリ自身の保存や同一内容の再保存では再読み込みしない。監視開始に失敗したときだけ約 2 秒ごとの指紋確認にフォールバックする
+- ワンショット IPC: 待受スレッドの起動失敗を握りつぶさず、ログとデスクトップ通知で案内するようにした。常駐の監視は継続する
+- 依存クレートの版をルート `Cargo.toml` の `[workspace.dependencies]` に集約した。メンバは `workspace = true` で参照し、`clip-refiner` の path 依存にアプリ版を二重に書かない
+- セレクター UI を設定画面と同じ ESM + esbuild IIFE バンドル (`quick_selector.bundle.js` / `clip_selector.bundle.js`) に揃え、DOM 側の ESLint 緩和 (`no-undef` オフ) をやめた。設定 UI の `main.js` ↔ `panels.js` 循環 import は `ctx.render` / `ctx.refreshActivePanel` へ寄せた。バンドル生成は `scripts/common/build-ui.mjs` (`npm run build:ui`)
+- 設定 / セレクターの純粋ロジックから Node テスト用 CJS dual export (`module.exports`) をやめ、`export default` に揃えた。ルート `package.json` は `"type": "module"`。esbuild が CJS 互換ラッパー (`__commonJS`) を出さなくなる
+- 設定 / セレクター WebView: 埋め込み HTML に CSP (`default-src 'none'`、インライン script/style と `data:` 画像のみ) を付け、`http(s)` / `file` 等のページ遷移・`window.open`・ダウンロードを拒否するようにした
+- ビルド時埋め込みの `CLIP_REFINER_KEY` を ChaCha20-Poly1305 で暗号化し、XOR 難読化してからバイナリへ入れるようにした (`option_env!` による平文埋め込みをやめた)。利用時だけ復号し、破棄時にゼロ化する。共有シークレットであることは変わらない
+
 ## [0.15.1] - 2026-08-09
 
 ### Breaking changes
@@ -566,7 +611,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.0.0...develop
+[1.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.1...v1.0.0
 [0.15.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...v0.15.1
 [0.15.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...v0.15.0
 [0.14.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...v0.14.3

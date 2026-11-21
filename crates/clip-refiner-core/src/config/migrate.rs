@@ -9,10 +9,24 @@ use crate::consts;
 pub struct ConfigMigration {
     /// 移行後の設定
     pub config: AppConfig,
-    /// スキーマ移行または互換性フォールバックが実行された
+    /// スキーマ移行を実行し、ディスクへ書き戻してよい
     pub migrated: bool,
     /// 現行アプリより新しい `version` を検出し、番号のみ現行へ揃えた
     pub newer_version_clamped: bool,
+    /// 移行手順が無い `version` を検出し、既存項目を維持した
+    pub unsupported_version_kept: bool,
+}
+
+// ======================================================================
+// 公開関数
+// ======================================================================
+/// 未対応スキーマ `version` を検出したときのユーザー向けメッセージ
+///
+/// # Returns
+/// * `&'static str` - デスクトップ通知・CLI 向けの固定文言
+#[must_use]
+pub fn format_unsupported_config_version_message() -> &'static str {
+    "未対応の設定スキーマ version を検出した。既存の項目は維持する。ディスク上の version は自動では書き換えない"
 }
 
 // ======================================================================
@@ -21,6 +35,7 @@ pub struct ConfigMigration {
 /// 保存済み設定を現行スキーマ (`CONFIG_VERSION`) へ順次移行する
 ///
 /// `version` が現行より新しい場合は既存項目を維持し、`version` 番号のみ現行へ揃える
+/// 移行手順が無い番号はデフォルトへ置換せず、既存項目を維持する (ディスクへは自動保存しない)
 ///
 /// # Arguments
 /// * `config` - 移行対象の設定
@@ -28,36 +43,47 @@ pub struct ConfigMigration {
 /// # Returns
 /// * `ConfigMigration` - 移行後の設定と移行メタデータ
 pub fn migrate_config(config: AppConfig) -> ConfigMigration {
-    if config.version > consts::CONFIG_VERSION {
+    migrate_config_to(config, consts::CONFIG_VERSION)
+}
+
+/// 指定スキーマ番号へ順次移行する
+///
+/// テストでは現行より先の番号を渡し、移行ステップ欠落時の維持方針を検証する
+fn migrate_config_to(config: AppConfig, target_version: u32) -> ConfigMigration {
+    if config.version > target_version {
         let saved_version = config.version;
         tracing::warn!(
-            "設定 version={saved_version} はアプリが対応する version={} より新しい。既存項目を維持し version を現行へ揃える",
-            consts::CONFIG_VERSION
+            "設定 version={saved_version} はアプリが対応する version={target_version} より新しい。既存項目を維持し version を現行へ揃える"
         );
         let mut config = config;
-        config.version = consts::CONFIG_VERSION;
+        config.version = target_version;
         return ConfigMigration {
             config,
             migrated: true,
             newer_version_clamped: true,
+            unsupported_version_kept: false,
         };
     }
 
     let mut config = config;
     let mut migrated = false;
 
-    while config.version != consts::CONFIG_VERSION {
+    while config.version != target_version {
         let from = config.version;
         config = match from {
             0 => migrate_v0_to_v1(config),
             1 => migrate_v1_to_v2(config),
             2 => migrate_v2_to_v3(config),
             v => {
-                tracing::warn!("未対応の設定 version={v}。デフォルト設定を使用する");
+                tracing::warn!(
+                    "未対応の設定 version={v} (現行={target_version})。既存項目を維持する。ディスクへは自動保存しない"
+                );
+                config.version = target_version;
                 return ConfigMigration {
-                    config: AppConfig::default(),
-                    migrated: true,
+                    config,
+                    migrated: false,
                     newer_version_clamped: false,
+                    unsupported_version_kept: true,
                 };
             }
         };
@@ -69,6 +95,7 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
         config,
         migrated,
         newer_version_clamped: false,
+        unsupported_version_kept: false,
     }
 }
 
@@ -269,5 +296,55 @@ case_insensitive = true
         assert_eq!(result.config.regex.active_steps()[0].pattern, "foo");
         assert_eq!(result.config.regex.active_steps()[0].replacement, "bar");
         assert!(result.config.regex.active_steps()[0].case_insensitive);
+        assert!(!result.unsupported_version_kept);
+    }
+
+    /// 移行ステップが無い version はデフォルトへ置換せず既存項目を維持すること
+    #[test]
+    fn migrate_missing_step_keeps_settings_without_marking_migrated() {
+        let config = AppConfig {
+            version: consts::CONFIG_VERSION,
+            mode: RefineMode::Trim,
+            interval_ms: 500,
+            history_enabled: true,
+            ..Default::default()
+        };
+        let result = migrate_config_to(config, consts::CONFIG_VERSION + 2);
+        assert!(!result.migrated);
+        assert!(!result.newer_version_clamped);
+        assert!(result.unsupported_version_kept);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION + 2);
+        assert_eq!(result.config.mode, RefineMode::Trim);
+        assert_eq!(result.config.interval_ms, 500);
+        assert!(result.config.history_enabled);
+    }
+
+    /// 連鎖移行の途中でステップが欠けても、そこまでの項目を維持すること
+    #[test]
+    fn migrate_chain_keeps_settings_when_later_step_is_missing() {
+        let config = AppConfig {
+            version: 0,
+            mode: RefineMode::UrlEncode,
+            interval_ms: 777,
+            history_enabled: true,
+            ..Default::default()
+        };
+        let result = migrate_config_to(config, consts::CONFIG_VERSION + 1);
+        assert!(!result.migrated);
+        assert!(result.unsupported_version_kept);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION + 1);
+        assert_eq!(result.config.mode, RefineMode::UrlEncode);
+        assert_eq!(result.config.interval_ms, 777);
+        assert!(result.config.history_enabled);
+        assert!(result.config.favorite_modes.is_empty());
+    }
+
+    /// 未対応 version の案内文言が既存維持を伝えること
+    #[test]
+    fn format_unsupported_config_version_message_mentions_keep() {
+        let message = format_unsupported_config_version_message();
+        assert!(message.contains("未対応"));
+        assert!(message.contains("既存"));
+        assert!(message.contains("自動では書き換えない"));
     }
 }

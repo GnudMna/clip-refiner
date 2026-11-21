@@ -2,8 +2,9 @@ use std::fmt::Write;
 
 use super::sections;
 use crate::config::types::AppConfig;
+use crate::error::ConfigError;
 
-use anyhow::Result;
+type Result<T> = std::result::Result<T, ConfigError>;
 
 /// `AppConfig` を各項目の説明コメント付き TOML 文字列へ変換する
 pub(crate) fn to_commented_toml(config: &AppConfig) -> Result<String> {

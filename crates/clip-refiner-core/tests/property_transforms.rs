@@ -1,6 +1,6 @@
 //! 加工変換のプロパティベーステスト
 
-use clip_refiner_core::{AppConfig, RefineContext, RefineMode, Refiner};
+use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 use proptest::prelude::*;
 
 proptest! {
@@ -34,9 +34,9 @@ proptest! {
     /// 数字のみの文字列は正規表現置換で一貫して変換されるようにすること
     #[test]
     fn regex_replace_digits_are_stable(input in "[0-9]{0,32}") {
-        let mut config = AppConfig::default();
-        config.regex = clip_refiner_core::config::RegexSettings::single(r"\d", "X");
-        let ctx = RefineContext::from_config(&config);
+        let ctx = RefineContext::with_regex(clip_refiner_core::config::RegexSettings::single(
+            r"\d", "X",
+        ));
         let once = RefineMode::RegexReplace.refine(&input, &ctx);
         let twice = RefineMode::RegexReplace.refine(&once, &ctx);
         prop_assert_eq!(&once, &twice);

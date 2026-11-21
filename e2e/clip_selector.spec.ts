@@ -1,4 +1,4 @@
-import { test, expect, TINY_PNG_DATA_URL } from './fixtures';
+import { test, expect, TINY_PNG_DATA_URL, expectWebViewCsp } from './fixtures';
 
 test.use({ e2eWindow: 'clip' });
 
@@ -7,6 +7,7 @@ test.describe('登録クリップセレクター WebView', () => {
     await expect(page.locator('#input')).toBeVisible();
     await expect(page.locator('#results')).toBeVisible();
     await expect(page.locator('#container')).toBeVisible();
+    await expectWebViewCsp(page);
   });
 
   test('空のときは空メッセージと登録行が表示される', async ({ page }) => {

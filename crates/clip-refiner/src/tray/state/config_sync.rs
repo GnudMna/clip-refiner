@@ -1,16 +1,19 @@
 use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::lock_ext::LockExt;
+use crate::config::{ConfigFileFingerprint, disk_config_content_fingerprint};
 
 // ======================================================================
 // 設定ディスク同期
 // ======================================================================
-/// 設定ファイルのディスク同期状態と保存グレース期間
+/// 設定ファイルのディスク同期状態
+///
+/// 変更判定は更新時刻ではなく本文指紋を使う。自身の保存中は外部変更とみなさない
 pub(crate) struct ConfigSyncState {
     persist_config: bool,
-    disk_mtime: Mutex<Option<SystemTime>>,
-    save_grace_until: Mutex<Option<Instant>>,
+    fingerprint: Mutex<Option<ConfigFileFingerprint>>,
+    own_write: AtomicBool,
 }
 
 impl ConfigSyncState {
@@ -19,11 +22,11 @@ impl ConfigSyncState {
     /// # Returns
     /// * `Self` - 生成したインスタンス
     pub fn new() -> Self {
-        let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
+        let fingerprint = disk_config_content_fingerprint().ok().flatten();
         Self {
             persist_config: true,
-            disk_mtime: Mutex::new(disk_mtime),
-            save_grace_until: Mutex::new(None),
+            fingerprint: Mutex::new(fingerprint),
+            own_write: AtomicBool::new(false),
         }
     }
 
@@ -35,8 +38,8 @@ impl ConfigSyncState {
     pub fn new_for_test() -> Self {
         Self {
             persist_config: false,
-            disk_mtime: Mutex::new(None),
-            save_grace_until: Mutex::new(None),
+            fingerprint: Mutex::new(None),
+            own_write: AtomicBool::new(false),
         }
     }
 
@@ -63,51 +66,53 @@ impl ConfigSyncState {
         self.persist_config
     }
 
-    /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
+    /// ディスク上の設定ファイルと同期済みの内容指紋を記録する
     ///
     /// # Arguments
     /// * `self` - 自身
     pub fn record_disk_sync(&self) {
-        if let Ok(mtime) = crate::config::disk_config_modified_time() {
-            *self.disk_mtime.lock_ignore_poison() = mtime;
+        if let Ok(fingerprint) = disk_config_content_fingerprint() {
+            *self.fingerprint.lock_ignore_poison() = fingerprint;
         }
     }
 
     /// 外部編集による設定ファイルの変更を検知する
     ///
-    /// アプリ自身の保存直後は同期済み時刻と一致するため `false` を返す
+    /// 自身の保存中、または本文指紋が最終同期と一致する場合は `false` を返す
     ///
     /// # Arguments
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - ディスク上の設定が最終同期時刻より新しい場合は `true`
+    /// * `bool` - ディスク上の本文が最終同期と異なる場合は `true`
     pub fn has_external_change(&self) -> bool {
-        if self.is_save_grace_active() {
+        if self.own_write.load(Ordering::Acquire) {
             return false;
         }
-        let Ok(Some(file_mtime)) = crate::config::disk_config_modified_time() else {
+        let Ok(current) = disk_config_content_fingerprint() else {
             return false;
         };
-        match *self.disk_mtime.lock_ignore_poison() {
-            Some(known) => file_mtime > known,
-            None => true,
+        match (*self.fingerprint.lock_ignore_poison(), current) {
+            (Some(known), Some(file)) => known != file,
+            (None, Some(_)) => true,
+            (Some(_) | None, None) => false,
         }
     }
 
-    /// 自身の保存直後に外部変更検知を一時抑制する
+    /// 自身の保存を開始し、完了まで外部変更検知を抑制する
     ///
     /// # Arguments
     /// * `self` - 自身
-    pub fn begin_save_grace(&self) {
-        *self.save_grace_until.lock_ignore_poison() = Some(Instant::now() + Duration::from_secs(2));
+    pub fn begin_own_write(&self) {
+        self.own_write.store(true, Ordering::Release);
     }
 
-    /// 自身の保存直後のグレース期間中かどうか
-    fn is_save_grace_active(&self) -> bool {
-        self.save_grace_until
-            .lock_ignore_poison()
-            .is_some_and(|until| Instant::now() < until)
+    /// 自身の保存を終了し、外部変更検知を再開する
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    pub fn end_own_write(&self) {
+        self.own_write.store(false, Ordering::Release);
     }
 
     /// ディスクへの設定保存が有効かどうか
@@ -145,16 +150,24 @@ mod tests {
         assert!(!sync.is_persistence_enabled());
     }
 
-    /// 保存グレース期間中は外部変更を検知しないようにすること
+    /// 自身の保存中は外部変更を検知しないようにすること
     #[test]
-    fn has_external_change_false_during_save_grace() {
+    fn has_external_change_false_during_own_write() {
         with_temp_config_dir(|| {
             AppConfig::default().save().expect("config save");
             let sync = ConfigSyncState::new_for_test_with_persistence();
             sync.record_disk_sync();
-            sync.begin_save_grace();
+            sync.begin_own_write();
+
+            let changed = AppConfig {
+                interval_ms: 2500,
+                ..AppConfig::default()
+            };
+            changed.save().expect("external-looking save");
 
             assert!(!sync.has_external_change());
+            sync.end_own_write();
+            assert!(sync.has_external_change());
         });
     }
 
@@ -167,9 +180,9 @@ mod tests {
         });
     }
 
-    /// 同期時刻未記録かつファイルがあるときは外部変更と判定すること
+    /// 同期指紋未記録かつファイルがあるときは外部変更と判定すること
     #[test]
-    fn has_external_change_true_when_mtime_unknown() {
+    fn has_external_change_true_when_fingerprint_unknown() {
         with_temp_config_dir(|| {
             AppConfig::default().save().expect("config save");
             let sync = ConfigSyncState::new_for_test();
@@ -177,20 +190,40 @@ mod tests {
         });
     }
 
-    /// ディスクの更新時刻が新しいときは外部変更と判定すること
+    /// 本文が変わったときは待ちなしで外部変更と判定すること
     #[test]
-    fn has_external_change_true_when_disk_newer() {
+    fn has_external_change_true_when_content_differs() {
         with_temp_config_dir(|| {
             AppConfig::default().save().expect("config save");
             let sync = ConfigSyncState::new_for_test_with_persistence();
             sync.record_disk_sync();
             assert!(!sync.has_external_change());
 
-            // Windows でも確実に新しい mtime になるよう少し待つ
-            std::thread::sleep(Duration::from_millis(1100));
-            AppConfig::default().save().expect("config resave");
+            let changed = AppConfig {
+                interval_ms: 2500,
+                ..AppConfig::default()
+            };
+            changed.save().expect("config resave");
 
             assert!(sync.has_external_change());
+        });
+    }
+
+    /// 同一本文の再書き込みは外部変更と判定しないようにすること
+    #[test]
+    fn has_external_change_false_when_bytes_unchanged() {
+        with_temp_config_dir(|| {
+            AppConfig::default().save().expect("config save");
+            let sync = ConfigSyncState::new_for_test_with_persistence();
+            sync.record_disk_sync();
+
+            let path = crate::config::get_config_dir()
+                .expect("dir")
+                .join("config.toml");
+            let bytes = std::fs::read(&path).expect("read");
+            std::fs::write(&path, bytes).expect("identical rewrite");
+
+            assert!(!sync.has_external_change());
         });
     }
 }

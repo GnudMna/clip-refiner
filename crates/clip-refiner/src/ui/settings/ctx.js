@@ -52,4 +52,20 @@ export const ctx = {
      * @type {Record<string, unknown>|null}
      */
     updateStatus: null,
+    /**
+     * サイドバーとアクティブパネルを描画する
+     *
+     * `main.js` が初期化時に代入する
+     *
+     * @type {((forcePanel?: boolean) => void)|null}
+     */
+    render: null,
+    /**
+     * アクティブタブのパネルを破棄して再描画する
+     *
+     * `main.js` が初期化時に代入する
+     *
+     * @type {(() => void)|null}
+     */
+    refreshActivePanel: null,
 };

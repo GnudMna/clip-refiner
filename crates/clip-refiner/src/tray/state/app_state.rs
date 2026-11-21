@@ -44,11 +44,12 @@ impl AppState {
     /// * `proxy` - メインイベントループへ通知を送るプロキシ
     ///
     /// # Returns
-    /// * `Result<(Self, Option<ConfigLoadFallback>, Vec<String>)>` - 生成された `AppState`、
-    ///   設定読み込み失敗時のフォールバック理由、認識できない設定キー
+    /// * `Result<(Self, Option<ConfigLoadFallback>, Vec<String>, bool)>` - 生成された `AppState`、
+    ///   設定読み込み失敗時のフォールバック理由、認識できない設定キー、
+    ///   未対応スキーマ version を既存項目維持で読み込んだか
     pub fn new(
         proxy: EventLoopProxy<AppEvent>,
-    ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>, Vec<String>)> {
+    ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>, Vec<String>, bool)> {
         let load_outcome = AppConfig::load();
         let config = load_outcome.config;
         Ok((
@@ -63,6 +64,7 @@ impl AppState {
             },
             load_outcome.fallback,
             load_outcome.unknown_keys,
+            load_outcome.unsupported_version_kept,
         ))
     }
 
@@ -96,12 +98,13 @@ impl AppState {
         if !self.config_sync.should_persist() {
             return;
         }
-        if let Err(e) = self.with_config(crate::config::AppConfig::save) {
-            crate::user_error::config_save_failure().notify_with_debug(&e);
-            return;
+        self.config_sync.begin_own_write();
+        let save_result = self.with_config(crate::config::AppConfig::save);
+        match save_result {
+            Ok(()) => self.config_sync.record_disk_sync(),
+            Err(e) => crate::user_error::config_save_failure().notify_with_debug(&e),
         }
-        self.config_sync.begin_save_grace();
-        self.config_sync.record_disk_sync();
+        self.config_sync.end_own_write();
     }
 
     /// 設定を読み取り専用で参照する

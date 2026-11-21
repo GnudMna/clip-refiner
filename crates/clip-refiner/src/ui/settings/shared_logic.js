@@ -7,7 +7,7 @@
  *
  * @namespace SettingsSharedLogic
  */
-var SettingsSharedLogic = (function () {
+const SettingsSharedLogic = (function () {
     'use strict';
 
     /** @type {ReadonlyArray<readonly [string, string]>} 通知タブの DOM ID と設定キー */
@@ -404,6 +404,4 @@ var SettingsSharedLogic = (function () {
     };
 })();
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SettingsSharedLogic;
-}
+export default SettingsSharedLogic;

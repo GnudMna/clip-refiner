@@ -3,7 +3,7 @@
  *
  * @namespace SelectorCommon
  */
-var SelectorCommon = (function () {
+const SelectorCommon = (function () {
     'use strict';
 
     /**
@@ -267,6 +267,22 @@ var SelectorCommon = (function () {
         input.select();
     }
 
+    /**
+     * カテゴリ見出しの内部 HTML を組み立てる
+     *
+     * @param {string} category
+     * @param {(text: string) => string} escapeHtmlFn
+     * @returns {string}
+     */
+    function buildCategoryHeaderInnerHtml(category, escapeHtmlFn) {
+        return (
+            '<span class="category-accent" aria-hidden="true"></span>' +
+            '<span class="category-label">' +
+            escapeHtmlFn(category) +
+            '</span>'
+        );
+    }
+
     return {
         escapeHtml,
         normalizeQuery,
@@ -279,13 +295,8 @@ var SelectorCommon = (function () {
         handleHomeEndKeys,
         handleEscapeKey,
         focusSearchInput,
+        buildCategoryHeaderInnerHtml,
     };
 })();
 
-if (typeof window !== 'undefined') {
-    window.SelectorCommon = SelectorCommon;
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SelectorCommon;
-}
+export default SelectorCommon;

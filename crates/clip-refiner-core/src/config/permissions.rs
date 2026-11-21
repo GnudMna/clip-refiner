@@ -8,7 +8,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use anyhow::{Context, Result};
+use crate::error::ConfigError;
 use windows::Win32::Foundation::{
     CloseHandle, GENERIC_ALL, GetLastError, HANDLE, HLOCAL, LocalFree,
 };
@@ -25,6 +25,12 @@ use windows::Win32::Security::{
 };
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::core::{PCWSTR, PWSTR};
+
+type Result<T> = std::result::Result<T, ConfigError>;
+
+fn dacl_err(msg: impl Into<String>) -> ConfigError {
+    ConfigError::DirPermissions(msg.into())
+}
 
 /// `InitializeSecurityDescriptor` のリビジョン (`SECURITY_DESCRIPTOR_REVISION`)
 const SECURITY_DESCRIPTOR_REVISION: u32 = 1;
@@ -64,19 +70,19 @@ pub(crate) fn restrict_private_file_permissions(path: &Path) -> Result<()> {
 /// # Errors
 /// ディレクトリ走査または個別ファイルのパーミッション設定に失敗した場合
 pub fn restrict_private_files_in_dir(dir: &Path) -> Result<()> {
-    let entries = fs::read_dir(dir).with_context(|| {
-        format!(
-            "ディレクトリ内ファイルのパーミッション設定に失敗: {}",
+    let entries = fs::read_dir(dir).map_err(|e| {
+        dacl_err(format!(
+            "ディレクトリ内ファイルのパーミッション設定に失敗: {}: {e}",
             dir.display()
-        )
+        ))
     })?;
 
     for entry in entries {
-        let entry = entry.with_context(|| {
-            format!(
-                "ディレクトリ内ファイルのパーミッション設定に失敗: {}",
+        let entry = entry.map_err(|e| {
+            dacl_err(format!(
+                "ディレクトリ内ファイルのパーミッション設定に失敗: {}: {e}",
                 dir.display()
-            )
+            ))
         })?;
         let path = entry.path();
         if path.is_file() {
@@ -123,7 +129,7 @@ impl OwnerOnlySecurityAttributes {
                 PSECURITY_DESCRIPTOR(descriptor_ptr),
                 SECURITY_DESCRIPTOR_REVISION,
             )
-            .context("セキュリティ記述子の初期化に失敗しました")?;
+            .map_err(|e| dacl_err(format!("セキュリティ記述子の初期化に失敗しました: {e}")))?;
 
             SetSecurityDescriptorDacl(
                 PSECURITY_DESCRIPTOR(descriptor_ptr),
@@ -131,11 +137,15 @@ impl OwnerOnlySecurityAttributes {
                 Some(dacl),
                 false,
             )
-            .context("セキュリティ記述子への DACL 設定に失敗しました")?;
+            .map_err(|e| {
+                dacl_err(format!(
+                    "セキュリティ記述子への DACL 設定に失敗しました: {e}"
+                ))
+            })?;
         }
 
         let n_length = u32::try_from(size_of::<SECURITY_ATTRIBUTES>())
-            .context("SECURITY_ATTRIBUTES のサイズが u32 に収まりません")?;
+            .map_err(|_| dacl_err("SECURITY_ATTRIBUTES のサイズが u32 に収まりません"))?;
         let attrs = SECURITY_ATTRIBUTES {
             nLength: n_length,
             lpSecurityDescriptor: descriptor_ptr,
@@ -205,11 +215,11 @@ fn apply_owner_only_dacl(path: &Path, is_directory: bool) -> Result<()> {
     }
 
     if !set_security_result.is_ok() {
-        return Err(anyhow::anyhow!(
+        return Err(dacl_err(format!(
             "ファイルのセキュリティ設定に失敗しました: {} (code={})",
             path.display(),
             set_security_result.0
-        ));
+        )));
     }
 
     Ok(())
@@ -248,10 +258,10 @@ fn build_owner_only_acl(inheritance: ACE_FLAGS) -> Result<*mut ACL> {
     let mut new_dacl = ptr::null_mut();
     let set_acl_result = unsafe { SetEntriesInAclW(Some(&[explicit]), None, &raw mut new_dacl) };
     if !set_acl_result.is_ok() {
-        return Err(anyhow::anyhow!(
+        return Err(dacl_err(format!(
             "DACL の構築に失敗しました (code={})",
             set_acl_result.0
-        ));
+        )));
     }
 
     Ok(new_dacl)
@@ -262,10 +272,10 @@ fn current_process_user_sid() -> Result<Vec<u8>> {
     unsafe {
         let mut token = HANDLE::default();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token).is_err() {
-            return Err(anyhow::anyhow!(
+            return Err(dacl_err(format!(
                 "プロセストークンのオープンに失敗しました (code={})",
                 GetLastError().0
-            ));
+            )));
         }
 
         let mut buffer_len = 0u32;
@@ -283,9 +293,9 @@ fn current_process_user_sid() -> Result<Vec<u8>> {
         {
             let code = GetLastError().0;
             let _ = CloseHandle(token);
-            return Err(anyhow::anyhow!(
+            return Err(dacl_err(format!(
                 "トークン情報の取得に失敗しました (code={code})"
-            ));
+            )));
         }
         let _ = CloseHandle(token);
 
@@ -294,10 +304,10 @@ fn current_process_user_sid() -> Result<Vec<u8>> {
         let sid_len = GetLengthSid(sid);
         let mut sid_copy = vec![0u8; sid_len as usize];
         if CopySid(sid_len, PSID(sid_copy.as_mut_ptr().cast()), sid).is_err() {
-            return Err(anyhow::anyhow!(
+            return Err(dacl_err(format!(
                 "SID のコピーに失敗しました (code={})",
                 GetLastError().0
-            ));
+            )));
         }
 
         Ok(sid_copy)

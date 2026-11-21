@@ -2,12 +2,15 @@
 
 use std::ptr;
 
-use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::{HLOCAL, LocalFree};
 use windows::Win32::Security::Cryptography::{
     CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
 use windows::core::PCWSTR;
+
+use crate::error::ConfigError;
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // パブリック関数
@@ -34,7 +37,7 @@ pub(crate) fn protect(data: &[u8]) -> Result<Vec<u8>> {
             &raw mut output,
         )
     }
-    .context("DPAPI によるデータ保護に失敗")?;
+    .map_err(|e| ConfigError::dpapi(format!("DPAPI によるデータ保護に失敗: {e}")))?;
 
     let protected =
         unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec() };
@@ -66,14 +69,14 @@ pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Vec<u8>> {
             &raw mut output,
         )
     }
-    .context("DPAPI によるデータ復号に失敗")?;
+    .map_err(|e| ConfigError::dpapi(format!("DPAPI によるデータ復号に失敗: {e}")))?;
 
     let plain = unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) };
     if plain.len() != expected_len {
         unsafe {
             let _ = LocalFree(Some(HLOCAL(output.pbData.cast())));
         }
-        bail!("DPAPI 復号データの長さが不正です");
+        return Err(ConfigError::dpapi("DPAPI 復号データの長さが不正です"));
     }
 
     let data = plain.to_vec();
@@ -87,7 +90,7 @@ pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Vec<u8>> {
 // プライベート関数
 // ======================================================================
 fn blob_len_u32(len: usize) -> Result<u32> {
-    u32::try_from(len).context("DPAPI 入力データ長が大きすぎます")
+    u32::try_from(len).map_err(|_| ConfigError::dpapi("DPAPI 入力データ長が大きすぎます"))
 }
 
 // ======================================================================

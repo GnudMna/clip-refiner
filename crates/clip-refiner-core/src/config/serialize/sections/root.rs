@@ -1,18 +1,20 @@
 use std::fmt::Write;
 
 use super::super::docs::{
-    DOC_CONTINUOUS_RECORD_ENABLED, DOC_CONTINUOUS_RECORD_LIMIT, DOC_FAVORITE_MODES,
-    DOC_HISTORY_ENABLED, DOC_HISTORY_LIMIT, DOC_INTERVAL_MS, DOC_IS_PAUSED, DOC_MODE,
-    DOC_MONITOR_MODE, DOC_PIPELINE, DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+    DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_IS_PAUSED, DOC_MODE, DOC_MONITOR_MODE,
     DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD,
-    SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW,
+    SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW, doc_continuous_record_limit,
+    doc_favorite_modes, doc_history_limit, doc_interval_ms, doc_pipeline,
+    doc_selector_webview_idle_minutes,
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
 use crate::config::types::AppConfig;
+use crate::error::ConfigError;
 
-use anyhow::Result;
 use toml_edit::{DocumentMut, Table};
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // ドキュメント更新
@@ -26,18 +28,18 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
 fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     set_table_value(root, "version", DOC_VERSION, "", &config.version)?;
     set_table_value(root, "mode", DOC_MODE, "", &config.mode)?;
-    set_table_value(root, "pipeline", DOC_PIPELINE, "", &config.pipeline)?;
+    set_table_value(root, "pipeline", &doc_pipeline(), "", &config.pipeline)?;
     set_table_value(
         root,
         "favorite_modes",
-        DOC_FAVORITE_MODES,
+        &doc_favorite_modes(),
         "",
         &config.favorite_modes,
     )?;
     set_table_value(
         root,
         "interval_ms",
-        DOC_INTERVAL_MS,
+        &doc_interval_ms(),
         "",
         &config.interval_ms,
     )?;
@@ -58,7 +60,7 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     set_table_value(
         root,
         "selector_webview_idle_minutes",
-        DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+        &doc_selector_webview_idle_minutes(),
         "",
         &config.selector_webview_idle_minutes,
     )?;
@@ -79,14 +81,14 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     set_table_value(
         root,
         "continuous_record_limit",
-        DOC_CONTINUOUS_RECORD_LIMIT,
+        &doc_continuous_record_limit(),
         "",
         &config.continuous_record_limit,
     )?;
     set_table_value(
         root,
         "history_limit",
-        DOC_HISTORY_LIMIT,
+        &doc_history_limit(),
         "",
         &config.history_limit,
     )?;
@@ -102,17 +104,23 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_section(out, SECTION_BASIC)?;
     write_field(out, "", DOC_VERSION, "version", &config.version)?;
     write_field(out, "", DOC_MODE, "mode", &config.mode)?;
-    write_field(out, "", DOC_PIPELINE, "pipeline", &config.pipeline)?;
+    write_field(out, "", &doc_pipeline(), "pipeline", &config.pipeline)?;
     write_field(
         out,
         "",
-        DOC_FAVORITE_MODES,
+        &doc_favorite_modes(),
         "favorite_modes",
         &config.favorite_modes,
     )?;
 
     write_section(out, SECTION_MONITOR)?;
-    write_field(out, "", DOC_INTERVAL_MS, "interval_ms", &config.interval_ms)?;
+    write_field(
+        out,
+        "",
+        &doc_interval_ms(),
+        "interval_ms",
+        &config.interval_ms,
+    )?;
     write_field(
         out,
         "",
@@ -133,7 +141,7 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         "",
-        DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+        &doc_selector_webview_idle_minutes(),
         "selector_webview_idle_minutes",
         &config.selector_webview_idle_minutes,
     )?;
@@ -149,7 +157,7 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         "",
-        DOC_CONTINUOUS_RECORD_LIMIT,
+        &doc_continuous_record_limit(),
         "continuous_record_limit",
         &config.continuous_record_limit,
     )?;
@@ -165,7 +173,7 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         "",
-        DOC_HISTORY_LIMIT,
+        &doc_history_limit(),
         "history_limit",
         &config.history_limit,
     )?;

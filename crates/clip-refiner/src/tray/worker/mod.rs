@@ -2,10 +2,12 @@
 //!
 //! 本文 I/O は [`OwnedClipboard`] を 1 インスタンスだけ保持する
 //! 変更検知は `clipboard_seq` (Open 不要) と `clipboard_listener` (本文非読) に分離する
+//! 設定の外部編集は `config_watcher` で起床し、内容指紋で判定する
 
 mod clipboard_listener;
 mod clipboard_seq;
 mod command;
+mod config_watcher;
 mod handle;
 mod handlers;
 mod monitor_loop;
@@ -19,14 +21,17 @@ use super::dispatch;
 use super::state::{AppState, ConfigEvent, WorkerEvent};
 use crate::refiner::OwnedClipboard;
 use clipboard_listener::{ClipboardFormatListener, clear_clipboard_changed_pending};
+use config_watcher::{ConfigFileWatcher, clear_config_changed_pending};
 use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
 
 pub use command::ClipboardCommand;
 pub use handle::ClipboardWorkerHandle;
 pub(crate) use handlers::handle_command;
 
-/// 設定ファイルの外部変更を検知するポーリング間隔
+/// 設定ディレクトリ監視が使えないときの外部変更ポーリング間隔
 pub(super) const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
+/// 設定ディレクトリ監視稼働時の安全網ポーリング間隔
+const CONFIG_WATCHER_FALLBACK_POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 // ======================================================================
 // ワーカースレッド
@@ -56,6 +61,7 @@ fn run_worker_loop(
     }
 
     let pending_clipboard_change = Arc::new(AtomicBool::new(false));
+    let config_watch_tx = listener_tx.clone();
     let listener = match ClipboardFormatListener::start(
         listener_tx,
         Arc::clone(&pending_clipboard_change),
@@ -73,24 +79,49 @@ fn run_worker_loop(
     };
     let listener_active = listener.is_some();
 
+    let pending_config_change = Arc::new(AtomicBool::new(false));
+    let config_watcher = match ConfigFileWatcher::start(
+        config_watch_tx,
+        Arc::clone(&pending_config_change),
+    ) {
+        Ok(watcher) => {
+            crate::log_info!("設定ディレクトリ監視を開始しました");
+            Some(watcher)
+        }
+        Err(err) => {
+            crate::log_warn!(
+                "設定ディレクトリ監視を開始できないため、内容指紋の周期確認にフォールバックします: {err}"
+            );
+            None
+        }
+    };
+    let config_poll_interval = if config_watcher.is_some() {
+        CONFIG_WATCHER_FALLBACK_POLL_INTERVAL
+    } else {
+        CONFIG_POLL_INTERVAL
+    };
+
     let mut monitor = MonitorLoopState::new();
     let mut last_config_poll = Instant::now();
 
     loop {
         sync_monitor_generation(&mut monitor, &mut clipboard, state);
 
-        if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
+        if last_config_poll.elapsed() >= config_poll_interval {
             last_config_poll = Instant::now();
-            if state.config_sync().has_external_change() {
-                dispatch::send_app_event(&state.proxy, ConfigEvent::Reload.into());
-            }
+            try_reload_if_config_changed(state);
         }
 
-        let timeout = monitor.recv_timeout(state, listener_active, CONFIG_POLL_INTERVAL);
+        let timeout = monitor.recv_timeout(state, listener_active, config_poll_interval);
         let should_exit = match rx.recv_timeout(timeout) {
             Ok(ClipboardCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => true,
             Ok(ClipboardCommand::ClipboardChanged) => {
                 clear_clipboard_changed_pending(&pending_clipboard_change);
+                false
+            }
+            Ok(ClipboardCommand::ConfigFileChanged) => {
+                clear_config_changed_pending(&pending_config_change);
+                try_reload_if_config_changed(state);
                 false
             }
             Ok(cmd) => {
@@ -108,10 +139,23 @@ fn run_worker_loop(
         }
     }
 
+    if let Some(watcher) = config_watcher {
+        watcher.stop();
+    }
     if let Some(listener) = listener {
         listener.stop();
     }
     state.worker().set_alive(false);
+}
+
+/// 内容指紋が最終同期と異なれば設定再読み込みを要求する
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+fn try_reload_if_config_changed(state: &Arc<AppState>) {
+    if state.config_sync().has_external_change() {
+        dispatch::send_app_event(&state.proxy, ConfigEvent::Reload.into());
+    }
 }
 
 /// ワーカー停止時にユーザーへ案内する通知本文

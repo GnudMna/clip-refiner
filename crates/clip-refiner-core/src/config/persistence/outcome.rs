@@ -67,6 +67,8 @@ pub struct ConfigLoadOutcome {
     pub fallback: Option<ConfigLoadFallback>,
     /// 認識できない設定キー (解析成功時のみ。読み込み自体は継続)
     pub unknown_keys: Vec<String>,
+    /// 移行手順が無い `version` を検出し、既存項目を維持した
+    pub unsupported_version_kept: bool,
 }
 
 /// ディスクからの設定再読み込み結果
@@ -78,6 +80,8 @@ pub struct ConfigDiskReload {
     pub migrated: bool,
     /// 将来の `version` を現行へ揃えたか
     pub newer_version_clamped: bool,
+    /// 移行手順が無い `version` を検出し、既存項目を維持した
+    pub unsupported_version_kept: bool,
     /// 認識できない設定キー (読み込み自体は継続)
     pub unknown_keys: Vec<String>,
 }

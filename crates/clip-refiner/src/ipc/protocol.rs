@@ -1,5 +1,6 @@
 //! ワンショット IPC の要求・応答プロトコル
 
+use crate::config::RegexStep;
 use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode};
 
 use serde::{Deserialize, Serialize};
@@ -133,29 +134,35 @@ pub enum OneshotIpcRequest {
 }
 
 /// ワンショット要求の正規表現上書き
+///
+/// CLI 側で解決済みの有効プリセットを常駐へ渡す。`steps` があれば全ステップを適用し、
+/// 旧クライアントの単一ステップフィールド (`pattern` 等) は `steps` が無いときだけ使う
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OneshotRegexOverride {
-    /// 有効化するプリセット名 (名前の先頭一致)
+    /// 有効化するプリセット名 (名前の先頭一致。ステップ列適用時は表示名としても使う)
     #[serde(
         default,
         rename = "presetName",
         skip_serializing_if = "Option::is_none"
     )]
     pub preset_name: Option<String>,
-    /// 正規表現パターン
+    /// 有効プリセットのステップ列 (CLI 側で解決済み)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps: Option<Vec<RegexStep>>,
+    /// 正規表現パターン (旧ワイヤ。`steps` が無いときだけ使う)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
-    /// 置換文字列
+    /// 置換文字列 (旧ワイヤ。`steps` が無いときだけ使う)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replacement: Option<String>,
-    /// 大文字小文字を無視するか
+    /// 大文字小文字を無視するか (旧ワイヤ。`steps` が無いときだけ使う)
     #[serde(
         default,
         rename = "caseInsensitive",
         skip_serializing_if = "Option::is_none"
     )]
     pub case_insensitive: Option<bool>,
-    /// 複数行モード
+    /// 複数行モード (旧ワイヤ。`steps` が無いときだけ使う)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
 }
@@ -163,10 +170,19 @@ pub struct OneshotRegexOverride {
 impl OneshotRegexOverride {
     /// 加工コンテキストへ上書きを適用する
     ///
+    /// `steps` があれば全ステップで有効プリセットを置き換える。無ければ旧フィールドで
+    /// 1 ステップ上書きする
+    ///
     /// # Arguments
     /// * `self` - 上書き内容
     /// * `ctx` - 適用先コンテキスト
     pub fn apply_to(&self, ctx: &mut RefineContext) {
+        if let Some(steps) = &self.steps {
+            ctx.regex
+                .apply_oneshot_steps_override(self.preset_name.as_deref(), steps);
+            return;
+        }
+
         if let Some(name) = &self.preset_name {
             let _ = ctx.regex.select_preset_by_name(name);
         }
@@ -187,24 +203,21 @@ impl OneshotRegexOverride {
 
     /// 加工コンテキストからワイヤ用の上書きを生成する
     ///
+    /// 有効プリセットの全ステップを送る。旧単一ステップフィールドは埋めない
+    ///
     /// # Arguments
     /// * `ctx` - 送信するコンテキスト
     ///
     /// # Returns
-    /// * `Self` - 正規表現フィールドをすべて埋めた上書き
+    /// * `Self` - プリセット名とステップ列を埋めた上書き
     pub fn from_context(ctx: &RefineContext) -> Self {
-        let step = ctx
-            .regex
-            .active_steps()
-            .first()
-            .cloned()
-            .unwrap_or_default();
         Self {
             preset_name: ctx.regex.active_preset().map(|preset| preset.name.clone()),
-            pattern: Some(step.pattern),
-            replacement: Some(step.replacement),
-            case_insensitive: Some(step.case_insensitive),
-            multiline: Some(step.multiline),
+            steps: Some(ctx.regex.active_steps().to_vec()),
+            pattern: None,
+            replacement: None,
+            case_insensitive: None,
+            multiline: None,
         }
     }
 }
@@ -352,22 +365,44 @@ impl OneshotIpcRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{RegexPreset, RegexSettings, RegexStep};
+
+    fn multi_step_regex_settings() -> RegexSettings {
+        RegexSettings {
+            active_preset_id: "date".into(),
+            presets: vec![RegexPreset {
+                id: "date".into(),
+                name: "日付".into(),
+                steps: vec![
+                    RegexStep {
+                        pattern: r"(\d{4})-(\d{2})-(\d{2})".into(),
+                        replacement: "$1/$2/$3".into(),
+                        ..RegexStep::default()
+                    },
+                    RegexStep {
+                        pattern: r"\s+".into(),
+                        replacement: " ".into(),
+                        ..RegexStep::default()
+                    },
+                ],
+            }],
+        }
+    }
 
     /// 要求 JSON を往復できるようにすること
     #[test]
     fn request_json_roundtrip() {
-        let ctx = RefineContext::with_regex(crate::config::RegexSettings::from_step(
-            crate::config::RegexStep {
-                pattern: "a".into(),
-                replacement: "b".into(),
-                case_insensitive: true,
-                multiline: false,
-            },
-        ));
+        let ctx = RefineContext::with_regex(RegexSettings::from_step(RegexStep {
+            pattern: "a".into(),
+            replacement: "b".into(),
+            case_insensitive: true,
+            multiline: false,
+        }));
         let request = build_request(&[RefineMode::Trim, RefineMode::UrlDecode], &ctx, "req-1");
         let json = serde_json::to_string(&request).expect("serialize");
         let parsed = parse_request(&json).expect("parse");
         assert_eq!(parsed, request);
+        assert!(json.contains("\"steps\""));
     }
 
     /// 応答 JSON を往復できるようにすること
@@ -380,11 +415,12 @@ mod tests {
         assert!(parsed.is_success());
     }
 
-    /// 正規表現上書きがコンテキストへ適用されるようにすること
+    /// 旧ワイヤの単一ステップ上書きがコンテキストへ適用されるようにすること
     #[test]
-    fn regex_override_applies_to_context() {
+    fn regex_override_applies_legacy_single_step_to_context() {
         let override_settings = OneshotRegexOverride {
             preset_name: None,
+            steps: None,
             pattern: Some("foo".into()),
             replacement: Some("bar".into()),
             case_insensitive: Some(true),
@@ -397,5 +433,84 @@ mod tests {
         assert_eq!(step.replacement, "bar");
         assert!(step.case_insensitive);
         assert!(step.multiline);
+        assert_eq!(ctx.regex.active_steps().len(), 1);
+    }
+
+    /// コンテキストの有効プリセット全ステップをワイヤへ載せること
+    #[test]
+    fn from_context_preserves_all_active_steps() {
+        let ctx = RefineContext::with_regex(multi_step_regex_settings());
+        let override_settings = OneshotRegexOverride::from_context(&ctx);
+
+        assert_eq!(override_settings.preset_name.as_deref(), Some("日付"));
+        let steps = override_settings.steps.expect("steps");
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].pattern, r"(\d{4})-(\d{2})-(\d{2})");
+        assert_eq!(steps[0].replacement, "$1/$2/$3");
+        assert_eq!(steps[1].pattern, r"\s+");
+        assert_eq!(steps[1].replacement, " ");
+        assert!(override_settings.pattern.is_none());
+        assert!(override_settings.replacement.is_none());
+    }
+
+    /// ステップ列上書きがコンテキストの全ステップを維持すること
+    #[test]
+    fn regex_override_applies_all_steps_to_context() {
+        let ctx = RefineContext::with_regex(multi_step_regex_settings());
+        let request = build_request(&[RefineMode::RegexReplace], &ctx, "req-2");
+        let (pipeline, applied) = request.into_pipeline_and_context();
+
+        assert_eq!(pipeline, vec![RefineMode::RegexReplace]);
+        assert_eq!(
+            applied
+                .regex
+                .active_preset()
+                .map(|preset| preset.name.as_str()),
+            Some("日付")
+        );
+        assert_eq!(applied.regex.active_steps(), ctx.regex.active_steps());
+    }
+
+    /// `steps` があるときは旧単一ステップフィールドを無視すること
+    #[test]
+    fn regex_override_prefers_steps_over_legacy_fields() {
+        let override_settings = OneshotRegexOverride {
+            preset_name: Some("日付".into()),
+            steps: Some(vec![
+                RegexStep {
+                    pattern: "a".into(),
+                    replacement: "A".into(),
+                    ..RegexStep::default()
+                },
+                RegexStep {
+                    pattern: "b".into(),
+                    replacement: "B".into(),
+                    ..RegexStep::default()
+                },
+            ]),
+            pattern: Some("ignored".into()),
+            replacement: Some("ignored".into()),
+            case_insensitive: Some(true),
+            multiline: Some(true),
+        };
+        let mut ctx = RefineContext::default();
+        override_settings.apply_to(&mut ctx);
+
+        assert_eq!(ctx.regex.active_steps().len(), 2);
+        assert_eq!(ctx.regex.active_steps()[0].pattern, "a");
+        assert_eq!(ctx.regex.active_steps()[1].pattern, "b");
+    }
+
+    /// 旧 JSON (単一ステップ) を解釈できるようにすること
+    #[test]
+    fn parse_request_accepts_legacy_single_step_regex() {
+        let json = r#"{"type":"process-clipboard","requestId":"req-3","pipeline":["RegexReplace"],"regex":{"pattern":"foo","replacement":"bar","caseInsensitive":true}}"#;
+        let parsed = parse_request(json).expect("parse");
+        let (_, ctx) = parsed.into_pipeline_and_context();
+        let step = &ctx.regex.active_steps()[0];
+        assert_eq!(step.pattern, "foo");
+        assert_eq!(step.replacement, "bar");
+        assert!(step.case_insensitive);
+        assert_eq!(ctx.regex.active_steps().len(), 1);
     }
 }

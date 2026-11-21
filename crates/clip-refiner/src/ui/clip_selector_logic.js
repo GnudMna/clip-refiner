@@ -3,7 +3,7 @@
  *
  * @namespace ClipSelectorLogic
  */
-var ClipSelectorLogic = (function () {
+const ClipSelectorLogic = (function () {
     'use strict';
 
     /**
@@ -152,6 +152,28 @@ var ClipSelectorLogic = (function () {
         return 'delete:' + id;
     }
 
+    /**
+     * 「クリップボードを登録」行の内部 HTML を組み立てる
+     *
+     * @param {string} query
+     * @param {(text: string, query: string) => string} highlightText
+     * @returns {string}
+     */
+    function buildRegisterRowInnerHtml(query, highlightText) {
+        const label = 'クリップボードを登録';
+        const preview = '現在のクリップボードを登録クリップに追加';
+        return (
+            '<div class="mode-info">' +
+            '<span class="label">' +
+            highlightText(label, query) +
+            '</span>' +
+            '</div>' +
+            '<span class="value-hint">' +
+            highlightText(preview, query) +
+            '</span>'
+        );
+    }
+
     return {
         imagePreviewSource,
         itemMatches,
@@ -164,13 +186,8 @@ var ClipSelectorLogic = (function () {
         selectMessage,
         registerMessage,
         deleteMessage,
+        buildRegisterRowInnerHtml,
     };
 })();
 
-if (typeof window !== 'undefined') {
-    window.ClipSelectorLogic = ClipSelectorLogic;
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ClipSelectorLogic;
-}
+export default ClipSelectorLogic;

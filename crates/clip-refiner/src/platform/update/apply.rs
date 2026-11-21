@@ -8,7 +8,7 @@ use super::types::{AvailableUpdate, UpdateApplyOutcome};
 use super::verify::download_and_verify;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use super::verify::download_and_verify_with_key;
-use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO};
+use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME};
 
 use zip::ZipArchive;
 
@@ -178,7 +178,7 @@ pub(crate) fn asset_download_url(base_url: &str, tag: &str, asset_name: &str) ->
 /// 更新作業用ディレクトリを用意する
 fn update_work_dir(version: &str) -> Result<PathBuf, UpdateError> {
     let base = std::env::temp_dir()
-        .join("clip-refiner-update")
+        .join(UPDATE_WORK_DIR_NAME)
         .join(version);
     fs::create_dir_all(&base).map_err(|err| {
         crate::log_warn!("更新作業ディレクトリの作成に失敗: {err}");

@@ -243,6 +243,20 @@ pub fn settings_patch_enqueue_failure() -> UserNotification {
     )
 }
 
+/// ワンショット IPC 待受スレッドの起動失敗を通知する
+///
+/// 常駐の監視は継続する。ワンショットは常駐検出時に委譲できず失敗する
+///
+/// # Returns
+/// * `UserNotification` - 監視継続と再起動案内を含む通知
+#[must_use]
+pub fn oneshot_ipc_start_failure() -> UserNotification {
+    UserNotification::static_message(
+        titles::ONESHOT,
+        "ワンショット用の常駐連携を開始できませんでした。監視は利用できます。ワンショットは常駐を終了してから実行するか、アプリを再起動してください",
+    )
+}
+
 /// 起動失敗向けの通知を組み立てる
 ///
 /// # Arguments
@@ -349,6 +363,7 @@ pub mod titles {
     pub const CLIPBOARD: &str = "クリップボードエラー";
     pub const CONTINUOUS_RECORD: &str = "連続記録";
     pub const OCR: &str = "OCR エラー";
+    pub const ONESHOT: &str = "ワンショット連携";
     pub const PROCESS: &str = "加工エラー";
     pub const PROCESS_SKIP: &str = "加工をスキップ";
     pub const REGISTERED_CLIP: &str = "登録クリップ";
@@ -440,6 +455,16 @@ mod tests {
             notification.body(),
             "クリップボードが空のため登録できません"
         );
+    }
+
+    /// ワンショット IPC 起動失敗通知が監視継続と再起動を案内するようにすること
+    #[test]
+    fn oneshot_ipc_start_failure_mentions_monitor_and_restart() {
+        let notification = oneshot_ipc_start_failure();
+        assert_eq!(notification.title(), titles::ONESHOT);
+        assert!(notification.body().contains("監視"));
+        assert!(notification.body().contains("再起動"));
+        assert!(notification.body().contains("ワンショット"));
     }
 
     /// 起動時の `WebView2` 案内が監視継続を伝えるようにすること

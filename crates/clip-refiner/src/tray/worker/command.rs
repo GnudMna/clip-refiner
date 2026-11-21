@@ -36,6 +36,8 @@ pub enum ClipboardCommand {
     PasteContinuousRecordFront,
     /// OS のクリップボード変更通知を受けた (監視ティックの起床用)
     ClipboardChanged,
+    /// 設定ディレクトリの変更通知を受けた (外部編集の再読み込み用)
+    ConfigFileChanged,
     /// ワーカースレッドの終了要求
     Shutdown,
 }
@@ -61,6 +63,7 @@ impl std::fmt::Debug for ClipboardCommand {
                 .finish(),
             Self::PasteContinuousRecordFront => f.write_str("PasteContinuousRecordFront"),
             Self::ClipboardChanged => f.write_str("ClipboardChanged"),
+            Self::ConfigFileChanged => f.write_str("ConfigFileChanged"),
             Self::Shutdown => f.write_str("Shutdown"),
         }
     }

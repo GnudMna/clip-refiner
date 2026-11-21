@@ -8,6 +8,7 @@ use clip_refiner::test_helpers::{
     set_worker_alive, spawn_oneshot_stub_responder, start_oneshot_ipc_for_test, stub_worker,
     test_app_state_arc,
 };
+use clip_refiner_core::config::{RegexPreset, RegexSettings, RegexStep};
 use clip_refiner_core::{RefineContext, RefineMode};
 
 /// 実パイプ IPC 統合テストの直列化ロック
@@ -80,14 +81,58 @@ fn oneshot_ipc_pipe_forwards_regex_override() {
         let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
 
         let mut ctx = RefineContext::default();
-        ctx.regex = clip_refiner_core::config::RegexSettings::from_step(
-            clip_refiner_core::config::RegexStep {
-                pattern: "(world)".into(),
-                replacement: "ClipRefiner".into(),
-                case_insensitive: true,
-                ..Default::default()
-            },
-        );
+        ctx.regex = RegexSettings::from_step(RegexStep {
+            pattern: "(world)".into(),
+            replacement: "ClipRefiner".into(),
+            case_insensitive: true,
+            ..Default::default()
+        });
+
+        let response = process_oneshot_via_pipe(&pipe_name, &[RefineMode::RegexReplace], &ctx)
+            .expect("IPC 往復");
+
+        assert_eq!(response.status, OneshotIpcStatus::Processed);
+    });
+}
+
+/// 複数ステップの正規表現プリセットがワーカーへ渡るようにすること
+#[test]
+fn oneshot_ipc_pipe_forwards_multi_step_regex() {
+    with_oneshot_ipc_lock(|| {
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+        let _responder = spawn_oneshot_stub_responder(rx, |pipeline, ctx| {
+            assert_eq!(pipeline, vec![RefineMode::RegexReplace]);
+            let steps = ctx.regex.active_steps();
+            assert_eq!(steps.len(), 2);
+            assert_eq!(steps[0].pattern, r"(\d{4})-(\d{2})-(\d{2})");
+            assert_eq!(steps[0].replacement, "$1/$2/$3");
+            assert_eq!(steps[1].pattern, r"\s+");
+            assert_eq!(steps[1].replacement, " ");
+            OneshotProcessResult::Processed
+        });
+        let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
+
+        let mut ctx = RefineContext::default();
+        ctx.regex = RegexSettings {
+            active_preset_id: "date".into(),
+            presets: vec![RegexPreset {
+                id: "date".into(),
+                name: "日付".into(),
+                steps: vec![
+                    RegexStep {
+                        pattern: r"(\d{4})-(\d{2})-(\d{2})".into(),
+                        replacement: "$1/$2/$3".into(),
+                        ..Default::default()
+                    },
+                    RegexStep {
+                        pattern: r"\s+".into(),
+                        replacement: " ".into(),
+                        ..Default::default()
+                    },
+                ],
+            }],
+        };
 
         let response = process_oneshot_via_pipe(&pipe_name, &[RefineMode::RegexReplace], &ctx)
             .expect("IPC 往復");

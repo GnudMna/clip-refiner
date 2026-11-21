@@ -51,8 +51,11 @@ impl OneshotIpcServer {
     /// * `worker` - クリップボードワーカーへのハンドル
     ///
     /// # Returns
-    /// * `Self` - 停止時に待受を終了するガード
-    pub fn start(worker: Arc<ClipboardWorkerHandle>) -> Self {
+    /// * `Result<Self>` - 停止時に待受を終了するガード
+    ///
+    /// # Errors
+    /// 待受スレッドの起動に失敗した場合
+    pub fn start(worker: Arc<ClipboardWorkerHandle>) -> Result<Self> {
         Self::start_named(worker, consts::ONESHOT_IPC_PIPE_NAME.to_owned())
     }
 
@@ -65,8 +68,14 @@ impl OneshotIpcServer {
     /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
     ///
     /// # Returns
-    /// * `Self` - 停止時に待受を終了するガード
-    pub(crate) fn start_named(worker: Arc<ClipboardWorkerHandle>, pipe_name: String) -> Self {
+    /// * `Result<Self>` - 停止時に待受を終了するガード
+    ///
+    /// # Errors
+    /// 待受スレッドの起動に失敗した場合
+    pub(crate) fn start_named(
+        worker: Arc<ClipboardWorkerHandle>,
+        pipe_name: String,
+    ) -> Result<Self> {
         // テスト用パイプは FIRST_PIPE_INSTANCE を付けない
         // 連続接続でインスタンス再作成が失敗し、クライアントが応答待ちのまま残るのを避ける
         let first_instance_only = pipe_name == consts::ONESHOT_IPC_PIPE_NAME;
@@ -78,13 +87,13 @@ impl OneshotIpcServer {
             .spawn(move || {
                 run_server_loop(&worker, &stop_flag, &listen_name, first_instance_only);
             })
-            .ok();
+            .context("ワンショット IPC 待受スレッドの起動に失敗")?;
 
-        Self {
+        Ok(Self {
             stop,
-            thread,
+            thread: Some(thread),
             pipe_name,
-        }
+        })
     }
 
     /// 待受を停止し、ブロッキング中の `ConnectNamedPipe` を解除する
@@ -273,7 +282,25 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use super::{connect_pipe, create_pipe_instance_named};
+    use super::{OneshotIpcServer, connect_pipe, create_pipe_instance_named};
+    use crate::test_helpers::{stub_worker, test_app_state_arc, wait_for_oneshot_pipe};
+
+    /// 待受スレッド起動に成功したらサーバーガードを返すようにすること
+    #[test]
+    fn start_named_returns_ok_when_thread_spawns() {
+        let (worker, _rx) = stub_worker(&test_app_state_arc());
+        let pipe_name = format!(
+            r"\\.\pipe\com.y_hirata.clip-refiner.oneshot-start-test-{}",
+            std::process::id()
+        );
+        let server = OneshotIpcServer::start_named(worker, pipe_name.clone())
+            .expect("待受スレッドを起動できる");
+        assert!(
+            wait_for_oneshot_pipe(&pipe_name, Duration::from_secs(2)),
+            "待受開始を検知できること"
+        );
+        drop(server);
+    }
 
     /// 現在ユーザー専用 DACL のパイプへ同一ユーザーが接続できるようにすること
     #[test]

@@ -74,7 +74,7 @@
  * @property {RegexPreviewUi} [ui] - UI 更新用フィールド (action が `apply` のとき)
  */
 
-var RegexPreview = (function () {
+const RegexPreview = (function () {
     'use strict';
 
     /**
@@ -287,6 +287,4 @@ var RegexPreview = (function () {
     };
 })();
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = RegexPreview;
-}
+export default RegexPreview;

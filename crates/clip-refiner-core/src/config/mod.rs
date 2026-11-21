@@ -1,43 +1,67 @@
-//! `ClipRefiner` の設定型と永続化 API
+//! 正規表現設定型と (feature `config`) 設定永続化 API
 //!
-//! [`AppConfig`] は `config.toml` の内容に対応する。正規表現設定 ([`RegexSettings`]) は
-//! 名前付きプリセットとステップ列を保持し、有効プリセットが加工に使われる。
-//! [`RefineContext::from_config`](crate::RefineContext::from_config) 経由で加工 API に渡せる
+//! [`RegexSettings`] は加工 API が常に利用する。`AppConfig` と `config.toml` I/O は
+//! feature `config` が必要。`RefineContext::from_config` も同じ feature に属する
 
+#[cfg(feature = "config")]
 mod atomic_io;
+#[cfg(feature = "config")]
 mod clip_store_key;
+#[cfg(feature = "config")]
 mod migrate;
+#[cfg(feature = "config")]
 mod paths;
+#[cfg(feature = "config")]
 pub mod permissions;
+#[cfg(feature = "config")]
 mod persistence;
+#[cfg(feature = "config")]
 mod registered_clips;
+#[cfg(feature = "config")]
 mod registered_images;
+#[cfg(feature = "config")]
 mod serialize;
+#[cfg(all(test, feature = "config"))]
+mod spec;
 mod types;
+#[cfg(feature = "config")]
 mod unknown_keys;
 
+pub use types::{RegexPreset, RegexSettings, RegexStep};
+
+#[cfg(feature = "config")]
 pub use crate::consts::CONFIG_VERSION;
+#[cfg(feature = "config")]
 pub use crate::error::ConfigError;
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "config")]
+pub use migrate::format_unsupported_config_version_message;
+#[cfg(all(feature = "config", any(test, debug_assertions)))]
 pub use paths::{begin_capture_open_path_for_test, take_captured_open_path_for_test};
-#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
+#[cfg(all(
+    feature = "config",
+    any(test, debug_assertions, feature = "test-helpers")
+))]
 pub use paths::{clear_test_config_dir, set_test_config_dir};
+#[cfg(feature = "config")]
 pub use paths::{get_config_dir, is_portable_mode, open_config_file};
+#[cfg(feature = "config")]
 pub use persistence::{
-    ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
-    disk_config_modified_time,
+    ConfigDiskReload, ConfigFileFingerprint, ConfigLoadFallback, ConfigLoadOutcome,
+    ConfigReloadError, disk_config_content_fingerprint, disk_config_modified_time,
 };
+#[cfg(feature = "config")]
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
-    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegexPreset, RegexSettings,
-    RegexStep, ResolvedClip, SelectorWebviewRetention, format_hotkey_fixes_message,
+    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, ResolvedClip,
+    SelectorWebviewRetention, format_hotkey_fixes_message,
 };
+#[cfg(feature = "config")]
 pub use unknown_keys::format_unknown_config_keys_message;
 
 // ======================================================================
 // テスト
 // ======================================================================
-#[cfg(test)]
+#[cfg(all(test, feature = "config"))]
 mod tests {
     use super::*;
     use crate::consts;

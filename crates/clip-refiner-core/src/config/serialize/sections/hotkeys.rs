@@ -3,26 +3,28 @@ use std::fmt::Write;
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
     DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_CONTINUOUS_RECORD, DOC_HOTKEY_CONTINUOUS_RECORD_PASTE,
-    DOC_HOTKEY_CONTINUOUS_RECORD_UNDO, DOC_HOTKEY_FAVORITE_SLOTS, DOC_HOTKEY_NOTIFICATION,
-    DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE, DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO,
-    SECTION_HOTKEYS,
+    DOC_HOTKEY_CONTINUOUS_RECORD_UNDO, DOC_HOTKEY_NOTIFICATION, DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE,
+    DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO, doc_hotkey_favorite_slots,
+    section_hotkeys,
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
 use crate::config::types::AppConfig;
+use crate::error::ConfigError;
 
-use anyhow::{Context, Result};
 use toml_edit::DocumentMut;
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // ドキュメント更新
 // ======================================================================
 /// `[hotkeys]` の設定値を更新する
 pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
-    ensure_table(doc, "hotkeys", SECTION_HOTKEYS);
+    ensure_table(doc, "hotkeys", &section_hotkeys());
     let hotkeys = doc["hotkeys"]
         .as_table_mut()
-        .context("hotkeys テーブルが存在しない")?;
+        .ok_or_else(|| ConfigError::serialize("hotkeys テーブルが存在しない"))?;
     write_hotkeys_table(hotkeys, config)
 }
 
@@ -107,7 +109,7 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         set_table_value(
             hotkeys,
             "favorite_mode_slots",
-            DOC_HOTKEY_FAVORITE_SLOTS,
+            &doc_hotkey_favorite_slots(),
             TABLE_INDENT,
             &config.hotkeys.favorite_mode_slots,
         )?;
@@ -120,7 +122,7 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
 // ======================================================================
 /// `[hotkeys]` をコメント付きテンプレートへ書き出す
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
-    write_table_section(out, SECTION_HOTKEYS, "hotkeys")?;
+    write_table_section(out, &section_hotkeys(), "hotkeys")?;
     write_field(
         out,
         TABLE_INDENT,
@@ -195,7 +197,7 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         write_field(
             out,
             TABLE_INDENT,
-            DOC_HOTKEY_FAVORITE_SLOTS,
+            &doc_hotkey_favorite_slots(),
             "favorite_mode_slots",
             &config.hotkeys.favorite_mode_slots,
         )?;

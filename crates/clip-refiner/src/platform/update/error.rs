@@ -205,6 +205,21 @@ pub(crate) enum UpdateError {
     /// 展開先と実行フォルダが同一
     #[error("展開先と実行フォルダが同じため差し替えできません")]
     SameReplaceDirs,
+    /// 差し替え先が既存のポータブルフォルダではない
+    #[error("差し替え先が ClipRefiner のポータブルフォルダではありません")]
+    InstallDirInvalid,
+    /// 展開元が更新作業フォルダの外にある
+    #[error("展開元が更新用の一時フォルダではありません")]
+    SourceDirInvalid,
+    /// 削除対象が更新作業フォルダの外にある
+    #[error("削除対象フォルダが更新用の一時フォルダではありません")]
+    CleanupDirInvalid,
+    /// `--wait-pid` が 0 またはヘルパー自身
+    #[error("待ち受けプロセスの指定が不正です")]
+    WaitPidInvalid,
+    /// 生存中の待ち受けプロセスが `ClipRefiner` ではない
+    #[error("待ち受けプロセスが ClipRefiner ではありません")]
+    WaitPidNotClipRefiner,
     /// パスに不正な文字
     #[error("パスに不正な文字が含まれています")]
     PathInvalid,

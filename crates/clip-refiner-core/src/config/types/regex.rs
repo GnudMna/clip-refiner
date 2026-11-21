@@ -189,6 +189,8 @@ impl RegexSettings {
     /// CLI / IPC 向けに有効プリセットを単一ステップへ置き換える
     ///
     /// 未指定フィールドは現在の有効プリセット先頭ステップ (無ければ既定) を引き継ぐ
+    /// `--regex-pattern` など 1 ステップ上書き専用。複数ステップの委譲は
+    /// [`Self::apply_oneshot_steps_override`] を使う
     ///
     /// # Arguments
     /// * `pattern` - 上書きするパターン
@@ -215,23 +217,48 @@ impl RegexSettings {
         if let Some(multiline) = multiline {
             step.multiline = multiline;
         }
+        self.replace_active_preset_steps(None, vec![step]);
+    }
+
+    /// CLI / IPC 向けに有効プリセットを指定ステップ列へ置き換える
+    ///
+    /// 空のステップ列は既定の 1 ステップにする。件数は [`MAX_REGEX_STEPS_PER_PRESET`] で打ち切る
+    ///
+    /// # Arguments
+    /// * `name` - 置き換え後プリセットの表示名。`None` または空なら現在の名前を維持する
+    /// * `steps` - 適用するステップ列
+    pub fn apply_oneshot_steps_override(&mut self, name: Option<&str>, steps: &[RegexStep]) {
+        self.replace_active_preset_steps(name, steps.to_vec());
+    }
+
+    /// 有効プリセットを 1 件だけ残し、ステップ列を置き換える
+    ///
+    /// # Arguments
+    /// * `name` - 置き換え後プリセットの表示名。`None` または空なら現在の名前を維持する
+    /// * `steps` - 適用するステップ列
+    fn replace_active_preset_steps(&mut self, name: Option<&str>, mut steps: Vec<RegexStep>) {
+        if steps.is_empty() {
+            steps.push(RegexStep::default());
+        }
+        steps.truncate(MAX_REGEX_STEPS_PER_PRESET);
 
         let id = if self.active_preset_id.is_empty() {
             DEFAULT_REGEX_PRESET_ID.to_string()
         } else {
             self.active_preset_id.clone()
         };
-        let name = self.active_preset().map_or_else(
-            || DEFAULT_REGEX_PRESET_NAME.to_string(),
-            |preset| preset.name.clone(),
+        let name = name.filter(|value| !value.is_empty()).map_or_else(
+            || {
+                self.active_preset().map_or_else(
+                    || DEFAULT_REGEX_PRESET_NAME.to_string(),
+                    |preset| preset.name.clone(),
+                )
+            },
+            str::to_string,
         );
 
         self.active_preset_id.clone_from(&id);
-        self.presets = vec![RegexPreset {
-            id,
-            name,
-            steps: vec![step],
-        }];
+        self.presets = vec![RegexPreset { id, name, steps }];
     }
 
     /// 件数上限・空配列・不正 ID を補正する
@@ -358,6 +385,7 @@ mod tests {
     use super::*;
 
     /// 旧フラット形式をプリセット 1 件へ読み込めるようにすること
+    #[cfg(feature = "config")]
     #[test]
     fn deserialize_legacy_flat_regex() {
         let settings: RegexSettings = toml::from_str(
@@ -377,6 +405,7 @@ multiline = false
     }
 
     /// プリセット形式を読み込めるようにすること
+    #[cfg(feature = "config")]
     #[test]
     fn deserialize_preset_regex() {
         let settings: RegexSettings = toml::from_str(
@@ -448,5 +477,87 @@ presets = [
         assert_eq!(settings.active_preset_id, "b");
         assert!(!settings.select_preset_by_id("missing"));
         assert_eq!(settings.active_preset_id, "b");
+    }
+
+    /// ワンショットの 1 ステップ上書きは有効プリセットを先頭 1 件へ畳むこと
+    #[test]
+    fn apply_oneshot_step_override_collapses_to_single_step() {
+        let mut settings = RegexSettings {
+            active_preset_id: "a".to_string(),
+            presets: vec![RegexPreset {
+                id: "a".to_string(),
+                name: "日付".to_string(),
+                steps: vec![
+                    RegexStep {
+                        pattern: "1".to_string(),
+                        replacement: "a".to_string(),
+                        ..RegexStep::default()
+                    },
+                    RegexStep {
+                        pattern: "2".to_string(),
+                        replacement: "b".to_string(),
+                        ..RegexStep::default()
+                    },
+                ],
+            }],
+        };
+
+        settings.apply_oneshot_step_override(Some("x".into()), None, None, None);
+
+        assert_eq!(settings.presets.len(), 1);
+        assert_eq!(
+            settings.active_preset().map(|preset| preset.name.as_str()),
+            Some("日付")
+        );
+        assert_eq!(settings.active_steps().len(), 1);
+        assert_eq!(settings.active_steps()[0].pattern, "x");
+        assert_eq!(settings.active_steps()[0].replacement, "a");
+    }
+
+    /// ワンショットのステップ列上書きで有効プリセットを全件置き換えること
+    #[test]
+    fn apply_oneshot_steps_override_replaces_all_steps() {
+        let mut settings = RegexSettings::default();
+        let steps = vec![
+            RegexStep {
+                pattern: "a".to_string(),
+                replacement: "A".to_string(),
+                ..RegexStep::default()
+            },
+            RegexStep {
+                pattern: "b".to_string(),
+                replacement: "B".to_string(),
+                case_insensitive: true,
+                ..RegexStep::default()
+            },
+        ];
+
+        settings.apply_oneshot_steps_override(Some("日付"), &steps);
+
+        assert_eq!(settings.presets.len(), 1);
+        assert_eq!(
+            settings.active_preset().map(|preset| preset.name.as_str()),
+            Some("日付")
+        );
+        assert_eq!(settings.active_steps(), steps.as_slice());
+    }
+
+    /// ステップ列上書きは上限件数で打ち切ること
+    #[test]
+    fn apply_oneshot_steps_override_truncates_to_max() {
+        let mut settings = RegexSettings::default();
+        let steps = vec![RegexStep::default(); MAX_REGEX_STEPS_PER_PRESET + 2];
+        settings.apply_oneshot_steps_override(None, &steps);
+        assert_eq!(settings.active_steps().len(), MAX_REGEX_STEPS_PER_PRESET);
+    }
+
+    /// 空のステップ列上書きは既定の 1 ステップになること
+    #[test]
+    fn apply_oneshot_steps_override_empty_becomes_default_step() {
+        let mut settings = RegexSettings::default();
+        settings.apply_oneshot_steps_override(None, &[]);
+
+        assert_eq!(settings.active_steps().len(), 1);
+        assert_eq!(settings.active_steps()[0], RegexStep::default());
     }
 }

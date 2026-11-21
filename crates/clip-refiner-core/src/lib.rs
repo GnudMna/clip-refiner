@@ -1,7 +1,8 @@
 //! クリップボード加工ロジックと設定型を提供する GUI 非依存クレート
 //!
+//! 既定 feature は `clipboard` と `config`。テキスト変換だけ使う場合は
+//! `default-features = false` にする
 //! デスクトップ常駐 UI は `clip-refiner` パッケージ (feature `app`) を参照
-//! 加工 API の利用例はクレートルートのドキュメントコメントを参照
 //!
 //! # 単一モードの加工
 //!
@@ -27,8 +28,11 @@
 //! assert_eq!(result.as_deref(), Some("あ"));
 //! ```
 
-#[cfg(not(target_os = "windows"))]
-compile_error!("clip-refiner-core は Windows 専用です");
+#[cfg(all(
+    not(target_os = "windows"),
+    any(feature = "clipboard", feature = "config")
+))]
+compile_error!("clip-refiner-core の clipboard / config feature は Windows 専用です");
 
 pub mod config;
 pub mod consts;
@@ -38,20 +42,28 @@ pub use hotkey_binding::{
     HotkeyKey, HotkeyModifiers, HotkeyParseError, ParsedHotkey, parse_hotkey_binding,
     parse_hotkey_or_default, parse_hotkey_or_default_labeled,
 };
+#[cfg(any(feature = "clipboard", feature = "config"))]
 mod native;
 pub mod refiner;
 pub mod security;
 
+#[cfg(feature = "config")]
 pub use config::{
-    AppConfig, CONFIG_VERSION, ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome,
-    ConfigReloadError, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix, HotkeyFixKind,
-    HotkeySettings, MonitorMode, NotificationSettings, RegexPreset, RegexSettings, RegexStep,
-    ResolvedClip, SelectorWebviewRetention, disk_config_modified_time, format_hotkey_fixes_message,
-    format_unknown_config_keys_message, get_config_dir, is_portable_mode, open_config_file,
+    AppConfig, CONFIG_VERSION, ConfigDiskReload, ConfigFileFingerprint, ConfigLoadFallback,
+    ConfigLoadOutcome, ConfigReloadError, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
+    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, ResolvedClip,
+    SelectorWebviewRetention, disk_config_content_fingerprint, disk_config_modified_time,
+    format_hotkey_fixes_message, format_unknown_config_keys_message,
+    format_unsupported_config_version_message, get_config_dir, is_portable_mode, open_config_file,
 };
-pub use error::{AddRegisteredClipError, ConfigError, Error};
+pub use config::{RegexPreset, RegexSettings, RegexStep};
+pub use error::Error;
+#[cfg(feature = "config")]
+pub use error::{AddRegisteredClipError, CipherError, ConfigError};
+#[cfg(feature = "clipboard")]
+pub use refiner::OwnedClipboard;
 pub use refiner::{
-    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue, OwnedClipboard,
+    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue,
     REGEX_PREVIEW_SAMPLE, RefineCategory, RefineContext, RefineMode, Refiner, RegexPreviewResult,
     apply_pipeline_to_text, apply_text_pipeline, preview_regex_replace, process_clipboard,
     process_clipboard_pipeline, split_pipeline,

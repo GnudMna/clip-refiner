@@ -1,4 +1,4 @@
-//! 設定ファイルの保存と更新時刻取得
+//! 設定ファイルの保存と更新時刻・内容指紋の取得
 
 use std::fs;
 use std::time::SystemTime;
@@ -11,6 +11,15 @@ use super::super::serialize::config_to_toml;
 use super::super::types::AppConfig;
 use crate::error::ConfigError;
 
+// ======================================================================
+// 内容指紋
+// ======================================================================
+/// `config.toml` 本文の内容指紋 (BLAKE3)
+///
+/// 更新時刻ではなくバイト列で比較し、同一秒の上書きや時計ずれでも変更を検知する
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigFileFingerprint([u8; 32]);
+
 /// ディスク上の設定ファイルの最終更新時刻を取得する
 ///
 /// # Returns
@@ -20,6 +29,26 @@ use crate::error::ConfigError;
 /// 設定ファイルのメタデータ取得に失敗した場合
 pub fn disk_config_modified_time() -> Result<Option<SystemTime>, ConfigError> {
     config_file_modified_time()
+}
+
+/// ディスク上の設定ファイル本文の内容指紋を取得する
+///
+/// ファイルが無い場合は `None` を返す
+///
+/// # Returns
+/// * `Result<Option<ConfigFileFingerprint>, ConfigError>` - 指紋。未作成時は `None`
+///
+/// # Errors
+/// 設定ファイルパス取得または読み取りに失敗した場合
+pub fn disk_config_content_fingerprint() -> Result<Option<ConfigFileFingerprint>, ConfigError> {
+    let path = get_config_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(ConfigError::Read)?;
+    Ok(Some(ConfigFileFingerprint(
+        *blake3::hash(&bytes).as_bytes(),
+    )))
 }
 
 impl AppConfig {
@@ -102,6 +131,57 @@ mod tests {
             );
             assert!(!path.with_file_name("config.toml.tmp").exists());
             assert!(!path.with_file_name("config.toml.prev").exists());
+        });
+    }
+
+    /// 未作成の設定ファイルは内容指紋 `None` を返すようにすること
+    #[test]
+    fn content_fingerprint_none_when_missing() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            assert_eq!(
+                disk_config_content_fingerprint().expect("fingerprint"),
+                None
+            );
+        });
+    }
+
+    /// 内容が変わると指紋も変わるようにすること
+    #[test]
+    fn content_fingerprint_changes_when_bytes_change() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.save().expect("初回保存");
+            let first = disk_config_content_fingerprint()
+                .expect("fingerprint")
+                .expect("存在する");
+
+            config.interval_ms = 2500;
+            config.save().expect("内容変更");
+            let second = disk_config_content_fingerprint()
+                .expect("fingerprint")
+                .expect("存在する");
+
+            assert_ne!(first, second);
+        });
+    }
+
+    /// 同一バイト列の再書き込みでは指紋が変わらないようにすること
+    #[test]
+    fn content_fingerprint_stable_for_identical_bytes() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            AppConfig::default().save().expect("初回保存");
+            let path = get_config_file_path().expect("path");
+            let bytes = fs::read(&path).expect("read");
+            let first = disk_config_content_fingerprint()
+                .expect("fingerprint")
+                .expect("存在する");
+
+            fs::write(&path, &bytes).expect("同一バイト列");
+            let second = disk_config_content_fingerprint()
+                .expect("fingerprint")
+                .expect("存在する");
+
+            assert_eq!(first, second);
         });
     }
 }

@@ -4,7 +4,10 @@ use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
-use crate::config::{AppConfig, ConfigReloadError, format_unknown_config_keys_message};
+use crate::config::{
+    AppConfig, ConfigReloadError, format_unknown_config_keys_message,
+    format_unsupported_config_version_message,
+};
 use crate::platform;
 use crate::tray::selector::ClipSelectorWindow;
 use crate::user_error::{UserNotification, titles};
@@ -68,6 +71,7 @@ pub fn apply_config_reload(
     let unknown_keys = loaded.unknown_keys.clone();
     let migrated = loaded.migrated;
     let newer_version_clamped = loaded.newer_version_clamped;
+    let unsupported_version_kept = loaded.unsupported_version_kept;
     let loaded = loaded.config;
 
     let previous = state.with_config(std::clone::Clone::clone);
@@ -138,11 +142,18 @@ pub fn apply_config_reload(
     if newer_version_clamped {
         change_labels.push("将来 version を現行へ揃え");
     }
+    if unsupported_version_kept {
+        change_labels.push("未対応 version を検出し既存項目を維持");
+    }
     if !unknown_keys.is_empty() {
         change_labels.push("未知の設定キーを検出");
     }
 
     let mut message = build_reload_message(&change_labels);
+    if unsupported_version_kept {
+        message.push('\n');
+        message.push_str(format_unsupported_config_version_message());
+    }
     if !unknown_keys.is_empty() {
         message.push('\n');
         message.push_str(&format_unknown_config_keys_message(&unknown_keys));
@@ -203,6 +214,7 @@ mod tests {
             "監視設定を更新",
             "設定スキーマを移行",
             "将来 version を現行へ揃え",
+            "未対応 version を検出し既存項目を維持",
             "未知の設定キーを検出",
         ]);
         assert!(message.contains("設定を反映しました"));
@@ -210,6 +222,7 @@ mod tests {
         assert!(message.contains("監視設定を更新"));
         assert!(message.contains("設定スキーマを移行"));
         assert!(message.contains("将来 version を現行へ揃え"));
+        assert!(message.contains("未対応 version を検出し既存項目を維持"));
         assert!(message.contains("未知の設定キーを検出"));
     }
 

@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 
 // ======================================================================
@@ -44,11 +43,11 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 /// * `input` - デコード対象の文字列
 ///
 /// # Returns
-/// * `Result<String>` - デコードされた文字列
+/// * `Result<String, std::str::Utf8Error>` - デコードされた文字列
 ///
 /// # Errors
 /// 不正なパーセントエンコード、または UTF-8 として不正な場合
-pub fn url_decode(input: &str) -> Result<String> {
+pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }

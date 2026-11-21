@@ -10,6 +10,7 @@ use super::super::worker::ClipboardWorkerHandle;
 use super::App;
 use crate::ipc::OneshotIpcServer;
 use crate::tray::selector::SelectorUi;
+use crate::user_error::oneshot_ipc_start_failure;
 
 use anyhow::Result;
 use tao::event_loop::EventLoopProxy;
@@ -29,7 +30,8 @@ impl App {
     /// # Errors
     /// 状態・メニュー・ホットキーのいずれかの初期化に失敗した場合
     pub fn new(proxy: &EventLoopProxy<AppEvent>) -> Result<Self> {
-        let (state, config_fallback, unknown_keys) = AppState::new(proxy.clone())?;
+        let (state, config_fallback, unknown_keys, unsupported_version_kept) =
+            AppState::new(proxy.clone())?;
         let state = Arc::new(state);
         if let Some(ref fallback) = config_fallback {
             crate::log_warn!("{}", fallback.user_message());
@@ -40,6 +42,11 @@ impl App {
             crate::log_warn!("{message}");
             crate::platform::show_notification("設定の読み込み", &message);
         }
+        if unsupported_version_kept {
+            let message = crate::config::format_unsupported_config_version_message();
+            crate::log_warn!("{message}");
+            crate::platform::show_notification("設定の読み込み", message);
+        }
         let menu = TrayMenu::build(&state)?;
         let (hotkeys, favorite_modes) =
             state.with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
@@ -49,7 +56,13 @@ impl App {
         let oneshot_ipc = if crate::tray::e2e::is_active() {
             None
         } else {
-            Some(OneshotIpcServer::start(Arc::clone(&clipboard_worker)))
+            match OneshotIpcServer::start(Arc::clone(&clipboard_worker)) {
+                Ok(server) => Some(server),
+                Err(err) => {
+                    oneshot_ipc_start_failure().notify_with_debug(&err);
+                    None
+                }
+            }
         };
         let selectors = SelectorUi::new(proxy, Arc::clone(&clipboard_worker));
         let settings = init_settings_window(proxy, &state);

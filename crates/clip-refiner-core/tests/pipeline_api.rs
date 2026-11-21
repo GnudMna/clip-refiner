@@ -6,7 +6,7 @@ use clip_refiner_core::consts::MAX_CLIPBOARD_TEXT_BYTES;
 use clip_refiner_core::refiner::process_clipboard_pipeline_io;
 use clip_refiner_core::test_helpers::InMemoryTextClipboard;
 use clip_refiner_core::{
-    AppConfig, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
+    ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
     apply_pipeline_to_text, apply_text_pipeline, is_within_clipboard_limit, is_within_parser_limit,
     split_pipeline,
 };
@@ -100,9 +100,9 @@ fn apply_text_pipeline_empty_modes_returns_none() {
 /// 設定の正規表現がパイプライン全体に効ようにすること
 #[test]
 fn config_regex_applies_through_pipeline() {
-    let mut config = AppConfig::default();
-    config.regex = clip_refiner_core::config::RegexSettings::single(r"\s+", "-");
-    let ctx = RefineContext::from_config(&config);
+    let ctx = RefineContext::with_regex(clip_refiner_core::config::RegexSettings::single(
+        r"\s+", "-",
+    ));
 
     assert_eq!(
         apply_text_pipeline("a   b", &[RefineMode::RegexReplace], &ctx),

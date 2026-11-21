@@ -7,7 +7,7 @@
  *
  * @namespace SettingsPatch
  */
-var SettingsPatch = (function () {
+const SettingsPatch = (function () {
     'use strict';
 
     /**
@@ -43,6 +43,4 @@ var SettingsPatch = (function () {
     };
 })();
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SettingsPatch;
-}
+export default SettingsPatch;

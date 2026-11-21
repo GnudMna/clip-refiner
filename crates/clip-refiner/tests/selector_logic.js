@@ -1,14 +1,11 @@
 /**
  * セレクター共有 / クイック / 登録クリップ純粋ロジックの Node テスト
  */
-'use strict';
+import assert from 'node:assert/strict';
 
-const assert = require('node:assert/strict');
-const path = require('node:path');
-
-const SelectorCommon = require(path.join(__dirname, '../src/ui/selector-common.js'));
-const QuickSelectorLogic = require(path.join(__dirname, '../src/ui/quick_selector_logic.js'));
-const ClipSelectorLogic = require(path.join(__dirname, '../src/ui/clip_selector_logic.js'));
+import ClipSelectorLogic from '../src/ui/clip_selector_logic.js';
+import QuickSelectorLogic from '../src/ui/quick_selector_logic.js';
+import SelectorCommon from '../src/ui/selector-common.js';
 
 /** @type {import('../src/ui/quick_selector_logic').QuickSelectorMode[]} */
 const SAMPLE_MODES = [
@@ -281,6 +278,22 @@ function test_clip_selector_ipc_messages() {
     assert.equal(ClipSelectorLogic.deleteMessage('3'), 'delete:3');
 }
 
+/** カテゴリ見出し HTML を組み立てられること */
+function test_build_category_header_inner_html() {
+    assert.equal(
+        SelectorCommon.buildCategoryHeaderInnerHtml('<b>', SelectorCommon.escapeHtml),
+        '<span class="category-accent" aria-hidden="true"></span>' +
+            '<span class="category-label">&lt;b&gt;</span>'
+    );
+}
+
+/** 登録行 HTML を組み立てられること */
+function test_build_register_row_inner_html() {
+    const html = ClipSelectorLogic.buildRegisterRowInnerHtml('登録', SelectorCommon.highlightText);
+    assert.ok(html.includes('<mark>登録</mark>'));
+    assert.ok(html.includes('クリップボードを'));
+}
+
 const tests = [
     test_escape_html,
     test_normalize_query,
@@ -303,6 +316,8 @@ const tests = [
     test_clip_image_preview,
     test_clip_resolve_activate_selection,
     test_clip_selector_ipc_messages,
+    test_build_category_header_inner_html,
+    test_build_register_row_inner_html,
 ];
 
 for (const test of tests) {

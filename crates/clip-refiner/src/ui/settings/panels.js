@@ -13,7 +13,6 @@ import {
     panelWrap,
     wrappedTable,
 } from './html_builders.js';
-import { render } from './main.js';
 import { buildPipelineInnerHtml } from './monitor_ui.js';
 import { buildRegexEditorHtml } from './regex_ui.js';
 import {
@@ -71,7 +70,7 @@ function activateTab(tabId, options = {}) {
     const focus = options.focus !== false;
     if (tabId !== ctx.activeTab) {
         ctx.activeTab = tabId;
-        render();
+        ctx.render();
     } else {
         syncSidebarActiveTab();
     }

@@ -1,12 +1,9 @@
 /**
  * `RegexPreview` 純粋ロジックの Node テスト
  */
-'use strict';
+import assert from 'node:assert/strict';
 
-const assert = require('node:assert/strict');
-const path = require('node:path');
-
-const RegexPreview = require(path.join(__dirname, '../src/ui/settings/regex_preview.js'));
+import RegexPreview from '../src/ui/settings/regex_preview.js';
 
 const MAX_PATTERN_BYTES = 8 * 1024;
 const SAMPLE = 'Hello world 123';

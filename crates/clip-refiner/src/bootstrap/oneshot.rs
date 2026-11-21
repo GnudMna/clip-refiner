@@ -35,6 +35,11 @@ pub(super) fn run_once(args: &Args) -> Result<()> {
         log_warn!("{message}");
         eprintln!("警告: {message}");
     }
+    if load_outcome.unsupported_version_kept {
+        let message = config::format_unsupported_config_version_message();
+        log_warn!("{message}");
+        eprintln!("警告: {message}");
+    }
     let config = load_outcome.config;
     let ctx = build_refinement_context(&config, args);
 
@@ -249,6 +254,40 @@ mod tests {
         let ctx = build_refinement_context(&config, &args);
         assert_eq!(ctx.regex.active_preset_id, "b");
         assert_eq!(ctx.regex.active_steps()[0].pattern, "2");
+    }
+
+    /// CLI 上書きが無いとき有効プリセットの全ステップを維持すること
+    #[test]
+    fn build_refinement_context_keeps_all_preset_steps() {
+        use crate::config::{RegexPreset, RegexSettings, RegexStep};
+
+        let config = AppConfig {
+            regex: RegexSettings {
+                active_preset_id: "date".to_string(),
+                presets: vec![RegexPreset {
+                    id: "date".to_string(),
+                    name: "日付".to_string(),
+                    steps: vec![
+                        RegexStep {
+                            pattern: "1".to_string(),
+                            replacement: "a".to_string(),
+                            ..RegexStep::default()
+                        },
+                        RegexStep {
+                            pattern: "2".to_string(),
+                            replacement: "b".to_string(),
+                            ..RegexStep::default()
+                        },
+                    ],
+                }],
+            },
+            ..AppConfig::default()
+        };
+        let ctx = build_refinement_context(&config, &sample_args_for_test());
+
+        assert_eq!(ctx.regex.active_steps().len(), 2);
+        assert_eq!(ctx.regex.active_steps()[0].pattern, "1");
+        assert_eq!(ctx.regex.active_steps()[1].pattern, "2");
     }
 
     /// 加工成功の IPC 応答を `Ok` として扱うようにすること

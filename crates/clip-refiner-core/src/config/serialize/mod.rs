@@ -1,4 +1,4 @@
-mod docs;
+pub(super) mod docs;
 mod document;
 mod format;
 mod scalar;
@@ -6,9 +6,11 @@ mod sections;
 mod template;
 
 use crate::config::types::AppConfig;
+use crate::error::ConfigError;
 
-use anyhow::Result;
 use toml_edit::DocumentMut;
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // コメント付き TOML 出力

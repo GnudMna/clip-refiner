@@ -54,6 +54,7 @@ pub trait ImageClipboard {
     -> Result<(), ClipboardIoError>;
 }
 
+#[cfg(feature = "clipboard")]
 impl TextClipboard for arboard::Clipboard {
     fn get_text(&mut self) -> Result<String, ClipboardIoError> {
         arboard::Clipboard::get_text(self).map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))
@@ -65,6 +66,7 @@ impl TextClipboard for arboard::Clipboard {
     }
 }
 
+#[cfg(feature = "clipboard")]
 impl ImageClipboard for arboard::Clipboard {
     fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
         read_rgba_image(self)
@@ -98,6 +100,7 @@ impl ImageClipboard for arboard::Clipboard {
 ///
 /// `CF_DIB` / `CF_DIBV5` がある場合は Excel 向け DIB デコードのみを試し、
 /// 無い場合または DIB 読み失敗時のみ `arboard` を使う
+#[cfg(feature = "clipboard")]
 fn read_rgba_image(
     clipboard: &mut arboard::Clipboard,
 ) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {

@@ -1,13 +1,15 @@
 use std::fmt::Write;
 
 use super::super::docs::TABLE_INDENT;
-use super::super::docs::{DOC_REGEX_ACTIVE_PRESET_ID, DOC_REGEX_PRESETS, SECTION_REGEX};
+use super::super::docs::{DOC_REGEX_ACTIVE_PRESET_ID, SECTION_REGEX, doc_regex_presets};
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{field_comment_prefix, write_field, write_table_section};
 use crate::config::types::{AppConfig, RegexPreset, RegexStep};
+use crate::error::ConfigError;
 
-use anyhow::{Context, Result};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // ドキュメント更新
@@ -17,7 +19,7 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "regex", SECTION_REGEX);
     let regex = doc["regex"]
         .as_table_mut()
-        .context("regex テーブルが存在しない")?;
+        .ok_or_else(|| ConfigError::serialize("regex テーブルが存在しない"))?;
 
     // 旧フラットキーを除去する
     for key in [
@@ -48,7 +50,7 @@ fn write_regex_table(regex: &mut toml_edit::Table, config: &AppConfig) -> Result
     if let Some(mut key_mut) = regex.key_mut("presets") {
         key_mut
             .leaf_decor_mut()
-            .set_prefix(field_comment_prefix(TABLE_INDENT, DOC_REGEX_PRESETS));
+            .set_prefix(field_comment_prefix(TABLE_INDENT, &doc_regex_presets()));
     }
     Ok(())
 }
@@ -92,7 +94,7 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         "active_preset_id",
         &config.regex.active_preset_id,
     )?;
-    writeln!(out, "{TABLE_INDENT}# {DOC_REGEX_PRESETS}")?;
+    writeln!(out, "{TABLE_INDENT}# {}", doc_regex_presets())?;
     writeln!(
         out,
         "{TABLE_INDENT}presets = {}",

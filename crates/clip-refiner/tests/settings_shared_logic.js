@@ -1,12 +1,9 @@
 /**
  * `SettingsSharedLogic` 純粋ロジックの Node テスト
  */
-'use strict';
+import assert from 'node:assert/strict';
 
-const assert = require('node:assert/strict');
-const path = require('node:path');
-
-const SettingsSharedLogic = require(path.join(__dirname, '../src/ui/settings/shared_logic.js'));
+import SettingsSharedLogic from '../src/ui/settings/shared_logic.js';
 
 const IMAGE_MODES = new Set(['excel-to-image']);
 

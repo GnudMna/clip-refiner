@@ -9,9 +9,11 @@ use super::super::docs::{
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
 use crate::config::types::AppConfig;
+use crate::error::ConfigError;
 
-use anyhow::{Context, Result};
 use toml_edit::DocumentMut;
+
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // ドキュメント更新
@@ -21,7 +23,7 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     ensure_table(doc, "notification_settings", SECTION_NOTIFICATION);
     let notification = doc["notification_settings"]
         .as_table_mut()
-        .context("notification_settings テーブルが存在しない")?;
+        .ok_or_else(|| ConfigError::serialize("notification_settings テーブルが存在しない"))?;
     write_notification_table(notification, config)
 }
 

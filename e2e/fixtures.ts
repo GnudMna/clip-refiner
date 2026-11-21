@@ -299,3 +299,13 @@ export const test = base.extend<HarnessFixtures>({
 });
 
 export { expect };
+
+/**
+ * 埋め込み HTML の CSP が WebView 上に残っていることを検証する
+ */
+export async function expectWebViewCsp(page: Page): Promise<void> {
+  const csp = page.locator('meta[http-equiv="Content-Security-Policy"]');
+  await expect(csp).toHaveAttribute('content', /default-src 'none'/);
+  await expect(csp).toHaveAttribute('content', /img-src data:/);
+  await expect(csp).toHaveAttribute('content', /script-src 'unsafe-inline'/);
+}

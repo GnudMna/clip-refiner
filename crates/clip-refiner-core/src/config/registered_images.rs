@@ -6,11 +6,17 @@ use super::clip_store_key::clip_store_key;
 use super::paths::get_config_dir;
 use super::permissions::{restrict_private_dir_permissions, restrict_private_file_permissions};
 use crate::consts;
+use crate::error::ConfigError;
 use crate::security::{decrypt_bytes, encrypt_bytes};
 
-use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
+
+type Result<T> = std::result::Result<T, ConfigError>;
+
+fn clips_err(msg: impl Into<String>) -> ConfigError {
+    ConfigError::RegisteredClipsSave(msg.into())
+}
 
 // ======================================================================
 // 定数
@@ -34,7 +40,8 @@ const LEGACY_IMAGE_EXT: &str = "png";
 pub fn registered_images_dir() -> Result<PathBuf> {
     let dir = get_config_dir()?.join(REGISTERED_IMAGES_DIR);
     if !dir.exists() {
-        fs::create_dir_all(&dir).context("登録画像ディレクトリの作成に失敗しました")?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| clips_err(format!("登録画像ディレクトリの作成に失敗しました: {e}")))?;
         if let Err(e) = restrict_private_dir_permissions(&dir) {
             tracing::warn!("登録画像ディレクトリのパーミッション設定に失敗: {:?}", e);
         }
@@ -59,13 +66,13 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
 
     let png = encode_png(width, height, rgba)?;
     if png.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-        bail!("登録画像の PNG サイズが上限を超えています");
+        return Err(clips_err("登録画像の PNG サイズが上限を超えています"));
     }
 
     let key = clip_store_key()?;
     let encrypted = encrypt_bytes(&key, &png)?;
     if encrypted.len() > consts::MAX_REGISTERED_IMAGE_ENCRYPTED_BYTES {
-        bail!("登録画像の暗号化サイズが上限を超えています");
+        return Err(clips_err("登録画像の暗号化サイズが上限を超えています"));
     }
 
     let filename = format!(
@@ -74,7 +81,8 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
     );
     let path = registered_images_dir()?.join(&filename);
     if !path.exists() {
-        fs::write(&path, &encrypted).context("登録画像ファイルの書き込みに失敗しました")?;
+        fs::write(&path, &encrypted)
+            .map_err(|e| clips_err(format!("登録画像ファイルの書き込みに失敗しました: {e}")))?;
         if let Err(e) = restrict_private_file_permissions(&path) {
             tracing::warn!("登録画像ファイルのパーミッション設定に失敗: {:?}", e);
         }
@@ -140,14 +148,14 @@ pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<Strin
         return Ok(relative_filename.to_string());
     }
     if !relative_filename.ends_with(&format!(".{LEGACY_IMAGE_EXT}")) {
-        bail!("登録画像のファイル名が不正です");
+        return Err(clips_err("登録画像のファイル名が不正です"));
     }
 
     let path = resolve_registered_image_path(relative_filename)?;
-    let png =
-        fs::read(&path).with_context(|| format!("登録画像の読み込みに失敗: {}", path.display()))?;
+    let png = fs::read(&path)
+        .map_err(|e| clips_err(format!("登録画像の読み込みに失敗: {}: {e}", path.display())))?;
     if png.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-        bail!("登録画像の PNG サイズが上限を超えています");
+        return Err(clips_err("登録画像の PNG サイズが上限を超えています"));
     }
 
     let key = clip_store_key()?;
@@ -158,7 +166,8 @@ pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<Strin
     );
     let new_path = registered_images_dir()?.join(&filename);
     if !new_path.exists() {
-        fs::write(&new_path, &encrypted).context("登録画像の暗号化保存に失敗しました")?;
+        fs::write(&new_path, &encrypted)
+            .map_err(|e| clips_err(format!("登録画像の暗号化保存に失敗しました: {e}")))?;
         if let Err(e) = restrict_private_file_permissions(&new_path) {
             tracing::warn!("登録画像ファイルのパーミッション設定に失敗: {:?}", e);
         }
@@ -235,23 +244,23 @@ fn registered_image_preview_data_url(
 // ======================================================================
 fn read_registered_image_png(relative_filename: &str) -> Result<Vec<u8>> {
     let path = resolve_registered_image_path(relative_filename)?;
-    let bytes =
-        fs::read(&path).with_context(|| format!("登録画像の読み込みに失敗: {}", path.display()))?;
+    let bytes = fs::read(&path)
+        .map_err(|e| clips_err(format!("登録画像の読み込みに失敗: {}: {e}", path.display())))?;
 
     if relative_filename.ends_with(&format!(".{ENCRYPTED_IMAGE_EXT}")) {
         if bytes.len() > consts::MAX_REGISTERED_IMAGE_ENCRYPTED_BYTES {
-            bail!("登録画像の暗号化サイズが上限を超えています");
+            return Err(clips_err("登録画像の暗号化サイズが上限を超えています"));
         }
         let key = clip_store_key()?;
         let png = decrypt_bytes(&key, &bytes)?;
         if png.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-            bail!("登録画像の PNG サイズが上限を超えています");
+            return Err(clips_err("登録画像の PNG サイズが上限を超えています"));
         }
         return Ok(png);
     }
 
     if bytes.len() > consts::MAX_REGISTERED_IMAGE_BYTES {
-        bail!("登録画像の PNG サイズが上限を超えています");
+        return Err(clips_err("登録画像の PNG サイズが上限を超えています"));
     }
     Ok(bytes)
 }
@@ -263,12 +272,12 @@ fn resolve_registered_image_path(relative_filename: &str) -> Result<PathBuf> {
         || relative_filename.contains("..")
         || !is_allowed_image_filename(relative_filename)
     {
-        bail!("登録画像のファイル名が不正です");
+        return Err(clips_err("登録画像のファイル名が不正です"));
     }
 
     let path = registered_images_dir()?.join(relative_filename);
     if !path.starts_with(registered_images_dir()?) {
-        bail!("登録画像のファイル名が不正です");
+        return Err(clips_err("登録画像のファイル名が不正です"));
     }
 
     Ok(path)
@@ -281,24 +290,24 @@ fn is_allowed_image_filename(filename: &str) -> bool {
 
 fn validate_rgba_buffer(width: u32, height: u32, rgba: &[u8]) -> Result<()> {
     if width == 0 || height == 0 {
-        bail!("登録画像のサイズが不正です");
+        return Err(clips_err("登録画像のサイズが不正です"));
     }
     if width > consts::MAX_REGISTERED_IMAGE_DIMENSION
         || height > consts::MAX_REGISTERED_IMAGE_DIMENSION
     {
-        bail!("登録画像の辺長が上限を超えています");
+        return Err(clips_err("登録画像の辺長が上限を超えています"));
     }
 
     let pixels = u64::from(width) * u64::from(height);
     if pixels > consts::MAX_REGISTERED_IMAGE_PIXELS {
-        bail!("登録画像のピクセル数が上限を超えています");
+        return Err(clips_err("登録画像のピクセル数が上限を超えています"));
     }
 
     let expected_len = usize::try_from(pixels)
-        .context("登録画像のピクセル数が大きすぎます")?
+        .map_err(|e| clips_err(format!("登録画像のピクセル数が大きすぎます: {e}")))?
         .saturating_mul(4);
     if rgba.len() != expected_len {
-        bail!("登録画像の RGBA バッファ長が不正です");
+        return Err(clips_err("登録画像の RGBA バッファ長が不正です"));
     }
 
     Ok(())
@@ -306,17 +315,17 @@ fn validate_rgba_buffer(width: u32, height: u32, rgba: &[u8]) -> Result<()> {
 
 fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>> {
     let image: RgbaImage = ImageBuffer::from_raw(width, height, rgba.to_vec())
-        .context("登録画像の RGBA バッファから画像を構築できませんでした")?;
+        .ok_or_else(|| clips_err("登録画像の RGBA バッファから画像を構築できませんでした"))?;
     let mut png = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
-        .context("登録画像の PNG エンコードに失敗しました")?;
+        .map_err(|e| clips_err(format!("登録画像の PNG エンコードに失敗しました: {e}")))?;
     Ok(png)
 }
 
 fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
     let image = image::load_from_memory_with_format(bytes, ImageFormat::Png)
-        .context("登録画像の PNG デコードに失敗しました")?;
+        .map_err(|e| clips_err(format!("登録画像の PNG デコードに失敗しました: {e}")))?;
     let rgba = image.to_rgba8();
     let (width, height) = (rgba.width(), rgba.height());
 
@@ -325,12 +334,12 @@ fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
         || width > consts::MAX_REGISTERED_IMAGE_DIMENSION
         || height > consts::MAX_REGISTERED_IMAGE_DIMENSION
     {
-        bail!("登録画像のサイズが不正です");
+        return Err(clips_err("登録画像のサイズが不正です"));
     }
 
     let pixels = u64::from(width) * u64::from(height);
     if pixels > consts::MAX_REGISTERED_IMAGE_PIXELS {
-        bail!("登録画像のピクセル数が上限を超えています");
+        return Err(clips_err("登録画像のピクセル数が上限を超えています"));
     }
 
     Ok((width, height, rgba.into_raw()))

@@ -44,6 +44,7 @@ pub const PORTABLE_DATA_DIR_NAME: &str = "data";
 /// 設定ファイルのスキーマバージョン
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
+/// 手順を書き忘れると既存項目を維持して警告し、デフォルトへは置換しない
 pub const CONFIG_VERSION: u32 = 3;
 
 /// 履歴のデフォルト最大保持数

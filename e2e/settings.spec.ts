@@ -1,4 +1,4 @@
-import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml } from './fixtures';
+import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml, expectWebViewCsp } from './fixtures';
 
 test.use({ e2eWindow: 'settings' });
 
@@ -11,6 +11,7 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#sidebar [role="tab"][data-tab="shortcuts"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
     await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
+    await expectWebViewCsp(page);
   });
 
   test('矢印キーで設定タブを移動できる', async ({ page }) => {
@@ -60,8 +61,6 @@ test.describe('設定 WebView', () => {
   test('外部で変更された config.toml をバナーで通知する', async ({ page, configDir }) => {
     await expect(page.locator('#app')).toBeVisible();
 
-    // 起動直後の mtime と差を付け、ワーカーの 2 秒ポーリングで検知させる
-    await page.waitForTimeout(1_100);
     const updated = readConfigToml(configDir).replace(
       /interval_ms\s*=\s*\d+/,
       'interval_ms = 2500',

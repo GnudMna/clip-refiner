@@ -70,21 +70,7 @@ function Get-WixUpgradeCode {
     throw 'エラー: wix/main.wxs から UpgradeCode を読み取れませんでした'
 }
 
-# rustc の host triple を取得する
-function Get-RustHostTriple {
-    $output = & rustc -vV 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "エラー: rustc -vV が終了コード $LASTEXITCODE で失敗しました"
-    }
-
-    foreach ($line in $output) {
-        if ($line -match '^host:\s+(.+)$') {
-            return $Matches[1].Trim()
-        }
-    }
-
-    throw 'エラー: rustc -vV から host triple を読み取れませんでした'
-}
+. (Join-Path $PSScriptRoot 'windows-target.ps1')
 
 # 期待する MSI パスを解決する
 function Resolve-BuiltMsiPath {
@@ -96,7 +82,9 @@ function Resolve-BuiltMsiPath {
         [Parameter(Mandatory = $true)]
         [string]$Version,
 
-        [string]$MsiPath
+        [string]$MsiPath,
+
+        [string]$TargetTriple
     )
 
     if ($MsiPath) {
@@ -120,10 +108,28 @@ function Resolve-BuiltMsiPath {
         throw "エラー: バージョン $Version の MSI が見つかりません ($wixDir)"
     }
 
-    $hostTriple = Get-RustHostTriple
-    $preferred = @($candidates | Where-Object { $_.Name -like "*$hostTriple*" })
+    $preferredTriple = if ($TargetTriple) {
+        $TargetTriple
+    } else {
+        Get-RustHostTriple
+    }
+
+    # cargo-wix の既定名は `{name}-{version}-{arch}.msi` (例: x86_64 / aarch64)
+    # フル triple (`x86_64-pc-windows-msvc`) では -Target All 時に 0 件になり、複数 MSI で失敗する
+    $preferred = @($candidates | Where-Object {
+        (Resolve-WindowsTargetTripleFromMsiName -MsiFileName $_.Name) -eq $preferredTriple
+    })
     if ($preferred.Count -eq 1) {
         return $preferred[0].FullName
+    }
+    if ($preferred.Count -gt 1) {
+        $names = ($preferred | ForEach-Object { $_.Name }) -join ', '
+        throw "エラー: バージョン $Version ($preferredTriple) に一致する MSI が複数あります: $names"
+    }
+
+    if ($TargetTriple) {
+        $names = ($candidates | ForEach-Object { $_.Name }) -join ', '
+        throw "エラー: バージョン $Version の $TargetTriple 向け MSI が見つかりません: $names"
     }
 
     if ($candidates.Count -eq 1) {
@@ -341,7 +347,9 @@ function Assert-MsiDatabaseContents {
         [string]$ExpectedVersion,
 
         [Parameter(Mandatory = $true)]
-        [string]$ExpectedUpgradeCode
+        [string]$ExpectedUpgradeCode,
+
+        [string]$TargetTriple
     )
 
     $database = Open-MsiDatabase -Path $MsiPath
@@ -398,6 +406,10 @@ function Assert-MsiDatabaseContents {
     } finally {
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($database) | Out-Null
     }
+
+    if ($TargetTriple) {
+        Assert-MsiPlatformTemplate -MsiPath $MsiPath -TargetTriple $TargetTriple
+    }
 }
 
 # MSI を管理インストールで展開する
@@ -438,7 +450,9 @@ function Assert-ExtractedMsiContents {
         [string]$ExtractDir,
 
         [Parameter(Mandatory = $true)]
-        [string]$ProjectRoot
+        [string]$ProjectRoot,
+
+        [string]$TargetTriple
     )
 
     foreach ($requiredName in $script:MsiRequiredFileNames) {
@@ -451,6 +465,10 @@ function Assert-ExtractedMsiContents {
     $executable = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter 'ClipRefiner.exe')[0]
     if ($executable.Length -lt $script:MsiMinExecutableBytes) {
         throw "エラー: ClipRefiner.exe のサイズが小さすぎます ($($executable.Length) bytes, 最低 $($script:MsiMinExecutableBytes) bytes)"
+    }
+
+    if ($TargetTriple) {
+        Assert-PeMachineType -Path $executable.FullName -TargetTriple $TargetTriple
     }
 
     $noticesFile = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter 'THIRD_PARTY_NOTICES')[0]
@@ -487,6 +505,8 @@ function Invoke-MsiPackageVerification {
 
         [string]$Version,
 
+        [string]$TargetTriple,
+
         [switch]$SkipExtract
     )
 
@@ -505,19 +525,33 @@ function Invoke-MsiPackageVerification {
     Write-Host '  Cargo.toml と wix/main.wxs の UpgradeCode が一致'
     Write-Host ''
 
-    $resolvedMsiPath = Resolve-BuiltMsiPath -ProjectRoot $ProjectRoot -Version $Version -MsiPath $MsiPath
+    $resolvedMsiPath = Resolve-BuiltMsiPath `
+        -ProjectRoot $ProjectRoot `
+        -Version $Version `
+        -MsiPath $MsiPath `
+        -TargetTriple $TargetTriple
+    if (-not $TargetTriple) {
+        $TargetTriple = Resolve-WindowsTargetTripleFromMsiName -MsiFileName $resolvedMsiPath
+    }
     Write-Host "検証対象 MSI: $resolvedMsiPath"
+    if ($TargetTriple) {
+        Write-Host "  ターゲット: $TargetTriple"
+    }
     Write-Host ''
 
     Write-Host 'MSI データベースを確認中...'
     Assert-MsiDatabaseContents `
         -MsiPath $resolvedMsiPath `
         -ExpectedVersion $Version `
-        -ExpectedUpgradeCode $expectedUpgradeCode
+        -ExpectedUpgradeCode $expectedUpgradeCode `
+        -TargetTriple $TargetTriple
     Write-Host '  ProductName / ProductVersion / UpgradeCode / Manufacturer'
     Write-Host '  必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES)'
     Write-Host '  必須 Feature (Binaries, Environment, Autostart)'
     Write-Host '  per-user インストール (ALLUSERS)'
+    if ($TargetTriple) {
+        Write-Host "  Platform テンプレート ($TargetTriple)"
+    }
     Write-Host ''
 
     if ($SkipExtract) {
@@ -535,9 +569,15 @@ function Invoke-MsiPackageVerification {
         Write-Host ''
 
         Write-Host '展開内容を確認中...'
-        Assert-ExtractedMsiContents -ExtractDir $extractDir -ProjectRoot $ProjectRoot
+        Assert-ExtractedMsiContents `
+            -ExtractDir $extractDir `
+            -ProjectRoot $ProjectRoot `
+            -TargetTriple $TargetTriple
         Write-Host '  実行ファイル・ライセンス・THIRD_PARTY_NOTICES の存在とサイズ'
         Write-Host '  THIRD_PARTY_NOTICES ヘッダーと生成物サイズの一致'
+        if ($TargetTriple) {
+            Write-Host "  ClipRefiner.exe の PE アーキテクチャ ($TargetTriple)"
+        }
         Write-Host ''
     } finally {
         if (Test-Path -LiteralPath $extractDir) {

@@ -92,12 +92,13 @@ pub(crate) fn download_and_verify(
     expected_size: u64,
     expected_sha256: &str,
 ) -> Result<(), UpdateError> {
+    let download_key = bridge_download_key();
     download_and_verify_with_key(
         url,
         dest,
         expected_size,
         expected_sha256,
-        bridge_download_key(),
+        download_key.as_ref().map(|key| key.as_str()),
     )
 }
 

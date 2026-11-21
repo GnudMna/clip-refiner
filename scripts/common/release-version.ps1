@@ -140,36 +140,6 @@ function Set-WorkspaceCargoVersion {
     Set-Content -LiteralPath $cargoTomlPath -Value $updated -Encoding utf8NoBOM -NoNewline
 }
 
-# clip-refiner の path 依存 version フィールドを更新する
-function Set-ClipRefinerCoreDependencyVersion {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ProjectRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$NewVersion,
-
-        [switch]$DryRun
-    )
-
-    $cargoTomlPath = Join-Path $ProjectRoot 'crates\clip-refiner\Cargo.toml'
-    $content = Get-Content -LiteralPath $cargoTomlPath -Raw -Encoding utf8
-    $pattern = '(clip-refiner-core\s*=\s*\{\s*path\s*=\s*"\.\./clip-refiner-core",\s*version\s*=\s*")[^"]+(")'
-    $updated = $content -replace $pattern, "`${1}$NewVersion`${2}"
-
-    if ($updated -eq $content) {
-        throw "エラー: crates/clip-refiner/Cargo.toml の clip-refiner-core version を更新できませんでした"
-    }
-
-    if ($DryRun) {
-        Write-Host "[DryRun] crates/clip-refiner/Cargo.toml -> clip-refiner-core version = `"$NewVersion`""
-        return
-    }
-
-    Set-Content -LiteralPath $cargoTomlPath -Value $updated -Encoding utf8NoBOM -NoNewline
-}
-
 # lib.rs ドキュメント内の依存バージョン例を更新する
 function Set-LibRsDocVersions {
     [CmdletBinding()]
@@ -315,7 +285,6 @@ function Get-ReleaseVersionFilePaths {
 
     return @(
         (Join-Path $ProjectRoot 'Cargo.toml'),
-        (Join-Path $ProjectRoot 'crates\clip-refiner\Cargo.toml'),
         (Join-Path $ProjectRoot 'Cargo.lock'),
         (Join-Path $ProjectRoot 'CHANGELOG.md'),
         (Join-Path $ProjectRoot 'crates\clip-refiner\src\lib.rs')

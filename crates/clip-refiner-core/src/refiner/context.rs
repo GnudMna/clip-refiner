@@ -1,7 +1,9 @@
 use std::cell::{Cell, RefCell};
 
 use super::transform::regex::RegexPatternCache;
-use crate::config::{AppConfig, RegexSettings};
+#[cfg(feature = "config")]
+use crate::config::AppConfig;
+use crate::config::RegexSettings;
 
 // ======================================================================
 // 加工スキップ理由
@@ -56,11 +58,14 @@ impl Clone for RefineContext {
 impl RefineContext {
     /// 設定ファイルの内容からコンテキストを生成する
     ///
+    /// feature `config` が必要
+    ///
     /// # Arguments
     /// * `config` - アプリケーション設定
     ///
     /// # Returns
     /// * `RefineContext` - 設定から構築した加工コンテキスト
+    #[cfg(feature = "config")]
     pub fn from_config(config: &AppConfig) -> Self {
         Self {
             regex: config.regex.clone(),

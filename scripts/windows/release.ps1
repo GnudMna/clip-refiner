@@ -21,6 +21,7 @@
 #   -SkipPortable              build-portable.ps1 をスキップ
 #   -NoCommit                  Git コミットを作成しない
 #   -AllowDirty                未コミット変更があっても続行する
+#   -Target Host|All|x64|arm64 配布アーキテクチャ (省略時はホスト。All で x64 と ARM64)
 # ========================================================================
 
 #requires -Version 7.0
@@ -39,7 +40,10 @@ param(
     [switch]$SkipMsi,
     [switch]$SkipPortable,
     [switch]$NoCommit,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+
+    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    [string]$Target
 )
 
 # シェルオプションを設定(エラー時に即終了)
@@ -100,7 +104,6 @@ Invoke-ScriptMain {
 
     Write-Host 'バージョン関連ファイルを更新します...'
     Set-WorkspaceCargoVersion -ProjectRoot $ProjectRoot -NewVersion $newVersion -DryRun:$DryRun
-    Set-ClipRefinerCoreDependencyVersion -ProjectRoot $ProjectRoot -NewVersion $newVersion -DryRun:$DryRun
     Update-ChangelogForRelease `
         -ProjectRoot $ProjectRoot `
         -CurrentVersion $currentVersion `
@@ -146,7 +149,11 @@ Invoke-ScriptMain {
         Write-Host 'MSI インストーラーを作成します (build-msi.ps1)...'
         Write-Host ''
         $msiScript = Join-Path $PSScriptRoot 'build-msi.ps1'
-        & $msiScript
+        if ($Target) {
+            & $msiScript -Target $Target
+        } else {
+            & $msiScript
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "エラー: build-msi.ps1 が終了コード $LASTEXITCODE で失敗しました"
         }
@@ -164,9 +171,17 @@ Invoke-ScriptMain {
         # MSI 作成済みならリリースビルドと THIRD_PARTY_NOTICES を再利用する
         # (配列スプラットだと '-SkipBuild' が位置引数になりバインドに失敗する)
         if ($msiBuilt) {
-            & $portableScript -SkipBuild -SkipNotices
+            if ($Target) {
+                & $portableScript -SkipBuild -SkipNotices -Target $Target
+            } else {
+                & $portableScript -SkipBuild -SkipNotices
+            }
         } else {
-            & $portableScript
+            if ($Target) {
+                & $portableScript -Target $Target
+            } else {
+                & $portableScript
+            }
         }
         if ($LASTEXITCODE -ne 0) {
             throw "エラー: build-portable.ps1 が終了コード $LASTEXITCODE で失敗しました"
@@ -185,6 +200,7 @@ Invoke-ScriptMain {
     Write-Host "  - リモートへ push: git push -u origin $releaseBranch"
     Write-Host "  - Gitea 上で v$newVersion タグを付与する"
     Write-Host '  - GitHub Release へ MSI / ポータブル ZIP をアップロードする'
-    Write-Host '      MSI:      target\wix\clip-refiner-{version}-{arch}.msi'
-    Write-Host '      Portable: target\portable\clip-refiner-{version}-{host-triple}-portable.zip'
+    Write-Host '      MSI:      target\wix\clip-refiner-{version}-{target-triple}.msi'
+    Write-Host '      Portable: target\portable\clip-refiner-{version}-{target-triple}-portable.zip'
+    Write-Host '      (x64 と ARM64 の両方を出す場合は -Target All)'
 }

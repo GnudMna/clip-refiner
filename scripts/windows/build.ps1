@@ -2,13 +2,18 @@
 # Script Name : build.ps1
 # Description : Windows 用のビルド実行
 # Usage       : ./build.ps1 [--release|-r]
+#               ./build.ps1 -Release -Target arm64
 # Requires    : PowerShell 7.0+, Rust / Cargo
+#               ARM64 クロスコンパイル時は VS の ARM64 C++ ビルドツール
 # ========================================================================
 
 #requires -Version 7.0
 
 param(
-    [switch]$Release
+    [switch]$Release,
+
+    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    [string]$Target
 )
 
 Set-StrictMode -Version Latest
@@ -19,23 +24,43 @@ $ErrorActionPreference = 'Stop'
 Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
     . (Join-Path $PSScriptRoot '..\common\assert.ps1')
+    . (Join-Path $PSScriptRoot '..\common\windows-target.ps1')
 
     if ($args -contains '--release' -or $args -contains '-r') {
         $Release = $true
     }
 
+    $targets = Resolve-WindowsPackageTargets -Target $Target
+
     Write-Host 'Rust プロジェクトのビルドを実行しています...'
     Write-Host ''
 
-    if ($Release) {
-        Write-Host 'リリースビルドを実行中...'
-        cargo build --release
-    } else {
-        Write-Host 'デバッグビルドを実行中...'
-        cargo build
-    }
-    Assert-LastExitCode -CommandLabel 'cargo build'
+    foreach ($triple in $targets) {
+        Assert-RustTargetInstalled -TargetTriple $triple
+        $implicitHost = Test-WindowsImplicitHostTarget -TargetTriple $triple -RequestedTarget $Target
+        if (-not $implicitHost) {
+            Import-WindowsMsvcBuildEnvironment -TargetTriple $triple
+        }
+        $targetArgs = Get-CargoTargetArguments -TargetTriple $triple -ImplicitHost:$implicitHost
 
-    Write-Host ''
+        if ($Release) {
+            Write-Host "リリースビルドを実行中 ($triple)..."
+            cargo build --release @targetArgs
+        } else {
+            Write-Host "デバッグビルドを実行中 ($triple)..."
+            cargo build @targetArgs
+        }
+
+        if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0) {
+            $hint = Get-WindowsCrossCompileHint -TargetTriple $triple
+            if ($hint) {
+                throw "エラー: cargo build が終了コード $LASTEXITCODE で失敗しました`n$hint"
+            }
+            throw "エラー: cargo build が終了コード $LASTEXITCODE で失敗しました"
+        }
+
+        Write-Host ''
+    }
+
     Write-Host 'ビルドが完了しました'
 }

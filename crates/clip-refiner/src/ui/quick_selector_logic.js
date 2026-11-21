@@ -3,7 +3,7 @@
  *
  * @namespace QuickSelectorLogic
  */
-var QuickSelectorLogic = (function () {
+const QuickSelectorLogic = (function () {
     'use strict';
 
     /** @type {string} お気に入りセクションの表示名 */
@@ -214,10 +214,4 @@ var QuickSelectorLogic = (function () {
     };
 })();
 
-if (typeof window !== 'undefined') {
-    window.QuickSelectorLogic = QuickSelectorLogic;
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = QuickSelectorLogic;
-}
+export default QuickSelectorLogic;

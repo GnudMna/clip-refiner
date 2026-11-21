@@ -1,6 +1,9 @@
 /**
- * クイックセレクター UI ロジック
+ * クイックセレクター UI (DOM / IPC)
  */
+import SelectorCommon from './selector-common.js';
+import QuickSelectorLogic from './quick_selector_logic.js';
+
 const {
     normalizeQuery,
     highlightText,
@@ -12,7 +15,8 @@ const {
     handleHomeEndKeys,
     handleEscapeKey,
     focusSearchInput,
-} = window.SelectorCommon;
+    buildCategoryHeaderInnerHtml,
+} = SelectorCommon;
 
 const {
     FAVORITES_CATEGORY,
@@ -26,7 +30,7 @@ const {
     selectMessage,
     toggleFavoriteMessage,
     moveFavoriteMessage,
-} = window.QuickSelectorLogic;
+} = QuickSelectorLogic;
 
 /** @type {import('./quick_selector_logic').QuickSelectorMode[]} */
 let modes = JSON.parse(document.getElementById('modes-data').textContent);
@@ -184,11 +188,7 @@ function renderList(scrollToSelection) {
 
                     const header = document.createElement('div');
                     header.className = 'category-header';
-                    header.innerHTML =
-                        '<span class="category-accent" aria-hidden="true"></span>' +
-                        '<span class="category-label">' +
-                        escapeHtml(category) +
-                        '</span>';
+                    header.innerHTML = buildCategoryHeaderInnerHtml(category, escapeHtml);
                     currentSection.appendChild(header);
                     results.appendChild(currentSection);
                     lastCategory = category;

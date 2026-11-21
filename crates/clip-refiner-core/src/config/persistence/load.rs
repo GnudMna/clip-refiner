@@ -11,6 +11,7 @@ use super::super::registered_clips::{
 use super::super::types::{AppConfig, RegisteredClip};
 use super::super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
+use crate::error::ConfigError;
 
 use serde::Deserialize;
 
@@ -21,9 +22,10 @@ impl AppConfig {
     /// 読み込みや解析に失敗した場合はデフォルト設定を返し、[`ConfigLoadOutcome::fallback`] に理由を格納する
     /// 解析に失敗した場合は元ファイルを `config.toml.bak` へ退避する
     /// 認識できないキーは [`ConfigLoadOutcome::unknown_keys`] に格納し、読み込み自体は継続する
+    /// 移行手順が無い `version` はデフォルトへ置換せず、既存項目を維持する
     ///
     /// # Returns
-    /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由・未知キー
+    /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由・未知キー・未対応 version の有無
     pub fn load() -> ConfigLoadOutcome {
         let config_path = match get_config_file_path() {
             Ok(path) => path,
@@ -37,6 +39,7 @@ impl AppConfig {
                     config: Self::default(),
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
+                    unsupported_version_kept: false,
                 };
             }
         };
@@ -46,6 +49,7 @@ impl AppConfig {
                 config: Self::create_initial_config(&config_path),
                 fallback: None,
                 unknown_keys: Vec::new(),
+                unsupported_version_kept: false,
             };
         }
 
@@ -61,6 +65,7 @@ impl AppConfig {
                     config: Self::default(),
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
+                    unsupported_version_kept: false,
                 };
             }
         };
@@ -68,18 +73,19 @@ impl AppConfig {
         match parse_config_toml(&content) {
             Ok(parsed) => {
                 warn_unknown_config_keys(&parsed.unknown_keys);
-                let (config, migrated, newer_version_clamped) =
-                    finish_loading(parsed.config, parsed.legacy_clips);
-                if newer_version_clamped {
-                    notify_newer_config_version_clamped();
-                }
-                if migrated && let Err(e) = config.save() {
+                let finished = finish_loading(parsed.config, parsed.legacy_clips);
+                apply_version_notices(&finished);
+                if finished.migrated
+                    && !finished.unsupported_version_kept
+                    && let Err(e) = finished.config.save()
+                {
                     tracing::warn!("移行後の設定保存に失敗: {:?}", e);
                 }
                 ConfigLoadOutcome {
-                    config,
+                    config: finished.config,
                     fallback: None,
                     unknown_keys: parsed.unknown_keys,
+                    unsupported_version_kept: finished.unsupported_version_kept,
                 }
             }
             Err(e) => {
@@ -93,6 +99,7 @@ impl AppConfig {
                     config: Self::default(),
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
+                    unsupported_version_kept: false,
                 }
             }
         }
@@ -122,19 +129,20 @@ impl AppConfig {
             parse_config_toml(&content).map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
         warn_unknown_config_keys(&parsed.unknown_keys);
 
-        let (config, migrated, newer_version_clamped) =
-            finish_loading(parsed.config, parsed.legacy_clips);
-        if newer_version_clamped {
-            notify_newer_config_version_clamped();
-        }
-        if migrated && let Err(e) = config.save() {
+        let finished = finish_loading(parsed.config, parsed.legacy_clips);
+        apply_version_notices(&finished);
+        if finished.migrated
+            && !finished.unsupported_version_kept
+            && let Err(e) = finished.config.save()
+        {
             tracing::warn!("移行後の設定保存に失敗: {:?}", e);
         }
 
         Ok(ConfigDiskReload {
-            config,
-            migrated,
-            newer_version_clamped,
+            config: finished.config,
+            migrated: finished.migrated,
+            newer_version_clamped: finished.newer_version_clamped,
+            unsupported_version_kept: finished.unsupported_version_kept,
             unknown_keys: parsed.unknown_keys,
         })
     }
@@ -178,14 +186,17 @@ struct ParsedConfigToml {
 }
 
 /// `config.toml` を解析し、レガシー `[[clips]]` と未知キーを分離して返す
-fn parse_config_toml(content: &str) -> anyhow::Result<ParsedConfigToml> {
-    let value: toml::Value = toml::from_str(content)?;
+fn parse_config_toml(content: &str) -> Result<ParsedConfigToml, ConfigError> {
+    let value: toml::Value =
+        toml::from_str(content).map_err(|e| ConfigError::serialize(e.to_string()))?;
     let unknown_keys = collect_unknown_config_keys(&value);
     let legacy_clips = value
         .get("clips")
         .and_then(|clips| clips.clone().try_into().ok())
         .unwrap_or_default();
-    let config: AppConfig = value.try_into()?;
+    let config: AppConfig = value
+        .try_into()
+        .map_err(|e: toml::de::Error| ConfigError::serialize(e.to_string()))?;
     Ok(ParsedConfigToml {
         config,
         legacy_clips,
@@ -216,15 +227,21 @@ fn encrypt_legacy_toml_clips(legacy_clips: Vec<LegacyTomlRegisteredClip>) -> Vec
     clips
 }
 
-/// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
-fn finish_loading(
+/// スキーマ移行と読み込み後フラグ
+struct FinishedLoad {
     config: AppConfig,
-    legacy_clips: Vec<LegacyTomlRegisteredClip>,
-) -> (AppConfig, bool, bool) {
+    migrated: bool,
+    newer_version_clamped: bool,
+    unsupported_version_kept: bool,
+}
+
+/// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
+fn finish_loading(config: AppConfig, legacy_clips: Vec<LegacyTomlRegisteredClip>) -> FinishedLoad {
     let migration = config.prepare_loaded();
     let mut config = migration.config;
     let schema_migrated = migration.migrated;
     let newer_version_clamped = migration.newer_version_clamped;
+    let unsupported_version_kept = migration.unsupported_version_kept;
 
     let (file_clips, file_format_migrated) = load_registered_clips().unwrap_or_else(|err| {
         tracing::warn!("登録クリップファイルの読み込みに失敗: {:?}", err);
@@ -249,18 +266,27 @@ fn finish_loading(
 
     config.normalize_clips();
 
-    (
+    FinishedLoad {
         config,
-        schema_migrated || clips_migrated,
+        migrated: schema_migrated || clips_migrated,
         newer_version_clamped,
-    )
+        unsupported_version_kept,
+    }
 }
 
-/// 将来バージョン向け設定を検出した旨をログへ記録する
-fn notify_newer_config_version_clamped() {
-    tracing::warn!(
-        "将来バージョン向けの設定を検出した。既存の項目は維持し、version を現行に揃えた"
-    );
+/// 将来 version / 未対応 version のログを出す
+fn apply_version_notices(finished: &FinishedLoad) {
+    if finished.newer_version_clamped {
+        tracing::warn!(
+            "将来バージョン向けの設定を検出した。既存の項目は維持し、version を現行に揃えた"
+        );
+    }
+    if finished.unsupported_version_kept {
+        tracing::warn!(
+            "{}",
+            crate::config::format_unsupported_config_version_message()
+        );
+    }
 }
 
 /// 破損した設定ファイルをバックアップする
@@ -371,10 +397,11 @@ text = "secret-body"
             assert!(parsed.config.clips.is_empty());
             assert!(parsed.unknown_keys.is_empty());
 
-            let (config, migrated, newer_version_clamped) =
-                finish_loading(parsed.config, parsed.legacy_clips);
-            assert!(migrated);
-            assert!(!newer_version_clamped);
+            let finished = finish_loading(parsed.config, parsed.legacy_clips);
+            assert!(finished.migrated);
+            assert!(!finished.newer_version_clamped);
+            assert!(!finished.unsupported_version_kept);
+            let config = finished.config;
             assert_eq!(config.clips.len(), 1);
             assert!(!config.clips[0].text_ciphertext.is_empty());
             let plain = super::super::super::registered_clips::decrypt_registered_clip_text(

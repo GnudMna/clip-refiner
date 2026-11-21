@@ -1,12 +1,9 @@
 /**
  * `SettingsPatch` 純粋ロジックの Node テスト
  */
-'use strict';
+import assert from 'node:assert/strict';
 
-const assert = require('node:assert/strict');
-const path = require('node:path');
-
-const SettingsPatch = require(path.join(__dirname, '../src/ui/settings/settings_patch.js'));
+import SettingsPatch from '../src/ui/settings/settings_patch.js';
 
 /** トップレベルキーをマージできること */
 function test_merge_top_level_keys() {

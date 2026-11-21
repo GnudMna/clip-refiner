@@ -7,4 +7,4 @@ mod outcome;
 mod save;
 
 pub use outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
-pub use save::disk_config_modified_time;
+pub use save::{ConfigFileFingerprint, disk_config_content_fingerprint, disk_config_modified_time};

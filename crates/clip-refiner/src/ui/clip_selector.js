@@ -1,6 +1,9 @@
 /**
- * 登録クリップセレクター UI ロジック
+ * 登録クリップセレクター UI (DOM / IPC)
  */
+import SelectorCommon from './selector-common.js';
+import ClipSelectorLogic from './clip_selector_logic.js';
+
 const {
     normalizeQuery,
     highlightText,
@@ -11,7 +14,7 @@ const {
     handleHomeEndKeys,
     handleEscapeKey,
     focusSearchInput,
-} = window.SelectorCommon;
+} = SelectorCommon;
 
 const {
     imagePreviewSource,
@@ -24,7 +27,8 @@ const {
     selectMessage,
     registerMessage,
     deleteMessage,
-} = window.ClipSelectorLogic;
+    buildRegisterRowInnerHtml,
+} = ClipSelectorLogic;
 
 /** @type {HTMLInputElement} */
 const input = document.getElementById('input');
@@ -191,17 +195,10 @@ function createItem(item, index, query) {
  * @returns {HTMLDivElement}
  */
 function createRegisterRow(index, query) {
-    const label = 'クリップボードを登録';
-    const preview = '現在のクリップボードを登録クリップに追加';
     const div = document.createElement('div');
     div.className = 'item action' + (index === selection.index ? ' selected' : '');
 
-    div.innerHTML = `
-        <div class="mode-info">
-            <span class="label">${highlightText(label, query)}</span>
-        </div>
-        <span class="value-hint">${highlightText(preview, query)}</span>
-    `;
+    div.innerHTML = buildRegisterRowInnerHtml(query, highlightText);
 
     div.onmouseenter = () => selection.setSelectedIndex(index, false);
     div.onclick = () => register();

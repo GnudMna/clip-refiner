@@ -1,4 +1,5 @@
 use crate::tray::menu::icon::app_icon_png_data_url;
+use crate::tray::selector::apply_webview_csp;
 
 // ======================================================================
 // HTML 組み立て
@@ -25,7 +26,7 @@ pub(super) fn log_unparsed_settings_ipc(msg: &str) {
 
 /// 設定ウィンドウ用 JavaScript バンドルを返す
 ///
-/// ソースは `src/ui/settings/*.js`。`npm run build:settings-ui` (esbuild) で
+/// ソースは `src/ui/settings/*.js`。`npm run build:ui` (esbuild) で
 /// `settings.bundle.js` を生成し、ここへ埋め込む。`cargo build` 単体では Node を要求しない
 pub(super) fn assemble_settings_js() -> String {
     include_str!("../../../ui/settings/settings.bundle.js").to_string()
@@ -36,9 +37,12 @@ fn embed_settings_assets(html: &str) -> String {
     let css = include_str!("../../../ui/settings.css");
     let js = assemble_settings_js();
 
-    html.replace(SETTINGS_CSS_IMPORT, css)
-        .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
-        .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url())
+    apply_webview_csp(
+        &html
+            .replace(SETTINGS_CSS_IMPORT, css)
+            .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
+            .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url()),
+    )
 }
 
 /// 設定ウィンドウ用 HTML を組み立てる
@@ -78,6 +82,8 @@ mod tests {
         assert!(js.contains("セレクター WebView"));
         assert!(js.contains("selectorWebviewRetention"));
         assert!(js.contains("DisposeAfterIdle"));
+        assert!(js.contains("ctx.render = render"));
+        assert!(js.contains("ctx.refreshActivePanel = refreshActivePanel"));
     }
 
     /// 設定 UI に表示マスキングと同一ユーザー信頼境界の注意が含まれるようにすること
@@ -145,6 +151,7 @@ mod tests {
             r#"id="close-btn""#,
             r#"id="apply-feedback""#,
             r#"id="confirm-dialog""#,
+            r#"http-equiv="Content-Security-Policy""#,
         ] {
             assert!(
                 html.contains(marker),
@@ -181,5 +188,8 @@ mod tests {
         assert!(!html.contains("__APP_ICON_SRC__"));
         assert!(html.contains("<script>"));
         assert!(html.contains("SettingsSharedLogic"));
+        assert!(html.contains("default-src 'none'"));
+        assert!(html.contains(r#"http-equiv="Content-Security-Policy""#));
+        assert!(!html.contains("__WEBVIEW_CSP__"));
     }
 }

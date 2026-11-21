@@ -1,8 +1,8 @@
 # ClipRefiner 設定リファレンス
 
-ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイックスタートは [README.md](README.md)、ビルド・テスト・カバレッジ・ライブラリ利用 (`clip-refiner-core`) は [DEVELOPMENT.md](DEVELOPMENT.md)、設定スキーマと機能の変更履歴は [CHANGELOG.md](CHANGELOG.md) の各バージョンにある **設定** / **Breaking changes** 節を参照してください。
+ClipRefiner は **Windows 専用**です。利用者向けの概要・クイックスタートは [README.md](README.md)、ビルド・テスト・カバレッジ・ライブラリ利用 (`clip-refiner-core`) は [DEVELOPMENT.md](DEVELOPMENT.md)、設定スキーマと機能の変更履歴は [CHANGELOG.md](CHANGELOG.md) の各バージョンにある **設定** / **Breaking changes** 節を参照してください。
 
-現行の設定スキーマは `version = 2` (`CONFIG_VERSION`)。スキーマ番号が繰り上がる変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョン **設定** 節に記載する。
+現行の設定スキーマは `version = 3` (`CONFIG_VERSION`)。スキーマ番号が繰り上がる変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョン **設定** 節に記載する。
 
 ## 目的別ガイド
 
@@ -10,6 +10,7 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 | :--- | :--- |
 | 設定ファイルを直接編集する | [設定ファイルの場所](#設定ファイルの場所) / [ポータブルモード](#ポータブルモード) / [最小構成例](#最小構成例) / [設定項目](#設定項目) |
 | 加工方法を選ぶ | [変換モード一覧](#変換モード一覧) / [変換モードの使用例](#変換モードの使用例) / [加工パイプライン](#加工パイプライン-pipeline) |
+| 正規表現プリセットを組む | [設定項目 (正規表現)](#正規表現) / [正規表現プリセット](#正規表現プリセット) / [変換モード一覧](#変換モード一覧) の正規表現 |
 | キー操作を変更する | [ホットキー形式](#ホットキー形式) / [UI 操作](#ui-操作) |
 | アップグレード後のホットキー差分を確認する | [ホットキー形式](#ホットキー形式) の「既定値の変更と既存設定」 |
 | アプリを最新版へ更新する | [アプリの更新](#アプリの更新) |
@@ -19,6 +20,8 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 | ワンショット IPC の前提を確認する | [ワンショット IPC](#ワンショット-ipc) |
 | 動作しない原因を調べる | [処理の制限](#処理の制限) / [ログ](#ログ) / [トラブルシューティング](#トラブルシューティング) |
 | ビルド・テスト・ライブラリ利用 | [DEVELOPMENT.md](DEVELOPMENT.md) |
+
+**目次:** [設定ファイル](#設定ファイルの場所) · [最小構成](#最小構成例) · [処理の制限](#処理の制限) · [設定項目](#設定項目) · [変換モード](#変換モード一覧) · [ホットキー](#ホットキー形式) · [通知](#通知-notification_settings) · [UI](#ui-操作) · [設定ウィンドウ](#設定ウィンドウ) · [OCR](#画面-ocr) · [パイプライン](#加工パイプライン-pipeline) · [監視方式](#監視方式-monitor_mode) · [連続記録](#連続記録) · [セキュリティ](#クリップボード履歴のセキュリティ) · [アプリの更新](#アプリの更新) · [ログ](#ログ) · [トラブルシューティング](#トラブルシューティング)
 
 ---
 
@@ -50,6 +53,8 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 | `logs/`                | 日次ログ (`clip-refiner.log.YYYY-MM-DD`)      |
 
 設定ファイルの解析に失敗した場合、壊れた元ファイルは `config.toml.bak` として退避され、デフォルト設定で起動します。`.bak` は正常だった前世代のバックアップではないため、そのまま復元せず構文を修正してください。起動時にデスクトップ通知 (常駐モード) または標準エラー出力 (ワンショット) で案内されます。
+
+移行手順が無いスキーマ `version` (現行より古く、対応する移行が未実装) を検出した場合はデフォルト設定へ置き換えず、既存項目を維持して警告します。ディスク上の `version` は自動では書き換えません (設定ウィンドウなどから保存したときだけ現行番号になります)。現行より新しい `version` は既存項目を維持し、番号だけ現行へ揃えて保存します。
 
 認識できないキー (タイプミスや廃止名・未サポート項目) がある場合も読み込み自体は継続し、既知の項目だけ適用します。起動時・再読み込み時にログへ記録し、デスクトップ通知 (常駐) または標準エラー出力 (ワンショット) でキー名を案内します。旧キー (`notify_mode` / `hotkeys.paste_queue` など) や serde の別名は警告対象外です。
 
@@ -86,7 +91,7 @@ data\
 
 ### 外部編集の自動再読み込み
 
-常駐中は監視ループが約 2 秒ごとに `config.toml` の更新時刻を確認し、外部エディタでの変更を自動再読み込みします (アプリ自身の保存直後は誤検知を避けるため約 2 秒間は抑制)。手動編集した場合は、通常 2 秒以内にホットキー・監視設定などへ反映されます。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。未知キーを含む場合は反映を継続しつつ、再読み込み通知に検出したキーを含めます。設定ウィンドウを開いているときは、外部更新をバナーで知らせます。
+常駐中は設定ディレクトリの変更通知 (`FindFirstChangeNotification`) で `config.toml` の外部編集を検知し、本文の内容指紋 (BLAKE3) が最終同期と異なるときだけ自動再読み込みします。同一秒の上書きや時計ずれでも本文が変われば反映し、アプリ自身の保存や同一内容の再保存では再読み込みしません。ディレクトリ監視を開始できない場合は約 2 秒ごとの指紋確認にフォールバックします。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。未知キーを含む場合は反映を継続しつつ、再読み込み通知に検出したキーを含めます。移行手順が無い `version` も既存項目を維持し、再読み込み通知に含めます。設定ウィンドウを開いているときは、外部更新をバナーで知らせます。
 
 ---
 
@@ -95,7 +100,7 @@ data\
 初回起動でコメント付きの完全な `config.toml` が生成されるため、通常はそれを設定ウィンドウまたはエディタで変更します。手動で新規作成する場合の最小構成は次のとおりです。
 
 ```toml
-version = 2
+version = 3
 mode = "UrlDecode"
 interval_ms = 1000
 ```
@@ -103,7 +108,7 @@ interval_ms = 1000
 `version` は設定スキーマ用であり、アプリのバージョン番号ではありません。手動で増減せず、現行値を維持してください。変換モードは PascalCase で指定します。たとえば URL デコード後に前後の空白を除去する場合:
 
 ```toml
-version = 2
+version = 3
 mode = "UrlDecode"
 pipeline = ["UrlDecode", "Trim"]
 interval_ms = 1000
@@ -129,6 +134,7 @@ notify_result = false
 | 正規表現ステップ / プリセット       | 10 件                                                              |
 | 正規表現マッチ実行時間              | 2 秒                                                               |
 | 正規表現マッチ同時実行              | 2 本                                                               |
+| 履歴 / 連続記録の保持件数           | 1〜100 件 (既定 10)                                                |
 | 登録クリップ                        | 100 件 (ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 8192 px) |
 | 登録クリップ暗号化ファイル          | 256 MiB                                                            |
 | お気に入り変換モード                | 20 件                                                              |
@@ -143,48 +149,87 @@ notify_result = false
 
 `mode` などの変換モード名は CLI の kebab-case (`url-decode` など) ではなく、設定ファイルでは PascalCase (`UrlDecode` など) を指定します。CLI 名との対応は [変換モード一覧](#変換モード一覧) を参照してください。
 
-| キー                                             | 型     | デフォルト              | 説明                                                                                                                                                                  |
-| :----------------------------------------------- | :----- | :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                                        | number | `2`                     | 設定スキーマのバージョン                                                                                                                                              |
-| `mode`                                           | string | `"UrlDecode"`           | 使用する変換モード (`pipeline` が空の場合に監視で適用)                                                                                                                |
-| `pipeline`                                       | array  | (空)                    | 監視時に順に適用する変換モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は `mode` のみ。例: `["UrlDecode", "Trim"]`)                                             |
-| `favorite_modes`                                 | array  | (空)                    | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`)                                                                                     |
-| `interval_ms`                                    | number | `1000`                  | クリップボードのポーリング間隔 (ミリ秒、100〜60000)。設定ウィンドウでは数値入力。トレイメニューは 0.5 / 1 / 2 / 5 秒のプリセットと「カスタム…」(設定ウィンドウを開く) |
-| `monitor_mode`                                   | string | `"Event"`               | 監視方式。`"Polling"` または `"Event"`                                                                                                                                |
-| `selector_webview_retention`                     | string | `"Keep"`                | セレクター WebView の保持方針。`"Keep"` (非表示後も保持) / `"DisposeOnHide"` (非表示時に破棄) / `"DisposeAfterIdle"` (アイドル後に破棄)                              |
-| `selector_webview_idle_minutes`                  | number | `5`                     | `DisposeAfterIdle` 時に非表示から破棄するまでの分数 (1〜1440)。設定ウィンドウ「一般」タブでも変更可                                                                  |
-| `is_paused`                                      | bool   | `false`                 | 監視を一時停止するかどうか                                                                                                                                            |
-| `history_enabled`                                | bool   | `false`                 | 加工履歴の有効・無効                                                                                                                                                  |
-| `continuous_record_enabled`                      | bool   | `false`                 | 連続記録モード (監視時は加工せず元テキストを記録)                                                                                                                     |
-| `continuous_record_limit`                        | number | `10`                    | 連続記録の最大保持件数 (1〜100)                                                                                                                                       |
-| `history_limit`                                  | number | `10`                    | 履歴の最大保持件数 (1〜100)                                                                                                                                           |
-| `notification_settings.enabled`                  | bool   | `false`                 | デスクトップ通知の有効・無効 (エラー通知は常に表示)                                                                                                                   |
-| `notification_settings.notify_process`           | bool   | `true`                  | 加工完了時の通知                                                                                                                                                      |
-| `notification_settings.notify_pause`             | bool   | `true`                  | 一時停止切替時の通知                                                                                                                                                  |
-| `notification_settings.notify_history_restore`   | bool   | `true`                  | 履歴復元時の通知                                                                                                                                                      |
-| `notification_settings.notify_ocr`               | bool   | `true`                  | OCR 完了時の通知                                                                                                                                                      |
-| `notification_settings.notify_registered_clip`   | bool   | `true`                  | 登録クリップ操作時の通知                                                                                                                                              |
-| `notification_settings.notify_favorites`         | bool   | `true`                  | お気に入り操作時の通知                                                                                                                                                |
-| `notification_settings.notify_continuous_record` | bool   | `true`                  | 連続記録操作時の通知                                                                                                                                                  |
-| `notification_settings.notify_result`            | bool   | `false`                 | 通知にクリップボードの内容を表示するかどうか                                                                                                                          |
-| `hotkeys.quick_selector`                         | string | `"Alt+Shift+S"`         | クイックセレクター表示                                                                                                                                                |
-| `hotkeys.clip_selector`                          | string | `"Alt+Shift+T"`         | 登録クリップセレクター表示                                                                                                                                            |
-| `hotkeys.ocr`                                    | string | `"Alt+Shift+G"`         | 画面範囲選択 OCR の開始                                                                                                                                               |
-| `hotkeys.notification`                           | string | `"Alt+Shift+N"`         | デスクトップ通知のマスター ON/OFF (エラー通知は常に表示)                                                                                                              |
-| `hotkeys.pause`                                  | string | `"Alt+Shift+P"`         | 監視の一時停止・再開                                                                                                                                                  |
-| `hotkeys.continuous_record`                      | string | `"Alt+Shift+C"`         | 連続記録の有効・無効切替                                                                                                                                              |
-| `hotkeys.continuous_record_undo`                 | string | `"Alt+Shift+Backspace"` | 連続記録の直近 1 件取り消し                                                                                                                                           |
-| `hotkeys.continuous_record_paste`                | string | `"Alt+Shift+X"`         | 連続記録キュー先頭をクリップボードへ載せて貼り付け                                                                                                                    |
-| `hotkeys.undo`                                   | string | `"Alt+Shift+Z"`         | 直近の加工を取り消し                                                                                                                                                  |
-| `hotkeys.quit`                                   | string | `"Alt+Shift+Q"`         | アプリケーション終了                                                                                                                                                  |
-| `hotkeys.favorite_mode_slots`                    | array  | (空)                    | お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜Alt+Shift+9 / Alt+Shift+F1〜Alt+Shift+F11。空文字で無効)                      |
-| `regex.active_preset_id`                         | string | `"default"`             | 有効な正規表現プリセットの ID                                                                                                                                         |
-| `regex.presets`                                  | array  | (デフォルト 1 件)       | 名前付きプリセット (`id` / `name` / `steps`)。最大 20 件。各 `steps` は最大 10 件で上から順に適用                                                                      |
-| `regex.presets[].steps[].pattern`                | string | `""`                    | 正規表現パターン (最大 8 KiB)                                                                                                                                         |
-| `regex.presets[].steps[].replacement`            | string | `""`                    | 置換文字列 (`regex-replace` で使用。`$1` 形式のキャプチャ参照可)                                                                                                      |
-| `regex.presets[].steps[].case_insensitive`       | bool   | `false`                 | 大文字小文字を無視 (`(?i)` 相当)                                                                                                                                      |
-| `regex.presets[].steps[].multiline`              | bool   | `false`                 | 複数行モード (`(?m)` 相当)                                                                                                                                            |
-| (登録クリップ)                                   | —      | —                       | `config.toml` には含まれない。設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存。最大 100 件                                        |
+### 基本
+
+| キー             | 型     | デフォルト    | 説明                                                                                                                                                                  |
+| :--------------- | :----- | :------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`        | number | `3`           | 設定スキーマのバージョン                                                                                                                                              |
+| `mode`           | string | `"UrlDecode"` | 使用する変換モード (`pipeline` が空の場合に監視で適用)                                                                                                                |
+| `pipeline`       | array  | (空)          | 監視時に順に適用する変換モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は `mode` のみ。例: `["UrlDecode", "Trim"]`)                                             |
+| `favorite_modes` | array  | (空)          | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`)                                                                                     |
+
+### 監視
+
+| キー            | 型     | デフォルト  | 説明                                                                                                                                                                  |
+| :-------------- | :----- | :---------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval_ms`   | number | `1000`      | クリップボードのポーリング間隔 (ミリ秒、100〜60000)。設定ウィンドウでは数値入力。トレイメニューは 0.5 / 1 / 2 / 5 秒のプリセットと「カスタム…」(設定ウィンドウを開く) |
+| `monitor_mode`  | string | `"Event"`   | 監視方式。`"Polling"` または `"Event"`                                                                                                                                |
+| `is_paused`     | bool   | `false`     | 監視を一時停止するかどうか                                                                                                                                            |
+
+### セレクター WebView
+
+| キー                            | 型     | デフォルト | 説明                                                                                                                     |
+| :------------------------------ | :----- | :--------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `selector_webview_retention`    | string | `"Keep"`   | セレクター WebView の保持方針。`"Keep"` (非表示後も保持) / `"DisposeOnHide"` (非表示時に破棄) / `"DisposeAfterIdle"` (アイドル後に破棄) |
+| `selector_webview_idle_minutes` | number | `5`        | `DisposeAfterIdle` 時に非表示から破棄するまでの分数 (1〜1440)。設定ウィンドウ「一般」タブでも変更可                      |
+
+### 履歴・連続記録
+
+| キー                        | 型     | デフォルト | 説明                                                              |
+| :-------------------------- | :----- | :--------- | :---------------------------------------------------------------- |
+| `history_enabled`           | bool   | `false`    | 加工履歴の有効・無効                                              |
+| `history_limit`             | number | `10`       | 履歴の最大保持件数 (1〜100)                                       |
+| `continuous_record_enabled` | bool   | `false`    | 連続記録モード (監視時は加工せず元テキストを記録)                 |
+| `continuous_record_limit`   | number | `10`       | 連続記録の最大保持件数 (1〜100)                                   |
+
+### 通知
+
+| キー                                             | 型   | デフォルト | 説明                                                         |
+| :----------------------------------------------- | :--- | :--------- | :----------------------------------------------------------- |
+| `notification_settings.enabled`                  | bool | `false`    | デスクトップ通知の有効・無効 (エラー通知は常に表示)          |
+| `notification_settings.notify_process`           | bool | `true`     | 加工完了時の通知                                             |
+| `notification_settings.notify_pause`             | bool | `true`     | 一時停止切替時の通知                                         |
+| `notification_settings.notify_history_restore`   | bool | `true`     | 履歴復元時の通知                                             |
+| `notification_settings.notify_ocr`               | bool | `true`     | OCR 完了時の通知                                             |
+| `notification_settings.notify_registered_clip`   | bool | `true`     | 登録クリップ操作時の通知                                     |
+| `notification_settings.notify_favorites`         | bool | `true`     | お気に入り操作時の通知                                       |
+| `notification_settings.notify_continuous_record` | bool | `true`     | 連続記録操作時の通知                                         |
+| `notification_settings.notify_result`            | bool | `false`    | 通知にクリップボードの内容を表示するかどうか                 |
+
+### ホットキー
+
+| キー                          | 型     | デフォルト              | 説明                                                                                                                                             |
+| :---------------------------- | :----- | :---------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hotkeys.quick_selector`      | string | `"Alt+Shift+S"`         | クイックセレクター表示                                                                                                                           |
+| `hotkeys.clip_selector`       | string | `"Alt+Shift+T"`         | 登録クリップセレクター表示                                                                                                                       |
+| `hotkeys.ocr`                 | string | `"Alt+Shift+G"`         | 画面範囲選択 OCR の開始                                                                                                                          |
+| `hotkeys.notification`        | string | `"Alt+Shift+N"`         | デスクトップ通知のマスター ON/OFF (エラー通知は常に表示)                                                                                         |
+| `hotkeys.pause`               | string | `"Alt+Shift+P"`         | 監視の一時停止・再開                                                                                                                             |
+| `hotkeys.continuous_record`   | string | `"Alt+Shift+C"`         | 連続記録の有効・無効切替                                                                                                                         |
+| `hotkeys.continuous_record_undo` | string | `"Alt+Shift+Backspace"` | 連続記録の直近 1 件取り消し                                                                                                                      |
+| `hotkeys.continuous_record_paste` | string | `"Alt+Shift+X"`         | 連続記録キュー先頭をクリップボードへ載せて貼り付け                                                                                               |
+| `hotkeys.undo`                | string | `"Alt+Shift+Z"`         | 直近の加工を取り消し                                                                                                                             |
+| `hotkeys.quit`                | string | `"Alt+Shift+Q"`         | アプリケーション終了                                                                                                                             |
+| `hotkeys.favorite_mode_slots` | array  | (空)                    | お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜Alt+Shift+9 / Alt+Shift+F1〜Alt+Shift+F11。空文字で無効) |
+
+### 正規表現
+
+| キー                                       | 型     | デフォルト        | 説明                                                                                          |
+| :----------------------------------------- | :----- | :---------------- | :-------------------------------------------------------------------------------------------- |
+| `regex.active_preset_id`                   | string | `"default"`       | 有効な正規表現プリセットの ID                                                                 |
+| `regex.presets`                            | array  | (デフォルト 1 件) | 名前付きプリセット (`id` / `name` / `steps`)。最大 20 件。各 `steps` は最大 10 件で上から順に適用 |
+| `regex.presets[].id`                       | string | `"default"`       | プリセット識別子 (設定内で一意)                                                               |
+| `regex.presets[].name`                     | string | `"デフォルト"`    | トレイ・設定 UI での表示名                                                                    |
+| `regex.presets[].steps[].pattern`          | string | `""`              | 正規表現パターン (最大 8 KiB)                                                                 |
+| `regex.presets[].steps[].replacement`      | string | `""`              | 置換文字列 (`regex-replace` で使用。`$1` 形式のキャプチャ参照可)                              |
+| `regex.presets[].steps[].case_insensitive` | bool   | `false`           | 大文字小文字を無視 (`(?i)` 相当)                                                              |
+| `regex.presets[].steps[].multiline`        | bool   | `false`           | 複数行モード (`(?m)` 相当)                                                                    |
+
+### 登録クリップ
+
+| キー             | 型 | デフォルト | 説明                                                                                                                          |
+| :--------------- | :- | :--------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| (登録クリップ)   | —  | —          | `config.toml` には含まれない。設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存。最大 100 件 |
 
 ---
 
@@ -428,6 +473,14 @@ notify_result = false
 
 登録クリップは `registered-clips.dat` (暗号化) と `registered-images/` に保存される (`config.toml` には含まれない)。
 
+### 正規表現プリセット
+
+- **有効化:** トレイ「正規表現プリセット」から有効プリセットを選択 (`regex.active_preset_id`)。連続記録 ON 時はメニューが無効化される
+- **編集:** 設定ウィンドウ「正規表現」タブでプリセットの追加・並び替え・削除・有効化と、選択中プリセットのステップ編集ができる
+- **適用:** トレイで選んだ操作 (`regex-replace` / `extract` / `delete` / `split`) が、有効プリセットの全ステップに同じ操作として上から順に適用される。パイプライン内の正規表現モードも同じ有効プリセットを参照する
+- **ワンショット:** `--regex-preset` でプリセット名 (表示名の先頭一致) を選ぶか、`--regex-pattern` 等で一時的な 1 ステップ上書きができる。未指定の項目は有効プリセットを使用する
+- **上限:** プリセット 20 件、各ステップ 10 件、パターン 8 KiB。マッチ実行時間は 2 秒、同時実行は 2 本
+
 ### 連続記録 (`Alt+Shift+C`)
 
 - **有効化:** トレイ「連続記録 → 連続記録を有効にする」、または `Alt+Shift+C`
@@ -636,6 +689,7 @@ ClipRefiner のローカル保護はいずれも **現在の Windows ユーザ�
 | **登録クリップ鍵** | Windows DPAPI (現在ユーザースコープ) + 鍵ファイルの DACL | 同じユーザーなら DPAPI 解除とファイルアクセスが可能 |
 | **ワンショット IPC** | 現在ユーザー専用 DACL + リモート拒否 | 同じユーザーならパイプへ接続し、加工指示を送りうる |
 | **履歴・連続記録** | ディスク非永続・メモリ内暗号化 | プロセスメモリや UI 経由の到達は OS / ランタイム依存 (完全には防げない) |
+| **設定 / セレクター WebView** | 埋め込み HTML の CSP (外部 script / connect 禁止) と `http(s)` / `file` 遷移・新規ウィンドウ・ダウンロード拒否 | 同一ユーザーならプロセス自体には到達しうる |
 
 **運用上の目安:**
 
@@ -648,7 +702,7 @@ ClipRefiner のローカル保護はいずれも **現在の Windows ユーザ�
 
 ### ワンショット IPC
 
-トレイ常駐中に `--mode` / `--pipeline` を実行すると、CLI は名前付きパイプで常駐プロセスへ加工を委譲する (常駐が無い場合はローカル実行)。パイプは次のように保護する。
+トレイ常駐中に `--mode` / `--pipeline` を実行すると、CLI は名前付きパイプで常駐プロセスへ加工を委譲する (常駐が無い場合はローカル実行。常駐中に接続できない場合は二重加工を避けるため失敗する)。待受スレッドの起動に失敗した場合はデスクトップ通知し、監視は継続する。パイプは次のように保護する。
 
 | 対策 | 内容 |
 | :--- | :--- |
@@ -666,11 +720,11 @@ ClipRefiner のローカル保護はいずれも **現在の Windows ユーザ�
 | 利用形態 | 適用手順 |
 | :--- | :--- |
 | **インストール版 (MSI)** | 新しい版があれば「ダウンロードして適用」で MSI を取得し `msiexec` を起動したあとアプリを終了する |
-| **ポータブル** | ZIP を一時フォルダへ展開し、差し替えヘルパー (`ClipRefiner.exe --apply-portable-update`) が旧プロセス終了を待って実行フォルダへ上書きコピーしたあと新しい版を起動する。`data\` は保持する。ヘルパー起動に失敗した場合のみ展開先をエクスプローラーで開き、手動差し替えを案内する |
+| **ポータブル** | ZIP を一時フォルダへ展開し、差し替えヘルパー (`ClipRefiner.exe --apply-portable-update`) が旧プロセス終了を待って実行フォルダへ上書きコピーしたあと新しい版を起動する。`data\` は保持する。ヘルパー起動に失敗した場合のみ展開先をエクスプローラーで開き、手動差し替えを案内する。差し替え先は既存のポータブルフォルダ (`ClipRefiner.exe` と `portable` マーカーがある場所) に限り、展開元と削除対象は `%TEMP%\clip-refiner-update\` 配下のみ。生存中の待ち受け PID は ClipRefiner に限る |
 
-**完全性検証:** version API の各アセットに付与された `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を必須とし、ダウンロード後にサイズと SHA-256 が一致した場合のみ適用する。宣言サイズが 0 または絶対上限 (512 MiB) を超えるアセットは確認時点で拒否する。ダウンロード中に宣言サイズを超えた応答は途中で打ち切り、不完全なファイルは削除する。digest が無いリリースやハッシュ / サイズ不一致は更新対象外 (適用しない)。CPU アーキテクチャが一致しないアセットへはフォールバックしない。
+**完全性検証:** version API の各アセットに付与された `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を必須とし、ダウンロード後にサイズと SHA-256 が一致した場合のみ適用する。宣言サイズが 0 または絶対上限 (512 MiB) を超えるアセットは確認時点で拒否する。ダウンロード中に宣言サイズを超えた応答は途中で打ち切り、不完全なファイルは削除する。digest が無いリリースやハッシュ / サイズ不一致は更新対象外 (適用しない)。実行中 CPU (x64 / ARM64) に一致しないアセットへはフォールバックしない。
 
-**ダウンロード認証:** gh-release-bridge が保護するタグ範囲のアセット DL には、ビルド時環境変数 `CLIP_REFINER_KEY` で埋め込んだ共有キーを `Authorization: Bearer` で送る。version API による更新確認はキー不要。キー不一致や未埋め込みで保護範囲を取得できない場合は認証エラーになる (利用者向けにキー設定は不要。リリースビルドで埋め込む)。
+**ダウンロード認証:** gh-release-bridge が保護するタグ範囲のアセット DL には、ビルド時環境変数 `CLIP_REFINER_KEY` を ChaCha20-Poly1305 で暗号化して埋め込んだ共有キーを、利用時に復号して `Authorization: Bearer` で送る。version API による更新確認はキー不要。キー不一致や未埋め込みで保護範囲を取得できない場合は認証エラーになる (利用者向けにキー設定は不要。リリースビルドで埋め込む)。
 
 更新確認・適用は同時に 1 本だけ実行できる。進行中に再実行すると「すでに実行中」と案内する。利用者向けの概要は [README.md のアプリの更新](README.md#アプリの更新) も参照。
 
@@ -702,17 +756,19 @@ ClipRefiner のローカル保護はいずれも **現在の Windows ユーザ�
 | 症状 | 対処 |
 | :--- | :--- |
 | 起動時に設定の解析エラーが出る | `config.toml.bak` を開いて通知・ログに示された TOML 構文を修正し、アプリ終了後に `config.toml` として戻す |
+| 未対応の設定 version と出る | 移行手順が無いスキーマ番号でも既存項目は維持される。ディスク上の `version` は自動では書き換えない。[設定ファイルの場所](#設定ファイルの場所) を参照 |
+| 「加工をスキップ」と通知される | 本文 2 MiB・パーサー 1 MiB・正規表現 2 秒のいずれかの上限。入力を小さくするかパターンを見直す。[処理の制限](#処理の制限) を参照 |
 | 未知キーの警告が出る | [設定項目](#設定項目) と照合し、タイプミスや廃止済みキーを削除する。既知の設定は引き続き適用される。旧キー (`notify_mode` / `paste_queue` など) は警告対象外 |
-| 外部編集が反映されない | 保存後 2 秒ほど待つ。構文エラー通知と当日ログを確認する。設定ウィンドウ表示中はバナーでも知らせる |
+| 外部編集が反映されない | エディタで保存した直後に反映される。構文エラー通知と当日ログを確認する。設定ウィンドウ表示中はバナーでも知らせる。ディレクトリ監視が失敗している場合は約 2 秒の周期確認になる |
 | ホットキーが既定値へ戻る | [対応するキー形式](#ホットキー形式)か、他の割り当てと重複していないか確認する。設定ウィンドウから保存した場合は補正内容がフィードバック表示される |
 | OCR が `Alt+Shift+O` のまま / 効かない | 既定は `Alt+Shift+G`。既存の `hotkeys.ocr` が残っている場合は設定ウィンドウ「ショートカット」または `config.toml` で変更する |
 | 連続記録で `Ctrl+V` してもキューが減らない | 貼り付け取り出しは `Alt+Shift+X` (`hotkeys.continuous_record_paste`)。通常の `Ctrl+V` は OS に任せる |
 | Event 監視でも反応が遅い | リスナ初期化失敗時は短周期 peek にフォールバックする。当日ログで `AddClipboardFormatListener` 関連の警告を確認する |
-| ワンショットが常駐に委譲されない | 常駐未起動・パイプ接続失敗時はローカル実行になる。[ワンショット IPC](#ワンショット-ipc) と [信頼境界](#信頼境界-同一ユーザー前提) を確認する |
+| ワンショットが常駐に委譲されない | 常駐未起動時はローカル実行する。常駐中にパイプへ届かない場合は二重加工を避けるためローカル実行せず失敗する。待受スレッド起動失敗時はデスクトップ通知する。[ワンショット IPC](#ワンショット-ipc) と [信頼境界](#信頼境界-同一ユーザー前提) を確認する |
 | 大きなテキストや画像を処理できない | [処理の制限](#処理の制限)のサイズ・件数上限を確認する |
 | 設定や登録クリップを保存できない | 設定ディレクトリ (通常は `%APPDATA%\ClipRefiner`、ポータブル時は `data\`) の書き込み権限、空き容量、セキュリティソフトのブロックを確認する |
 | ポータブルなのに `%APPDATA%` を見ている | 実行ファイルと同じフォルダにファイル名ちょうど `portable` があるか確認する。`CLIP_REFINER_CONFIG_DIR` が優先されていないかも確認する |
 | 設定・セレクターが開かない | WebView2 Runtime 未導入の可能性。起動時通知や表示失敗時の導入ページ案内に従い Evergreen Runtime を入れ、アプリを再起動する。手動導入は [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | アイドル時のメモリ使用量が増える | セレクターは既定 `Keep` で非表示後も `WebView` を保持する。[セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) で `DisposeOnHide` / `DisposeAfterIdle` に切り替える |
-| 更新確認が失敗する / 適用できない | ネットワークと当日ログを確認する。digest 欠落・SHA-256 / サイズ不一致・アーキテクチャ不一致のアセットは適用しない。認証に失敗した場合はキー埋め込みのない旧ビルドから保護範囲へ更新しようとしている可能性がある。[アプリの更新](#アプリの更新) を参照 |
+| 更新確認が失敗する / 適用できない | ネットワークと当日ログを確認する。digest 欠落・SHA-256 / サイズ不一致・アーキテクチャ不一致のアセットは適用しない。ARM64 PC では `aarch64` 付きの MSI / ZIP がリリースに必要 (x64 版へはフォールバックしない)。認証に失敗した場合はキー埋め込みのない旧ビルドから保護範囲へ更新しようとしている可能性がある。[アプリの更新](#アプリの更新) を参照 |
 | ポータブル更新後も古い版のまま | 差し替えヘルパー起動失敗時は展開先がエクスプローラーで開く。実行フォルダへ手動で上書きし、`portable` と `data\` を残したまま新しい `ClipRefiner.exe` を起動する |

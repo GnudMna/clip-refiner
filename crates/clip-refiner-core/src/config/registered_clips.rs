@@ -8,13 +8,19 @@ use super::permissions::restrict_private_file_permissions;
 use super::registered_images::migrate_plain_image_to_encrypted;
 use super::types::RegisteredClip;
 use crate::consts;
+use crate::error::ConfigError;
 use crate::security::{
     SecretString, decrypt_bytes, encrypt_bytes, format_public_snippet, is_within_clipboard_limit,
     secret_from,
 };
 
-use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+
+type Result<T> = std::result::Result<T, ConfigError>;
+
+fn clips_err(msg: impl Into<String>) -> ConfigError {
+    ConfigError::RegisteredClipsSave(msg.into())
+}
 
 // ======================================================================
 // 定数
@@ -72,16 +78,23 @@ pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
         return Ok((Vec::new(), false));
     }
 
-    let bytes = fs::read(&path)
-        .with_context(|| format!("登録クリップファイルの読み込みに失敗: {}", path.display()))?;
+    let bytes = fs::read(&path).map_err(|e| {
+        clips_err(format!(
+            "登録クリップファイルの読み込みに失敗: {}: {e}",
+            path.display()
+        ))
+    })?;
     if bytes.len() > consts::MAX_REGISTERED_CLIPS_FILE_BYTES {
-        bail!("登録クリップファイルのサイズが上限を超えています");
+        return Err(clips_err(
+            "登録クリップファイルのサイズが上限を超えています",
+        ));
     }
 
     let key = clip_store_key()?;
-    let json = decrypt_bytes(&key, &bytes).context("登録クリップファイルの復号に失敗")?;
-    let payload: RegisteredClipsPayloadWire =
-        serde_json::from_slice(&json).context("登録クリップファイルの JSON 解析に失敗")?;
+    let json = decrypt_bytes(&key, &bytes)
+        .map_err(|e| clips_err(format!("登録クリップファイルの復号に失敗: {e}")))?;
+    let payload: RegisteredClipsPayloadWire = serde_json::from_slice(&json)
+        .map_err(|e| clips_err(format!("登録クリップファイルの JSON 解析に失敗: {e}")))?;
 
     let mut migrated = false;
     let mut clips = Vec::with_capacity(payload.clips.len());
@@ -127,22 +140,30 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     let json = serde_json::to_vec(&RegisteredClipsPayload {
         clips: clips.to_vec(),
     })
-    .context("登録クリップの JSON シリアライズに失敗")?;
+    .map_err(|e| clips_err(format!("登録クリップの JSON シリアライズに失敗: {e}")))?;
     if json.len() > consts::MAX_REGISTERED_CLIPS_FILE_BYTES {
-        bail!("登録クリップのシリアライズサイズが上限を超えています");
+        return Err(clips_err(
+            "登録クリップのシリアライズサイズが上限を超えています",
+        ));
     }
 
     let key = clip_store_key()?;
     let encrypted = encrypt_bytes(&key, &json)?;
     if encrypted.len() > consts::MAX_REGISTERED_CLIPS_FILE_BYTES {
-        bail!("登録クリップファイルの暗号化サイズが上限を超えています");
+        return Err(clips_err(
+            "登録クリップファイルの暗号化サイズが上限を超えています",
+        ));
     }
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).context("設定ディレクトリの作成に失敗")?;
+        fs::create_dir_all(parent).map_err(ConfigError::CreateDir)?;
     }
-    write_bytes_atomically(&path, &encrypted)
-        .with_context(|| format!("登録クリップファイルの書き込みに失敗: {}", path.display()))?;
+    write_bytes_atomically(&path, &encrypted).map_err(|e| {
+        clips_err(format!(
+            "登録クリップファイルの書き込みに失敗: {}: {e}",
+            path.display()
+        ))
+    })?;
     if let Err(e) = restrict_private_file_permissions(&path) {
         tracing::warn!("登録クリップファイルのパーミッション設定に失敗: {:?}", e);
     }
@@ -210,8 +231,10 @@ pub(crate) fn encrypt_registered_clip_text(text: &str) -> Result<(Vec<u8>, Strin
 /// 鍵取得、復号、UTF-8 解釈のいずれかに失敗した場合
 pub(crate) fn decrypt_registered_clip_text(ciphertext: &[u8]) -> Result<SecretString> {
     let key = clip_store_key()?;
-    let plain = decrypt_bytes(&key, ciphertext).context("登録クリップ本文の復号に失敗")?;
-    let text = String::from_utf8(plain).context("登録クリップ本文が UTF-8 ではありません")?;
+    let plain = decrypt_bytes(&key, ciphertext)
+        .map_err(|e| clips_err(format!("登録クリップ本文の復号に失敗: {e}")))?;
+    let text = String::from_utf8(plain)
+        .map_err(|e| clips_err(format!("登録クリップ本文が UTF-8 ではありません: {e}")))?;
     Ok(secret_from(text))
 }
 
@@ -228,10 +251,10 @@ pub(crate) fn decrypt_registered_clip_text(ciphertext: &[u8]) -> Result<SecretSt
 /// 本文が空 / サイズ超過、または暗号化に失敗した場合
 pub(crate) fn registered_clip_from_plain_text(label: String, text: &str) -> Result<RegisteredClip> {
     if text.trim().is_empty() {
-        bail!("登録クリップが空です");
+        return Err(clips_err("登録クリップが空です"));
     }
     if !is_within_clipboard_limit(text) {
-        bail!("登録クリップのサイズが上限を超えています");
+        return Err(clips_err("登録クリップのサイズが上限を超えています"));
     }
     let (text_ciphertext, preview) = encrypt_registered_clip_text(text)?;
     Ok(RegisteredClip {
@@ -274,7 +297,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
             &base64::engine::general_purpose::STANDARD,
             encoded.as_bytes(),
         )
-        .context("登録クリップ本文暗号文の base64 復号に失敗")?;
+        .map_err(|e| clips_err(format!("登録クリップ本文暗号文の base64 復号に失敗: {e}")))?;
 
         let mut clip = RegisteredClip {
             label: wire.label,
@@ -297,7 +320,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
         return Ok((clip, true));
     }
 
-    bail!("登録クリップに本文がありません");
+    Err(clips_err("登録クリップに本文がありません"))
 }
 
 // ======================================================================

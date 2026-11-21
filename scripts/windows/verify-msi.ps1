@@ -3,6 +3,7 @@
 # Description : ビルド済み MSI の内容・メタデータを検証する
 # Usage       : ./verify-msi.ps1
 #               ./verify-msi.ps1 -MsiPath target\wix\clip-refiner-0.12.1-x86_64-pc-windows-msvc.msi
+#               ./verify-msi.ps1 -Target arm64
 #               ./verify-msi.ps1 -SkipExtract
 # Requires    : PowerShell 7.0+, Windows (Windows Installer COM)
 #
@@ -12,6 +13,7 @@
 #   - 必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES)
 #   - 必須 Feature (Binaries, Environment, Autostart)
 #   - per-user インストール (ALLUSERS)
+#   - MSI Platform テンプレートと ClipRefiner.exe の PE アーキテクチャ (x64 / ARM64)
 #   - 管理インストール展開後の実ファイル内容 (既定。SkipExtract で省略)
 # ========================================================================
 
@@ -26,7 +28,10 @@ param(
     [string]$Version,
 
     # 管理インストールによる展開検証をスキップする
-    [switch]$SkipExtract
+    [switch]$SkipExtract,
+
+    # 配布ターゲット。省略時は MSI ファイル名またはホストから推定
+    [string]$Target
 )
 
 # シェルオプションを設定(エラー時に即終了)
@@ -39,11 +44,22 @@ $ErrorActionPreference = 'Stop'
 Invoke-ScriptMain {
     # プロジェクトルートへ移動
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
+    . (Join-Path $PSScriptRoot '..\common\windows-target.ps1')
     . (Join-Path $PSScriptRoot '..\common\verify-msi.ps1')
+
+    $targetTriple = $null
+    if (-not [string]::IsNullOrWhiteSpace($Target)) {
+        $resolved = Resolve-WindowsPackageTargets -Target $Target
+        if ($resolved.Count -ne 1) {
+            throw 'エラー: verify-msi.ps1 の -Target に All は指定できません。triple または x64 / arm64 を指定してください'
+        }
+        $targetTriple = $resolved[0]
+    }
 
     Invoke-MsiPackageVerification `
         -ProjectRoot $ProjectRoot `
         -MsiPath $MsiPath `
         -Version $Version `
+        -TargetTriple $targetTriple `
         -SkipExtract:$SkipExtract
 }

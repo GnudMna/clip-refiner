@@ -85,6 +85,25 @@ mod tests {
         assert_eq!(selected.name, "clip-refiner-0.13.1-x86_64.msi");
     }
 
+    /// ARM64 向けに `aarch64` を含むアセットを選ぶようにすること
+    #[test]
+    fn select_asset_selects_aarch64_when_requested() {
+        let assets = [
+            asset("clip-refiner-0.15.1-x86_64-pc-windows-msvc.msi", 1),
+            asset("clip-refiner-0.15.1-aarch64-pc-windows-msvc.msi", 2),
+            asset(
+                "clip-refiner-0.15.1-aarch64-pc-windows-msvc-portable.zip",
+                3,
+            ),
+        ];
+        let msi = select_asset(&assets, UpdatePackageKind::Msi, "aarch64").expect("arm64 msi");
+        assert_eq!(msi.name, "clip-refiner-0.15.1-aarch64-pc-windows-msvc.msi");
+        let zip =
+            select_asset(&assets, UpdatePackageKind::PortableZip, "aarch64").expect("arm64 zip");
+        assert!(zip.name.contains("aarch64"));
+        assert!(zip.name.ends_with("-portable.zip"));
+    }
+
     /// アーキテクチャ不一致時は先頭候補へフォールバックしないようにすること
     #[test]
     fn select_asset_returns_none_when_arch_mismatches() {

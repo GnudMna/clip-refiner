@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, expectWebViewCsp } from './fixtures';
 
 test.use({ e2eWindow: 'quick' });
 
@@ -7,6 +7,7 @@ test.describe('クイックセレクター WebView', () => {
     await expect(page.locator('#input')).toBeVisible();
     await expect(page.locator('#results')).toBeVisible();
     await expect(page.locator('#results .item').first()).toBeVisible();
+    await expectWebViewCsp(page);
   });
 
   test('検索でモードを絞り込める', async ({ page }) => {

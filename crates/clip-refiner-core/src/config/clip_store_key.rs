@@ -6,10 +6,11 @@ use std::sync::OnceLock;
 
 use super::paths::get_config_dir;
 use super::permissions::restrict_private_file_permissions;
+use crate::error::ConfigError;
 use crate::native::dpapi;
 use crate::security::{CIPHER_KEY_LEN, generate_cipher_key};
 
-use anyhow::{Context, Result};
+type Result<T> = std::result::Result<T, ConfigError>;
 
 // ======================================================================
 // 定数
@@ -97,8 +98,7 @@ fn load_or_create_key() -> Result<[u8; CIPHER_KEY_LEN]> {
 }
 
 fn read_key_file(path: &PathBuf) -> Result<[u8; CIPHER_KEY_LEN]> {
-    let bytes = fs::read(path)
-        .with_context(|| format!("登録クリップ暗号化鍵の読み込みに失敗: {}", path.display()))?;
+    let bytes = fs::read(path).map_err(ConfigError::Read)?;
     let plain = dpapi::unprotect(&bytes, CIPHER_KEY_LEN)?;
     let mut key = [0u8; CIPHER_KEY_LEN];
     key.copy_from_slice(&plain);
@@ -107,12 +107,11 @@ fn read_key_file(path: &PathBuf) -> Result<[u8; CIPHER_KEY_LEN]> {
 
 fn write_key_file(path: &PathBuf, key: &[u8; CIPHER_KEY_LEN]) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).context("設定ディレクトリの作成に失敗")?;
+        fs::create_dir_all(parent).map_err(ConfigError::CreateDir)?;
     }
 
     let protected = dpapi::protect(key)?;
-    fs::write(path, protected)
-        .with_context(|| format!("登録クリップ暗号化鍵の書き込みに失敗: {}", path.display()))?;
+    fs::write(path, protected).map_err(ConfigError::Write)?;
     if let Err(e) = restrict_private_file_permissions(path) {
         tracing::warn!("登録クリップ暗号化鍵のパーミッション設定に失敗: {:?}", e);
     }

@@ -40,6 +40,9 @@ function Invoke-CargoClippy {
 
     cargo clippy --all-targets --features $script:CargoTestFeatures -- -D warnings
     Assert-LastExitCode -CommandLabel 'cargo clippy'
+
+    cargo clippy -p clip-refiner-core --no-default-features --all-targets -- -D warnings
+    Assert-LastExitCode -CommandLabel 'cargo clippy -p clip-refiner-core --no-default-features'
 }
 
 # テストを実行する
@@ -51,6 +54,9 @@ function Invoke-CargoTest {
 
     cargo test --all-targets --features $script:CargoTestFeatures
     Assert-LastExitCode -CommandLabel 'cargo test'
+
+    cargo test -p clip-refiner-core --no-default-features --all-targets
+    Assert-LastExitCode -CommandLabel 'cargo test -p clip-refiner-core --no-default-features'
 
     if ($IncludeDocTests) {
         cargo test --doc --features $script:CargoTestFeatures

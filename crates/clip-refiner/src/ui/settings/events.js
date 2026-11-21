@@ -18,7 +18,6 @@ import {
     validateRegexSettings,
 } from './regex_feedback.js';
 import { emptyStep, moveListItem, newPresetId, selectedRegexPresetId } from './regex_ui.js';
-import { refreshActivePanel } from './main.js';
 import {
     commitLimitInput,
     historyLimitBounds,
@@ -304,7 +303,7 @@ export function bindRegexEvents() {
         ctx.selectedRegexPresetId = id;
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
     });
 
     document.getElementById('regex-step-add-btn')?.addEventListener('click', () => {
@@ -317,7 +316,7 @@ export function bindRegexEvents() {
         preset.steps.push(emptyStep());
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
     });
 
     updateRegexFeedback();
@@ -331,7 +330,7 @@ export function bindRegexEvents() {
 function handleRegexAction(button) {
     if (button.classList.contains('regex-preset-select')) {
         ctx.selectedRegexPresetId = button.dataset.id;
-        refreshActivePanel();
+        ctx.refreshActivePanel();
         return;
     }
 
@@ -347,7 +346,7 @@ function handleRegexAction(button) {
         settings.presets = moveListItem(settings.presets, index, direction);
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
         return;
     }
 
@@ -365,7 +364,7 @@ function handleRegexAction(button) {
         }
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
         return;
     }
 
@@ -383,7 +382,7 @@ function handleRegexAction(button) {
         preset.steps = moveListItem(preset.steps, index, direction);
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
         return;
     }
 
@@ -395,7 +394,7 @@ function handleRegexAction(button) {
         preset.steps.splice(index, 1);
         ctx.state.regex = settings;
         scheduleApply({ regex: settings });
-        refreshActivePanel();
+        ctx.refreshActivePanel();
     }
 }
 

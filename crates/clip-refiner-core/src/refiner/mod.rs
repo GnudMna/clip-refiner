@@ -20,6 +20,7 @@ mod context;
 mod dispatch;
 mod mode;
 mod ordered_value;
+#[cfg(feature = "clipboard")]
 mod owned_clipboard;
 mod pipeline;
 pub mod text_clipboard;
@@ -34,6 +35,7 @@ pub use context::RefineContext;
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
+#[cfg(feature = "clipboard")]
 pub use owned_clipboard::OwnedClipboard;
 pub use pipeline::{apply_text_pipeline, split_pipeline};
 pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};

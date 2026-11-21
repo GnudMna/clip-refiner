@@ -69,7 +69,8 @@ pub fn start_oneshot_ipc_for_test(
     worker: Arc<ClipboardWorkerHandle>,
 ) -> (OneshotIpcServer, String) {
     let pipe_name = unique_oneshot_pipe_name();
-    let server = OneshotIpcServer::start_named(worker, pipe_name.clone());
+    let server = OneshotIpcServer::start_named(worker, pipe_name.clone())
+        .expect("ワンショット IPC 待受スレッドの起動に失敗");
     assert!(
         wait_for_named_pipe(&pipe_name, Duration::from_secs(2)),
         "テスト用ワンショット IPC パイプが待受を開始しなかった: {pipe_name}"

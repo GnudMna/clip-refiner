@@ -3,7 +3,7 @@
  *
  * @namespace SettingsPanelsLogic
  */
-var SettingsPanelsLogic = (function () {
+const SettingsPanelsLogic = (function () {
     'use strict';
 
     /**
@@ -419,6 +419,4 @@ var SettingsPanelsLogic = (function () {
     };
 })();
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SettingsPanelsLogic;
-}
+export default SettingsPanelsLogic;

@@ -77,6 +77,9 @@ export function render(forcePanel = false) {
     renderActivePanel(forcePanel);
 }
 
+ctx.render = render;
+ctx.refreshActivePanel = refreshActivePanel;
+
 /**
  * Rust から設定スナップショットを受信して UI を更新する
  *

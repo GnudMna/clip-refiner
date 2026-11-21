@@ -1,9 +1,11 @@
 {
   "name": "clip-refiner",
   "private": true,
+  "type": "module",
   "description": "ClipRefiner UI JavaScript の品質チェック・バンドル用 (本番バイナリには npm 依存を同梱しない)",
   "scripts": {
-    "build:settings-ui": "node scripts/build-settings-ui.mjs",
+    "build:ui": "node scripts/common/build-ui.mjs",
+    "build:settings-ui": "node scripts/common/build-ui.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"crates/clip-refiner/**/*.js\" \"scripts/**/*.mjs\" eslint.config.js",

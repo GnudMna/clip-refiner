@@ -6,13 +6,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::webview_policy::{
+    apply_webview_csp, is_allowed_webview_navigation, preview_denied_webview_url,
+};
 use super::webview_script;
 use crate::tray::state::AppEvent;
 
 use anyhow::Context;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder, WindowId};
-use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
+use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 // ======================================================================
 // ウィンドウ配置
@@ -51,53 +54,33 @@ pub(crate) fn position_window_on_monitor(window: &Window, align: WindowVerticalA
 // ======================================================================
 const SELECTOR_CSS_IMPORT: &str = r#"@import url("selector.css");"#;
 const CLIP_SELECTOR_CSS_IMPORT: &str = r#"@import url("clip_selector.css");"#;
-const SELECTOR_COMMON_JS_TAG: &str = r#"<script src="selector-common.js"></script>"#;
-const QUICK_SELECTOR_LOGIC_JS_TAG: &str = r#"<script src="quick_selector_logic.js"></script>"#;
 const QUICK_SELECTOR_JS_TAG: &str = r#"<script src="quick_selector.js"></script>"#;
-const CLIP_SELECTOR_LOGIC_JS_TAG: &str = r#"<script src="clip_selector_logic.js"></script>"#;
 const CLIP_SELECTOR_JS_TAG: &str = r#"<script src="clip_selector.js"></script>"#;
 
-/// セレクター HTML 内の共通アセット (CSS / JS) をインライン展開する
+/// セレクター HTML 内の共通 CSS をインライン展開する
 pub(crate) fn embed_selector_assets(html: &str) -> String {
     let css = include_str!("../../ui/selector.css");
-    let common_js = include_str!("../../ui/selector-common.js");
-
-    html.replace(SELECTOR_CSS_IMPORT, css).replace(
-        SELECTOR_COMMON_JS_TAG,
-        &format!("<script>\n{common_js}\n</script>"),
-    )
+    apply_webview_csp(&html.replace(SELECTOR_CSS_IMPORT, css))
 }
 
 /// クイックセレクター用 HTML 内のアセットをインライン展開する
+///
+/// JS は `npm run build:ui` で生成した `quick_selector.bundle.js` を埋め込む
 pub(crate) fn embed_quick_selector_assets(html: &str) -> String {
-    let logic_js = include_str!("../../ui/quick_selector_logic.js");
-    let quick_js = include_str!("../../ui/quick_selector.js");
+    let js = include_str!("../../ui/quick_selector.bundle.js");
     embed_selector_assets(html)
-        .replace(
-            QUICK_SELECTOR_LOGIC_JS_TAG,
-            &format!("<script>\n{logic_js}\n</script>"),
-        )
-        .replace(
-            QUICK_SELECTOR_JS_TAG,
-            &format!("<script>\n{quick_js}\n</script>"),
-        )
+        .replace(QUICK_SELECTOR_JS_TAG, &format!("<script>\n{js}\n</script>"))
 }
 
 /// 登録クリップセレクター用 HTML 内のアセットをインライン展開する
+///
+/// JS は `npm run build:ui` で生成した `clip_selector.bundle.js` を埋め込む
 pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
     let clip_css = include_str!("../../ui/clip_selector.css");
-    let logic_js = include_str!("../../ui/clip_selector_logic.js");
-    let clip_js = include_str!("../../ui/clip_selector.js");
+    let js = include_str!("../../ui/clip_selector.bundle.js");
     embed_selector_assets(html)
         .replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
-        .replace(
-            CLIP_SELECTOR_LOGIC_JS_TAG,
-            &format!("<script>\n{logic_js}\n</script>"),
-        )
-        .replace(
-            CLIP_SELECTOR_JS_TAG,
-            &format!("<script>\n{clip_js}\n</script>"),
-        )
+        .replace(CLIP_SELECTOR_JS_TAG, &format!("<script>\n{js}\n</script>"))
 }
 
 // ======================================================================
@@ -136,6 +119,7 @@ impl WebSelectorWindow {
     ///
     /// 直前プロセスの `WebView2` ユーザーデータロックで失敗した場合に備え、
     /// 同一ディレクトリ再試行のあとプロセス固有ディレクトリへフォールバックする
+    /// 外部 URL へのページ遷移・`window.open`・ダウンロードは拒否する
     ///
     /// # Arguments
     /// * `window` - ホストとなる `tao` ウィンドウ
@@ -211,9 +195,34 @@ impl WebSelectorWindow {
 
         let mut context = WebContext::new(Some(PathBuf::from(data_dir)));
         let handler = Arc::clone(ipc_handler);
+        let html_for_nav = html.to_string();
         let mut builder = WebViewBuilder::new_with_web_context(&mut context)
             .with_html(html)
-            .with_ipc_handler(move |req| handler(req));
+            .with_ipc_handler(move |req| handler(req))
+            .with_navigation_handler(move |url| {
+                let allowed = is_allowed_webview_navigation(&url, &html_for_nav);
+                if !allowed {
+                    crate::log_warn!(
+                        "WebView のページ遷移を拒否: {}",
+                        preview_denied_webview_url(&url)
+                    );
+                }
+                allowed
+            })
+            .with_new_window_req_handler(|url, _features| {
+                crate::log_warn!(
+                    "WebView の新規ウィンドウを拒否: {}",
+                    preview_denied_webview_url(&url)
+                );
+                NewWindowResponse::Deny
+            })
+            .with_download_started_handler(|url, _path| {
+                crate::log_warn!(
+                    "WebView のダウンロードを拒否: {}",
+                    preview_denied_webview_url(&url)
+                );
+                false
+            });
         if options.transparent {
             builder = builder
                 .with_transparent(true)
@@ -319,41 +328,35 @@ pub(crate) fn build_hidden_selector_window(
 mod tests {
     use super::*;
 
-    /// 共通 CSS / JS がインライン展開されるようにすること
+    /// 共通 CSS がインライン展開されるようにすること
     #[test]
-    fn embed_selector_assets_inlines_common_files() {
-        let html = embed_selector_assets(
-            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script>"#,
-        );
+    fn embed_selector_assets_inlines_common_css() {
+        let html = embed_selector_assets(r#"<style>@import url("selector.css");</style>"#);
         assert!(!html.contains(SELECTOR_CSS_IMPORT));
-        assert!(!html.contains(SELECTOR_COMMON_JS_TAG));
-        assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("--bg-color"));
     }
 
-    /// クイックセレクター専用 JS がインライン展開されるようにすること
+    /// クイックセレクター用バンドル JS がインライン展開されるようにすること
     #[test]
-    fn embed_quick_selector_assets_inlines_quick_js() {
+    fn embed_quick_selector_assets_inlines_quick_bundle() {
         let html = embed_quick_selector_assets(
-            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script><script src="quick_selector_logic.js"></script><script src="quick_selector.js"></script>"#,
+            r#"<style>@import url("selector.css");</style><script src="quick_selector.js"></script>"#,
         );
-        assert!(!html.contains(QUICK_SELECTOR_LOGIC_JS_TAG));
         assert!(!html.contains(QUICK_SELECTOR_JS_TAG));
-        assert!(html.contains("window.QuickSelectorLogic"));
+        assert!(html.contains("Generated by scripts/common/build-ui.mjs"));
         assert!(html.contains("window.refreshModes"));
         assert!(html.contains("FAVORITES_CATEGORY"));
     }
 
-    /// 登録クリップセレクター専用 CSS / JS がインライン展開されるようにすること
+    /// 登録クリップセレクター専用 CSS / バンドル JS がインライン展開されるようにすること
     #[test]
     fn embed_clip_selector_assets_inlines_clip_assets() {
         let html = embed_clip_selector_assets(
-            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style><script src="selector-common.js"></script><script src="clip_selector_logic.js"></script><script src="clip_selector.js"></script>"#,
+            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style><script src="clip_selector.js"></script>"#,
         );
         assert!(!html.contains(CLIP_SELECTOR_CSS_IMPORT));
-        assert!(!html.contains(CLIP_SELECTOR_LOGIC_JS_TAG));
         assert!(!html.contains(CLIP_SELECTOR_JS_TAG));
-        assert!(html.contains("window.ClipSelectorLogic"));
+        assert!(html.contains("Generated by scripts/common/build-ui.mjs"));
         assert!(html.contains("#image-hover-preview"));
         assert!(html.contains("window.refreshItems"));
     }
