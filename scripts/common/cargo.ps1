@@ -56,3 +56,12 @@ function Invoke-CargoTest {
         Assert-LastExitCode -CommandLabel 'cargo test --doc'
     }
 }
+
+# デバッグバイナリをビルドする (E2E 用など)
+function Invoke-CargoBuild {
+    [CmdletBinding()]
+    param()
+
+    cargo build -p clip-refiner
+    Assert-LastExitCode -CommandLabel 'cargo build -p clip-refiner'
+}

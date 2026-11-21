@@ -96,13 +96,20 @@ function Install-NpmDependenciesIfNeeded {
 
     Assert-NpmInstalled
 
-    if (Test-Path -LiteralPath 'node_modules') {
+    $playwrightPkg = Join-Path 'node_modules' '@playwright\test'
+    if ((Test-Path -LiteralPath 'node_modules') -and (Test-Path -LiteralPath $playwrightPkg)) {
         return
     }
 
     Write-Host 'npm 依存関係をインストールしています...'
-    npm ci
-    Assert-LastExitCode -CommandLabel 'npm ci'
+    if (Test-Path -LiteralPath 'package-lock.json') {
+        npm ci
+        Assert-LastExitCode -CommandLabel 'npm ci'
+    }
+    else {
+        npm install
+        Assert-LastExitCode -CommandLabel 'npm install'
+    }
     Write-Host ''
 }
 

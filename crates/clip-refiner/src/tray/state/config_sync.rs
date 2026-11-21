@@ -34,8 +34,16 @@ impl ConfigSyncState {
         }
     }
 
+    /// テスト用にディスク保存を有効化した同期状態を生成する
+    ///
+    /// `with_temp_config_dir` 内でのみ使うこと
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+    pub fn new_for_test_with_persistence() -> Self {
+        Self::new()
+    }
+
     /// 設定のディスク保存が有効かどうかを返す
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     pub fn is_persistence_enabled(&self) -> bool {
         self.persist_config
     }

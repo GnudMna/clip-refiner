@@ -1,8 +1,8 @@
 # ========================================================================
 # Script Name : check.ps1
-# Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / test)
+# Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / test / e2e)
 # Usage       : ./check.ps1
-# Requires    : PowerShell 7.0+, Node.js (npm)
+# Requires    : PowerShell 7.0+, Node.js (npm), WebView2 Runtime (E2E)
 # ========================================================================
 
 #requires -Version 7.0
@@ -44,6 +44,29 @@ Invoke-ScriptMain {
     Write-Host 'テストを実行中...'
     Invoke-CargoTest -IncludeDocTests
     Write-Host ''
+
+    if ($env:CLIP_REFINER_SKIP_E2E -eq '1') {
+        Write-Host 'note: WebView E2E をスキップしました (CLIP_REFINER_SKIP_E2E=1)'
+        Write-Host ''
+    }
+    else {
+        Write-Host 'E2E 用バイナリをビルド中...'
+        Invoke-CargoBuild
+        Write-Host ''
+
+        Write-Host 'WebView E2E (Playwright) を実行中...'
+        Install-NpmDependenciesIfNeeded
+        Assert-NpmInstalled
+        if ($env:CARGO_TARGET_DIR) {
+            $env:CLIP_REFINER_E2E_EXE = Join-Path $env:CARGO_TARGET_DIR 'debug\ClipRefiner.exe'
+        }
+        else {
+            $env:CLIP_REFINER_E2E_EXE = Join-Path (Get-Location) 'target\debug\ClipRefiner.exe'
+        }
+        npm run test:e2e
+        Assert-LastExitCode -CommandLabel 'npm run test:e2e'
+        Write-Host ''
+    }
 
     Write-Host 'すべてのチェックが完了しました'
 }

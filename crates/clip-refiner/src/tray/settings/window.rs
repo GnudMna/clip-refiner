@@ -35,6 +35,8 @@ const SETTINGS_JS_TAG: &str = r#"<script src="settings.js"></script>"#;
 const SETTINGS_ICON_PLACEHOLDER: &str = "__APP_ICON_SRC__";
 const FLUSH_PENDING_APPLY_SCRIPT: &str =
     "typeof flushPendingApply==='function'&&flushPendingApply();";
+/// OS の閉じる操作から呼ぶ JS (未公開時は no-op)
+const CLOSE_FROM_OS_SCRIPT: &str = "typeof window.closeWindow==='function'&&window.closeWindow();";
 const IPC_LOG_PREVIEW_MAX_LEN: usize = 200;
 
 /// 解釈に失敗した IPC メッセージを警告ログへ出力する
@@ -55,6 +57,11 @@ fn assemble_settings_js() -> String {
         include_str!("../../ui/settings/shared_logic.js"),
         include_str!("../../ui/settings/panels_logic.js"),
         include_str!("../../ui/settings/shared.js"),
+        include_str!("../../ui/settings/html_builders.js"),
+        include_str!("../../ui/settings/ipc_apply.js"),
+        include_str!("../../ui/settings/confirm_dialog.js"),
+        include_str!("../../ui/settings/regex_feedback.js"),
+        include_str!("../../ui/settings/monitor_ui.js"),
         include_str!("../../ui/settings/panels.js"),
         include_str!("../../ui/settings/events.js"),
         include_str!("../../ui/settings/main.js"),
@@ -300,7 +307,7 @@ impl SettingsWindow {
         let Some(inner) = inner.as_ref() else {
             return;
         };
-        inner.evaluate_script("typeof closeWindow==='function'&&closeWindow();");
+        inner.evaluate_script(CLOSE_FROM_OS_SCRIPT);
     }
 
     /// 設定ウィンドウが表示中かどうか
@@ -342,7 +349,7 @@ impl SettingsWindow {
             AppEvent::ShowSettingsWindow => open_settings_window(event_loop, state, self),
             AppEvent::HideSettingsWindow => self.hide(),
             AppEvent::SettingsApplyPatch => {
-                if let Some(json) = state.take_pending_settings_patch() {
+                if let Some(json) = state.settings_pending().take_patch() {
                     match serde_json::from_str::<SettingsPatch>(&json) {
                         Ok(patch) => handle_settings_window_command(
                             SettingsWindowCommand::Apply(Box::new(patch)),
@@ -393,7 +400,7 @@ impl SettingsWindow {
                 );
             }
             AppEvent::SettingsRegexPreview => {
-                if let Some(request) = state.take_regex_preview_request() {
+                if let Some(request) = state.settings_pending().take_regex_preview_request() {
                     let response = RegexPreviewResponse::from_request(&request);
                     self.notify_regex_preview(&response);
                 }
@@ -450,6 +457,7 @@ pub(crate) fn open_settings_window(
     } else {
         settings.show(event_loop, &snapshot.to_json());
     }
+    crate::tray::e2e::signal_ready();
 }
 
 // ======================================================================
@@ -459,7 +467,9 @@ pub(crate) fn open_settings_window(
 mod tests {
     use std::sync::Arc;
 
-    use super::{SettingsWindow, assemble_settings_html, assemble_settings_js};
+    use super::{
+        CLOSE_FROM_OS_SCRIPT, SettingsWindow, assemble_settings_html, assemble_settings_js,
+    };
 
     use crate::tray::state::test_app_state;
 
@@ -474,6 +484,7 @@ mod tests {
         settings.load_snapshot("{}");
         settings.focus();
         settings.flush_pending_apply();
+        settings.request_close_from_os();
         settings.hide();
         assert!(!settings.is_visible());
         assert!(settings.id().is_none());
@@ -488,6 +499,18 @@ mod tests {
         assert!(js.contains("action: 'stale'"));
     }
 
+    /// 設定 UI JavaScript に責務分割後の DOM モジュールが含まれるようにすること
+    #[test]
+    fn assembled_settings_js_includes_split_dom_modules() {
+        let js = assemble_settings_js();
+        assert!(js.contains("グローバルホットキーを編集する"));
+        assert!(js.contains("function scheduleApply"));
+        assert!(js.contains("function bindConfirmDialog"));
+        assert!(js.contains("function handleRegexPreview"));
+        assert!(js.contains("function updateMonitorPipelineUi"));
+        assert!(js.contains("function panelWrap"));
+    }
+
     /// 設定 UI JavaScript に共有純粋ロジックが含まれるようにすること
     #[test]
     fn assembled_settings_js_includes_shared_logic() {
@@ -497,8 +520,23 @@ mod tests {
         assert!(js.contains("buildNotificationSettingsPatch"));
         assert!(js.contains("normalizePipeline"));
         assert!(js.contains("shouldFullRenderOnLoad"));
+        assert!(js.contains("collectCloseWindowIpcMessages"));
+        assert!(js.contains("resolveShortcutsDiffUpdate"));
+        assert!(js.contains("shouldCloseSettingsOnEscape"));
         assert!(js.contains("applyPipelineAction"));
         assert!(js.contains("resolveContentClickAction"));
+    }
+
+    /// OS の閉じる操作向けに `window.closeWindow` が公開されるようにすること
+    #[test]
+    fn assembled_settings_js_exposes_close_window_on_window() {
+        let js = assemble_settings_js();
+        assert!(js.contains("window.closeWindow = closeWindow"));
+        assert!(js.contains("collectCloseWindowIpcMessages"));
+        assert_eq!(
+            CLOSE_FROM_OS_SCRIPT,
+            "typeof window.closeWindow==='function'&&window.closeWindow();"
+        );
     }
 
     /// 組み立て HTML にシェル必須 DOM と全タブ定義が含まれるようにすること

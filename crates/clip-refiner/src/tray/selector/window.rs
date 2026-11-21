@@ -12,7 +12,7 @@ use crate::tray::state::AppEvent;
 use anyhow::Context;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder, WindowId};
-use wry::{WebContext, WebView, WebViewBuilder};
+use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 // ======================================================================
 // ウィンドウ配置
@@ -154,7 +154,8 @@ impl WebSelectorWindow {
         options: WebViewWindowOptions,
     ) -> anyhow::Result<Self> {
         let window = Arc::new(window);
-        let base_dir = std::env::temp_dir().join(webview_data_dir_suffix);
+        let data_dir_suffix = crate::tray::e2e::webview_data_dir_suffix(webview_data_dir_suffix);
+        let base_dir = std::env::temp_dir().join(&data_dir_suffix);
         let fallback_dir = base_dir.join(format!("pid-{}", std::process::id()));
         let ipc_handler: Arc<dyn Fn(wry::http::Request<String>) + Send + Sync + 'static> =
             Arc::new(ipc_handler);
@@ -182,7 +183,7 @@ impl WebSelectorWindow {
         }
 
         Err(last_error.unwrap_or_else(|| anyhow::anyhow!("WebView 初期化に失敗")))
-            .with_context(|| format!("WebView2 の初期化に失敗 ({webview_data_dir_suffix})"))
+            .with_context(|| format!("WebView2 の初期化に失敗 ({data_dir_suffix})"))
     }
 
     /// 指定データディレクトリで `WebView` を1回構築する
@@ -217,6 +218,9 @@ impl WebSelectorWindow {
             builder = builder
                 .with_transparent(true)
                 .with_background_color((0, 0, 0, 0));
+        }
+        if let Some(args) = crate::tray::e2e::additional_browser_args() {
+            builder = builder.with_additional_browser_args(args);
         }
         let webview = builder
             .build(window.as_ref())

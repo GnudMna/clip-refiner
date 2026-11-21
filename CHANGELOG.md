@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-07-12
+
+### Fixed
+
+- 設定ウィンドウをタイトルバーの閉じるボタン (バツ) から閉じられない不具合を修正。`closeWindow` を `window` へ公開し、OS の閉じる操作から呼び出せるようにした
+- 設定 UI「ショートカット」タブの説明文を編集可能である実態に合わせて更新
+- ログの日次ローテーションを UTC からローカル日付基準へ変更。長時間常駐時にローカル日付と異なるファイルへ書き続けられる問題を解消
+- E2E fixture のホットキー (`continuous_record`) を本番デフォルト (`Alt+Shift+C`) に合わせ、実スキーマに無い `[regex] enabled` を削除
+
+### Added
+
+- 設定 UI の閉じる IPC (`apply`→`close`)・Escape 判定・ショートカット差分更新を `shared_logic.js` へ抽出し Node テストで固定
+- 設定 IPC → `config.toml` 往復の統合テスト (`SettingsTestContext::with_persistence`)
+- 正規表現プレビューのタイムアウト表示と設定ウィンドウ幾何 JSON の往復テスト
+- Playwright + WebView2 CDP による設定 / クイックセレクター / 登録クリップセレクターの E2E (`e2e/`)。`--e2e-window` ハーネスと `check.ps1` 組み込み (`CLIP_REFINER_SKIP_E2E=1` でスキップ可)
+- E2E に設定の debounce 保存・外部 `config.toml` 変更バナー、登録クリップの空表示・検索絞り込みを追加
+- OCR オーバーレイの生成・表示・非表示ライフサイクルを Rust テストで固定
+
+### Changed
+
+- 設定 UI の肥大化した `shared.js` を責務別に分割 (`html_builders.js` / `ipc_apply.js` / `confirm_dialog.js` / `regex_feedback.js` / `monitor_ui.js`)。挙動は維持し、`assemble_settings_js` の連結順のみ更新
+- 正規表現マッチの同時実行を最大 2 本に制限。タイムアウト時はキャンセルを要求し、マッチ境界で中断してスロットを解放する (単一の `find` 実行中はエンジン制約で打ち切れない)
+- `AppState` の薄い委譲メソッドを削除し、`worker()` / `clipboard_session()` / `config_sync()` / `settings_pending()` アクセサ経由に呼び出しを移行。横断処理 (`save_config` / `add_to_history` 等) のみ `AppState` に残した
+- WebView 回帰検知を 3 層から 4 層 (JS 純粋 / Rust IPC / Playwright E2E / 手動) へ拡張。手動スモークはトレイ・ホットキー・OCR ドラッグ・外部連携に縮小
+- ドキュメント (README / CONFIG / DEVELOPMENT) を現状に合わせて更新・整理。連続記録の有効化直後の挙動矛盾を解消し、処理上限・設定ディレクトリ構成・環境変数・E2E 構成を追記
+
 ## [0.12.5] - 2026-07-11
 
 ### Changed
@@ -387,7 +413,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...develop
+[0.12.6]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...v0.12.6
 [0.12.5]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...v0.12.5
 [0.12.4]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...v0.12.4
 [0.12.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...v0.12.3

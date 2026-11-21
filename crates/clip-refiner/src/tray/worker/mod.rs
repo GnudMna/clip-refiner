@@ -36,14 +36,14 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         Ok(cb) => cb,
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
-            state.set_worker_recovery_pending(true);
+            state.worker().set_recovery_pending(true);
             dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerStopped);
             return;
         }
     };
 
-    let notify_recovery = state.take_worker_recovery_pending();
-    state.set_worker_alive(true);
+    let notify_recovery = state.worker().take_recovery_pending();
+    state.worker().set_alive(true);
     if notify_recovery {
         dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerReady);
     }
@@ -56,7 +56,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
 
         if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
             last_config_poll = Instant::now();
-            if state.has_external_config_change() {
+            if state.config_sync().has_external_change() {
                 dispatch::send_app_event(&state.proxy, AppEvent::ReloadConfig);
             }
         }
@@ -79,7 +79,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         }
     }
 
-    state.set_worker_alive(false);
+    state.worker().set_alive(false);
 }
 
 /// ワーカー停止時にユーザーへ案内する通知本文

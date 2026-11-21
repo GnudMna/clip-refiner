@@ -61,7 +61,7 @@ impl TrayMenu {
     /// # Returns
     /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_history(&self, state: &AppState) -> Result<()> {
-        let history_len = state.history_len();
+        let history_len = state.clipboard_session().history_len();
         let mut records = self.history.records.lock_ignore_poison();
         records.clear();
 
@@ -79,7 +79,7 @@ impl TrayMenu {
         // 履歴が空でない場合は、履歴アイテムを追加
         if history_len > 0 {
             for index in 0..history_len {
-                let Some(text) = state.get_history_entry(index) else {
+                let Some(text) = state.clipboard_session().get_history_entry(index) else {
                     continue;
                 };
                 let label = format_history_menu_label(&text);
@@ -158,7 +158,11 @@ mod tests {
         assert_eq!(records[0].1, 0);
         assert_eq!(records[1].1, 1);
         assert_eq!(
-            state.get_history_entry(0).as_ref().map(|s| s.as_str()),
+            state
+                .clipboard_session()
+                .get_history_entry(0)
+                .as_ref()
+                .map(|s| s.as_str()),
             Some("second entry")
         );
     }
@@ -171,7 +175,7 @@ mod tests {
         menu.refresh_history(&state)
             .expect("履歴メニューの更新に失敗");
 
-        state.clear_history();
+        state.clipboard_session().clear_history();
         menu.refresh_history(&state)
             .expect("履歴メニューの更新に失敗");
 

@@ -58,8 +58,10 @@ impl MonitorLoopState {
         let new_token = clipboard_seq::token().unwrap_or(0);
         let token_changed = new_token != self.last_token;
         let initial_sync = self.tracked_generation == 0;
-        let already_seen = state.with_processed_state(|ps| ps.matches_last_seen(&text));
-        state.record_clipboard_observed(&text);
+        let already_seen = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_seen(&text));
+        state.clipboard_session().record_clipboard_observed(&text);
         clipboard_monitor::recover_continuous_record_on_reset(
             state,
             &text,

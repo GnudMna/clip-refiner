@@ -65,3 +65,23 @@ impl Default for WorkerState {
         Self::new()
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ワーカー稼働状態と復旧通知フラグを更新できること
+    #[test]
+    fn worker_alive_and_recovery_pending() {
+        let worker = WorkerState::new_for_test();
+        assert!(worker.is_alive());
+        worker.set_alive(false);
+        assert!(!worker.is_alive());
+        worker.set_recovery_pending(true);
+        assert!(worker.take_recovery_pending());
+        assert!(!worker.take_recovery_pending());
+    }
+}

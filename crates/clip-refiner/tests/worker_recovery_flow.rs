@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{
-    ClipboardCommand, ClipboardWorkerHandle, stub_worker, test_app_state_arc, test_tray_menu,
+    ClipboardCommand, ClipboardWorkerHandle, is_worker_alive, set_worker_alive,
+    set_worker_recovery_pending, stub_worker, test_app_state_arc, test_tray_menu,
     wait_until_worker_alive,
 };
 
@@ -39,13 +40,13 @@ fn worker_restart_restores_alive_after_simulated_stop() {
         let worker = ClipboardWorkerHandle::spawn(&state);
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));
 
-        state.set_worker_alive(false);
-        state.set_worker_recovery_pending(true);
+        set_worker_alive(&state, false);
+        set_worker_recovery_pending(&state, true);
 
         worker.restart();
 
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));
-        assert!(state.is_worker_alive());
+        assert!(is_worker_alive(&state));
     });
 }
 
@@ -58,8 +59,8 @@ fn worker_restart_bumps_monitor_generation_when_recovery_pending() {
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));
 
         let generation_before = state.monitor_generation.load(Ordering::SeqCst);
-        state.set_worker_alive(false);
-        state.set_worker_recovery_pending(true);
+        set_worker_alive(&state, false);
+        set_worker_recovery_pending(&state, true);
 
         worker.restart();
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));
@@ -74,7 +75,7 @@ fn worker_restart_bumps_monitor_generation_when_recovery_pending() {
 fn worker_send_blocked_while_stopped() {
     let state = test_app_state_arc();
     let (stub, rx) = stub_worker(&state);
-    state.set_worker_alive(false);
+    set_worker_alive(&state, false);
 
     stub.send(ClipboardCommand::ProcessMode(RefineMode::Trim));
 
@@ -87,7 +88,7 @@ fn worker_stop_enables_retry_menu_item() {
     let state = test_app_state_arc();
     let menu = test_tray_menu(&state);
     let (worker, _) = stub_worker(&state);
-    state.set_worker_alive(false);
+    set_worker_alive(&state, false);
 
     worker.sync_menu_state(&menu);
 

@@ -18,7 +18,9 @@ pub(crate) fn toggle_continuous_record(
     state.with_config_mut(|c| c.continuous_record_enabled = enabled);
     if enabled {
         // 有効化前の加工書き戻し指紋が、同一内容の再コピーを誤って抑止しないようクリアする
-        state.with_processed_state(|ps| ps.last_written = None);
+        state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.last_written = None);
     }
     state.save_config();
     bump_monitor_generation_unchecked(state);
@@ -49,7 +51,7 @@ pub(crate) fn handle_continuous_record_event(
         return true;
     }
     if id == menu.continuous_record.clear_item.id() {
-        state.clear_continuous_record();
+        state.clipboard_session().clear_continuous_record();
         state.save_config();
         if let Err(err) = menu.refresh_continuous_record(state) {
             dispatch::log_menu_operation_error("連続記録メニューの更新", err);

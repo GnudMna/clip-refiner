@@ -128,6 +128,19 @@ function test_build_preview_ui_empty_pattern() {
     assert.equal(ui.fieldInvalid, false);
 }
 
+/** タイムアウト応答をエラー表示として組み立てられること */
+function test_build_preview_ui_timeout_message() {
+    const ui = RegexPreview.buildPreviewUi(
+        previewPayload(1, false, '正規表現の実行がタイムアウトしました', null),
+        { pattern: '.+', replacement: '', caseInsensitive: false, multiline: false }
+    );
+    assert.equal(ui.statusClass, 'regex-status regex-status--error');
+    assert.equal(ui.fieldInvalid, true);
+    assert.equal(ui.previewError, true);
+    assert.equal(ui.statusMessage, '正規表現の実行がタイムアウトしました');
+    assert.equal(ui.previewText, '—');
+}
+
 /** regexSettingsEqual の基本動作 */
 function test_regex_settings_equal() {
     assert.equal(RegexPreview.regexSettingsEqual(validSettings, validSettings), true);
@@ -144,6 +157,7 @@ const tests = [
     test_validate_pending_after_stale_response,
     test_validate_uses_cache_after_apply,
     test_build_preview_ui_empty_pattern,
+    test_build_preview_ui_timeout_message,
     test_regex_settings_equal,
 ];
 

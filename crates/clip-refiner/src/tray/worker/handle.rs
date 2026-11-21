@@ -46,7 +46,7 @@ impl ClipboardWorkerHandle {
     /// # Arguments
     /// * `command` - ワーカーへ送るクリップボード操作コマンド
     pub fn send(&self, command: ClipboardCommand) {
-        if !self.state.is_worker_alive() {
+        if !self.state.worker().is_alive() {
             crate::log_warn!("クリップボードワーカーが停止中のため操作を送信できません");
             UserNotification::static_message(
                 titles::WORKER,
@@ -76,7 +76,7 @@ impl ClipboardWorkerHandle {
 
         let (tx, rx) = mpsc::channel();
         *self.tx.lock_ignore_poison() = tx;
-        self.state.set_worker_alive(false);
+        self.state.worker().set_alive(false);
         Self::start_thread(Arc::clone(self), rx);
         bump_monitor_generation(&self.state);
         crate::log_info!("クリップボードワーカーの再起動を要求しました");
@@ -87,7 +87,7 @@ impl ClipboardWorkerHandle {
     /// # Arguments
     /// * `menu` - 同期対象のトレイメニュー
     pub fn sync_menu_state(&self, menu: &super::super::menu::TrayMenu) {
-        menu.set_clipboard_worker_retry_enabled(!self.state.is_worker_alive());
+        menu.set_clipboard_worker_retry_enabled(!self.state.worker().is_alive());
     }
 
     fn start_thread(handle: Arc<Self>, rx: Receiver<ClipboardCommand>) {
@@ -102,9 +102,9 @@ impl ClipboardWorkerHandle {
     }
 
     fn mark_worker_stopped(&self) {
-        if self.state.is_worker_alive() {
-            self.state.set_worker_alive(false);
-            self.state.set_worker_recovery_pending(true);
+        if self.state.worker().is_alive() {
+            self.state.worker().set_alive(false);
+            self.state.worker().set_recovery_pending(true);
             dispatch::send_app_event(&self.state.proxy, AppEvent::ClipboardWorkerStopped);
         }
     }
@@ -131,7 +131,7 @@ impl ClipboardWorkerHandle {
     /// # Returns
     /// * `Arc<Self>` - ワーカースレッドを起動しないテスト用ハンドル
     pub fn for_test(state: Arc<AppState>, tx: Sender<ClipboardCommand>) -> Arc<Self> {
-        state.set_worker_alive(true);
+        state.worker().set_alive(true);
         Arc::new(Self {
             state,
             tx: std::sync::Mutex::new(tx),
@@ -168,7 +168,7 @@ mod tests {
     fn send_skips_command_when_worker_stopped() {
         let state = Arc::new(test_app_state());
         let (worker, rx) = with_stub_worker(&state);
-        state.set_worker_alive(false);
+        state.worker().set_alive(false);
 
         worker.send(ClipboardCommand::ProcessMode(RefineMode::Trim));
 
@@ -181,7 +181,7 @@ mod tests {
         let state = Arc::new(test_app_state());
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
         let (worker, _) = with_stub_worker(&state);
-        state.set_worker_alive(false);
+        state.worker().set_alive(false);
 
         worker.sync_menu_state(&menu);
 
@@ -194,7 +194,7 @@ mod tests {
         let state = Arc::new(test_app_state());
         let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
         let (worker, _) = with_stub_worker(&state);
-        state.set_worker_alive(true);
+        state.worker().set_alive(true);
 
         worker.sync_menu_state(&menu);
 

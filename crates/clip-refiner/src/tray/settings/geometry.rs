@@ -166,4 +166,28 @@ mod tests {
         assert!(geometry.x.is_none());
         assert!(geometry.y.is_none());
     }
+
+    /// 幾何 JSON を保存して再読込できること
+    #[test]
+    fn geometry_round_trips_through_settings_window_json() {
+        use crate::config::get_config_dir;
+        use crate::test_helpers::with_temp_config_dir;
+
+        with_temp_config_dir(|| {
+            let path = get_config_dir()
+                .expect("テスト用設定ディレクトリ")
+                .join(GEOMETRY_FILE);
+            let geometry = SettingsWindowGeometry {
+                width: 900.0,
+                height: 700.0,
+                x: Some(12.0),
+                y: Some(34.0),
+            };
+            let json = serde_json::to_string_pretty(&geometry).expect("幾何 JSON のシリアライズ");
+            std::fs::write(&path, json).expect("幾何 JSON の書き込み");
+
+            let loaded = load_settings_window_geometry();
+            assert_eq!(loaded, geometry);
+        });
+    }
 }

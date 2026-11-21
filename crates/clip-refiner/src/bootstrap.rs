@@ -7,7 +7,7 @@ use crate::platform;
 use crate::refiner::{
     self, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
 };
-use crate::tray;
+use crate::tray::{self, E2eWindow};
 use crate::user_error::fatal_startup;
 use crate::{log_error, log_info, log_warn};
 
@@ -30,6 +30,11 @@ use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 pub fn run() -> Result<()> {
     setup_console();
 
+    let args = Args::parse();
+    if args.e2e_window.is_some() {
+        tray::e2e::activate();
+    }
+
     let _guard = match setup_logging() {
         Ok(guard) => guard,
         Err(err) => {
@@ -40,9 +45,7 @@ pub fn run() -> Result<()> {
 
     platform::init_notifications();
 
-    let args = Args::parse();
-
-    let _instance = match ensure_single_instance() {
+    let _instance = match ensure_single_instance(args.e2e_window.is_some()) {
         Ok(instance) => instance,
         Err(err) => {
             report_fatal_startup_error("多重起動防止", &err);
@@ -64,7 +67,7 @@ fn run_application(args: &Args) -> Result<()> {
     if args.mode.is_some() || !args.pipeline.is_empty() {
         run_once(args)
     } else {
-        tray::run_loop()
+        tray::run_loop(args.e2e_window)
     }
 }
 
@@ -107,6 +110,13 @@ struct Args {
     /// 正規表現で複数行モードを有効にする
     #[arg(long = "regex-multiline")]
     regex_multiline: bool,
+    /// E2E 用: 指定 `WebView` を自動表示して常駐する (Playwright + CDP)
+    #[arg(
+        long = "e2e-window",
+        value_enum,
+        conflicts_with_all = ["mode", "pipeline"]
+    )]
+    e2e_window: Option<E2eWindow>,
 }
 
 // ======================================================================
@@ -127,7 +137,7 @@ fn setup_console() {
 // ======================================================================
 /// ロギングシステムを初期化する
 ///
-/// 設定ディレクトリ内の `logs` フォルダに日次のログファイルを作成し、
+/// 設定ディレクトリ内の `logs` フォルダにローカル日付の日次ログファイルを作成し、
 /// 標準出力とファイルの両方にログを出力するように設定する
 /// また、システム全体のグローバルロガーもここで初期化される
 ///
@@ -148,7 +158,7 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
         log_warn!("ログファイルのパーミッション設定に失敗: {:?}", e);
     }
 
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "clip-refiner.log");
+    let file_appender = logger::LocalDailyFileAppender::new(&log_dir, "clip-refiner.log")?;
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
@@ -179,13 +189,21 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 // ======================================================================
 /// アプリケーションの多重起動を防止し、インスタンスを保持する
 ///
-/// `APP_ID` を使用してシステム全体で一意のインスタンスを確認する
+/// 通常起動では `APP_ID` を使う。E2E 起動ではプロセス固有 ID にし、常駐インスタンスと衝突しない
+///
+/// # Arguments
+/// * `e2e` - E2E モードなら `true`
 ///
 /// # Returns
 /// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す
 ///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了する
-fn ensure_single_instance() -> Result<SingleInstance> {
-    let instance = SingleInstance::new(consts::APP_ID)
+fn ensure_single_instance(e2e: bool) -> Result<SingleInstance> {
+    let instance_id = if e2e {
+        format!("{}-e2e-{}", consts::APP_ID, std::process::id())
+    } else {
+        consts::APP_ID.to_string()
+    };
+    let instance = SingleInstance::new(&instance_id)
         .context("多重起動防止のインスタンス作成に失敗しました")?;
 
     if !instance.is_single() {
@@ -316,6 +334,7 @@ mod tests {
             regex_replacement: None,
             regex_case_insensitive: false,
             regex_multiline: false,
+            e2e_window: None,
         }
     }
 

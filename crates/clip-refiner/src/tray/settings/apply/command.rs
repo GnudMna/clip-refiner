@@ -52,7 +52,7 @@ pub(crate) fn handle_settings_window_command(
             );
         }
         SettingsWindowCommand::ClearHistory => {
-            state.clear_history();
+            state.clipboard_session().clear_history();
             state.save_config();
             if let Err(err) = menu.refresh_history(state) {
                 dispatch::log_menu_operation_error("履歴メニューの更新", err);
@@ -61,7 +61,7 @@ pub(crate) fn handle_settings_window_command(
             settings.notify_apply_feedback(&SettingsApplyFeedback::ok("履歴をクリアしました"));
         }
         SettingsWindowCommand::ClearContinuousRecord => {
-            state.clear_continuous_record();
+            state.clipboard_session().clear_continuous_record();
             state.save_config();
             if let Err(err) = menu.refresh_continuous_record(state) {
                 dispatch::log_menu_operation_error("連続記録メニューの更新", err);

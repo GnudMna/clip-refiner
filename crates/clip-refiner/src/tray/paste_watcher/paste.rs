@@ -20,7 +20,9 @@ pub(crate) fn try_paste_continuous_record_front<C: TextClipboard>(
     state: &AppState,
     clipboard: &mut C,
 ) -> bool {
-    if !state.with_config(|c| c.continuous_record_enabled) || state.continuous_record_len() == 0 {
+    if !state.with_config(|c| c.continuous_record_enabled)
+        || state.clipboard_session().continuous_record_len() == 0
+    {
         return false;
     }
 
@@ -34,7 +36,7 @@ pub(crate) fn try_paste_continuous_record_front<C: TextClipboard>(
         return false;
     }
 
-    state.record_clipboard_set(&text);
+    state.clipboard_session().record_clipboard_set(&text);
     true
 }
 
@@ -47,7 +49,9 @@ pub(crate) fn try_paste_continuous_record_front<C: TextClipboard>(
 pub(crate) fn try_paste_continuous_record_front_standalone(state: &AppState) -> bool {
     use arboard::Clipboard;
 
-    if !state.with_config(|c| c.continuous_record_enabled) || state.continuous_record_len() == 0 {
+    if !state.with_config(|c| c.continuous_record_enabled)
+        || state.clipboard_session().continuous_record_len() == 0
+    {
         return false;
     }
 
@@ -70,7 +74,7 @@ pub(crate) fn try_paste_continuous_record_front_standalone(state: &AppState) -> 
         return false;
     }
 
-    state.record_clipboard_set(&text);
+    state.clipboard_session().record_clipboard_set(&text);
     true
 }
 
@@ -116,13 +120,19 @@ mod tests {
 
         assert!(!try_paste_continuous_record_front(&state, &mut clipboard));
         assert_eq!(clipboard.text(), "keep");
-        assert_eq!(state.continuous_record_len(), 2);
+        assert_eq!(state.clipboard_session().continuous_record_len(), 2);
         assert_eq!(
-            state.get_continuous_record_entry(0).map(|s| s.to_string()),
+            state
+                .clipboard_session()
+                .get_continuous_record_entry(0)
+                .map(|s| s.to_string()),
             Some("second".to_string())
         );
         assert_eq!(
-            state.get_continuous_record_entry(1).map(|s| s.to_string()),
+            state
+                .clipboard_session()
+                .get_continuous_record_entry(1)
+                .map(|s| s.to_string()),
             Some("first".to_string())
         );
     }
@@ -138,9 +148,12 @@ mod tests {
 
         assert!(try_paste_continuous_record_front(&state, &mut clipboard));
         assert_eq!(clipboard.text(), "first");
-        assert_eq!(state.continuous_record_len(), 1);
+        assert_eq!(state.clipboard_session().continuous_record_len(), 1);
         assert_eq!(
-            state.get_continuous_record_entry(0).map(|s| s.to_string()),
+            state
+                .clipboard_session()
+                .get_continuous_record_entry(0)
+                .map(|s| s.to_string()),
             Some("second".to_string())
         );
     }

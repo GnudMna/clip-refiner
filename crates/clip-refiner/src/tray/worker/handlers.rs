@@ -43,7 +43,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                     .notification()
                     .notify_with_debug(&e);
             } else {
-                state.record_clipboard_set(&text);
+                state.clipboard_session().record_clipboard_set(&text);
                 show_category_notification(
                     state,
                     NotificationCategory::HistoryRestore,
@@ -61,7 +61,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                     .notification()
                     .notify_with_debug(&e);
             } else {
-                state.record_clipboard_set(&text);
+                state.clipboard_session().record_clipboard_set(&text);
                 show_category_notification(
                     state,
                     NotificationCategory::Ocr,
@@ -101,15 +101,19 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
     match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
             if let Some(ref pre) = pre_text {
-                state.record_undo_source(pre);
+                state.clipboard_session().record_undo_source(pre);
             }
-            state.record_processing_success(&processed);
+            state
+                .clipboard_session()
+                .record_processing_success(&processed);
             show_process_notification(state, &pipeline, &processed);
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
             if let Some(ref pre) = pre_text {
-                state.record_undo_source(pre);
-                state.record_image_processing_success(pre);
+                state.clipboard_session().record_undo_source(pre);
+                state
+                    .clipboard_session()
+                    .record_image_processing_success(pre);
             }
             show_image_process_notification(state, mode, width, height);
         }
@@ -129,14 +133,14 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
 
 /// 加工の取り消しコマンドを処理する
 fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
-    if let Some(text) = state.take_undo_source() {
+    if let Some(text) = state.clipboard_session().take_undo_source() {
         if let Err(e) = clipboard.set_text(text.to_string()) {
             ClipboardWriteContext::Undo
                 .notification()
                 .notify_with_debug(&e);
-            state.record_undo_source(&text);
+            state.clipboard_session().record_undo_source(&text);
         } else {
-            state.record_processing_success(&text);
+            state.clipboard_session().record_processing_success(&text);
             show_category_notification(
                 state,
                 NotificationCategory::Process,
@@ -178,7 +182,7 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
             .notification()
             .notify_with_debug(&e);
     } else {
-        state.record_clipboard_set(&text);
+        state.clipboard_session().record_clipboard_set(&text);
         show_category_notification(
             state,
             NotificationCategory::ContinuousRecord,
@@ -205,7 +209,7 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
                     .notification()
                     .notify_with_debug(&e);
             } else {
-                state.record_clipboard_set(&text);
+                state.clipboard_session().record_clipboard_set(&text);
                 show_category_notification(
                     state,
                     NotificationCategory::RegisteredClip,

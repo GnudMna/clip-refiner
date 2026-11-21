@@ -43,6 +43,10 @@ pub enum AppEvent {
     ReloadHotkeys,
     /// 設定ウィンドウを表示する
     ShowSettingsWindow,
+    /// クイックセレクターを表示する
+    ShowQuickSelector,
+    /// 登録クリップセレクターを表示する
+    ShowClipSelector,
     /// 設定ウィンドウを非表示にする
     HideSettingsWindow,
     /// 設定ウィンドウからの部分更新パッチを適用する

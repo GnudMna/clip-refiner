@@ -33,7 +33,7 @@ pub(crate) fn handle_history_event(
         return true;
     }
     if id == menu.history.clear_item.id() {
-        state.clear_history();
+        state.clipboard_session().clear_history();
         state.save_config();
         if let Err(err) = menu.refresh_history(state) {
             dispatch::log_menu_operation_error("履歴メニューの更新", err);
@@ -44,7 +44,7 @@ pub(crate) fn handle_history_event(
     let menu_records = menu.history.records.lock_ignore_poison();
 
     if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
-        if let Some(text) = state.get_history_entry(*index) {
+        if let Some(text) = state.clipboard_session().get_history_entry(*index) {
             dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::SetText(text));
         }
         return true;

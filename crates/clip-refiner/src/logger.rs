@@ -1,8 +1,10 @@
-use std::fs;
-use std::path::Path;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
 
 // ======================================================================
 // 起動時初期化
@@ -17,6 +19,119 @@ pub fn cleanup_on_startup(log_dir: &Path) {
     if let Err(e) = cleanup_old_logs(log_dir, 14) {
         tracing::warn!("起動時ログクリーンアップに失敗: {:?}", e);
     }
+}
+
+// ======================================================================
+// ローカル日付の日次ファイル Appender
+// ======================================================================
+/// ローカルタイムゾーンの日付で日次ローテーションするファイル Appender
+///
+/// ファイル名は `{prefix}.YYYY-MM-DD` (例: `clip-refiner.log.2026-07-12`)
+/// `tracing_appender::non_blocking` と組み合わせて使う
+pub struct LocalDailyFileAppender {
+    directory: PathBuf,
+    file_name_prefix: String,
+    /// 現在日付の取得 (本番は `Local::now().date_naive()`、テストでは差し替え)
+    date_fn: Box<dyn Fn() -> NaiveDate + Send + Sync>,
+    state: Mutex<AppenderState>,
+}
+
+struct AppenderState {
+    date: NaiveDate,
+    file: File,
+}
+
+impl LocalDailyFileAppender {
+    /// ローカル日付で日次ローテーションする Appender を作成する
+    ///
+    /// # Arguments
+    /// * `directory` - ログファイルを置くディレクトリ
+    /// * `file_name_prefix` - ファイル名のプレフィックス (例: `clip-refiner.log`)
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 作成に成功した場合は Appender、失敗時はエラー
+    pub fn new(directory: impl AsRef<Path>, file_name_prefix: impl Into<String>) -> Result<Self> {
+        Self::with_date_fn(directory, file_name_prefix, || Local::now().date_naive())
+    }
+
+    /// 日付取得関数を差し替えて Appender を作成する (テスト用)
+    ///
+    /// # Arguments
+    /// * `directory` - ログファイルを置くディレクトリ
+    /// * `file_name_prefix` - ファイル名のプレフィックス
+    /// * `date_fn` - 現在のローカル日付を返す関数
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 作成に成功した場合は Appender、失敗時はエラー
+    pub fn with_date_fn(
+        directory: impl AsRef<Path>,
+        file_name_prefix: impl Into<String>,
+        date_fn: impl Fn() -> NaiveDate + Send + Sync + 'static,
+    ) -> Result<Self> {
+        let directory = directory.as_ref().to_path_buf();
+        let file_name_prefix = file_name_prefix.into();
+        let date = date_fn();
+        let file = open_log_file(&directory, &file_name_prefix, date)
+            .context("ログファイルのオープンに失敗")?;
+
+        Ok(Self {
+            directory,
+            file_name_prefix,
+            date_fn: Box::new(date_fn),
+            state: Mutex::new(AppenderState { date, file }),
+        })
+    }
+
+    /// 必要なら日付に合わせてファイルを切り替える
+    ///
+    /// # Arguments
+    /// * `state` - 現在開いているファイルの状態
+    ///
+    /// # Returns
+    /// * `io::Result<()>` - 切替成功時は `Ok(())`
+    fn rotate_if_needed(&self, state: &mut AppenderState) -> io::Result<()> {
+        let today = (self.date_fn)();
+        if state.date == today {
+            return Ok(());
+        }
+        state.file = open_log_file(&self.directory, &self.file_name_prefix, today)?;
+        state.date = today;
+        Ok(())
+    }
+}
+
+impl Write for LocalDailyFileAppender {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| io::Error::other(format!("ログ Appender のロックに失敗: {e}")))?;
+        self.rotate_if_needed(&mut state)?;
+        state.file.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|e| io::Error::other(format!("ログ Appender のロックに失敗: {e}")))?;
+        self.rotate_if_needed(&mut state)?;
+        state.file.flush()
+    }
+}
+
+/// 指定日付のログファイルを追記モードで開く
+///
+/// # Arguments
+/// * `directory` - ログディレクトリ
+/// * `prefix` - ファイル名プレフィックス
+/// * `date` - ローカル日付
+///
+/// # Returns
+/// * `io::Result<File>` - オープンしたファイル
+fn open_log_file(directory: &Path, prefix: &str, date: NaiveDate) -> io::Result<File> {
+    let path = directory.join(format!("{prefix}.{date}"));
+    OpenOptions::new().create(true).append(true).open(path)
 }
 
 // ======================================================================
@@ -106,21 +221,32 @@ macro_rules! log_debug {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Write;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    use chrono::NaiveDate;
 
     use super::*;
 
-    /// 保持期間を超えたログファイルが削除されるようにすること
-    #[test]
-    fn test_cleanup_old_logs_removes_expired_files() {
+    /// テスト用の一時ディレクトリを作成する
+    fn temp_log_dir(label: &str) -> PathBuf {
         let base = std::env::temp_dir().join(format!(
-            "clip-refiner-log-cleanup-{}",
+            "clip-refiner-log-{label}-{}",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("UNIX_EPOCH より前の時刻")
                 .as_nanos()
         ));
         fs::create_dir_all(&base).expect("一時ディレクトリの作成に失敗");
+        base
+    }
+
+    /// 保持期間を超えたログファイルが削除されるようにすること
+    #[test]
+    fn test_cleanup_old_logs_removes_expired_files() {
+        let base = temp_log_dir("cleanup");
 
         let old_name = "clip-refiner.log.2000-01-01";
         let recent_name = "clip-refiner.log.2099-01-01";
@@ -131,6 +257,80 @@ mod tests {
 
         assert!(!base.join(old_name).exists(), "古いログが残っている");
         assert!(base.join(recent_name).exists(), "新しいログが削除された");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// 同一ローカル日付では同じログファイルへ追記すること
+    #[test]
+    fn local_daily_appender_appends_same_day() {
+        let base = temp_log_dir("same-day");
+        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+
+        let mut appender =
+            LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
+                .expect("Appender の作成に失敗");
+
+        appender
+            .write_all(b"first\n")
+            .expect("1回目の書き込みに失敗");
+        appender
+            .write_all(b"second\n")
+            .expect("2回目の書き込みに失敗");
+        appender.flush().expect("flush に失敗");
+
+        let path = base.join("clip-refiner.log.2026-07-12");
+        assert!(path.exists(), "当日のログファイルが無い");
+        let content = fs::read_to_string(&path).expect("ログの読み取りに失敗");
+        assert_eq!(content, "first\nsecond\n");
+
+        // 他日付のファイルは作られない
+        assert!(!base.join("clip-refiner.log.2026-07-13").exists());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// ローカル日付が変わると新しいログファイルへ切り替えること
+    #[test]
+    fn local_daily_appender_rotates_on_date_change() {
+        let base = temp_log_dir("rotate");
+        let day0 = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let day1 = NaiveDate::from_ymd_opt(2026, 7, 13).expect("有効な日付");
+        let step = Arc::new(AtomicU8::new(0));
+        let step_for_fn = Arc::clone(&step);
+
+        let mut appender =
+            LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || {
+                if step_for_fn.load(Ordering::SeqCst) == 0 {
+                    day0
+                } else {
+                    day1
+                }
+            })
+            .expect("Appender の作成に失敗");
+
+        appender
+            .write_all(b"day0\n")
+            .expect("1日目の書き込みに失敗");
+        appender.flush().expect("1日目の flush に失敗");
+
+        step.store(1, Ordering::SeqCst);
+
+        appender
+            .write_all(b"day1\n")
+            .expect("2日目の書き込みに失敗");
+        appender.flush().expect("2日目の flush に失敗");
+
+        let path0 = base.join("clip-refiner.log.2026-07-12");
+        let path1 = base.join("clip-refiner.log.2026-07-13");
+        assert_eq!(
+            fs::read_to_string(&path0).expect("1日目ログの読み取りに失敗"),
+            "day0\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&path1).expect("2日目ログの読み取りに失敗"),
+            "day1\n"
+        );
 
         let _ = fs::remove_dir_all(&base);
     }

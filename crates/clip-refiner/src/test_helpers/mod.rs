@@ -32,7 +32,10 @@ pub use settings::SettingsTestContext;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub use worker::{stub_worker, test_app_state_arc, test_tray_menu, wait_until_worker_alive};
+pub use worker::{
+    is_worker_alive, set_worker_alive, set_worker_recovery_pending, stub_worker,
+    test_app_state_arc, test_tray_menu, wait_until_worker_alive,
+};
 
 pub use clip_refiner_core::config::MonitorMode;
 pub use clip_refiner_core::test_helpers::{InMemoryTextClipboard, with_temp_config_dir};

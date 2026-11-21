@@ -62,17 +62,18 @@ pub(crate) fn recover_continuous_record_on_reset(
     }
 
     if !is_within_clipboard_limit(text) {
-        state.record_clipboard_observed(text);
+        state.clipboard_session().record_clipboard_observed(text);
         return;
     }
 
-    let should_record =
-        state.with_processed_state(|ps| should_record_continuous_clipboard(ps, text));
+    let should_record = state
+        .clipboard_session()
+        .with_processed_state(|ps| should_record_continuous_clipboard(ps, text));
     if !should_record {
         return;
     }
 
-    state.record_clipboard_observed(text);
+    state.clipboard_session().record_clipboard_observed(text);
     state.enqueue_continuous_record(text);
 }
 
@@ -112,8 +113,9 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
             return ClipboardObserveResult::Observed;
         }
     } else {
-        let should_process =
-            state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
+        let should_process = state
+            .clipboard_session()
+            .with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
 
         if !should_process {
             return ClipboardObserveResult::Observed;
@@ -121,7 +123,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
 
         if !is_within_clipboard_limit(&text) {
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
-            state.record_clipboard_observed(&text);
+            state.clipboard_session().record_clipboard_observed(&text);
             return ClipboardObserveResult::Observed;
         }
     }
@@ -178,8 +180,9 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
         return ClipboardObserveResult::ReadFailed;
     };
 
-    let should_record =
-        state.with_processed_state(|ps| should_record_continuous_clipboard(ps, &text));
+    let should_record = state
+        .clipboard_session()
+        .with_processed_state(|ps| should_record_continuous_clipboard(ps, &text));
 
     if !should_record {
         return ClipboardObserveResult::Observed;
@@ -187,11 +190,11 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
 
     if !is_within_clipboard_limit(&text) {
         crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
-        state.record_clipboard_observed(&text);
+        state.clipboard_session().record_clipboard_observed(&text);
         return ClipboardObserveResult::Observed;
     }
 
-    state.record_clipboard_observed(&text);
+    state.clipboard_session().record_clipboard_observed(&text);
     state.enqueue_continuous_record(&text);
     ClipboardObserveResult::Observed
 }
@@ -214,16 +217,20 @@ pub(crate) fn record_clipboard_outcome(
 ) -> bool {
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            state.record_undo_source(observed_text);
-            state.record_processing_success(processed);
+            state.clipboard_session().record_undo_source(observed_text);
+            state
+                .clipboard_session()
+                .record_processing_success(processed);
             if snap.history_enabled {
                 state.add_to_history(processed.clone());
             }
             true
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { .. }) => {
-            state.record_undo_source(observed_text);
-            state.record_image_processing_success(observed_text);
+            state.clipboard_session().record_undo_source(observed_text);
+            state
+                .clipboard_session()
+                .record_image_processing_success(observed_text);
             true
         }
         Ok(ClipboardProcessOutcome::Unchanged)
@@ -232,14 +239,18 @@ pub(crate) fn record_clipboard_outcome(
             | ClipboardProcessError::WriteFailed(_)
             | ClipboardProcessError::NoImage,
         ) => {
-            state.record_clipboard_observed(observed_text);
+            state
+                .clipboard_session()
+                .record_clipboard_observed(observed_text);
             if snap.history_enabled {
                 state.add_to_history(observed_text);
             }
             false
         }
         Err(ClipboardProcessError::NoText | ClipboardProcessError::TextTooLarge) => {
-            state.record_clipboard_observed(observed_text);
+            state
+                .clipboard_session()
+                .record_clipboard_observed(observed_text);
             false
         }
     }
@@ -276,14 +287,24 @@ mod tests {
     use crate::test_helpers::InMemoryTextClipboard;
 
     fn collect_history(state: &Arc<AppState>) -> Vec<String> {
-        (0..state.history_len())
-            .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
+        (0..state.clipboard_session().history_len())
+            .filter_map(|i| {
+                state
+                    .clipboard_session()
+                    .get_history_entry(i)
+                    .map(|s| s.to_string())
+            })
             .collect()
     }
 
     fn collect_continuous_record(state: &Arc<AppState>) -> Vec<String> {
-        (0..state.continuous_record_len())
-            .filter_map(|i| state.get_continuous_record_entry(i).map(|s| s.to_string()))
+        (0..state.clipboard_session().continuous_record_len())
+            .filter_map(|i| {
+                state
+                    .clipboard_session()
+                    .get_continuous_record_entry(i)
+                    .map(|s| s.to_string())
+            })
             .collect()
     }
 
@@ -316,12 +337,18 @@ mod tests {
             "  trimmed  "
         ));
 
-        let ps = state.with_processed_state(|s| s.clone());
+        let ps = state
+            .clipboard_session()
+            .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen("trimmed"));
         assert!(ps.matches_last_written("trimmed"));
         assert_eq!(collect_history(&state), vec!["trimmed".to_string()]);
         assert_eq!(
-            state.take_undo_source().as_ref().map(|s| s.as_str()),
+            state
+                .clipboard_session()
+                .take_undo_source()
+                .as_ref()
+                .map(|s| s.as_str()),
             Some("  trimmed  ")
         );
     }
@@ -340,7 +367,9 @@ mod tests {
             "unchanged"
         ));
 
-        let ps = state.with_processed_state(|s| s.clone());
+        let ps = state
+            .clipboard_session()
+            .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen("unchanged"));
         assert!(!ps.matches_last_written("unchanged"));
         assert_eq!(collect_history(&state), vec!["unchanged".to_string()]);
@@ -354,7 +383,7 @@ mod tests {
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
         record_clipboard_outcome(&state, &snap, &outcome, "x");
-        assert_eq!(state.history_len(), 0);
+        assert_eq!(state.clipboard_session().history_len(), 0);
     }
 
     /// `NoText` エラー時は観測のみ記録し履歴に追加しないであるようにすること
@@ -366,9 +395,11 @@ mod tests {
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
 
-        let ps = state.with_processed_state(|s| s.clone());
+        let ps = state
+            .clipboard_session()
+            .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen(""));
-        assert_eq!(state.history_len(), 0);
+        assert_eq!(state.clipboard_session().history_len(), 0);
     }
 
     /// 読み取り失敗時は観測を記録し履歴に追加すること
@@ -407,7 +438,9 @@ mod tests {
     fn recover_continuous_record_skips_already_seen_text() {
         let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.continuous_record_enabled = true);
-        state.record_clipboard_observed("existing");
+        state
+            .clipboard_session()
+            .record_clipboard_observed("existing");
 
         recover_continuous_record_on_reset(&state, "existing", true, true, false);
 

@@ -5,8 +5,8 @@ use super::app_event::AppEvent;
 use super::clipboard_session::ClipboardSessionState;
 use super::config_sync::ConfigSyncState;
 use super::lock_ext::RwLockExt;
-use super::monitor_snapshot::{MonitorSnapshot, ProcessedState};
-use super::settings_pending::{RegexPreviewRequest, SettingsPendingState};
+use super::monitor_snapshot::MonitorSnapshot;
+use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
 
 use crate::config::{AppConfig, ConfigLoadFallback};
@@ -20,6 +20,7 @@ use tao::event_loop::EventLoopProxy;
 /// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
 /// 永続設定・ワーカー稼働・監視世代・セッション揮発データ・設定ウィンドウ適用待ちを保持する
+/// 単一サブ状態で完結する操作は各アクセサ経由で呼び出し、複数フィールドにまたがる処理のみここに置く
 pub struct AppState {
     worker: WorkerState,
     /// 永続化設定データ
@@ -34,7 +35,7 @@ pub struct AppState {
 }
 
 // ======================================================================
-// 初期化・設定保存
+// 初期化・設定保存・アクセサ
 // ======================================================================
 impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
@@ -63,39 +64,24 @@ impl AppState {
         ))
     }
 
-    /// 適用待ちの部分更新 JSON キューへ排他アクセスする
-    pub(crate) fn pending_settings_patch_mut(&self) -> std::sync::MutexGuard<'_, Option<String>> {
-        self.settings_pending.patch_mut()
+    /// クリップボードワーカーの稼働状態
+    pub(crate) fn worker(&self) -> &WorkerState {
+        &self.worker
     }
 
-    /// キュー済みの部分更新 JSON を取り出す
-    pub(crate) fn take_pending_settings_patch(&self) -> Option<String> {
-        self.settings_pending.take_patch()
+    /// セッション限定の監視・履歴・連続記録状態
+    pub(crate) fn clipboard_session(&self) -> &ClipboardSessionState {
+        &self.clipboard_session
     }
 
-    /// 正規表現プレビュー要求を格納する
-    pub(crate) fn set_regex_preview_request(&self, request: RegexPreviewRequest) {
-        self.settings_pending.set_regex_preview_request(request);
+    /// 設定ファイルのディスク同期状態
+    pub(crate) fn config_sync(&self) -> &ConfigSyncState {
+        &self.config_sync
     }
 
-    /// 処理待ちの正規表現プレビュー要求を取り出す
-    pub(crate) fn take_regex_preview_request(&self) -> Option<RegexPreviewRequest> {
-        self.settings_pending.take_regex_preview_request()
-    }
-
-    /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
-    pub fn record_config_disk_sync(&self) {
-        self.config_sync.record_disk_sync();
-    }
-
-    /// 外部編集による設定ファイルの変更を検知する
-    ///
-    /// アプリ自身の保存直後は同期済み時刻と一致するため `false` を返す
-    ///
-    /// # Returns
-    /// * `bool` - ディスク上の設定が最終同期時刻より新しい場合は `true`
-    pub fn has_external_config_change(&self) -> bool {
-        self.config_sync.has_external_change()
+    /// 設定ウィンドウからの適用待ち要求
+    pub(crate) fn settings_pending(&self) -> &SettingsPendingState {
+        &self.settings_pending
     }
 
     /// 現在の設定をファイルへ保存する
@@ -110,7 +96,7 @@ impl AppState {
             return;
         }
         self.config_sync.begin_save_grace();
-        self.record_config_disk_sync();
+        self.config_sync.record_disk_sync();
     }
 
     /// 設定を読み取り専用で参照する
@@ -134,48 +120,10 @@ impl AppState {
     pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
         f(&mut self.config.write_ignore_poison())
     }
-
-    /// クリップボードワーカーが稼働中かどうか
-    ///
-    /// # Returns
-    /// * `bool` - ワーカーが稼働中の場合は `true`
-    pub fn is_worker_alive(&self) -> bool {
-        self.worker.is_alive()
-    }
-
-    /// クリップボードワーカーの稼働状態を更新する
-    ///
-    /// # Arguments
-    /// * `alive` - 稼働中にする場合は `true`
-    pub fn set_worker_alive(&self, alive: bool) {
-        self.worker.set_alive(alive);
-    }
-
-    /// ワーカー復旧成功時の通知が必要であることを記録する
-    ///
-    /// # Arguments
-    /// * `pending` - 通知が必要な場合は `true`
-    pub fn set_worker_recovery_pending(&self, pending: bool) {
-        self.worker.set_recovery_pending(pending);
-    }
-
-    /// ワーカー復旧成功時の通知が必要かどうかを取得し、フラグをクリアする
-    ///
-    /// # Returns
-    /// * `bool` - 通知が必要だった場合は `true`
-    pub fn take_worker_recovery_pending(&self) -> bool {
-        self.worker.take_recovery_pending()
-    }
-
-    /// 設定のディスク保存が有効かどうかを返す
-    #[cfg(test)]
-    pub(crate) fn is_config_persistence_enabled(&self) -> bool {
-        self.config_sync.is_persistence_enabled()
-    }
 }
 
 // ======================================================================
-// 状態操作
+// 横断操作 (設定・セッション・イベント連携)
 // ======================================================================
 impl AppState {
     /// 監視ループ向けに設定フィールドをまとめて一括取得する
@@ -195,90 +143,6 @@ impl AppState {
         })
     }
 
-    /// 二重加工防止状態を更新する
-    ///
-    /// # Arguments
-    /// * `f` - `ProcessedState` へ排他アクセスして変更を行うクロージャ
-    ///
-    /// # Returns
-    /// * `R` - クロージャ `f` の戻り値
-    pub fn with_processed_state<R>(&self, f: impl FnOnce(&mut ProcessedState) -> R) -> R {
-        self.clipboard_session.with_processed_state(f)
-    }
-
-    /// 加工成功後にクリップボードへ書き戻したことを記録する
-    ///
-    /// # Arguments
-    /// * `output` - 書き戻した加工後テキスト
-    pub fn record_processing_success(&self, output: &str) {
-        self.clipboard_session.record_processing_success(output);
-    }
-
-    /// 画像加工成功後に元テキストの指紋を記録する
-    ///
-    /// # Arguments
-    /// * `source_text` - 加工前の元テキスト
-    pub fn record_image_processing_success(&self, source_text: &str) {
-        self.clipboard_session
-            .record_image_processing_success(source_text);
-    }
-
-    /// 加工せずに観測したクリップボード本文を記録する
-    ///
-    /// # Arguments
-    /// * `text` - 観測したクリップボード本文
-    pub fn record_clipboard_observed(&self, text: &str) {
-        self.clipboard_session.record_clipboard_observed(text);
-    }
-
-    /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
-    ///
-    /// # Arguments
-    /// * `text` - クリップボードへ設定した本文
-    pub fn record_clipboard_set(&self, text: &str) {
-        self.clipboard_session.record_clipboard_set(text);
-    }
-
-    /// 加工成功時に取り消し用の元テキストを記録する
-    ///
-    /// # Arguments
-    /// * `text` - 取り消し用に保持する加工前テキスト
-    pub fn record_undo_source(&self, text: &str) {
-        self.clipboard_session.record_undo_source(text);
-    }
-
-    /// 取り消し用の元テキストを取り出す
-    ///
-    /// # Returns
-    /// * `Option<SecretString>` - 取り消し可能な加工があれば `Some(元テキスト)`
-    pub fn take_undo_source(&self) -> Option<SecretString> {
-        self.clipboard_session.take_undo_source()
-    }
-
-    /// 履歴の件数を返す
-    ///
-    /// # Returns
-    /// * `usize` - 保持している履歴件数
-    pub fn history_len(&self) -> usize {
-        self.clipboard_session.history_len()
-    }
-
-    /// 指定インデックスの履歴を復号して取得する
-    ///
-    /// # Arguments
-    /// * `index` - 履歴ストア内のインデックス (0 が最新)
-    ///
-    /// # Returns
-    /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
-    pub fn get_history_entry(&self, index: usize) -> Option<SecretString> {
-        self.clipboard_session.get_history_entry(index)
-    }
-
-    /// 履歴をクリアする
-    pub fn clear_history(&self) {
-        self.clipboard_session.clear_history();
-    }
-
     /// クリップボード履歴に新しいテキストを追加する
     ///
     /// 追加完了後、UI スレッドへ履歴更新イベントを通知する
@@ -290,30 +154,6 @@ impl AppState {
         if self.clipboard_session.add_to_history(text.as_ref(), limit) {
             dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
         }
-    }
-
-    /// 連続記録の件数を返す
-    ///
-    /// # Returns
-    /// * `usize` - 保持している連続記録件数
-    pub fn continuous_record_len(&self) -> usize {
-        self.clipboard_session.continuous_record_len()
-    }
-
-    /// 指定インデックスの連続記録を復号して取得する
-    ///
-    /// # Arguments
-    /// * `index` - 連続記録キュー内のインデックス (0 が先頭)
-    ///
-    /// # Returns
-    /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
-    pub fn get_continuous_record_entry(&self, index: usize) -> Option<SecretString> {
-        self.clipboard_session.get_continuous_record_entry(index)
-    }
-
-    /// 連続記録をクリアする
-    pub fn clear_continuous_record(&self) {
-        self.clipboard_session.clear_continuous_record();
     }
 
     /// 連続記録に新しいテキストをキューへ積む
@@ -367,6 +207,21 @@ impl AppState {
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 #[allow(clippy::expect_used)]
 pub(crate) fn test_app_state() -> AppState {
+    test_app_state_inner(false)
+}
+
+/// ディスク永続化を有効にしたテスト用 `AppState` を生成する
+///
+/// `with_temp_config_dir` 内でのみ使うこと
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+#[allow(clippy::expect_used)]
+pub(crate) fn test_app_state_with_persistence() -> AppState {
+    test_app_state_inner(true)
+}
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+#[allow(clippy::expect_used)]
+fn test_app_state_inner(persist_config: bool) -> AppState {
     use crate::config::AppConfig;
     use crate::refiner::RefineMode;
 
@@ -388,7 +243,11 @@ pub(crate) fn test_app_state() -> AppState {
         monitor_generation: AtomicU64::new(0),
         clipboard_session: ClipboardSessionState::new()
             .expect("テスト用クリップボードセッションの生成に失敗"),
-        config_sync: ConfigSyncState::new_for_test(),
+        config_sync: if persist_config {
+            ConfigSyncState::new_for_test_with_persistence()
+        } else {
+            ConfigSyncState::new_for_test()
+        },
         settings_pending: SettingsPendingState::new(),
         proxy: event_loop.create_proxy(),
     }

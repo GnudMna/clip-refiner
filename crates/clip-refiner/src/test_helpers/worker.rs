@@ -45,6 +45,35 @@ pub fn test_tray_menu(state: &Arc<AppState>) -> TrayMenu {
     TrayMenu::build(state).expect("テスト用トレイメニューの構築に失敗")
 }
 
+/// ワーカーが稼働中かどうか返す
+///
+/// # Arguments
+/// * `state` - ワーカー稼働状態を参照する `AppState`
+///
+/// # Returns
+/// * `bool` - 稼働中なら `true`
+pub fn is_worker_alive(state: &AppState) -> bool {
+    state.worker().is_alive()
+}
+
+/// ワーカー稼働フラグを設定する
+///
+/// # Arguments
+/// * `state` - 更新対象の `AppState`
+/// * `alive` - 稼働中なら `true`
+pub fn set_worker_alive(state: &AppState, alive: bool) {
+    state.worker().set_alive(alive);
+}
+
+/// ワーカー復旧待ちフラグを設定する
+///
+/// # Arguments
+/// * `state` - 更新対象の `AppState`
+/// * `pending` - 復旧待ちなら `true`
+pub fn set_worker_recovery_pending(state: &AppState, pending: bool) {
+    state.worker().set_recovery_pending(pending);
+}
+
 /// ワーカーが稼働状態になるまで待機する
 ///
 /// # Arguments
@@ -56,7 +85,7 @@ pub fn test_tray_menu(state: &Arc<AppState>) -> TrayMenu {
 pub fn wait_until_worker_alive(state: &AppState, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if state.is_worker_alive() {
+        if is_worker_alive(state) {
             return true;
         }
         std::thread::sleep(Duration::from_millis(20));

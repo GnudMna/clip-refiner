@@ -14,6 +14,14 @@ pub const APP_NAME: &str = "ClipRefiner";
 /// 多重起動防止やレジストリ、設定のスコープ分離に使用される
 pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 
+/// 設定ディレクトリ上書き用の環境変数名
+///
+/// 設定時は `%APPDATA%\ClipRefiner` の代わりに指定パスを使う (E2E / テスト向け)
+pub const ENV_CONFIG_DIR: &str = "CLIP_REFINER_CONFIG_DIR";
+
+/// `WebView2` CDP ポート指定用の環境変数名 (E2E 専用)
+pub const ENV_E2E_CDP_PORT: &str = "CLIP_REFINER_E2E_CDP_PORT";
+
 // ======================================================================
 // 設定
 // ======================================================================
@@ -56,6 +64,13 @@ pub const MAX_REGEX_PATTERN_BYTES: usize = 8 * 1024;
 ///
 /// 超過時は加工を中断し、元のテキストを維持する
 pub const REGEX_MATCH_TIMEOUT_MS: u64 = 2_000;
+
+/// 正規表現マッチの同時実行上限
+///
+/// タイムアウト時はキャンセルを要求し、マッチ境界で中断してスロットを解放する。
+/// 単一の `find` 実行中はエンジン側が打ち切り不可のため、その探索が終わるまで
+/// スレッドが残る場合がある。この数を超えて spawn しない
+pub const REGEX_MATCH_MAX_IN_FLIGHT: usize = 2;
 
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;

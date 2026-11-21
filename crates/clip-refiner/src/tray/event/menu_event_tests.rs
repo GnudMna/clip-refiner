@@ -165,7 +165,7 @@ fn handle_menu_event_history_clear() {
         &mut control_flow,
     );
 
-    assert_eq!(state.history_len(), 0);
+    assert_eq!(state.clipboard_session().history_len(), 0);
 }
 
 /// 登録クリップの「クリップボードを登録」でワーカーコマンドが送信されるようにすること

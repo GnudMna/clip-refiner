@@ -1,4 +1,7 @@
+use std::time::Instant;
+
 use super::super::dispatch;
+use super::super::e2e;
 use super::super::hotkey::{HotkeyEventContext, notify_registration_failures};
 use super::super::settings::{
     refresh_settings_clips, refresh_settings_favorites_and_shortcuts, refresh_settings_window,
@@ -11,8 +14,7 @@ use super::{
     copy_registered_clip, delete_registered_clip, move_favorite_mode, refresh_clips_views,
     reload_config_with_notification, toggle_favorite_mode, update_refine,
 };
-
-use crate::config::FavoriteMoveDirection;
+use crate::config::{AppConfig, FavoriteMoveDirection};
 use crate::refiner::RefineMode;
 
 // ======================================================================
@@ -31,6 +33,8 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         AppEvent::HideClipSelector => {
             ctx.selectors.clip.hide();
         }
+        AppEvent::ShowQuickSelector => show_quick_selector(ctx),
+        AppEvent::ShowClipSelector => show_clip_selector(ctx),
         AppEvent::RequestClipCopy(index) => handle_clip_copy(ctx, index),
         AppEvent::RequestClipRegister => {
             dispatch::send_clipboard_command(
@@ -74,6 +78,32 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         | AppEvent::SettingsRegexPreview => handle_settings_window_event(ctx, event),
         AppEvent::Hotkey(hotkey_event) => handle_hotkey_event(ctx, hotkey_event),
     }
+}
+
+/// クイックセレクターを表示する
+fn show_quick_selector(ctx: &mut AppEventContext<'_>) {
+    if ctx.selectors.clip.is_visible() {
+        ctx.selectors.clip.hide();
+    }
+    *ctx.last_quick_selector_show = Instant::now();
+    let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
+    ctx.selectors.quick.show(
+        ctx.event_loop,
+        ctx.state.with_config(|c| c.mode),
+        &modes_json,
+    );
+    e2e::signal_ready();
+}
+
+/// 登録クリップセレクターを表示する
+fn show_clip_selector(ctx: &mut AppEventContext<'_>) {
+    if ctx.selectors.quick.is_visible() {
+        ctx.selectors.quick.hide();
+    }
+    *ctx.last_clip_selector_show = Instant::now();
+    let clips_json = ctx.state.with_config(AppConfig::clips_to_json_list);
+    ctx.selectors.clip.show(ctx.event_loop, &clips_json);
+    e2e::signal_ready();
 }
 
 /// 登録クリップのコピー要求を処理する

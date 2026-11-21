@@ -221,3 +221,89 @@ impl ClipboardSessionState {
             .discharge_at(index)
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::security::ContentFingerprint;
+    use crate::tray::state::ProcessedState;
+
+    #[allow(clippy::expect_used)]
+    fn session() -> ClipboardSessionState {
+        ClipboardSessionState::new().expect("テスト用クリップボードセッションの生成に失敗")
+    }
+
+    /// 加工成功時に書き戻し本文と観測済み本文が更新されること
+    #[test]
+    fn record_processing_success_updates_fingerprints() {
+        let session = session();
+        session.record_processing_success("processed");
+
+        let ps = session.with_processed_state(|s| s.clone());
+        assert!(ps.matches_last_seen("processed"));
+        assert!(ps.matches_last_written("processed"));
+    }
+
+    /// 観測のみの場合は `last_written` を変更しないこと
+    #[test]
+    fn record_clipboard_observed_preserves_last_written() {
+        let session = session();
+        session.with_processed_state(|ps| {
+            ps.last_written = Some(ContentFingerprint::from_text("written"));
+            ps.last_seen = ContentFingerprint::from_text("old");
+        });
+
+        session.record_clipboard_observed("observed");
+
+        let ps = session.with_processed_state(|s| s.clone());
+        assert!(ps.matches_last_seen("observed"));
+        assert!(ps.matches_last_written("written"));
+    }
+
+    /// 履歴復元など外部設定時は書き戻しフラグを1回分のエコーとして記録すること
+    #[test]
+    fn record_clipboard_set_updates_both_fingerprints() {
+        let session = session();
+        session.with_processed_state(|ps| {
+            ps.last_written = Some(ContentFingerprint::from_text("written"));
+            ps.last_seen = ContentFingerprint::from_text("old");
+        });
+
+        session.record_clipboard_set("restored");
+
+        let ps = session.with_processed_state(|s| s.clone());
+        assert!(ps.matches_last_seen("restored"));
+        assert!(ps.matches_last_written("restored"));
+    }
+
+    /// 加工取り消し用テキストの記録と取得ができること
+    #[test]
+    fn undo_source_record_and_take() {
+        let session = session();
+
+        assert!(session.take_undo_source().is_none());
+
+        session.record_undo_source("original");
+        assert_eq!(
+            session.take_undo_source().as_ref().map(|s| s.as_str()),
+            Some("original")
+        );
+        assert!(session.take_undo_source().is_none());
+    }
+
+    /// `with_processed_state` で二重加工防止状態を更新できること
+    #[test]
+    fn with_processed_state_updates_last_seen() {
+        let session = session();
+        let ps = ProcessedState {
+            last_seen: ContentFingerprint::from_text("hello"),
+            ..Default::default()
+        };
+        session.with_processed_state(|s| *s = ps);
+        assert!(session.with_processed_state(|s| s.matches_last_seen("hello")));
+    }
+}

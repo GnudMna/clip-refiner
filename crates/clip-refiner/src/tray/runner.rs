@@ -1,4 +1,5 @@
 use super::app::App;
+use super::e2e::E2eWindow;
 use super::state::AppEvent;
 
 use anyhow::Result;
@@ -13,13 +14,25 @@ use tao::platform::windows::EventLoopBuilderExtWindows;
 /// イベントループを初期化し、`App` 構造体を生成して実行する
 /// この関数はアプリケーションが終了するまでブロックされる
 ///
+/// # Arguments
+/// * `e2e_window` - E2E 時に自動表示するウィンドウ。通常起動では `None`
+///
 /// # Returns
 /// * `Result<()>` - アプリケーションが正常に終了した場合は `Ok(())`、起動や実行中にエラーが発生した場合は `Err` を返す
-pub fn run_loop() -> Result<()> {
+pub fn run_loop(e2e_window: Option<E2eWindow>) -> Result<()> {
     let event_loop = create_event_loop();
     let proxy = event_loop.create_proxy();
 
     let mut app = App::new(&proxy)?;
+
+    if let Some(target) = e2e_window {
+        let event = match target {
+            E2eWindow::Settings => AppEvent::ShowSettingsWindow,
+            E2eWindow::Quick => AppEvent::ShowQuickSelector,
+            E2eWindow::Clip => AppEvent::ShowClipSelector,
+        };
+        let _ = proxy.send_event(event);
+    }
 
     event_loop.run(move |event, event_loop, control_flow| {
         app.handle_event(event, event_loop, control_flow);

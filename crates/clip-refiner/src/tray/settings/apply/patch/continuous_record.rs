@@ -31,7 +31,9 @@ pub(super) fn apply_continuous_record_patch(
             *config_dirty = true;
             bump_monitor_generation_unchecked(state);
             if continuous_record_enabled {
-                state.with_processed_state(|ps| ps.last_written = None);
+                state
+                    .clipboard_session()
+                    .with_processed_state(|ps| ps.last_written = None);
             }
             if let Err(err) = menu.refresh_continuous_record(state) {
                 dispatch::log_menu_operation_error("連続記録メニューの更新", err);

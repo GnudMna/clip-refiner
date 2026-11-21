@@ -139,3 +139,22 @@ impl Drop for OverlayWindow {
         }
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// オーバーレイを生成・表示・非表示・破棄できること
+    #[test]
+    fn overlay_lifecycle_create_show_hide() {
+        let mut overlay =
+            OverlayWindow::create(Box::new(|_| {})).expect("オーバーレイを生成できる");
+        overlay.show();
+        assert!(overlay.is_visible(), "表示後は可視であること");
+        overlay.hide();
+        assert!(!overlay.is_visible(), "非表示後は不可視であること");
+    }
+}

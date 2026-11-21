@@ -5,6 +5,7 @@
 pub mod app;
 pub(crate) mod clipboard_monitor;
 mod dispatch;
+pub(crate) mod e2e;
 pub mod event;
 mod features;
 pub mod history_store;
@@ -22,4 +23,5 @@ pub mod worker;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use paste_watcher::try_paste_continuous_record_front;
 
+pub use e2e::E2eWindow;
 pub use runner::run_loop;

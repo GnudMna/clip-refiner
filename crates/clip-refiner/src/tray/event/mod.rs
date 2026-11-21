@@ -129,6 +129,10 @@ pub fn handle_window_event<S: FocusDismissibleSelector>(
     selector: &S,
     last_selector_show: &Instant,
 ) {
+    // E2E 中は Playwright 操作でフォーカスが外れるため自動非表示しない
+    if crate::tray::e2e::is_active() {
+        return;
+    }
     if let WindowEvent::Focused(focused) = event
         && !focused
         && selector.is_visible()

@@ -132,7 +132,8 @@ struct PasteHotkeyArmState {
 
 /// `Ctrl+V` ホットキーを捕捉すべきか判定する
 pub(crate) fn should_arm_paste_hotkey(state: &AppState) -> bool {
-    state.with_config(|c| c.continuous_record_enabled) && state.continuous_record_len() > 0
+    state.with_config(|c| c.continuous_record_enabled)
+        && state.clipboard_session().continuous_record_len() > 0
 }
 
 fn sync_paste_hotkey(state: &AppState, arm: &mut PasteHotkeyArmState) {

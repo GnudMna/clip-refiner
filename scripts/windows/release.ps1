@@ -15,7 +15,7 @@
 #   -Version x.y.z             明示的な新バージョン指定 (-Bump と排他)
 #   -Date yyyy-MM-dd           リリース日 (既定: 本日)
 #   -DryRun                    変更内容を表示するのみ
-#   -SkipCheck                 check.ps1 (fmt / clippy / deny / eslint / test) をスキップ
+#   -SkipCheck                 check.ps1 (fmt / clippy / deny / eslint / test / e2e) をスキップ
 #   -SkipMsi                   build-msi.ps1 をスキップ
 #   -NoCommit                  Git コミットを作成しない
 #   -AllowDirty                未コミット変更があっても続行する

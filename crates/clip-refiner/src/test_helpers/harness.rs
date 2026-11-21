@@ -166,7 +166,7 @@ impl ClipboardHarness {
     /// # Returns
     /// * `usize` - 保持している履歴件数
     pub fn history_len(&self) -> usize {
-        self.state.history_len()
+        self.state.clipboard_session().history_len()
     }
 
     /// 連続記録件数を返す
@@ -177,7 +177,7 @@ impl ClipboardHarness {
     /// # Returns
     /// * `usize` - 保持している連続記録件数
     pub fn continuous_record_len(&self) -> usize {
-        self.state.continuous_record_len()
+        self.state.clipboard_session().continuous_record_len()
     }
 
     /// 履歴エントリを先頭 (最新) から順に復号して返す
@@ -214,7 +214,10 @@ impl ClipboardHarness {
     /// # Returns
     /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn history_entry_text(&self, index: usize) -> Option<String> {
-        self.state.get_history_entry(index).map(|s| s.to_string())
+        self.state
+            .clipboard_session()
+            .get_history_entry(index)
+            .map(|s| s.to_string())
     }
 
     /// 指定インデックスの連続記録本文を返す
@@ -226,6 +229,7 @@ impl ClipboardHarness {
     /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn continuous_record_entry_text(&self, index: usize) -> Option<String> {
         self.state
+            .clipboard_session()
             .get_continuous_record_entry(index)
             .map(|s| s.to_string())
     }
@@ -238,7 +242,10 @@ impl ClipboardHarness {
     /// # Returns
     /// * `Option<String>` - 取り消し可能な加工があれば `Some(元テキスト)`
     pub fn take_undo_source(&self) -> Option<String> {
-        self.state.take_undo_source().map(|s| s.to_string())
+        self.state
+            .clipboard_session()
+            .take_undo_source()
+            .map(|s| s.to_string())
     }
 
     /// 直近の書き戻し指紋が指定テキストと一致するか判定する
@@ -250,6 +257,7 @@ impl ClipboardHarness {
     /// * `bool` - 直近の書き戻しと一致する場合は `true`
     pub fn matches_last_written(&self, text: &str) -> bool {
         self.state
+            .clipboard_session()
             .with_processed_state(|ps| ps.matches_last_written(text))
     }
 

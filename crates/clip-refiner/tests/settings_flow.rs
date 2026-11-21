@@ -226,3 +226,27 @@ fn apply_ipc_pauses_monitoring() {
     assert!(ctx.state().with_config(|c| c.is_paused));
     assert!(ctx.menu().pause_item.is_checked());
 }
+
+/// IPC `apply` 後に `config.toml` へ保存され再読込できること
+#[test]
+fn apply_ipc_persists_settings_to_config_toml() {
+    SettingsTestContext::with_persistence(|ctx| {
+        assert!(ctx.apply_ipc(
+            r#"{"type":"apply","patch":{"intervalMs":750,"historyEnabled":true,"hotkeys":{"quickSelector":"Ctrl+Shift+S","favoriteModeSlots":[""]}}}"#,
+        ));
+
+        assert!(ctx.is_config_persistence_enabled());
+        assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
+        assert!(ctx.state().with_config(|c| c.history_enabled));
+
+        let loaded = AppConfig::load();
+        assert!(loaded.fallback.is_none());
+        assert_eq!(loaded.config.interval_ms, 750);
+        assert!(loaded.config.history_enabled);
+        assert_eq!(loaded.config.hotkeys.quick_selector, "Ctrl+Shift+S");
+        assert_eq!(
+            loaded.config.hotkeys.favorite_mode_slots,
+            vec![String::new()]
+        );
+    });
+}

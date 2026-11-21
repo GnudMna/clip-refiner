@@ -8,7 +8,7 @@ const globals = require('globals');
 /** @type {import('eslint').Linter.Config[]} */
 module.exports = [
     {
-        ignores: ['node_modules/**'],
+        ignores: ['node_modules/**', 'e2e/**'],
     },
     eslint.configs.recommended,
     eslintConfigPrettier,
@@ -77,6 +77,11 @@ module.exports = [
         // Rust 側で 1 つの IIFE に連結するため、ファイル間の共有バインディングは ESLint 単体では解決できない
         files: [
             'crates/clip-refiner/src/ui/settings/shared.js',
+            'crates/clip-refiner/src/ui/settings/html_builders.js',
+            'crates/clip-refiner/src/ui/settings/ipc_apply.js',
+            'crates/clip-refiner/src/ui/settings/confirm_dialog.js',
+            'crates/clip-refiner/src/ui/settings/regex_feedback.js',
+            'crates/clip-refiner/src/ui/settings/monitor_ui.js',
             'crates/clip-refiner/src/ui/settings/panels.js',
             'crates/clip-refiner/src/ui/settings/events.js',
             'crates/clip-refiner/src/ui/settings/main.js',

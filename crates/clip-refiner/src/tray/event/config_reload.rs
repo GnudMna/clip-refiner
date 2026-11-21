@@ -52,7 +52,7 @@ pub fn apply_config_reload(
         previous.continuous_record_enabled && !loaded.continuous_record_enabled;
 
     state.with_config_mut(|config| *config = loaded);
-    state.record_config_disk_sync();
+    state.config_sync().record_disk_sync();
 
     menu.sync_from_config(state)
         .map_err(|e| format!("メニュー同期に失敗: {e}"))?;
@@ -76,13 +76,13 @@ pub fn apply_config_reload(
     }
 
     if history_disabled {
-        state.clear_history();
+        state.clipboard_session().clear_history();
         menu.refresh_history(state)
             .map_err(|e| format!("履歴メニュー更新に失敗: {e}"))?;
     }
 
     if continuous_record_disabled {
-        state.clear_continuous_record();
+        state.clipboard_session().clear_continuous_record();
         menu.refresh_continuous_record(state)
             .map_err(|e| format!("連続記録メニュー更新に失敗: {e}"))?;
     }

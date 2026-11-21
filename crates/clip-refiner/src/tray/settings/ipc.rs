@@ -141,7 +141,7 @@ pub(crate) enum SettingsIpcAction {
 /// 適用待ちキューへ部分更新 JSON を原子的にマージして格納する
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn enqueue_settings_patch_json(state: &Arc<AppState>, patch_json: &str) -> bool {
-    let mut guard = state.pending_settings_patch_mut();
+    let mut guard = state.settings_pending().patch_mut();
     let merged_json = if let Some(existing) = guard.as_ref() {
         merge_settings_patch_json_strings(existing, patch_json)
             .unwrap_or_else(|| patch_json.to_string())
@@ -158,7 +158,7 @@ pub(crate) fn enqueue_settings_patch(state: &Arc<AppState>, patch: &SettingsPatc
         return false;
     };
 
-    let mut guard = state.pending_settings_patch_mut();
+    let mut guard = state.settings_pending().patch_mut();
     let merged_json = if let Some(existing) = guard.as_ref() {
         merge_settings_patch_json_strings(existing, &incoming_json).unwrap_or(incoming_json)
     } else {
@@ -228,10 +228,12 @@ pub(crate) fn dispatch_settings_ipc(
             dispatch::send_app_event(proxy, AppEvent::RequestFavoriteMove(mode, direction));
         }
         SettingsIpcAction::RegexPreview(request_id, settings) => {
-            state.set_regex_preview_request(RegexPreviewRequest {
-                request_id,
-                settings,
-            });
+            state
+                .settings_pending()
+                .set_regex_preview_request(RegexPreviewRequest {
+                    request_id,
+                    settings,
+                });
             dispatch::send_app_event(proxy, AppEvent::SettingsRegexPreview);
         }
     }
@@ -410,7 +412,8 @@ mod tests {
         ));
 
         let json = state
-            .take_pending_settings_patch()
+            .settings_pending()
+            .take_patch()
             .expect("マージ済みパッチがキューに残ること");
         let value: serde_json::Value = serde_json::from_str(&json).expect("マージ後 JSON のパース");
         assert_eq!(value["notificationSettings"]["enabled"], true);
@@ -448,7 +451,8 @@ mod tests {
         ));
 
         let json = state
-            .take_pending_settings_patch()
+            .settings_pending()
+            .take_patch()
             .expect("マージ済みパッチがキューに残ること");
         let patch: SettingsPatch = serde_json::from_str(&json).expect("パッチ JSON のパース");
         assert_eq!(patch.history_enabled, Some(true));
@@ -537,7 +541,8 @@ mod tests {
 
         assert!(enqueue_settings_patch(&state, &patch));
         let queued = state
-            .take_pending_settings_patch()
+            .settings_pending()
+            .take_patch()
             .expect("キューにパッチが格納されること");
         let restored: SettingsPatch =
             serde_json::from_str(&queued).expect("キュー JSON からパッチを復元");

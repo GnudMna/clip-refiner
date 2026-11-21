@@ -22,7 +22,10 @@ thread_local! {
 // ======================================================================
 /// 設定ディレクトリのパスを取得する
 ///
-/// `%APPDATA%` 配下の `ClipRefiner` ディレクトリを設定ルートとする
+/// 優先順位:
+/// 1. 環境変数 `CLIP_REFINER_CONFIG_DIR` (非空のとき)
+/// 2. テスト用上書き (`set_test_config_dir`, debug/test のみ)
+/// 3. `%APPDATA%` 配下の `ClipRefiner`
 ///
 /// # Returns
 /// * `Result<PathBuf>` - 設定ディレクトリのパス
@@ -30,12 +33,25 @@ thread_local! {
 /// # Errors
 /// システムディレクトリの取得に失敗した場合
 pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
+    if let Some(dir) = env_config_dir_override() {
+        return Ok(dir);
+    }
+
     #[cfg(any(test, debug_assertions))]
     if let Some(dir) = test_config_dir_override() {
         return Ok(dir);
     }
 
     Ok(config_base_dir()?.join(consts::APP_NAME))
+}
+
+/// 環境変数 `CLIP_REFINER_CONFIG_DIR` による上書き先を返す
+fn env_config_dir_override() -> Option<PathBuf> {
+    let value = std::env::var_os(consts::ENV_CONFIG_DIR)?;
+    if value.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(value))
 }
 
 /// 設定ディレクトリ基底パス (`%APPDATA%`) を返す
@@ -143,7 +159,26 @@ mod tests {
     use super::*;
 
     use crate::config::{clear_test_config_dir, set_test_config_dir};
+    use crate::consts;
     use crate::test_helpers::with_temp_config_dir;
+
+    /// 環境変数 `CLIP_REFINER_CONFIG_DIR` を優先すること
+    #[test]
+    fn get_config_dir_uses_env_override() {
+        let dir =
+            std::env::temp_dir().join(format!("clip-refiner-env-config-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        // SAFETY: テストプロセス内でのみ環境変数を一時変更する
+        unsafe {
+            std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
+        }
+        let resolved = get_config_dir().expect("get_config_dir");
+        unsafe {
+            std::env::remove_var(consts::ENV_CONFIG_DIR);
+        }
+        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(resolved, dir);
+    }
 
     /// テスト用上書き時は上書き先ディレクトリをそのまま返すようにすること
     #[test]

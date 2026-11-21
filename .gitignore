@@ -1,3 +1,7 @@
+test-results/
+playwright-report/
+blob-report/
+
 # ---> Node.js (UI JavaScript のリンター・整形用)
 node_modules/
 

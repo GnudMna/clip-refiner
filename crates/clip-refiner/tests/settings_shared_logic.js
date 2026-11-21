@@ -186,6 +186,69 @@ function test_should_full_render_when_not_editing() {
     assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, false, 'regex', false), true);
 }
 
+/** ショートカット編集中は入力欄同期、件数変化時は再描画すること */
+function test_resolve_shortcuts_diff_update() {
+    assert.equal(
+        SettingsSharedLogic.resolveShortcutsDiffUpdate({
+            wasEditingShortcuts: true,
+            previousFavoriteCount: 2,
+            nextFavoriteCount: 2,
+        }),
+        'syncInputs'
+    );
+    assert.equal(
+        SettingsSharedLogic.resolveShortcutsDiffUpdate({
+            wasEditingShortcuts: true,
+            previousFavoriteCount: 2,
+            nextFavoriteCount: 3,
+        }),
+        'refreshPanel'
+    );
+    assert.equal(
+        SettingsSharedLogic.resolveShortcutsDiffUpdate({
+            wasEditingShortcuts: false,
+            previousFavoriteCount: 2,
+            nextFavoriteCount: 2,
+        }),
+        'refreshPanel'
+    );
+}
+
+/** Escape はダイアログ・編集中以外で閉じること */
+function test_should_close_settings_on_escape() {
+    assert.equal(
+        SettingsSharedLogic.shouldCloseSettingsOnEscape({
+            dialogVisible: false,
+            isEditing: false,
+        }),
+        true
+    );
+    assert.equal(
+        SettingsSharedLogic.shouldCloseSettingsOnEscape({
+            dialogVisible: true,
+            isEditing: false,
+        }),
+        false
+    );
+    assert.equal(
+        SettingsSharedLogic.shouldCloseSettingsOnEscape({
+            dialogVisible: false,
+            isEditing: true,
+        }),
+        false
+    );
+}
+
+/** 閉じる操作は保留パッチを先に apply してから close すること */
+function test_collect_close_window_ipc_messages() {
+    assert.deepEqual(SettingsSharedLogic.collectCloseWindowIpcMessages(null), [{ type: 'close' }]);
+    assert.deepEqual(SettingsSharedLogic.collectCloseWindowIpcMessages({}), [{ type: 'close' }]);
+    assert.deepEqual(SettingsSharedLogic.collectCloseWindowIpcMessages({ intervalMs: 750 }), [
+        { type: 'apply', patch: { intervalMs: 750 } },
+        { type: 'close' },
+    ]);
+}
+
 /** 設定シェル HTML の必須 DOM ID を検証できること */
 function test_settings_shell_has_required_ids() {
     const html =
@@ -220,6 +283,9 @@ const tests = [
     test_should_full_render_while_editing_favorites_or_shortcuts,
     test_should_full_render_when_clip_register_pending_on_clips_tab,
     test_should_full_render_when_not_editing,
+    test_resolve_shortcuts_diff_update,
+    test_should_close_settings_on_escape,
+    test_collect_close_window_ipc_messages,
     test_settings_shell_has_required_ids,
     test_settings_js_defines_all_tabs,
 ];

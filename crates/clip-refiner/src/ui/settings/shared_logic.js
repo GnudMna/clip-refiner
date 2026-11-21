@@ -282,6 +282,56 @@ var SettingsSharedLogic = (function () {
     }
 
     /**
+     * お気に入り/ショートカット差分更新時のショートカットタブの更新方針
+     *
+     * 入力中かつお気に入り件数が変わらない場合はフォーカス維持のため入力欄のみ同期する
+     *
+     * @param {{ wasEditingShortcuts: boolean, previousFavoriteCount: number, nextFavoriteCount: number }} options
+     * @returns {'syncInputs'|'refreshPanel'}
+     */
+    function resolveShortcutsDiffUpdate(options) {
+        const opts = options || {};
+        if (opts.wasEditingShortcuts && opts.previousFavoriteCount === opts.nextFavoriteCount) {
+            return 'syncInputs';
+        }
+        return 'refreshPanel';
+    }
+
+    /**
+     * Escape キーで設定ウィンドウを閉じられるか判定する
+     *
+     * 確認ダイアログ表示中やフォーム編集中は閉じない
+     *
+     * @param {{ dialogVisible: boolean, isEditing: boolean }} options
+     * @returns {boolean}
+     */
+    function shouldCloseSettingsOnEscape(options) {
+        const opts = options || {};
+        return !opts.dialogVisible && !opts.isEditing;
+    }
+
+    /**
+     * 閉じる操作で送る IPC メッセージ列を組み立てる
+     *
+     * 保留パッチがあれば先に `apply` し、続けて `close` を送る
+     *
+     * @param {Record<string, unknown>|null|undefined} pendingPatch
+     * @returns {Array<{ type: string, patch?: Record<string, unknown> }>}
+     */
+    function collectCloseWindowIpcMessages(pendingPatch) {
+        const messages = [];
+        const patch =
+            pendingPatch && typeof pendingPatch === 'object' && !Array.isArray(pendingPatch)
+                ? pendingPatch
+                : {};
+        if (Object.keys(patch).length > 0) {
+            messages.push({ type: 'apply', patch: patch });
+        }
+        messages.push({ type: 'close' });
+        return messages;
+    }
+
+    /**
      * 設定シェル HTML に必須の DOM ID が含まれるか検証する
      *
      * @param {string} html
@@ -337,6 +387,9 @@ var SettingsSharedLogic = (function () {
         snapshotHasNotificationFields,
         snapshotHasHotkeyFields,
         shouldFullRenderOnLoad,
+        resolveShortcutsDiffUpdate,
+        shouldCloseSettingsOnEscape,
+        collectCloseWindowIpcMessages,
         settingsShellHasRequiredIds,
         settingsJsDefinesAllTabs,
     };

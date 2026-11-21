@@ -12,7 +12,7 @@ mod worker_state;
 pub use app_event::AppEvent;
 pub use app_state::AppState;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub(crate) use app_state::test_app_state;
+pub(crate) use app_state::{test_app_state, test_app_state_with_persistence};
 pub use lock_ext::LockExt;
 pub use monitor_snapshot::{MonitorSnapshot, ProcessedState};
 pub(crate) use settings_pending::RegexPreviewRequest;
@@ -28,9 +28,8 @@ mod tests {
 
     use crate::config::MonitorMode;
     use crate::refiner::RefineMode;
-    use crate::security::ContentFingerprint;
 
-    /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作できるようにすること
+    /// `with_config` / `monitor_generation` の基本動作できるようにすること
     #[test]
     fn test_app_state_helpers() {
         let state = test_app_state();
@@ -38,13 +37,6 @@ mod tests {
         assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
         assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
-
-        let ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("hello"),
-            ..Default::default()
-        };
-        state.with_processed_state(|s| *s = ps);
-        assert!(state.with_processed_state(|s| s.matches_last_seen("hello")));
 
         assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
 
@@ -133,20 +125,24 @@ mod tests {
     }
 
     fn collect_history(state: &AppState) -> Vec<String> {
-        (0..state.history_len())
-            .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
+        let session = state.clipboard_session();
+        (0..session.history_len())
+            .filter_map(|i| session.get_history_entry(i).map(|s| s.to_string()))
             .collect()
     }
 
-    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になるできるようにすること
+    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になること
+    ///
+    /// `add_to_history` は設定の `history_limit` を参照する横断処理として検証する
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
         let state = test_app_state();
         let limit = crate::consts::DEFAULT_HISTORY_LIMIT;
+        let session = state.clipboard_session();
 
         // 空白は無視
         state.add_to_history("   ");
-        assert_eq!(state.history_len(), 0);
+        assert_eq!(session.history_len(), 0);
 
         // 重複するエントリは先頭に移動する
         state.add_to_history("first");
@@ -161,28 +157,36 @@ mod tests {
         for i in 0..(limit + 5) {
             state.add_to_history(format!("item-{i}"));
         }
-        assert_eq!(state.history_len(), limit);
+        assert_eq!(session.history_len(), limit);
         assert_eq!(collect_history(&state)[0], format!("item-{}", limit + 4));
 
         // clear_history で履歴が空になること
-        state.clear_history();
-        assert_eq!(state.history_len(), 0);
+        session.clear_history();
+        assert_eq!(session.history_len(), 0);
     }
 
     fn collect_continuous_record(state: &AppState) -> Vec<String> {
-        (0..state.continuous_record_len())
-            .filter_map(|i| state.get_continuous_record_entry(i).map(|s| s.to_string()))
+        let session = state.clipboard_session();
+        (0..session.continuous_record_len())
+            .filter_map(|i| {
+                session
+                    .get_continuous_record_entry(i)
+                    .map(|s| s.to_string())
+            })
             .collect()
     }
 
-    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になるできるようにすること
+    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になること
+    ///
+    /// `enqueue_continuous_record` は設定の `continuous_record_limit` を参照する横断処理として検証する
     #[test]
     fn test_continuous_record_enqueue_limit_and_clear() {
         let state = test_app_state();
         let limit = crate::consts::DEFAULT_CONTINUOUS_RECORD_LIMIT;
+        let session = state.clipboard_session();
 
         state.enqueue_continuous_record("   ");
-        assert_eq!(state.continuous_record_len(), 0);
+        assert_eq!(session.continuous_record_len(), 0);
 
         state.enqueue_continuous_record("dup");
         state.enqueue_continuous_record("dup");
@@ -192,12 +196,12 @@ mod tests {
         for i in 0..(limit + 5) {
             state.enqueue_continuous_record(format!("item-{i}"));
         }
-        assert_eq!(state.continuous_record_len(), limit);
+        assert_eq!(session.continuous_record_len(), limit);
         let records = collect_continuous_record(&state);
         assert_eq!(records.first().map(String::as_str), Some("item-5"));
 
-        state.clear_continuous_record();
-        assert_eq!(state.continuous_record_len(), 0);
+        session.clear_continuous_record();
+        assert_eq!(session.continuous_record_len(), 0);
     }
 
     /// 連続記録キュー先頭取り出しと位置指定排出が FIFO 順で動作すること
@@ -226,83 +230,20 @@ mod tests {
                 .map(|s| s.to_string()),
             Some("first".to_string())
         );
-        assert_eq!(state.continuous_record_len(), 0);
+        assert_eq!(state.clipboard_session().continuous_record_len(), 0);
     }
 
-    /// 加工成功時に書き戻し本文と観測済み本文が更新されるようにすること
-    #[test]
-    fn test_record_processing_success() {
-        let state = test_app_state();
-        state.record_processing_success("processed");
-
-        let ps = state.with_processed_state(|s| s.clone());
-        assert!(ps.matches_last_seen("processed"));
-        assert!(ps.matches_last_written("processed"));
-    }
-
-    /// 観測のみの場合は `last_written` を変更しないであるようにすること
-    #[test]
-    fn test_record_clipboard_observed() {
-        let state = test_app_state();
-        state.with_processed_state(|ps| {
-            ps.last_written = Some(ContentFingerprint::from_text("written"));
-            ps.last_seen = ContentFingerprint::from_text("old");
-        });
-
-        state.record_clipboard_observed("observed");
-
-        let ps = state.with_processed_state(|s| s.clone());
-        assert!(ps.matches_last_seen("observed"));
-        assert!(ps.matches_last_written("written"));
-    }
-
-    /// 履歴復元など外部設定時は書き戻しフラグを1回分のエコーとして記録すること
-    #[test]
-    fn test_record_clipboard_set() {
-        let state = test_app_state();
-        state.with_processed_state(|ps| {
-            ps.last_written = Some(ContentFingerprint::from_text("written"));
-            ps.last_seen = ContentFingerprint::from_text("old");
-        });
-
-        state.record_clipboard_set("restored");
-
-        let ps = state.with_processed_state(|s| s.clone());
-        assert!(ps.matches_last_seen("restored"));
-        assert!(ps.matches_last_written("restored"));
-    }
-
-    /// 加工取り消し用テキストの記録と取得できるようにすること
-    #[test]
-    fn test_undo_source_record_and_take() {
-        let state = test_app_state();
-
-        assert!(state.take_undo_source().is_none());
-
-        state.record_undo_source("original");
-        assert_eq!(
-            state.take_undo_source().as_ref().map(|s| s.as_str()),
-            Some("original")
-        );
-        assert!(state.take_undo_source().is_none());
-    }
-
-    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないであるようにすること
+    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
     #[test]
     fn test_app_state_disables_config_persistence() {
         let state = test_app_state();
-        assert!(!state.is_config_persistence_enabled());
+        assert!(!state.config_sync().is_persistence_enabled());
     }
 
-    /// ワーカー稼働状態の更新できるようにすること
+    /// 永続化付きテスト用 `AppState` はディスク保存が有効であること
     #[test]
-    fn test_worker_alive_state() {
-        let state = test_app_state();
-        assert!(state.is_worker_alive());
-        state.set_worker_alive(false);
-        assert!(!state.is_worker_alive());
-        state.set_worker_recovery_pending(true);
-        assert!(state.take_worker_recovery_pending());
-        assert!(!state.take_worker_recovery_pending());
+    fn test_app_state_with_persistence_enables_config_persistence() {
+        let state = test_app_state_with_persistence();
+        assert!(state.config_sync().is_persistence_enabled());
     }
 }

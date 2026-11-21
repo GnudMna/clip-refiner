@@ -146,8 +146,12 @@ window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payloa
     if (activeTab === 'favorites') {
         refreshActivePanel();
     } else if (activeTab === 'shortcuts') {
-        // お気に入り件数変化時は入力欄の行数が変わるため再描画する
-        if (wasEditingShortcuts && previousFavoriteCount === nextFavoriteModes.length) {
+        const action = SettingsSharedLogic.resolveShortcutsDiffUpdate({
+            wasEditingShortcuts,
+            previousFavoriteCount,
+            nextFavoriteCount: nextFavoriteModes.length,
+        });
+        if (action === 'syncInputs') {
             syncHotkeyInputsFromState();
         } else {
             refreshActivePanel();
@@ -163,6 +167,15 @@ window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payloa
  * @type {typeof flushPendingApply}
  */
 window.flushPendingApply = flushPendingApply;
+
+/**
+ * 保留パッチをフラッシュして設定ウィンドウを閉じる
+ *
+ * Rust から `window.closeWindow()` として呼び出す (タイトルバーの閉じるボタン)
+ *
+ * @type {typeof closeWindow}
+ */
+window.closeWindow = closeWindow;
 
 /**
  * 設定適用のフィードバックを表示する
@@ -187,14 +200,17 @@ document.getElementById('open-config-btn').addEventListener('click', openConfigF
 document.getElementById('close-btn').addEventListener('click', closeWindow);
 
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        const dialog = document.getElementById('confirm-dialog');
-        if (dialog && !dialog.hidden) {
-            return;
-        }
-        if (isContentEditing()) {
-            return;
-        }
-        closeWindow();
+    if (event.key !== 'Escape') {
+        return;
     }
+    const dialog = document.getElementById('confirm-dialog');
+    if (
+        !SettingsSharedLogic.shouldCloseSettingsOnEscape({
+            dialogVisible: Boolean(dialog && !dialog.hidden),
+            isEditing: isContentEditing(),
+        })
+    ) {
+        return;
+    }
+    closeWindow();
 });

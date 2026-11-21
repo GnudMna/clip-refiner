@@ -71,7 +71,7 @@ impl TrayMenu {
     /// # Returns
     /// * `Result<()>` - 更新に成功した場合は `Ok(())` を返す
     pub fn refresh_continuous_record(&self, state: &AppState) -> Result<()> {
-        let record_len = state.continuous_record_len();
+        let record_len = state.clipboard_session().continuous_record_len();
         let mut records = self.continuous_record.records.lock_ignore_poison();
         records.clear();
 
@@ -86,7 +86,8 @@ impl TrayMenu {
 
         if record_len > 0 {
             for index in 0..record_len {
-                let Some(text) = state.get_continuous_record_entry(index) else {
+                let Some(text) = state.clipboard_session().get_continuous_record_entry(index)
+                else {
                     continue;
                 };
                 let label = format_record_menu_label(index, &text);
@@ -166,6 +167,7 @@ mod tests {
         assert_eq!(records[1].1, 1);
         assert_eq!(
             state
+                .clipboard_session()
                 .get_continuous_record_entry(0)
                 .as_ref()
                 .map(|s| s.as_str()),
@@ -181,7 +183,7 @@ mod tests {
         menu.refresh_continuous_record(&state)
             .expect("連続記録メニューの更新に失敗");
 
-        state.clear_continuous_record();
+        state.clipboard_session().clear_continuous_record();
         menu.refresh_continuous_record(&state)
             .expect("連続記録メニューの更新に失敗");
 
