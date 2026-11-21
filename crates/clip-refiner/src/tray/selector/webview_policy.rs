@@ -72,10 +72,10 @@ pub(crate) fn is_allowed_webview_navigation(url: &str, expected_html: &str) -> b
 /// # Returns
 /// * `String` - 長すぎる場合は先頭 200 文字 + `...`
 pub(crate) fn preview_denied_webview_url(url: &str) -> String {
-    if url.len() > DENIED_URL_PREVIEW_MAX_LEN {
-        format!("{}...", &url[..DENIED_URL_PREVIEW_MAX_LEN])
-    } else {
-        url.to_string()
+    // バイト位置で切ると多バイト文字の途中で panic するため文字単位で切る
+    match url.char_indices().nth(DENIED_URL_PREVIEW_MAX_LEN) {
+        Some((end, _)) => format!("{}...", &url[..end]),
+        None => url.to_string(),
     }
 }
 
@@ -219,5 +219,18 @@ mod tests {
             preview_denied_webview_url("https://example.com/"),
             "https://example.com/"
         );
+    }
+
+    /// 多バイト文字を含む長い拒否 URL を文字境界で切り詰めること
+    #[test]
+    fn preview_denied_webview_url_truncates_multibyte() {
+        // 先頭 1 バイト + 3 バイト文字の並びで 200 バイト目を文字の途中にする
+        let long = "h".to_string() + &"あ".repeat(300);
+        let preview = preview_denied_webview_url(&long);
+        assert!(preview.ends_with("..."));
+        assert_eq!(preview.chars().count(), DENIED_URL_PREVIEW_MAX_LEN + 3);
+
+        let exact = "あ".repeat(DENIED_URL_PREVIEW_MAX_LEN);
+        assert_eq!(preview_denied_webview_url(&exact), exact);
     }
 }

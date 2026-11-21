@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use super::super::clipboard_monitor::{self, ClipboardObserveResult, EVENT_POLL_MS, POLL_TICK_MS};
+use super::super::clipboard_monitor::{
+    self, ClipboardObserveResult, ClipboardTrigger, EVENT_POLL_MS, POLL_TICK_MS,
+};
 use super::super::state::AppState;
 use super::clipboard_seq;
 use crate::config::MonitorMode;
@@ -205,13 +207,16 @@ impl MonitorLoopState {
             clipboard,
             state,
             snap,
-            true,
+            ClipboardTrigger::Event,
             &self.refine_ctx,
         );
         Self::apply_token_after_observe(self, token, result);
     }
 
     /// ポーリング監視で加工処理を試みる
+    ///
+    /// 変更トークンが前回から進んでいなければ本文を読まない。テキストの無い画像は
+    /// 本文で重複を判定できないため、トークンで変更を確認しないと同じ画像を加工し続ける
     fn tick_polling_processing(
         &mut self,
         clipboard: &mut OwnedClipboard,
@@ -222,15 +227,29 @@ impl MonitorLoopState {
             return;
         }
 
+        let token = clipboard_seq::token();
+        if token == Some(self.last_token) {
+            self.last_poll_at = Instant::now();
+            return;
+        }
+
+        let trigger = if token.is_some() {
+            ClipboardTrigger::PollingChanged
+        } else {
+            ClipboardTrigger::PollingUnconfirmed
+        };
         let result = clipboard_monitor::handle_clipboard_update(
             clipboard,
             state,
             snap,
-            false,
+            trigger,
             &self.refine_ctx,
         );
         if result != ClipboardObserveResult::ReadFailed {
             self.last_poll_at = Instant::now();
+        }
+        if let Some(token) = token {
+            Self::apply_token_after_observe(self, token, result);
         }
     }
 

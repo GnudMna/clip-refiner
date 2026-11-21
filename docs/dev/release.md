@@ -60,13 +60,20 @@ git switch -c release/v1.1.0
 
 **手動で残る作業:**
 
+`release.ps1` の実行前:
+
 1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **Settings** 節に移行内容を書く
 2. 利用者向けの大きな変更があれば [README.md](../../README.md) / `docs/user/` の該当文書も合わせて更新する。設定スキーマ番号・既定値・上限のずれは `crates/clip-refiner-core/src/config/spec.rs` のテストが検出する ([ドキュメント同期](contributing.md#ドキュメント同期))
-3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](testing.md#手動確認が残る範囲) に該当する変更だけ実機確認する (旧手動スモークチェックリストは自動化済み)
-4. `release.ps1` を実行する (または同等の手順でタグ付けと MSI / ポータブル ZIP 作成)
-5. `git push -u origin release/v{version}` でリモートへ反映する
-6. Gitea 上で `v{version}` タグを付与する
-7. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返し、署名ファイルも同じ URL 形式 (`/{owner}/{repo}/{tag}/{asset}.minisig`) で取得できることを確認する。アプリ更新は digest と署名が必須で、保護範囲の DL には埋め込みキー (`Authorization: Bearer`) を使い、ダウンロード中の宣言サイズ / 絶対上限打ち切りと完了後のサイズ・SHA-256・署名検証を行う (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
+3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](testing.md#手動確認が残る範囲) に該当する変更だけ実機確認する
+
+`release.ps1` の実行後:
+
+1. `git push -u origin release/v{version}` でリモートへ反映する
+2. Gitea 上で `v{version}` タグを付与する
+3. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードする
+4. [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) で次を確認する。アプリは digest と署名のどちらかが欠けたアセットを適用しない ([アプリ更新の検証](../user/security.md#アプリ更新の検証))
+   - version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返す
+   - 署名ファイルをアセットと同じ URL 形式 (`/{owner}/{repo}/{tag}/{asset}.minisig`) で取得できる
 
 ## 更新署名鍵
 

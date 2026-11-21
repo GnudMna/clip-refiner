@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::config::{HotkeySettings, MonitorMode, NotificationSettings};
+use crate::config::HotkeySettings;
 use crate::refiner::RefineMode;
 
 // ======================================================================
@@ -19,16 +19,10 @@ pub struct MenuSnapshot {
     pub favorite_modes: Vec<RefineMode>,
     /// ホットキー設定 (お気に入りスロットのラベル表示用)
     pub hotkeys: HotkeySettings,
-    /// 監視方式
-    pub monitor_mode: MonitorMode,
-    /// ポーリング間隔 (ミリ秒)
-    pub interval_ms: u64,
     /// 履歴機能が有効かどうか
     pub history_enabled: bool,
     /// 連続記録が有効かどうか
     pub continuous_record_enabled: bool,
-    /// 通知設定
-    pub notification_settings: NotificationSettings,
     /// 一時停止中かどうか
     pub is_paused: bool,
     /// 有効な正規表現プリセット ID

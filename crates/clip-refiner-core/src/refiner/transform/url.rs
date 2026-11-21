@@ -1,30 +1,25 @@
 use std::borrow::Cow;
 
-use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 
 // ======================================================================
 // エンコードセット
 // ======================================================================
-/// 「ASCII の制御文字 + 非英数字」を全部エンコードするセット
-const ENCODE_SET: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'#')
-    .add(b'%')
-    .add(b'<')
-    .add(b'>')
-    .add(b'?')
-    .add(b'`')
-    .add(b'{')
-    .add(b'}');
+/// RFC 3986 の非予約文字 (英数字と `-` `.` `_` `~`) 以外を全部エンコードするセット
+///
+/// `&` `=` `+` `/` などの予約文字も対象とし、クエリの値としてそのまま埋め込めるようにする
+const ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 // ======================================================================
 // URL エンコード・デコード
 // ======================================================================
 /// 文字列をURLエンコード(パーセントエンコーディング)する
 ///
-/// 入力文字列内の特殊文字を `%XX` 形式に変換する
-/// 英数字以外の多くの文字がエンコード対象となる
+/// 英数字と `-` `.` `_` `~` 以外の文字を `%XX` 形式に変換する。空白は `%20` にする。
 ///
 /// # Arguments
 /// * `input` - エンコード対象の文字列
@@ -37,7 +32,8 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 
 /// URLエンコードされた文字列をデコードする
 ///
-/// `%XX` 形式の記述を元の文字に戻す。結果はUTF-8として解釈される。
+/// `%XX` 形式の記述を元の文字に戻し、`+` を空白に戻す。結果はUTF-8として解釈される。
+/// `+` そのものは `%2B` と書く。
 ///
 /// # Arguments
 /// * `input` - デコード対象の文字列
@@ -48,7 +44,13 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 /// # Errors
 /// 不正なパーセントエンコード、または UTF-8 として不正な場合
 pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
-    let decoded = percent_decode_str(input).decode_utf8()?;
+    // フォーム形式 (application/x-www-form-urlencoded) の `+` を空白として扱う
+    let input: Cow<'_, str> = if input.contains('+') {
+        Cow::Owned(input.replace('+', " "))
+    } else {
+        Cow::Borrowed(input)
+    };
+    let decoded = percent_decode_str(&input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
 // ======================================================================
@@ -141,6 +143,14 @@ mod tests {
         assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
+    /// `+` を空白に戻し、`%2B` は `+` に戻すようにすること
+    #[test]
+    fn test_url_decode_plus() {
+        assert_eq!(url_decode("foo+bar").unwrap(), "foo bar");
+        assert_eq!(url_decode("a%2Bb").unwrap(), "a+b");
+        assert_eq!(url_decode("a%26b%3Dc%2Bd%2Fe").unwrap(), "a&b=c+d/e");
+    }
+
     /// マルチバイト文字のURLデコードできるようにすること
     #[test]
     fn test_url_decode_multibyte() {
@@ -180,13 +190,28 @@ mod tests {
         assert_eq!(remove_utm_params("?utm_source=a"), "");
     }
 
-    /// スペースや特殊文字が含まれる場合のURLエンコードできるようにすること
-    /// `プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認`できるようにすること
+    /// スペースや予約文字が含まれる場合のURLエンコードできるようにすること
     #[test]
     fn test_url_encode_space_special() {
         assert_eq!(url_encode("foo bar"), "foo%20bar");
-        // ENCODE_SET に '+' は含まれないためそのまま残る
-        assert_eq!(url_encode("foo+bar"), "foo+bar");
+        assert_eq!(url_encode("foo+bar"), "foo%2Bbar");
+        assert_eq!(url_encode("a&b=c+d/e"), "a%26b%3Dc%2Bd%2Fe");
+        assert_eq!(
+            url_encode("!$'()*,:;@[]"),
+            "%21%24%27%28%29%2A%2C%3A%3B%40%5B%5D"
+        );
+    }
+
+    /// 非予約文字 (`-` `.` `_` `~`) はエンコードしないようにすること
+    #[test]
+    fn test_url_encode_unreserved() {
+        assert_eq!(url_encode("a-b.c_d~e"), "a-b.c_d~e");
+    }
+
+    /// マルチバイト文字をUTF-8のバイト列としてエンコードできるようにすること
+    #[test]
+    fn test_url_encode_multibyte() {
+        assert_eq!(url_encode("あいう"), "%E3%81%82%E3%81%84%E3%81%86");
     }
 
     /// UTMパラメータが他のパラメータと混在している場合できるようにすること

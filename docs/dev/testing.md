@@ -4,27 +4,13 @@
 
 ## テスト
 
-変更中は対象テストを絞り、完了前に品質チェック一式を実行する。
+変更中は対象テストを絞り、完了前に [品質チェック](#品質チェック) 一式 (`check.ps1`) を実行する。
 
 ```powershell
-# 短いフィードバックループ
-cargo fmt
-cargo test --test monitor_flow
+# 単体テスト・統合テスト (check.ps1 と同じ条件。--release を付けても通る)
+cargo test --all-targets --features test-helpers
 
-# GUI セッションを使えない場合のチェック
-$env:CLIP_REFINER_SKIP_E2E = '1'
-./scripts/windows/check.ps1
-Remove-Item Env:CLIP_REFINER_SKIP_E2E
-
-# リリース前の全チェック (WebView E2E を含む)
-./scripts/windows/check.ps1
-```
-
-```powershell
-# 単体テスト・統合テストを実行 (デフォルト feature `app` で統合テストも含む)
-cargo test
-
-# 特定の統合テストのみ実行
+# 特定の統合テストのみ実行 (短いフィードバックループ)
 cargo test --test monitor_flow
 cargo test --test settings_flow
 
@@ -63,6 +49,7 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 | `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `ui_bundle_flow.rs` | コミット済み `*.bundle.js` 先頭の入力一覧・SHA-256 をソースから再計算し、バンドルの再生成忘れを検出 (Node.js 不要) |
+| `architecture_doc_flow.rs` | `docs/dev/architecture.md` の構成図・基準ディレクトリ付きの表・バッククォート内のパスが実在することを検証 (移動・改名後の記述の取り残しを検出) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 複数ステッププリセット / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲 / 無応答接続の並行 / 同時処理上限からの回復 / 読み取り期限による無応答・途中送信接続の切断)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
 
@@ -84,7 +71,7 @@ core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で�
 | :------- | :------- |
 | `refine_modes.rs` | 全 `RefineMode` の代表入力・出力とモード追加時のカバレッジ |
 | `pipeline_api.rs` | テキスト / クリップボードのパイプライン API |
-| `property_transforms.rs` | `proptest` による URL・エスケープ・正規表現置換 |
+| `property_transforms.rs` | `proptest` による任意入力で成り立つ性質 ([プロパティテスト](#プロパティテスト-proptest)) |
 
 UI ロジックテストは Node.js 未インストール時にスキップする (`note:` を出力)。`check.ps1` は Node.js を検証し `CLIP_REFINER_REQUIRE_NODE=1` で必須化する。意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する。
 
@@ -98,6 +85,59 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
 OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクル・ドラッグ確定・枠描画は上記 Rust テストで回帰検知する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
+
+### プロパティテスト (`proptest`)
+
+`refine_modes.rs` は各モード 1 つの代表入力しか見ないため、境界ケース (空行・単独の CR・大きな数値・記号だけのセル・区切り文字と camelCase の混在など) は `property_transforms.rs` で任意入力から検出する。変換モードを追加・変更したら、次のどの性質が成り立つかを考えて該当する節へ追加する。
+
+| 性質 | 例 |
+| :--- | :--- |
+| 件数・内容の保存 | 並べ替えは行数と行の集合を変えない。Markdown 表→Excel は行とセルを保つ。重複行削除・空行削除は残すべき行を残す |
+| 往復 | JSON→YAML→JSON (128 bit 整数・浮動小数点・任意のキー)、半角⇄全角、TSV⇄Markdown 表、URL・エスケープ |
+| 冪等性 (`f(f(x)) == f(x)`) | トリム・行操作・JSON 整形・全角半角・パス区切り・カンマ除去・ケース変換 |
+| パニックしない | 任意の文字列と、生成した JSON / Markdown 表 / TSV / CSV で全モードが結果を返す |
+
+性質が成り立たない入力を意図して除く場合 (camelCase で境界が消える 1 文字の単語など) は、生成器のコメントに理由を書く。ケース数は `PROPTEST_CASES` で増やせる (既定 256)。失敗した入力は `tests/*.proptest-regressions` に保存され、次回以降も先に再実行される。
+
+```powershell
+cargo test -p clip-refiner-core --test property_transforms
+$env:PROPTEST_CASES = '5000'; cargo test -p clip-refiner-core --test property_transforms
+```
+
+### ファジング (`cargo-fuzz`)
+
+CSV・Markdown 表・JSON・YAML・HTML のパーサ系変換は `fuzz/` の cargo-fuzz (libFuzzer) ターゲットで検証する。nightly が必要なためルートのワークスペースには含めず、`check.ps1` にも組み込まない。変換やパーサ依存を変えたときや、リリース前などにローカルで不定期に実行する。
+
+前提:
+
+```powershell
+rustup toolchain install nightly --profile minimal
+cargo +nightly install cargo-fuzz --locked
+```
+
+Visual Studio の「C++ によるデスクトップ開発」(AddressSanitizer を含む) も必要。Windows の cargo-fuzz は ASan を有効にしてビルドし、実行時に `clang_rt.asan_dynamic-x86_64.dll` を読み込む。`fuzz.ps1` が `vswhere` で MSVC のフォルダを探して `PATH` へ追加する。
+
+```powershell
+# 全ターゲットを 60 秒ずつ実行
+./scripts/windows/fuzz.ps1
+
+# ターゲットと時間を指定
+./scripts/windows/fuzz.ps1 -Target line_sort -Seconds 600
+
+# 失敗した入力を再実行
+./scripts/windows/fuzz.ps1 -Target line_sort -Reproduce fuzz/artifacts/line_sort/crash-0123456789abcdef
+```
+
+| ターゲット | 検証内容 |
+| :--------- | :------- |
+| `all_modes` | 全モードがパニックしない (正規表現は既定と置換設定ありの 2 通り) |
+| `line_sort` | 並べ替えがパニックせず、行数と行の集合を変えない (CSV レコード単位の経路を含む) |
+| `markdown_table` | Markdown 表⇄Excel がパニックしない (互いの出力を入力にした経路を含む) |
+| `json` | JSON 整形が値を変えない。JSON→YAML の結果を YAML→JSON で読み戻せる |
+| `yaml` | YAML→JSON がパニックせず、出力が JSON として解釈できる |
+| `html` | HTML⇄Markdown がパニックしない (深い入れ子によるスタックあふれを含む) |
+
+生成した入力は `fuzz/corpus/<ターゲット>/` に蓄積し、次回の実行で再利用する。失敗した入力は `fuzz/artifacts/<ターゲット>/` に保存する (どちらも Git 管理外)。Windows ではパニック時の `abort` を libFuzzer が捕捉できないため、`fuzz/src/lib.rs` のパニックフックが実行中の入力を `crash-<ハッシュ>` として保存する。見つかった不具合は、修正と同じ変更で `property_transforms.rs` かモジュール内ユニットテストに回帰ケースとして追加する。
 
 ### WebView E2E (Playwright)
 
@@ -114,7 +154,7 @@ npm run test:e2e
 
 ### 手動確認が残る範囲
 
-上記の自動テストで、かつての手動スモーク (設定 / セレクター / OCR ドラッグ / 画像プレビュー / お気に入り並び) はカバー済み。次だけは OS / 実機依存のため自動化していない。
+設定 / セレクター / OCR ドラッグ / 画像プレビュー / お気に入り並びは上記の自動テストでカバーする。次は OS / 実機依存のため自動化していない。
 
 | 項目 | 理由 |
 | :--- | :--- |
@@ -124,8 +164,6 @@ npm run test:e2e
 | トースト通知の見た目 | 文言組み立てはユニット済み。OS トースト描画は環境依存 |
 | 連続記録のフォアグラウンド貼り付け (`SendInput`) | 注入ロジックはユニット済み。アクティブウィンドウへの実貼り付けは実機のみ |
 | アプリ更新の `msiexec` / 差し替えヘルパー実起動 | `update_flow` はモック bridge で確認〜検証〜展開まで固定。外部プロセス起動と再起動後の実フォルダ差し替えは実機のみ |
-
-表示中の設定ウィンドウへの外部 `config.toml` 反映バナーは E2E (`settings.spec.ts`) でカバー済み。
 
 ### テスト用ヘルパー (`test_helpers`)
 
@@ -385,19 +423,22 @@ npm run format             # Prettier 整形適用
 
 設定ファイル: [`package.json`](../../package.json), [`eslint.config.js`](../../eslint.config.js), [`.prettierrc.json`](../../.prettierrc.json)
 
-設定画面とセレクターの JavaScript は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.mjs` / esbuild) で IIFE バンドルする (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`)。Rust (`tray/settings/window/assets.rs` / `tray/selector/window.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。ソースだけ更新してバンドルを忘れる事故は 2 段で防ぐ: (1) バンドル先頭に入力ファイル一覧 (`build-ui.mjs` 自身を含む) と SHA-256 を刻み、`cargo test` の `ui_bundle_flow.rs` が Node.js なしで再計算して照合する。(2) `check.ps1` は `npm run build:ui:check` で作業ツリーを書き換えずに再生成結果とバイト比較し、手編集や esbuild の版差も検出する。設定 UI の共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する (`render` / `refreshActivePanel` も含む)。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
+設定画面とセレクターの JavaScript は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.mjs` / esbuild) で IIFE バンドル (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`) にまとめる。Rust は生成物を `include_str!` で埋め込むため、バンドルはリポジトリにコミットし、`cargo build` 単体では Node.js を要求しない。ソースだけ更新してバンドルを忘れる事故は 2 段で防ぐ。
+
+1. バンドル先頭に入力ファイル一覧 (`build-ui.mjs` 自身を含む) と SHA-256 を刻み、`cargo test` の `ui_bundle_flow.rs` が Node.js なしで再計算して照合する
+2. `check.ps1` の `npm run build:ui:check` が作業ツリーを書き換えずに再生成し、コミット済みバンドルとバイト比較する (手編集や esbuild の版差も検出する)
+
+UI のファイル構成と `innerHTML` の扱いは [アーキテクチャ](architecture.md#webview-ui-srcui) を参照。
 
 ### サプライチェーン監査 (`cargo-deny`)
 
-[`deny.toml`](../../deny.toml) で依存関係の脆弱性・ライセンス・取得元を検証する。`check` スクリプトは `cargo deny check` を含む。
+[`deny.toml`](../../deny.toml) で依存関係の脆弱性・ライセンス・取得元を検証する。`check.ps1` は `cargo deny check` を含む。
 
 | チェック | 内容 |
 | :------- | :--- |
 | **advisories** | RustSec 公表の脆弱性・yanked crate。`unmaintained` はワークスペース直接依存のみ失敗 |
-| **licenses** | 商用利用可能なパーミッシブライセンスのみ許可 (GPL / LGPL / MPL 等のコピーレフトは拒否) |
+| **licenses** | 商用利用可能なパーミッシブライセンス (MIT / Apache-2.0 / BSD 等) のみ許可。GPL / LGPL / MPL 等のコピーレフトは拒否 |
 | **bans** | 同一 crate の多重バージョンなど |
 | **sources** | crates.io 以外のレジストリ / git 依存の拒否 |
 
 `graph.all-features` と Windows ターゲット (`x86_64-pc-windows-msvc` / `aarch64-pc-windows-msvc`) を対象に、feature `app` 有効時の依存グラフを検査する。
-
-許可リストはパーミッシブライセンス (MIT / Apache-2.0 / BSD 等) のみ。コピーレフト (GPL / LGPL / MPL 等) は拒否する。

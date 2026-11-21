@@ -171,11 +171,8 @@ impl AppState {
             active_modes: config.effective_pipeline().into_iter().collect(),
             favorite_modes: config.favorite_modes.clone(),
             hotkeys: config.hotkeys.clone(),
-            monitor_mode: config.monitor_mode,
-            interval_ms: config.interval_ms,
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
-            notification_settings: config.notification_settings.clone(),
             is_paused: config.is_paused,
             regex_active_preset_id: config.regex.active_preset_id.clone(),
             regex_presets: config

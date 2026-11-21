@@ -113,7 +113,7 @@ mod tests {
     /// `menu_snapshot` がメニュー用フィールドを正しく反映すること
     #[test]
     fn test_menu_snapshot_values() {
-        use crate::config::{HotkeySettings, MonitorMode};
+        use crate::config::HotkeySettings;
 
         let state = test_app_state();
         state.with_config_mut(|c| {
@@ -124,12 +124,8 @@ mod tests {
                 pause: "Ctrl+Alt+P".to_string(),
                 ..HotkeySettings::default()
             };
-            c.monitor_mode = MonitorMode::Polling;
-            c.interval_ms = 2500;
             c.history_enabled = true;
             c.continuous_record_enabled = true;
-            c.notification_settings.enabled = true;
-            c.notification_settings.notify_result = true;
             c.is_paused = true;
         });
 
@@ -139,12 +135,8 @@ mod tests {
         assert!(snap.active_modes.contains(&RefineMode::UrlEncode));
         assert_eq!(snap.favorite_modes, vec![RefineMode::Trim]);
         assert_eq!(snap.hotkeys.pause, "Ctrl+Alt+P");
-        assert_eq!(snap.monitor_mode, MonitorMode::Polling);
-        assert_eq!(snap.interval_ms, 2500);
         assert!(snap.history_enabled);
         assert!(snap.continuous_record_enabled);
-        assert!(snap.notification_settings.enabled);
-        assert!(snap.notification_settings.notify_result);
         assert!(snap.is_paused);
         assert_eq!(snap.regex_active_preset_id, "default");
         assert!(!snap.regex_presets.is_empty());

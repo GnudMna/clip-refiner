@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use csv::{ReaderBuilder, WriterBuilder};
+use csv::ReaderBuilder;
 
 // ======================================================================
 // 並び替え
@@ -23,11 +23,16 @@ pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
 
     let line_ending = super::utils::detect_line_ending(text);
 
-    if is_likely_csv(text) {
-        sort_csv_records(text, line_ending, descending)
-    } else {
-        sort_plain_lines(text, line_ending, descending)
+    // クォート内改行を含むレコードが無い場合や、CSV 判定の範囲外に解析できないレコードがある場合は行単位で並び替える
+    // csv クレートは単独の CR もレコードの区切りとみなし、行単位の区切り (LF / CRLF) とずれるため、
+    // 単独の CR を含むテキストも行単位で並び替える
+    if !has_lone_cr(text)
+        && is_likely_csv(text)
+        && let Some(sorted) = sort_csv_records(text, line_ending, descending)
+    {
+        return sorted;
     }
+    sort_plain_lines(text, line_ending, descending)
 }
 
 // ======================================================================
@@ -87,7 +92,7 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
         }
     }
 
-    let result = lines.join(line_ending);
+    let result = super::utils::join_lines(&lines, line_ending);
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -148,13 +153,20 @@ fn is_likely_csv(text: &str) -> bool {
     true
 }
 
+/// LF が続かない単独の CR を含むか判定する
+fn has_lone_cr(text: &str) -> bool {
+    text.match_indices('\r')
+        .any(|(i, _)| text.as_bytes().get(i + 1) != Some(&b'\n'))
+}
+
 // ======================================================================
 // ソートユーティリティ
 // ======================================================================
 /// CSVレコードとしてテキストを並び替える
 ///
-/// レコード全体をカンマで結合した文字列に基づいてソートを行う
-/// クォートで囲まれた改行を含むレコードも正しく処理する
+/// クォートで囲まれた改行を含むレコードを 1 つの単位として扱い、レコード全体をカンマで結合した文字列に基づいてソートする
+/// 出力には元のレコードの文字列をそのまま使い、空行も行単位の並び替えと同じく 1 行として残す
+/// クォート内改行を含むレコードが無い場合や、解析に失敗したレコードが 1 件でもある場合は `None` を返す
 ///
 /// # Arguments
 /// * `text` - 並び替える対象のCSVテキスト
@@ -162,53 +174,81 @@ fn is_likely_csv(text: &str) -> bool {
 /// * `descending` - 降順にする場合は `true`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - レコード単位で並び替えられたCSVテキスト
-fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
+/// * `Option<Cow<'_, str>>` - レコード単位で並び替えられたCSVテキスト。
+///   行単位で並び替えるべき場合は `None`
+fn sort_csv_records<'a>(
+    text: &'a str,
+    line_ending: &str,
+    descending: bool,
+) -> Option<Cow<'a, str>> {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
         .from_reader(text.as_bytes());
 
-    let mut records: Vec<Vec<String>> = rdr
-        .records()
-        .filter_map(std::result::Result::ok)
-        .map(|r| r.iter().map(std::string::ToString::to_string).collect())
-        .collect();
+    // (比較キー, 元の文字列)
+    let mut entries: Vec<(String, &str)> = Vec::new();
+    let mut has_multiline_record = false;
+    // 直前のレコード本体の終端。csv クレートは空行を読み飛ばすため、レコード間の区間から空行を数え直す
+    let mut prev_end: Option<usize> = None;
+    let mut record = csv::StringRecord::new();
 
-    // 全体の内容でソート(大文字小文字無視)
-    records.sort_by(|a, b| {
-        let sa = a.join(",");
-        let sb = b.join(",");
-        if descending {
-            sb.to_lowercase().cmp(&sa.to_lowercase())
-        } else {
-            sa.to_lowercase().cmp(&sb.to_lowercase())
-        }
-    });
+    // 列数の不一致も解析エラーになるため、1 件でも失敗すれば CSV として扱わない
+    while rdr.read_record(&mut record).ok()? {
+        let pos = usize::try_from(record.position()?.byte()).ok()?;
+        let end = usize::try_from(rdr.position().byte()).ok()?;
+        // レコードの位置は前後の改行や空行を含むことがあるため、本体だけを切り出す
+        let with_head = text[pos..end].trim_end_matches(['\r', '\n']);
+        let raw = with_head.trim_start_matches(['\r', '\n']);
+        let start = pos + (with_head.len() - raw.len());
+        push_blank_lines(
+            &mut entries,
+            &text[prev_end.unwrap_or(0)..start],
+            prev_end.is_some(),
+        );
 
-    let mut wtr = WriterBuilder::new()
-        .has_headers(false)
-        .terminator(if line_ending == "\r\n" {
-            csv::Terminator::CRLF
-        } else {
-            csv::Terminator::Any(b'\n')
-        })
-        .from_writer(Vec::new());
-
-    for record in records {
-        let _ = wtr.write_record(&record);
+        has_multiline_record |= raw.contains(['\r', '\n']);
+        entries.push((
+            record.iter().collect::<Vec<_>>().join(",").to_lowercase(),
+            raw,
+        ));
+        prev_end = Some(start + raw.len());
     }
+    if !has_multiline_record {
+        return None;
+    }
+    push_blank_lines(
+        &mut entries,
+        &text[prev_end.unwrap_or(0)..],
+        prev_end.is_some(),
+    );
 
-    let Ok(bytes) = wtr.into_inner() else {
-        return Cow::Borrowed(text);
-    };
-    let Ok(result) = String::from_utf8(bytes) else {
-        return Cow::Borrowed(text);
-    };
-    if result == text {
-        Cow::Borrowed(text)
+    if descending {
+        entries.sort_by(|a, b| b.0.cmp(&a.0));
     } else {
-        Cow::Owned(result)
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
     }
+
+    let lines: Vec<&str> = entries.iter().map(|(_, raw)| *raw).collect();
+    let result = super::utils::join_lines(&lines, line_ending);
+    if result == text {
+        Some(Cow::Borrowed(text))
+    } else {
+        Some(Cow::Owned(result))
+    }
+}
+
+/// レコード間の区間に含まれる空行を、比較キーが空のエントリとして追加する
+///
+/// # Arguments
+/// * `entries` - 追加先の (比較キー, 元の文字列) の一覧
+/// * `gap` - 前のレコード本体の終端から次のレコードの先頭までの文字列
+/// * `after_record` - `gap` の先頭が直前のレコードの改行である場合は `true`
+fn push_blank_lines(entries: &mut Vec<(String, &str)>, gap: &str, after_record: bool) {
+    let mut count = gap.lines().count();
+    if after_record {
+        count = count.saturating_sub(1);
+    }
+    entries.extend(std::iter::repeat_n((String::new(), ""), count));
 }
 
 /// 単純なテキスト行として並び替える
@@ -229,7 +269,7 @@ fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
     } else {
         lines.sort_by_key(|a| a.to_lowercase());
     }
-    let result = lines.join(line_ending);
+    let result = super::utils::join_lines(&lines, line_ending);
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -272,11 +312,61 @@ mod tests {
     #[test]
     fn test_sort_csv_with_newlines() {
         let input = "z,\"cell\nwith\nnewline\",3\na,\"simple\",1";
-        // csv クレートがクォート内改行を処理する
-        // 'a' 行が先頭になること
+        // クォート内改行を含むレコードを 1 単位とし、元のクォートを保ったまま並び替える
         let output = sort_lines(input, false);
-        assert!(output.starts_with("a,simple,1"));
-        assert!(output.contains("z,\"cell\nwith\nnewline\",3"));
+        assert_eq!(output, "a,\"simple\",1\nz,\"cell\nwith\nnewline\",3");
+    }
+
+    /// クォート内改行を含む CSV でも空行を残し、CRLF を保持すること
+    #[test]
+    fn test_sort_csv_with_newlines_keeps_blank_lines_and_crlf() {
+        let input = "z,\"x\r\ny\"\r\n\r\na,1\r\n";
+        assert_eq!(sort_lines(input, false), "\r\na,1\r\nz,\"x\r\ny\"");
+        // 空行が最後に来る場合は、末尾の改行が行の終端とみなされて消えないよう改行を 1 つ足す
+        assert_eq!(sort_lines(input, true), "z,\"x\r\ny\"\r\na,1\r\n\r\n");
+
+        // 先頭・途中・末尾の空行を行単位の並び替えと同じ数だけ残す
+        let input = "\n\nz,\"a\nb\"\n\n\nc,d\n\n";
+        assert_eq!(sort_lines(input, false), "\n\n\n\n\nc,d\nz,\"a\nb\"");
+    }
+
+    /// クォート内改行が無ければ、CSV とみなせても元の行の文字列のまま並び替えること
+    #[test]
+    fn test_sort_csv_like_lines_keeps_original_text() {
+        let input = "log(\"y\", 2)\nlog(\"x\", 1)";
+        assert!(is_likely_csv(input));
+        assert_eq!(sort_lines(input, false), "log(\"x\", 1)\nlog(\"y\", 2)");
+    }
+
+    /// クォート内改行が無ければ、CSV とみなせても空行を残し末尾に改行を付けないこと
+    #[test]
+    fn test_sort_csv_like_lines_keeps_blank_lines() {
+        assert_eq!(sort_lines("b,1\n\na,2\n", false), "\na,2\nb,1");
+    }
+
+    /// クォート内に単独の CR を含む CSV でも、CR を改行に変えず行単位で並び替えること
+    #[test]
+    fn test_sort_csv_with_lone_cr_keeps_lines() {
+        let input = "\"\r\"zz,1\n\r,.";
+        // csv クレートは単独の CR でレコードを区切るため、CSV として並べると `\r,.` が 2 行に分かれる
+        assert_eq!(sort_lines(input, false), "\r,.\n\"\r\"zz,1");
+    }
+
+    /// 降順で空行が最後に来ても、空行の数を保つこと
+    #[test]
+    fn test_sort_lines_descending_keeps_trailing_blank_line() {
+        let output = sort_lines("\na\nb", true);
+        assert_eq!(output, "b\na\n\n");
+        assert_eq!(output.lines().collect::<Vec<_>>(), ["b", "a", ""]);
+        // 並べ替え済みの結果は再度並べ替えても変わらない
+        assert_eq!(sort_lines(&output, true), output);
+    }
+
+    /// 重複行削除で末尾の空行を残すこと
+    #[test]
+    fn test_remove_duplicate_lines_keeps_trailing_blank_line() {
+        assert_eq!(remove_duplicate_lines("a\n\na\n"), "a\n\n");
+        assert!(matches!(remove_duplicate_lines("a\n\n"), Cow::Borrowed(_)));
     }
 
     /// 空行削除の基本動作できるようにすること
@@ -368,6 +458,23 @@ mod tests {
         assert_eq!(lines[0], "cherry,3");
         assert_eq!(lines[1], "banana,2");
         assert_eq!(lines[2], "apple,1");
+    }
+
+    /// CSV 判定範囲より後ろに解析できない行があっても行を失わずに並び替えること
+    ///
+    /// `is_likely_csv` は先頭 7 レコードしか見ないため、9 行目の不正行は判定をすり抜ける
+    #[test]
+    fn test_sort_csv_keeps_unparsable_record_after_detection_window() {
+        let mut rows: Vec<String> = (0..10).map(|i| format!("a{i},b")).collect();
+        rows[8] = "x".to_string();
+        let input = rows.join("\n");
+        assert!(is_likely_csv(&input));
+
+        // 全行が残り、行単位で並び替えた結果と一致する
+        let output = sort_lines(&input, false);
+        let mut sorted_input: Vec<&str> = input.lines().collect();
+        sorted_input.sort_by_key(|l| l.to_lowercase());
+        assert_eq!(output.lines().collect::<Vec<_>>(), sorted_input);
     }
 
     /// CRLF 入力で空行削除しても CRLF が保持されるようにすること

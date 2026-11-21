@@ -5,44 +5,14 @@ use std::borrow::Cow;
 // ======================================================================
 /// 識別子文字列を単語列へ分割する
 ///
-/// `snake_case` / `kebab-case` / 空白区切り / `camelCase` / `PascalCase` に対応
+/// `snake_case` / `kebab-case` / 空白区切り / `camelCase` / `PascalCase` に対応。
+/// 区切り文字で分けた各部分にも `camelCase` の境界を適用する (`myVar_name` → `my`, `var`, `name`)
 fn split_identifier(input: &str) -> Vec<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return Vec::new();
-    }
-
-    if trimmed
-        .chars()
-        .any(|c| c == '_' || c == '-' || c.is_whitespace())
-    {
-        return split_on_separators(trimmed);
-    }
-
-    split_camel_case(trimmed)
-}
-
-/// 区切り文字 (`_`, `-`, 空白) で分割する
-fn split_on_separators(input: &str) -> Vec<String> {
-    let mut words = Vec::new();
-    let mut current = String::new();
-
-    for c in input.chars() {
-        if c == '_' || c == '-' || c.is_whitespace() {
-            if !current.is_empty() {
-                words.push(current.to_lowercase());
-                current.clear();
-            }
-        } else {
-            current.push(c);
-        }
-    }
-
-    if !current.is_empty() {
-        words.push(current.to_lowercase());
-    }
-
-    words
+    input
+        .split(|c: char| c == '_' || c == '-' || c.is_whitespace())
+        .filter(|part| !part.is_empty())
+        .flat_map(split_camel_case)
+        .collect()
 }
 
 /// `camelCase` / `PascalCase` を単語境界で分割する
@@ -230,6 +200,26 @@ mod tests {
         );
         assert_eq!(split_identifier("HTTPResponse"), vec!["http", "response"]);
         assert_eq!(split_identifier("URL"), vec!["url"]);
+        assert_eq!(split_identifier("HTTP_RESPONSE"), vec!["http", "response"]);
+    }
+
+    /// 区切り文字と `camelCase` が混在する識別子を両方の境界で分割すること
+    #[test]
+    fn test_split_identifier_mixed_separators_and_camel_case() {
+        assert_eq!(split_identifier("myVar_name"), vec!["my", "var", "name"]);
+        assert_eq!(
+            split_identifier("getHTTPResponse_code"),
+            vec!["get", "http", "response", "code"]
+        );
+        assert_eq!(
+            split_identifier("fooBar-baz qux"),
+            vec!["foo", "bar", "baz", "qux"]
+        );
+        assert_eq!(to_snake_case("myVar_name"), "my_var_name");
+        assert_eq!(
+            to_kebab_case("getHTTPResponse_code"),
+            "get-http-response-code"
+        );
     }
 
     /// `to_camel_case` の基本変換できるようにすること

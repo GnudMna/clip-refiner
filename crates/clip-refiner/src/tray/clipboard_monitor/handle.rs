@@ -30,6 +30,17 @@ pub(crate) enum ClipboardObserveResult {
     ClipboardWritten,
 }
 
+/// クリップボード変更を検知した経路
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClipboardTrigger {
+    /// イベント監視で変更を検知した。同一内容の再コピーも加工する
+    Event,
+    /// ポーリングで変更トークンの更新を確認した
+    PollingChanged,
+    /// ポーリングで変更トークンを取得できず、変更の有無を確認できない
+    PollingUnconfirmed,
+}
+
 // ======================================================================
 // クリップボード更新処理
 // ======================================================================
@@ -84,7 +95,7 @@ pub(crate) fn recover_continuous_record_on_reset(
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
 /// * `snap` - ループ先頭で取得済みの設定スナップショット
-/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
+/// * `trigger` - 変更を検知した経路
 /// * `ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 ///
 /// # Returns
@@ -93,7 +104,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
     clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
-    event_driven: bool,
+    trigger: ClipboardTrigger,
     ctx: &RefineContext,
 ) -> ClipboardObserveResult {
     if !snap.auto_processing_enabled() {
@@ -113,10 +124,12 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
     };
 
     if text.is_empty() {
-        if !snap.produces_image() {
+        // テキストの無い画像は本文で重複を判定できないため、変更を確認できた場合のみ加工する
+        if !snap.produces_image() || trigger == ClipboardTrigger::PollingUnconfirmed {
             return ClipboardObserveResult::Observed;
         }
     } else {
+        let event_driven = trigger == ClipboardTrigger::Event;
         let should_process = state
             .clipboard_session()
             .with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
@@ -446,7 +459,7 @@ mod tests {
             &mut clipboard,
             &state,
             &snap,
-            true,
+            ClipboardTrigger::Event,
             &RefineContext::default(),
         );
 
@@ -458,6 +471,46 @@ mod tests {
             .clipboard_session()
             .with_processed_state(|s| s.clone());
         assert!(!ps.matches_last_seen("  secret  "));
+    }
+
+    /// ポーリングで変更を確認できないときは、テキストの無い画像を加工しないこと
+    #[test]
+    fn handle_update_skips_textless_image_when_polling_change_unconfirmed() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::ExcelToImage], false, false);
+        let mut clipboard =
+            InMemoryTextClipboard::with_text("").with_source_image(1, 1, vec![0; 4]);
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::PollingUnconfirmed,
+            &RefineContext::default(),
+        );
+
+        assert_eq!(result, ClipboardObserveResult::Observed);
+        assert_eq!(clipboard.written_image_size(), None);
+    }
+
+    /// ポーリングで変更トークンの更新を確認したときは、テキストの無い画像を加工すること
+    #[test]
+    fn handle_update_processes_textless_image_when_polling_change_confirmed() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::ExcelToImage], false, false);
+        let mut clipboard =
+            InMemoryTextClipboard::with_text("").with_source_image(1, 1, vec![0; 4]);
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::PollingChanged,
+            &RefineContext::default(),
+        );
+
+        assert_eq!(result, ClipboardObserveResult::ClipboardWritten);
+        assert_eq!(clipboard.written_image_size(), Some((1, 1)));
     }
 
     /// 監視除外指定付きの内容は連続記録キューへ積まないようにすること

@@ -215,17 +215,24 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
 }
 
 /// Markdownテーブル行をパースしてセル配列のリストを返す
+///
+/// 区切り行とみなすのは表の 2 行目 (見出し行の直後) だけとする (GFM と同じ)。
+/// 見出しやデータ行のセルがすべて `-` でも (`| - | - |`) データとして残す
 fn parse_markdown_table_rows(text: &str) -> Vec<Vec<String>> {
     let mut records = Vec::new();
+    // 連続する表の行のうち何行目か (`|` を含まない行で表が途切れる)
+    let mut row_in_table = 0;
 
     for line in text.lines() {
         let trimmed = line.trim();
         if !trimmed.contains('|') {
+            row_in_table = 0;
             continue;
         }
 
         let cells = split_table_row(trimmed);
-        if cells.is_empty() || is_separator_row(&cells) {
+        row_in_table += 1;
+        if row_in_table == 2 && is_separator_row(&cells) {
             continue;
         }
 
@@ -262,11 +269,13 @@ fn split_table_row(line: &str) -> Vec<String> {
 }
 
 /// 区切り行 (`|---|`, `|:---:|` など) かどうかを判定する
+///
+/// 全セルが `-` を含む必要がある。空セルだけの行 (`|  |  |`) はデータ行として残す。
 fn is_separator_row(cells: &[String]) -> bool {
     cells.iter().all(|cell| {
         let trimmed = cell.trim();
-        trimmed.is_empty()
-            || trimmed
+        trimmed.contains('-')
+            && trimmed
                 .chars()
                 .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
     })
@@ -389,6 +398,29 @@ mod tests {
         let input = "| Col |\n|---|\n| a<br>b |";
         let output = markdown_table_to_excel(input);
         assert_eq!(output, "Col\n\"a\nb\"");
+    }
+
+    /// `markdown_table_to_excel`: 中身が空の行を区切り行とみなさず残すこと
+    #[test]
+    fn test_markdown_table_to_excel_keeps_empty_row() {
+        let input = "| A | B |\n|:---|---:|\n| 1 | 2 |\n|  |  |\n| 3 | 4 |";
+        let output = markdown_table_to_excel(input);
+        // 空行は空セルのみの TSV 行として位置を保つ
+        assert_eq!(output, "A\tB\n1\t2\n\t\n3\t4");
+    }
+
+    /// `markdown_table_to_excel`: セルがすべて `-` の見出し・データ行を区切り行とみなさず残すこと
+    #[test]
+    fn test_markdown_table_to_excel_keeps_dash_only_rows() {
+        let input = "| - | - |\n|---|---|\n| 1 | 2 |\n| - | :-: |";
+        assert_eq!(markdown_table_to_excel(input), "-\t-\n1\t2\n-\t:-:");
+    }
+
+    /// `markdown_table_to_excel`: 表ごとに 2 行目の区切り行を読み飛ばすこと
+    #[test]
+    fn test_markdown_table_to_excel_skips_separator_per_table() {
+        let input = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
+        assert_eq!(markdown_table_to_excel(input), "A\n1\nB\n2");
     }
 
     /// `markdown_table_to_excel`: 空入力は元の文字列を返すようにすること

@@ -8,7 +8,7 @@ use crate::refiner::text_clipboard::TextClipboard;
 use crate::refiner::{RefineContext, RefineMode};
 use crate::security::secret_from;
 use crate::tray::clipboard_monitor::{
-    ClipboardObserveResult, handle_clipboard_update, observe_continuous_record,
+    ClipboardObserveResult, ClipboardTrigger, handle_clipboard_update, observe_continuous_record,
 };
 use crate::tray::state::test_app_state;
 use crate::tray::worker::{ClipboardCommand, handle_command};
@@ -297,7 +297,8 @@ impl ClipboardHarness {
 
     /// 監視ループのクリップボード更新処理を実行する
     ///
-    /// `event_driven` は OS イベント通知を受けたかどうかを表し、
+    /// `event_driven` は OS イベント通知を受けたかどうかを表す。`false` のときは
+    /// ポーリングで変更トークンの更新を確認した場合として扱う。
     /// `MonitorMode::Event` 設定時のワーカー挙動と一致させる場合は
     /// [`Self::run_configured_monitor_update`] を使う
     ///
@@ -320,7 +321,11 @@ impl ClipboardHarness {
             &mut self.clipboard,
             &self.state,
             &snap,
-            event_driven,
+            if event_driven {
+                ClipboardTrigger::Event
+            } else {
+                ClipboardTrigger::PollingChanged
+            },
             &self.refine_ctx,
         ) == ClipboardObserveResult::ClipboardWritten
     }

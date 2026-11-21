@@ -32,12 +32,24 @@ const SETTINGS_CSS: &str = concat!(
 
 /// 解釈に失敗した IPC メッセージを警告ログへ出力する
 pub(super) fn log_unparsed_settings_ipc(msg: &str) {
-    let preview = if msg.len() > IPC_LOG_PREVIEW_MAX_LEN {
-        format!("{}...", &msg[..IPC_LOG_PREVIEW_MAX_LEN])
-    } else {
-        msg.to_string()
-    };
-    crate::log_warn!("設定 IPC メッセージの解釈に失敗: {}", preview);
+    crate::log_warn!("設定 IPC メッセージの解釈に失敗: {}", ipc_log_preview(msg));
+}
+
+/// ログ出力用に IPC メッセージを先頭 `IPC_LOG_PREVIEW_MAX_LEN` バイト以内へ切り詰める
+///
+/// 上限位置が UTF-8 の文字途中に当たる場合は直前の文字境界で切る
+///
+/// # Arguments
+/// * `msg` - 切り詰め対象の IPC メッセージ
+///
+/// # Returns
+/// * `String` - 上限超過時は末尾に `...` を付けた先頭部分、それ以外は `msg` の複製
+fn ipc_log_preview(msg: &str) -> String {
+    if msg.len() <= IPC_LOG_PREVIEW_MAX_LEN {
+        return msg.to_string();
+    }
+    let end = msg.floor_char_boundary(IPC_LOG_PREVIEW_MAX_LEN);
+    format!("{}...", &msg[..end])
 }
 
 /// 設定ウィンドウ用 JavaScript バンドルを返す
@@ -70,7 +82,32 @@ pub(super) fn assemble_settings_html() -> String {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::{CLOSE_FROM_OS_SCRIPT, assemble_settings_html, assemble_settings_js};
+    use super::{
+        CLOSE_FROM_OS_SCRIPT, IPC_LOG_PREVIEW_MAX_LEN, assemble_settings_html,
+        assemble_settings_js, ipc_log_preview,
+    };
+
+    /// 上限以下の IPC メッセージはそのままログ用プレビューにすること
+    #[test]
+    fn ipc_log_preview_keeps_short_message() {
+        let msg = "a".repeat(IPC_LOG_PREVIEW_MAX_LEN);
+        assert_eq!(ipc_log_preview(&msg), msg);
+    }
+
+    /// 上限位置が UTF-8 の文字途中でも panic せず直前の文字境界で切り詰めること
+    #[test]
+    fn ipc_log_preview_truncates_at_char_boundary() {
+        // 先頭 1 バイトで以降の 3 バイト文字の境界を上限位置からずらす
+        let msg = format!("a{}", "設".repeat(IPC_LOG_PREVIEW_MAX_LEN));
+        assert!(!msg.is_char_boundary(IPC_LOG_PREVIEW_MAX_LEN));
+
+        let preview = ipc_log_preview(&msg);
+        let body = preview.strip_suffix("...").expect("末尾に ... が付くこと");
+        assert!(body.len() <= IPC_LOG_PREVIEW_MAX_LEN);
+        assert!(msg.starts_with(body));
+        // 切り捨て幅は 1 文字分 (3 バイト) 未満
+        assert!(IPC_LOG_PREVIEW_MAX_LEN - body.len() < 3);
+    }
 
     /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれるようにすること
     #[test]

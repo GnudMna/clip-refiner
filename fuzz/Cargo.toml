@@ -1,0 +1,70 @@
+# パーサ系変換の cargo-fuzz ターゲット
+#
+# nightly が必要なため、ルートのワークスペースには含めない (`[workspace]` で独立させる)
+# 実行: ./scripts/windows/fuzz.ps1 (詳細は docs/dev/testing.md の「ファジング」)
+
+[package]
+name = "clip-refiner-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+clip-refiner-core = { path = "../crates/clip-refiner-core", default-features = false }
+libfuzzer-sys = "0.4.10"
+serde_json = "1.0.150"
+strum = "0.28.0"
+
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "all_modes"
+path = "fuzz_targets/all_modes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "line_sort"
+path = "fuzz_targets/line_sort.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown_table"
+path = "fuzz_targets/markdown_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "yaml"
+path = "fuzz_targets/yaml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html"
+path = "fuzz_targets/html.rs"
+test = false
+doc = false
+bench = false

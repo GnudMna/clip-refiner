@@ -87,6 +87,7 @@ impl OneshotIpcServer {
     ///
     /// # Errors
     /// 待受スレッドの起動に失敗した場合
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     pub(crate) fn start_named(
         worker: Arc<ClipboardWorkerHandle>,
         pipe_name: String,

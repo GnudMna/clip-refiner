@@ -8,6 +8,7 @@
 - `crates/clip-refiner` — デスクトップアプリ (トレイ常駐・WebView UI・IPC・OS 連携)。core API は re-export しない
 - `crates/clip-refiner/src/ui/` — WebView UI の JavaScript。`*.bundle.js` は esbuild 生成物のため直接編集せず、`npm run build:ui` で再生成してソースと同じコミットに含める
 - `e2e/` — Playwright + WebView2 による UI E2E
+- `fuzz/` — パーサ系変換の cargo-fuzz ターゲット (nightly が必要なためワークスペース外。`check.ps1` に含めない)
 - `scripts/windows/` — 開発者向けエントリポイント (PowerShell 7 で実行)。実処理は `scripts/common/` に置く
 
 第三者クレートの版はルート `Cargo.toml` の `[workspace.dependencies]` に置き、メンバ側は `workspace = true` で参照する。
@@ -23,6 +24,7 @@ cargo test -p clip-refiner-core --no-default-features --all-targets
 ./scripts/windows/format.ps1        # rustfmt + Prettier
 npm run build:ui                    # UI バンドル再生成
 npm run lint                        # ESLint
+./scripts/windows/fuzz.ps1          # ファジング (nightly + cargo-fuzz。不定期にローカルで実行)
 
 # 完了前の品質チェック一式 (fmt / clippy / deny / eslint / test / e2e)
 ./scripts/windows/check.ps1
@@ -36,6 +38,7 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 - 設定キー・既定値・処理上限・既定ホットキー・`CONFIG_VERSION` → `docs/user/configuration.md` の設定項目表 / 処理の制限、README のホットキー表 (`crates/clip-refiner-core/src/config/spec.rs` が検証)
 - UI の JavaScript → `*.bundle.js` を再生成 (`tests/ui_bundle_flow.rs` が検証)
+- ディレクトリ・ファイルの移動 / 改名 / 削除 → `docs/dev/architecture.md` の構成図と表 (`tests/architecture_doc_flow.rs` が検証)。同書はディレクトリ・命名規則の単位で書き、ファイル単位の責務表を増やさない
 - 利用者に見える挙動 → README / `docs/user/` の該当節
 
 ドキュメントは常体 (だ・である調) で書く。

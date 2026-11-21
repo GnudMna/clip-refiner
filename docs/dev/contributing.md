@@ -48,5 +48,6 @@ JavaScript は ESLint / Prettier の設定に従う ([JavaScript リンター](t
 | 既定ホットキー | README のホットキー表、`docs/user/configuration.md` の `[hotkeys]` |
 | 利用者向けの挙動 | README / `docs/user/` の該当節、[CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` |
 | UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`ui_bundle_flow.rs` が検出) |
+| ディレクトリ・ファイルの移動 / 改名 / 削除 | [アーキテクチャ](architecture.md) の構成図と表 (`architecture_doc_flow.rs` が実在しないパスを検出) |
 
 公開 API の破壊的変更は CHANGELOG の **Breaking changes** / **Changed** / **Removed** へ書き、設定スキーマ変更は **Settings** 節にも移行方法を記載する。
