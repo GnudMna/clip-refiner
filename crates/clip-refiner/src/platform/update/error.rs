@@ -90,6 +90,9 @@ pub(crate) enum UpdateError {
         /// HTTP ステータスコード
         status: u16,
     },
+    /// ダウンロードの認証失敗 (`401`)
+    #[error("更新ファイルのダウンロードが認証に失敗しました")]
+    DownloadUnauthorized,
     /// ダウンロードの一般失敗 (読み取り含む)
     #[error("更新ファイルのダウンロードに失敗しました")]
     DownloadFailed,

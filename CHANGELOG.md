@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-07-31
+
+### Security
+
+- アプリ更新: gh-release-bridge の保護範囲アセット DL にビルド時埋め込みキー (`CLIP_REFINER_KEY`) を `Authorization: Bearer` で送るようにした。認証失敗 (`401`) は専用エラーとして案内する
+
+### Added
+
+- アプリ更新の統合テスト: モック bridge のキー必須 DL (成功 / キー無し / 誤キー) をカバーする
+- リリーススクリプト (`release.ps1`): 環境変数 `CLIP_REFINER_KEY` が未設定のとき失敗するようにした
+
 ## [0.14.2] - 2026-07-31
 
 ### Added
@@ -513,7 +524,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...develop
+[0.14.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...v0.14.3
 [0.14.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...v0.14.2
 [0.14.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...v0.14.1
 [0.14.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...v0.14.0

@@ -14,6 +14,8 @@ fn main() {
     // アイコンパスを再実行条件に追加
     println!("cargo:rerun-if-changed={ICON_PATH}");
     println!("cargo:rerun-if-changed=../../assets/icon.png");
+    // bridge ダウンロードキー (未設定時は埋め込みなし)
+    println!("cargo:rerun-if-env-changed=CLIP_REFINER_KEY");
 
     let mut res = winres::WindowsResource::new();
 

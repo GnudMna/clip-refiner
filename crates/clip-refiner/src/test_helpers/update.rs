@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::platform::update::{RELEASE_OWNER, RELEASE_REPO, apply_update_at, check_for_update_at};
+use crate::platform::update::{
+    RELEASE_OWNER, RELEASE_REPO, apply_update_at, apply_update_at_with_key, check_for_update_at,
+};
 
 use sha2::{Digest, Sha256};
 use zip::ZipWriter;
@@ -46,6 +48,8 @@ struct BridgeRoutes {
     version_body: Option<Vec<u8>>,
     /// パス (`/{owner}/{repo}/{tag}/{asset}`) → 本文
     assets: HashMap<String, Vec<u8>>,
+    /// アセット DL に要求する Bearer キー (`None` ならキー不要)
+    required_asset_key: Option<String>,
 }
 
 impl MockReleaseBridge {
@@ -131,6 +135,20 @@ impl MockReleaseBridge {
             .assets
             .insert(path, body.into());
     }
+
+    /// アセット DL に要求する Bearer キーを設定する
+    ///
+    /// version API はキー不要のまま。`None` 相当の空文字はキー不要へ戻す
+    ///
+    /// # Arguments
+    /// * `key` - 期待する共有キー
+    pub fn set_required_asset_key(&self, key: impl Into<String>) {
+        let key = key.into();
+        self.routes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .required_asset_key = if key.is_empty() { None } else { Some(key) };
+    }
 }
 
 impl Drop for MockReleaseBridge {
@@ -170,6 +188,8 @@ pub fn check_update_at(
 
 /// モック bridge 向けに更新を適用する (外部プロセスは起動しない)
 ///
+/// ダウンロードキーはビルド埋め込み値を使う
+///
 /// # Arguments
 /// * `update` - 確認済み更新
 /// * `base_url` - モックのベース URL
@@ -181,6 +201,28 @@ pub fn apply_update_for_test(update: &AvailableUpdate, base_url: &str) -> Update
         update,
         base_url,
         crate::platform::update::ApplyOptions::TEST,
+    )
+}
+
+/// 指定キーでモック bridge 向けに更新を適用する (外部プロセスは起動しない)
+///
+/// # Arguments
+/// * `update` - 確認済み更新
+/// * `base_url` - モックのベース URL
+/// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+///
+/// # Returns
+/// * `UpdateApplyOutcome` - 適用結果
+pub fn apply_update_for_test_with_key(
+    update: &AvailableUpdate,
+    base_url: &str,
+    download_key: Option<&str>,
+) -> UpdateApplyOutcome {
+    apply_update_at_with_key(
+        update,
+        base_url,
+        crate::platform::update::ApplyOptions::TEST,
+        download_key,
     )
 }
 
@@ -289,6 +331,7 @@ fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io
             }
         })
         .unwrap_or_default();
+    let bearer = extract_bearer(&request);
 
     let version_path = format!("/{RELEASE_OWNER}/{RELEASE_REPO}/version");
     let response = {
@@ -296,12 +339,21 @@ fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if path == version_path {
+            // version API はキー不要
             match &guard.version_body {
                 Some(body) => http_response(200, "application/json", body),
                 None => http_response(404, "text/plain", b"not found"),
             }
         } else if let Some(body) = guard.assets.get(&path) {
-            http_response(200, "application/octet-stream", body)
+            if let Some(required) = guard.required_asset_key.as_deref() {
+                if bearer == Some(required) {
+                    http_response(200, "application/octet-stream", body)
+                } else {
+                    http_response(401, "text/plain", b"unauthorized")
+                }
+            } else {
+                http_response(200, "application/octet-stream", body)
+            }
         } else {
             http_response(404, "text/plain", b"not found")
         }
@@ -313,10 +365,37 @@ fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io
     Ok(())
 }
 
+/// リクエストから `Authorization: Bearer` のトークンを取り出す
+fn extract_bearer(request: &str) -> Option<&str> {
+    for line in request.lines() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed
+            .strip_prefix("Authorization:")
+            .or_else(|| trimmed.strip_prefix("authorization:"))
+        else {
+            continue;
+        };
+        let rest = rest.trim();
+        let Some(token) = rest
+            .strip_prefix("Bearer ")
+            .or_else(|| rest.strip_prefix("bearer "))
+            .or_else(|| rest.strip_prefix("BEARER "))
+        else {
+            continue;
+        };
+        let token = token.trim();
+        if !token.is_empty() {
+            return Some(token);
+        }
+    }
+    None
+}
+
 /// 最小限の HTTP/1.1 レスポンスを組み立てる
 fn http_response(status: u16, content_type: &str, body: &[u8]) -> Vec<u8> {
     let reason = match status {
         200 => "OK",
+        401 => "Unauthorized",
         404 => "Not Found",
         _ => "Error",
     };

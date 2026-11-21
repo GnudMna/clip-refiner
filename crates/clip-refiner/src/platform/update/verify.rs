@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
+use super::bridge_download_key;
 use super::error::UpdateError;
 
 use sha2::{Digest, Sha256};
@@ -74,7 +75,8 @@ pub(crate) fn validate_declared_download_size(expected_size: u64) -> Result<(), 
 /// URL からファイルへダウンロードし、サイズと SHA-256 を検証する
 ///
 /// 期待サイズ超過または絶対上限超過の時点で読み取りを打ち切る。
-/// 検証に失敗した場合は保存済みファイルを削除する
+/// 検証に失敗した場合は保存済みファイルを削除する。
+/// ビルド埋め込みキーがあれば `Authorization: Bearer` を付与する
 ///
 /// # Arguments
 /// * `url` - ダウンロード URL
@@ -90,7 +92,36 @@ pub(crate) fn download_and_verify(
     expected_size: u64,
     expected_sha256: &str,
 ) -> Result<(), UpdateError> {
-    let result = download_and_verify_inner(url, dest, expected_size, expected_sha256);
+    download_and_verify_with_key(
+        url,
+        dest,
+        expected_size,
+        expected_sha256,
+        bridge_download_key(),
+    )
+}
+
+/// 指定キーで URL からダウンロードし、サイズと SHA-256 を検証する
+///
+/// テストからキーを差し替えるときに使う。本番は `download_and_verify` 経由
+///
+/// # Arguments
+/// * `url` - ダウンロード URL
+/// * `dest` - 保存先パス
+/// * `expected_size` - 期待バイト数 (0 は拒否)
+/// * `expected_sha256` - 期待する SHA-256 (小文字16進 64 桁)
+/// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+///
+/// # Returns
+/// * `Result<(), UpdateError>` - 成功時 `Ok(())`
+pub(crate) fn download_and_verify_with_key(
+    url: &str,
+    dest: &Path,
+    expected_size: u64,
+    expected_sha256: &str,
+    download_key: Option<&str>,
+) -> Result<(), UpdateError> {
+    let result = download_and_verify_inner(url, dest, expected_size, expected_sha256, download_key);
     if result.is_err() {
         let _ = fs::remove_file(dest);
     }
@@ -106,12 +137,18 @@ fn download_and_verify_inner(
     dest: &Path,
     expected_size: u64,
     expected_sha256: &str,
+    download_key: Option<&str>,
 ) -> Result<(), UpdateError> {
     validate_declared_download_size(expected_size)?;
 
-    let mut response = ureq::get(url).call().map_err(|err| {
+    let mut request = ureq::get(url);
+    if let Some(key) = download_key {
+        request = request.header("Authorization", &format!("Bearer {key}"));
+    }
+    let mut response = request.call().map_err(|err| {
         crate::log_warn!("更新ダウンロード HTTP 失敗: {err}");
         match err {
+            ureq::Error::StatusCode(401) => UpdateError::DownloadUnauthorized,
             ureq::Error::StatusCode(status) => UpdateError::DownloadHttp { status },
             _ => UpdateError::DownloadFailed,
         }

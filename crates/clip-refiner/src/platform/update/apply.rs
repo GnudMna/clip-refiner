@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use super::error::UpdateError;
 use super::replace::{current_install_dir, launch_portable_replace_helper};
 use super::types::{AvailableUpdate, UpdateApplyOutcome};
-use super::verify::download_and_verify;
+use super::verify::{download_and_verify, download_and_verify_with_key};
 use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO};
 
 use zip::ZipArchive;
@@ -56,7 +56,8 @@ pub(crate) fn apply_update(update: &AvailableUpdate) -> UpdateApplyOutcome {
 
 /// 指定した bridge ベース URL で更新アセットをダウンロードして適用する
 ///
-/// 統合テストからローカル HTTP サーバへ向けて呼び出す
+/// 統合テストからローカル HTTP サーバへ向けて呼び出す。
+/// ダウンロードキーはビルド埋め込み値を使う
 ///
 /// # Arguments
 /// * `update` - 確認済みの更新アセット情報
@@ -77,17 +78,66 @@ pub(crate) fn apply_update_at(
     };
 
     let archive_path = work_dir.join(&update.asset_name);
+    // ビルド埋め込みキーを使う
     if let Err(err) = download_and_verify(&download_url, &archive_path, update.size, &update.sha256)
     {
         return err.into();
     }
 
+    apply_downloaded_asset(update, &archive_path, &work_dir, options)
+}
+
+/// 指定キーで bridge から更新アセットをダウンロードして適用する
+///
+/// 統合テストからキー有無を差し替えるときに使う
+///
+/// # Arguments
+/// * `update` - 確認済みの更新アセット情報
+/// * `base_url` - bridge のベース URL (末尾スラッシュなし)
+/// * `options` - 外部プロセス起動の有無
+/// * `download_key` - bridge ダウンロードキー (`None` なら無認証)
+///
+/// # Returns
+/// * `UpdateApplyOutcome` - 適用結果
+pub(crate) fn apply_update_at_with_key(
+    update: &AvailableUpdate,
+    base_url: &str,
+    options: ApplyOptions,
+    download_key: Option<&str>,
+) -> UpdateApplyOutcome {
+    let download_url = asset_download_url(base_url, &update.tag, &update.asset_name);
+    let work_dir = match update_work_dir(&update.latest_version) {
+        Ok(dir) => dir,
+        Err(err) => return err.into(),
+    };
+
+    let archive_path = work_dir.join(&update.asset_name);
+    if let Err(err) = download_and_verify_with_key(
+        &download_url,
+        &archive_path,
+        update.size,
+        &update.sha256,
+        download_key,
+    ) {
+        return err.into();
+    }
+
+    apply_downloaded_asset(update, &archive_path, &work_dir, options)
+}
+
+/// ダウンロード済みアセットを MSI / ポータブルへ振り分ける
+fn apply_downloaded_asset(
+    update: &AvailableUpdate,
+    archive_path: &Path,
+    work_dir: &Path,
+    options: ApplyOptions,
+) -> UpdateApplyOutcome {
     if Path::new(&update.asset_name)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("msi"))
     {
         if options.launch_msi {
-            return launch_msi(&archive_path);
+            return launch_msi(archive_path);
         }
         return UpdateApplyOutcome::MsiStarted;
     }
@@ -97,7 +147,7 @@ pub(crate) fn apply_update_at(
         .to_ascii_lowercase()
         .ends_with("-portable.zip")
     {
-        return extract_portable_zip(&archive_path, &work_dir, options);
+        return extract_portable_zip(archive_path, work_dir, options);
     }
 
     UpdateError::UnsupportedAsset {

@@ -7,6 +7,7 @@
 # Requires    : PowerShell 7.0+, Git
 #
 # 前提:
+#   - 環境変数 CLIP_REFINER_KEY を設定すること (gh-release-bridge ダウンロードキー。ビルド時埋め込み)
 #   - release/v{version} ブランチ上で実行すること (ブランチ名と更新バージョンが一致必須)
 #   - Git タグは Gitea 上で付与する (本スクリプトでは作成しない)
 #
@@ -59,6 +60,12 @@ Invoke-ScriptMain {
 
     if ($Version -and $Bump) {
         throw 'エラー: -Version と -Bump は同時に指定できません'
+    }
+
+    # gh-release-bridge の保護範囲 DL 用キー (ビルド時にバイナリへ埋め込まれる)
+    $bridgeDownloadKey = [Environment]::GetEnvironmentVariable('CLIP_REFINER_KEY')
+    if ([string]::IsNullOrWhiteSpace($bridgeDownloadKey)) {
+        throw 'エラー: 環境変数 CLIP_REFINER_KEY が未設定または空です (gh-release-bridge のダウンロードキー。ビルド時に埋め込まれます)'
     }
 
     $currentVersion = Get-WorkspaceVersion -ProjectRoot $ProjectRoot

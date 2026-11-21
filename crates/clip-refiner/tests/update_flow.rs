@@ -6,7 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use clip_refiner::test_helpers::{
     MockReleaseBridge, UpdateApplyOutcome, UpdateCheckOutcome, UpdatePackageKind,
-    apply_update_for_test, build_portable_zip_fixture, check_update_at, version_api_json,
+    apply_update_for_test, apply_update_for_test_with_key, build_portable_zip_fixture,
+    check_update_at, version_api_json,
 };
 
 /// ケースごとに一意なバージョン末尾を割り当てる
@@ -320,6 +321,132 @@ fn update_flow_errors_when_version_api_missing() {
         }
         other => panic!("想定外: {other:?}"),
     }
+}
+
+/// キー必須のアセットを正しい Bearer で適用できること
+#[test]
+fn update_flow_applies_with_required_download_key() {
+    let version = unique_version();
+    let tag = format!("v{version}");
+    let asset_name = portable_asset_name(&version);
+    let marker = b"keyed-portable-ok";
+    let (zip_bytes, digest, size) = build_portable_zip_fixture(marker);
+    let key = "test-clip-refiner-key";
+
+    let bridge = MockReleaseBridge::start();
+    bridge.set_required_asset_key(key);
+    bridge.set_version_json(version_api_json(
+        &tag,
+        &asset_name,
+        size,
+        Some(&format!("sha256:{digest}")),
+    ));
+    bridge.set_asset(&tag, &asset_name, zip_bytes);
+
+    // version API はキー不要のまま確認できる
+    let update = match check_update_at(
+        bridge.base_url(),
+        "0.1.0",
+        UpdatePackageKind::PortableZip,
+        std::env::consts::ARCH,
+    ) {
+        UpdateCheckOutcome::Available(update) => update,
+        other => panic!("想定外の確認結果: {other:?}"),
+    };
+
+    let apply = apply_update_for_test_with_key(&update, bridge.base_url(), Some(key));
+    let path = match apply {
+        UpdateApplyOutcome::PortableExtracted {
+            path,
+            helper_launched,
+        } => {
+            assert!(!helper_launched);
+            PathBuf::from(path)
+        }
+        other => panic!("想定外の適用結果: {other:?}"),
+    };
+    let content = fs::read_to_string(path.join("PORTABLE.txt")).expect("PORTABLE.txt");
+    assert_eq!(content.as_bytes(), marker);
+
+    cleanup_update_work_dir(&version);
+}
+
+/// キー必須のアセットをキー無しで適用すると認証エラーになること
+#[test]
+fn update_flow_errors_when_download_key_missing() {
+    let version = unique_version();
+    let tag = format!("v{version}");
+    let asset_name = portable_asset_name(&version);
+    let (zip_bytes, digest, size) = build_portable_zip_fixture(b"keyed-denied");
+
+    let bridge = MockReleaseBridge::start();
+    bridge.set_required_asset_key("expected-key");
+    bridge.set_version_json(version_api_json(
+        &tag,
+        &asset_name,
+        size,
+        Some(&format!("sha256:{digest}")),
+    ));
+    bridge.set_asset(&tag, &asset_name, zip_bytes);
+
+    let update = match check_update_at(
+        bridge.base_url(),
+        "0.1.0",
+        UpdatePackageKind::PortableZip,
+        std::env::consts::ARCH,
+    ) {
+        UpdateCheckOutcome::Available(update) => update,
+        other => panic!("想定外の確認結果: {other:?}"),
+    };
+
+    let apply = apply_update_for_test_with_key(&update, bridge.base_url(), None);
+    match apply {
+        UpdateApplyOutcome::Error { message } => {
+            assert!(message.contains("認証"));
+        }
+        other => panic!("想定外の適用結果: {other:?}"),
+    }
+
+    cleanup_update_work_dir(&version);
+}
+
+/// キー必須のアセットを誤ったキーで適用すると認証エラーになること
+#[test]
+fn update_flow_errors_when_download_key_wrong() {
+    let version = unique_version();
+    let tag = format!("v{version}");
+    let asset_name = portable_asset_name(&version);
+    let (zip_bytes, digest, size) = build_portable_zip_fixture(b"keyed-wrong");
+
+    let bridge = MockReleaseBridge::start();
+    bridge.set_required_asset_key("expected-key");
+    bridge.set_version_json(version_api_json(
+        &tag,
+        &asset_name,
+        size,
+        Some(&format!("sha256:{digest}")),
+    ));
+    bridge.set_asset(&tag, &asset_name, zip_bytes);
+
+    let update = match check_update_at(
+        bridge.base_url(),
+        "0.1.0",
+        UpdatePackageKind::PortableZip,
+        std::env::consts::ARCH,
+    ) {
+        UpdateCheckOutcome::Available(update) => update,
+        other => panic!("想定外の確認結果: {other:?}"),
+    };
+
+    let apply = apply_update_for_test_with_key(&update, bridge.base_url(), Some("wrong-key"));
+    match apply {
+        UpdateApplyOutcome::Error { message } => {
+            assert!(message.contains("認証"));
+        }
+        other => panic!("想定外の適用結果: {other:?}"),
+    }
+
+    cleanup_update_work_dir(&version);
 }
 
 /// MSI アセットもダウンロード検証まで通ること (`msiexec` は起動しない)
