@@ -15,6 +15,7 @@ import {
     showActivePanel,
     syncHotkeyInputsFromState,
     syncServerFields,
+    withPreservedScroll,
 } from './shared.js';
 
 import SettingsSharedLogic from './shared_logic.js';
@@ -61,10 +62,12 @@ function renderActivePanel(force = false) {
     showActivePanel();
 }
 
-/** アクティブタブのパネルを破棄して再描画する */
+/** アクティブタブのパネルを破棄して再描画する (スクロール位置は保つ) */
 export function refreshActivePanel() {
-    invalidatePanel(ctx.activeTab);
-    renderActivePanel(true);
+    withPreservedScroll(() => {
+        invalidatePanel(ctx.activeTab);
+        renderActivePanel(true);
+    });
 }
 
 /**
@@ -123,8 +126,10 @@ window.loadSettings = function loadSettings(snapshot, options) {
         )
     ) {
         ctx.clipRegisterPending = false;
-        invalidateAllPanels();
-        render(true);
+        withPreservedScroll(() => {
+            invalidateAllPanels();
+            render(true);
+        });
         return;
     }
 

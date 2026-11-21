@@ -9,6 +9,11 @@ import SettingsSharedLogic from './shared_logic.js';
 /** @type {Array<{ id: string, label: string, description: string }>} */
 export const TABS = [
     {
+        id: 'general',
+        label: '一般',
+        description: '一時停止・起動時の動作・更新など、アプリ全体の設定を管理する',
+    },
+    {
         id: 'convert',
         label: '変換',
         description: 'コピー時の自動変換・加工パイプライン・お気に入り変換モードを設定する',
@@ -34,9 +39,9 @@ export const TABS = [
         description: 'グローバルホットキーを編集する',
     },
     {
-        id: 'general',
-        label: '一般',
-        description: '一時停止・起動時の動作・更新など、アプリ全体の設定を管理する',
+        id: 'about',
+        label: '情報',
+        description: '利用者向けドキュメントと第三者ライセンスの表示を開く',
     },
 ];
 

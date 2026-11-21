@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::feedback::SettingsApplyFeedback;
 use super::patch::apply_settings_patch;
 use super::refresh::refresh_settings_window;
+use crate::platform::bundled_docs::{BundledDocument, open_bundled_document};
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
@@ -28,6 +29,8 @@ pub(crate) enum SettingsWindowCommand {
     ClearContinuousRecord,
     /// 設定ファイルを既定アプリで開く
     OpenConfigFile,
+    /// 同梱文書を既定アプリで開く
+    OpenDocument(BundledDocument),
 }
 
 /// 設定ウィンドウ内コマンドを処理する
@@ -78,6 +81,16 @@ pub(crate) fn handle_settings_window_command(
                 .notify_with_debug(&e);
                 settings.notify_apply_feedback(
                     &SettingsApplyFeedback::error(None, "設定ファイルを開けませんでした")
+                        .with_desktop_already_notified(),
+                );
+            }
+        }
+        SettingsWindowCommand::OpenDocument(document) => {
+            if let Err(e) = open_bundled_document(document) {
+                UserNotification::static_message(titles::SETTINGS, "文書を開けませんでした")
+                    .notify_with_debug(&e);
+                settings.notify_apply_feedback(
+                    &SettingsApplyFeedback::error(None, "文書を開けませんでした")
                         .with_desktop_already_notified(),
                 );
             }

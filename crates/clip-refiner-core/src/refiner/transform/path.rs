@@ -223,6 +223,14 @@ mod tests {
         assert_eq!(add_path_quotes(input), expected);
     }
 
+    /// CRLF と LF が混在していても行ごとに引用符を付与すること
+    #[test]
+    fn test_add_path_quotes_mixed_line_endings() {
+        let input = "C:\\a\r\nfoo\nC:\\b";
+        let expected = "\"C:\\a\"\r\nfoo\n\"C:\\b\"";
+        assert_eq!(add_path_quotes(input), expected);
+    }
+
     /// スラッシュ区切りへの変換できるようにすること
     #[test]
     fn test_convert_to_forward_slash() {

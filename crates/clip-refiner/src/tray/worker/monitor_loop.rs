@@ -76,17 +76,17 @@ impl MonitorLoopState {
         self.event_fallback_warned = false;
     }
 
-    /// 設定と環境に応じた実効監視モードを返す
+    /// 設定値と環境に応じた実効監視モードを返す
     ///
     /// イベント監視が利用できない場合はポーリング方式にフォールバックする
     ///
     /// # Arguments
-    /// * `state` - アプリケーションの共有状態
+    /// * `configured` - 設定上の監視方式
     ///
     /// # Returns
     /// * `MonitorMode` - 実際に使用する監視方式
-    pub fn effective_mode(state: &Arc<AppState>) -> MonitorMode {
-        match state.with_config(|c| c.monitor_mode) {
+    pub fn effective_mode(configured: MonitorMode) -> MonitorMode {
+        match configured {
             MonitorMode::Event if clipboard_seq::supports_event_monitor() => MonitorMode::Event,
             MonitorMode::Event | MonitorMode::Polling => MonitorMode::Polling,
         }
@@ -121,7 +121,9 @@ impl MonitorLoopState {
             return Duration::from_millis(100);
         }
 
-        if snap.continuous_record_enabled || Self::effective_mode(state) == MonitorMode::Event {
+        if snap.continuous_record_enabled
+            || Self::effective_mode(snap.monitor_mode) == MonitorMode::Event
+        {
             if listener_active {
                 return idle_timeout;
             }
@@ -144,7 +146,7 @@ impl MonitorLoopState {
     pub fn tick(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
         let snap = state.monitor_snapshot();
 
-        if state.with_config(|c| c.monitor_mode) == MonitorMode::Event
+        if snap.monitor_mode == MonitorMode::Event
             && !clipboard_seq::supports_event_monitor()
             && !self.event_fallback_warned
         {
@@ -154,17 +156,15 @@ impl MonitorLoopState {
             self.event_fallback_warned = true;
         }
 
-        self.refine_ctx.regex = snap.regex_settings.clone();
-
         if snap.continuous_record_enabled {
-            self.tick_continuous_record(clipboard, state);
+            self.tick_continuous_record(clipboard, state, &snap);
         }
 
         if !snap.auto_processing_enabled() {
             return;
         }
 
-        match Self::effective_mode(state) {
+        match Self::effective_mode(snap.monitor_mode) {
             MonitorMode::Event => self.tick_event_processing(clipboard, state, &snap),
             MonitorMode::Polling => self.tick_polling_processing(clipboard, state, &snap),
         }
@@ -173,7 +173,12 @@ impl MonitorLoopState {
     /// 連続記録向けにクリップボード変更を検知する
     ///
     /// 監視方式に依存せず変更トークンで検知する (`ClipboardChanged` 起床後も同じ判定)
-    fn tick_continuous_record(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
+    fn tick_continuous_record(
+        &mut self,
+        clipboard: &mut OwnedClipboard,
+        state: &Arc<AppState>,
+        snap: &super::super::state::MonitorSnapshot,
+    ) {
         if let Some(token) = clipboard_seq::token() {
             if token != self.last_token {
                 let result = clipboard_monitor::observe_continuous_record(clipboard, state);
@@ -182,8 +187,7 @@ impl MonitorLoopState {
             return;
         }
 
-        let interval_ms = state.with_config(|c| c.interval_ms);
-        if self.last_poll_at.elapsed() >= Duration::from_millis(interval_ms) {
+        if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
             let _ = clipboard_monitor::observe_continuous_record(clipboard, state);
             self.last_poll_at = Instant::now();
         }
@@ -203,6 +207,7 @@ impl MonitorLoopState {
             return;
         }
 
+        state.sync_regex_settings(&mut self.refine_ctx.regex);
         let result = clipboard_monitor::handle_clipboard_update(
             clipboard,
             state,
@@ -238,6 +243,7 @@ impl MonitorLoopState {
         } else {
             ClipboardTrigger::PollingUnconfirmed
         };
+        state.sync_regex_settings(&mut self.refine_ctx.regex);
         let result = clipboard_monitor::handle_clipboard_update(
             clipboard,
             state,

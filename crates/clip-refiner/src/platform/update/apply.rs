@@ -15,6 +15,7 @@ use super::{
     BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME, bridge_download_key,
     system_exe_path,
 };
+use crate::platform::shell::shell_open;
 
 // ======================================================================
 // パブリック関数
@@ -408,8 +409,14 @@ fn find_portable_root(extract_dir: &Path) -> Option<PathBuf> {
 }
 
 /// エクスプローラーでフォルダを開く
+///
+/// `explorer` を名前だけで起動せず、シェルの関連付け経由で開く
 fn open_in_explorer(path: &Path) {
-    if let Err(err) = std::process::Command::new("explorer").arg(path).spawn() {
+    let Some(path_str) = path.to_str() else {
+        crate::log_warn!("エクスプローラー起動失敗: パスが UTF-8 ではない");
+        return;
+    };
+    if let Err(err) = shell_open(path_str) {
         crate::log_warn!("エクスプローラー起動失敗: {err}");
     }
 }

@@ -4,17 +4,17 @@
 //! ページ遷移は許可しない
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use sha2::{Digest, Sha256};
 
 // ======================================================================
 // 定数
 // ======================================================================
-/// HTML に埋め込む CSP 本文 (インライン script / style と `data:` 画像のみ)
+/// CSP 本文のうち `script-src` を除く部分 (インライン style と `data:` 画像のみ許可)
 ///
-/// バンドル JS と CSS は HTML へインライン展開する。アプリアイコンと登録クリップ
-/// サムネイルは `data:` URL。`connect-src` 等は `default-src 'none'` で禁止する
-pub(crate) const WEBVIEW_CSP: &str = concat!(
+/// CSS は HTML へインライン展開する。アプリアイコンと登録クリップサムネイルは
+/// `data:` URL。`connect-src` 等は `default-src 'none'` で禁止する
+const WEBVIEW_CSP_BASE: &str = concat!(
     "default-src 'none'; ",
-    "script-src 'unsafe-inline'; ",
     "style-src 'unsafe-inline'; ",
     "img-src data:; ",
     "connect-src 'none'; ",
@@ -36,15 +36,36 @@ const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
 // ======================================================================
 // パブリック関数
 // ======================================================================
-/// HTML の CSP プレースホルダを本番ポリシーへ置換する
+/// 埋め込み JS を囲むインライン `<script>` ブロックを組み立てる
+///
+/// `apply_webview_csp` が許可するハッシュと一致する本文になる。JS を HTML へ埋め込むときは
+/// 必ずこの関数を使う
 ///
 /// # Arguments
-/// * `html` - `__WEBVIEW_CSP__` を含む組み立て前 HTML
+/// * `js` - 埋め込むバンドル JS
+///
+/// # Returns
+/// * `String` - `<script>` から `</script>` までのブロック
+pub(crate) fn inline_script_block(js: &str) -> String {
+    format!("<script>{}</script>", inline_script_body(js))
+}
+
+/// HTML の CSP プレースホルダを本番ポリシーへ置換する
+///
+/// `script-src` は `inline_script_block(js)` で埋め込んだ固定スクリプトのハッシュのみ許可する。
+/// ハッシュは HTML を走査せず `js` から計算するため、後から HTML に混入した
+/// `<script>` は実行されない
+///
+/// # Arguments
+/// * `html` - `__WEBVIEW_CSP__` を含む HTML
+/// * `js` - `inline_script_block` で埋め込んだ JS
 ///
 /// # Returns
 /// * `String` - CSP 本文を埋め込んだ HTML
-pub(crate) fn apply_webview_csp(html: &str) -> String {
-    html.replace(WEBVIEW_CSP_PLACEHOLDER, WEBVIEW_CSP)
+pub(crate) fn apply_webview_csp(html: &str, js: &str) -> String {
+    let script_hash = script_hash_source(&inline_script_body(js));
+    let csp = format!("script-src {script_hash}; {WEBVIEW_CSP_BASE}");
+    html.replace(WEBVIEW_CSP_PLACEHOLDER, &csp)
 }
 
 /// `WebView2` のページ遷移を許可するかどうか
@@ -82,6 +103,56 @@ pub(crate) fn preview_denied_webview_url(url: &str) -> String {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// インライン `<script>` の本文を返す (CSP ハッシュの計算対象)
+///
+/// HTML パーサは改行を LF に正規化してから本文を扱うため、CRLF / CR は LF にそろえる
+/// (ソースが CRLF で checkout されてもハッシュが一致する)
+fn inline_script_body(js: &str) -> String {
+    let normalized = js.replace("\r\n", "\n").replace('\r', "\n");
+    format!("\n{normalized}\n")
+}
+
+/// スクリプト本文の CSP ソース式 (`'sha256-<base64>'`) を返す
+fn script_hash_source(body: &str) -> String {
+    format!(
+        "'sha256-{}'",
+        STANDARD.encode(Sha256::digest(body.as_bytes()))
+    )
+}
+
+/// 埋め込み済み HTML のインラインスクリプトがすべて CSP で許可されていることを検証する
+///
+/// `html` の CSP メタタグに含まれるハッシュと、属性なし `<script>` ブロックの本文を突き合わせる
+///
+/// # Arguments
+/// * `html` - 組み立て済みの HTML
+#[cfg(test)]
+pub(crate) fn assert_inline_scripts_allowed_by_csp(html: &str) {
+    let marker = r#"http-equiv="Content-Security-Policy" content=""#;
+    let start = html.find(marker).expect("CSP メタタグ") + marker.len();
+    let csp = &html[start..start + html[start..].find('"').expect("CSP 終端")];
+    assert!(
+        !csp.contains("script-src 'unsafe-inline'"),
+        "script-src にインライン全許可を含まないこと: {csp}"
+    );
+
+    let mut rest = html;
+    let mut count = 0;
+    while let Some(open) = rest.find("<script>") {
+        let body_start = open + "<script>".len();
+        let body_len = rest[body_start..].find("</script>").expect("</script>");
+        let body = &rest[body_start..body_start + body_len];
+        let hash = script_hash_source(body);
+        assert!(
+            csp.contains(&hash),
+            "スクリプトのハッシュ {hash} を許可すること"
+        );
+        count += 1;
+        rest = &rest[body_start + body_len..];
+    }
+    assert!(count > 0, "インラインスクリプトが 1 つ以上あること");
+}
+
 /// `about:blank` / `about:srcdoc` 系の初期読み込み URI かどうか
 fn is_about_blank_navigation(url: &str) -> bool {
     let normalized = url.to_ascii_lowercase();
@@ -196,16 +267,43 @@ mod tests {
         }
     }
 
-    /// CSP プレースホルダをポリシー本文へ置換すること
+    /// CSP プレースホルダをポリシー本文へ置換し、スクリプトをハッシュで許可すること
     #[test]
     fn apply_webview_csp_replaces_placeholder() {
         let html = apply_webview_csp(
             r#"<meta http-equiv="Content-Security-Policy" content="__WEBVIEW_CSP__">"#,
+            "console.log(1);",
         );
         assert!(!html.contains(WEBVIEW_CSP_PLACEHOLDER));
-        assert!(html.contains(WEBVIEW_CSP));
         assert!(html.contains("default-src 'none'"));
         assert!(html.contains("img-src data:"));
+        assert!(html.contains("script-src 'sha256-"));
+        // 任意のインラインスクリプトを許可しない
+        assert!(!html.contains("script-src 'unsafe-inline'"));
+    }
+
+    /// 既知のスクリプト本文に対して CSP ハッシュが期待値と一致すること
+    ///
+    /// 期待値は `printf '\nconsole.log(1);\n' | openssl dgst -sha256 -binary | base64` の結果
+    #[test]
+    fn script_hash_source_matches_known_digest() {
+        let body = inline_script_body("console.log(1);");
+        assert_eq!(body, "\nconsole.log(1);\n");
+        assert_eq!(
+            script_hash_source(&body),
+            "'sha256-6ylx2nk61t31O3rHPzQZfJJkryyz5Ldd+rHtiDdohm0='"
+        );
+    }
+
+    /// CRLF の JS でも HTML 上の本文と CSP ハッシュが一致すること
+    #[test]
+    fn inline_script_block_normalizes_newlines() {
+        let lf = inline_script_block("a();\nb();");
+        let crlf = inline_script_block("a();\r\nb();");
+        let cr = inline_script_block("a();\rb();");
+        assert_eq!(lf, crlf);
+        assert_eq!(lf, cr);
+        assert!(!lf.contains('\r'));
     }
 
     /// 長い拒否 URL を切り詰めること

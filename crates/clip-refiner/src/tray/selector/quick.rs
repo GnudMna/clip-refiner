@@ -520,6 +520,7 @@ mod tests {
         assert!(html.contains("default-src 'none'"));
         assert!(html.contains(r#"http-equiv="Content-Security-Policy""#));
         assert!(!html.contains("__WEBVIEW_CSP__"));
+        crate::tray::selector::assert_inline_scripts_allowed_by_csp(&html);
     }
 
     /// フォーカス用スクリプトに現在モードと一覧 JSON が含まれるようにすること

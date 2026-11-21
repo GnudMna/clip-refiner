@@ -141,12 +141,43 @@ pub enum RefineMode {
     /// Excelでコピーしたセルの描画ビットマップをクリップボードの画像として保存する
     #[strum(message = "Excel→画像")]
     ExcelToImage,
-    /// Unixタイムスタンプを日時文字列へ変換する
-    #[strum(message = "Unixタイムスタンプ→日時文字列")]
-    TimestampToDatetime,
-    /// 日時文字列をUnixタイムスタンプへ変換する
-    #[strum(message = "日時文字列→Unixタイムスタンプ")]
-    DatetimeToTimestamp,
+    /// 日時を `YYYY-MM-DD HH:MM:SS` 形式のローカル日時文字列へ変換する
+    ///
+    /// 入力の形式 (Unixタイムスタンプ・Excel のシリアル値・ISO 8601・RFC 2822・和文形式・和暦・月名と米国式) は行ごとに自動で判定する。
+    /// 旧名 `TimestampToDatetime` / `timestamp-to-datetime` も受け付ける
+    #[strum(
+        to_string = "to-datetime-string",
+        serialize = "timestamp-to-datetime",
+        message = "日時→日時文字列"
+    )]
+    #[serde(alias = "TimestampToDatetime")]
+    ToDatetimeString,
+    /// 日時を UTC の日時文字列へ変換する
+    #[strum(message = "日時→日時文字列(UTC)")]
+    ToDatetimeStringUtc,
+    /// 日時をローカルタイムゾーンの ISO 8601 (RFC 3339) 形式へ変換する
+    #[strum(message = "日時→ISO 8601")]
+    ToIso8601,
+    /// 日時を UTC の ISO 8601 (RFC 3339) 形式へ変換する
+    #[strum(message = "日時→ISO 8601(UTC)")]
+    ToIso8601Utc,
+    /// 日時をローカルタイムゾーンの RFC 2822 形式へ変換する。ミリ秒は切り捨てる
+    #[strum(message = "日時→RFC 2822")]
+    ToRfc2822,
+    /// 日時をローカルタイムゾーンの和文形式 (`2023年11月15日 07時13分20秒`) へ変換する。ミリ秒は切り捨てる
+    #[strum(message = "日時→和文日時")]
+    ToJapaneseDatetime,
+    /// 日時をUnixタイムスタンプへ変換する
+    ///
+    /// Unixタイムスタンプの数値は変換しない。
+    /// 旧名 `DatetimeToTimestamp` / `datetime-to-timestamp` も受け付ける
+    #[strum(
+        to_string = "to-unix-timestamp",
+        serialize = "datetime-to-timestamp",
+        message = "日時→Unixタイムスタンプ"
+    )]
+    #[serde(alias = "DatetimeToTimestamp")]
+    ToUnixTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する(例: 1000 -> 1,000)
     #[strum(message = "カンマ追加")]
     AddComma,
@@ -223,7 +254,7 @@ pub enum RefineCategory {
     #[strum(message = "Excel")]
     Excel,
     /// 日時変換サブメニュー内
-    #[strum(message = "Unixタイムスタンプ")]
+    #[strum(message = "日時変換")]
     Datetime,
     /// 数値変換サブメニュー内
     #[strum(message = "桁区切りカンマ")]

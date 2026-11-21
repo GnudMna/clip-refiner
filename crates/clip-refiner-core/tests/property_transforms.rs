@@ -15,8 +15,24 @@ use std::collections::BTreeMap;
 use clip_refiner_core::config::RegexSettings;
 use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 use proptest::prelude::*;
+use proptest::test_runner::FileFailurePersistence;
 use serde_json::Value;
 use strum::IntoEnumIterator;
+
+// ======================================================================
+// 設定
+// ======================================================================
+/// 失敗した入力の保存先を `tests/property_transforms.proptest-regressions` に固定した設定
+///
+/// 統合テストには `lib.rs` / `main.rs` が無く、既定の保存先を解決できず警告が出るため明示する
+fn config() -> ProptestConfig {
+    ProptestConfig {
+        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource(
+            "proptest-regressions",
+        ))),
+        ..ProptestConfig::default()
+    }
+}
 
 // ======================================================================
 // 入力生成
@@ -255,6 +271,8 @@ fn normalize_json(value: &Value) -> Value {
 // 件数・内容の保存
 // ======================================================================
 proptest! {
+    #![proptest_config(config())]
+
     /// 行の並べ替えは行の並び順だけを変え、行数と行の集合を保つこと
     #[test]
     fn sort_lines_preserves_line_multiset(input in prop_oneof![lines_text(), multiline_csv_text()]) {
@@ -306,6 +324,8 @@ proptest! {
 // 往復
 // ======================================================================
 proptest! {
+    #![proptest_config(config())]
+
     /// URL エンコード後にデコードすると元の文字列に戻るようにすること
     #[test]
     fn url_encode_decode_roundtrip(input in "\\PC*") {
@@ -439,6 +459,8 @@ const CASE_MODES: &[RefineMode] = &[
 ];
 
 proptest! {
+    #![proptest_config(config())]
+
     /// 冪等なモードは 2 回適用しても結果が変わらないこと
     ///
     /// 末尾が単独の CR のテキストは除く。行単位の処理で最終行の CR が次の行の LF と
@@ -518,6 +540,8 @@ proptest! {
 // パニックしないこと
 // ======================================================================
 proptest! {
+    #![proptest_config(config())]
+
     /// 処理上限内の任意の文字列に対し、全モードがパニックせず結果を返すこと
     #[test]
     fn all_modes_do_not_panic(input in any_text()) {

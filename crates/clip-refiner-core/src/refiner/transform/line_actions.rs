@@ -53,7 +53,7 @@ fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
     }
 
     let line_ending = super::utils::detect_line_ending(text);
-    let units = split_csv_records(text).unwrap_or_else(|| text.lines().collect());
+    let units = split_units(text);
 
     // (比較キー, 元の文字列)
     let mut entries: Vec<(String, &str)> = units
@@ -108,16 +108,17 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// 重複行を削除する(出現順序を維持する)
+/// 重複行またはCSVレコードを削除する(出現順序を維持する)
 ///
-/// テキスト内の重複する行を特定し、最初に出現した行のみを残して他を削除する
+/// `sort_lines` と同じ単位で重複を判定し、最初に出現した単位のみを残して他を削除する。
+/// クォート内に改行を含む CSV のレコードは、改行を含めて 1 つの単位として比較する
 /// セット(HashSet)を使用して効率的に重複を判定する
 ///
 /// # Arguments
 /// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 重複行が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 重複が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
 pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -125,15 +126,15 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 
     let line_ending = super::utils::detect_line_ending(text);
     let mut seen = std::collections::HashSet::new();
-    let mut lines = Vec::new();
+    let mut units = Vec::new();
 
-    for line in text.lines() {
-        if seen.insert(line) {
-            lines.push(line);
+    for unit in split_units(text) {
+        if seen.insert(unit) {
+            units.push(unit);
         }
     }
 
-    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
+    let result = super::utils::join_lines(&units, line_ending, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -144,6 +145,19 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 // ======================================================================
 // CSV のレコード分割
 // ======================================================================
+/// テキストを並び替え・重複判定の単位に分ける
+///
+/// RFC 4180 の CSV として読めるテキストはレコード単位、読めないテキストは行単位で分ける
+///
+/// # Arguments
+/// * `text` - 分割する対象のテキスト
+///
+/// # Returns
+/// * `Vec<&str>` - 改行を除いた各単位の元の文字列
+fn split_units(text: &str) -> Vec<&str> {
+    split_csv_records(text).unwrap_or_else(|| text.lines().collect())
+}
+
 /// フィールドの読み取り状態
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FieldState {
@@ -160,7 +174,7 @@ enum FieldState {
 /// テキストを RFC 4180 の CSV としてレコード単位に分ける
 ///
 /// クォートで囲んだフィールドだけが改行・カンマ・`""` (エスケープしたクォート) を含められる。
-/// 閉じクォートの直後はカンマか行末に限り、空行を除くレコードのフィールド数はそろっている必要がある。
+/// 閉じクォートの直後はカンマか行末に限り、空行を除くレコードのフィールド数は 2 以上でそろっている必要がある。
 /// 改行は LF と CRLF で、単独の CR は行単位の並び替え (`str::lines`) と同じく改行とみなさない。
 /// 空行は空のレコードとして残す
 ///
@@ -226,6 +240,10 @@ fn split_csv_records(text: &str) -> Option<Vec<&str>> {
             return None;
         }
         records.push(&text[record_start..]);
+    }
+    // 1 列だけのテキストは、引用符で囲んだ複数行の文章と見分けられないため CSV として読まない
+    if field_count.is_some_and(|count| count < 2) {
+        return None;
     }
     Some(records)
 }
@@ -412,6 +430,25 @@ mod tests {
         assert!(matches!(remove_duplicate_lines("a\n\n"), Cow::Borrowed(_)));
     }
 
+    /// クォート内改行を含む CSV の重複削除をレコード単位で行うこと
+    ///
+    /// 行単位で比べると、別のレコードの断片 (`x"` など) が重複と判定されて壊れる
+    #[test]
+    fn test_remove_duplicate_lines_csv_records() {
+        // 同じレコードは改行を含めて 1 つにまとめる
+        let input = "a,\"x\ny\"\nb,1\na,\"x\ny\"\n";
+        assert_eq!(remove_duplicate_lines(input), "a,\"x\ny\"\nb,1\n");
+        // 後半の行が同じでも、レコードが異なれば両方残す
+        let input = "a,\"p\nq\"\nb,\"p\nq\"\n";
+        assert_eq!(remove_duplicate_lines(input), input);
+        assert!(matches!(remove_duplicate_lines(input), Cow::Borrowed(_)));
+        // CRLF を保ち、クォート内の改行は書き換えない
+        let input = "a,\"x\r\ny\"\r\nb,1\r\na,\"x\r\ny\"\r\n";
+        assert_eq!(remove_duplicate_lines(input), "a,\"x\r\ny\"\r\nb,1\r\n");
+        // CSV として読めないテキストは行単位のまま扱う
+        assert_eq!(remove_duplicate_lines("a,\"x\nb\na,\"x"), "a,\"x\nb");
+    }
+
     /// 空行削除の基本動作できるようにすること
     #[test]
     fn test_remove_empty_lines() {
@@ -520,17 +557,16 @@ mod tests {
         );
     }
 
-    /// `split_csv_records`: 1 レコードや 1 列のテキストも CSV として読むこと
+    /// `split_csv_records`: 1 レコードの CSV も読み、1 列のテキストは CSV として読まないこと
     #[test]
     fn test_split_csv_records_single_record_or_column() {
         assert_eq!(
             split_csv_records("\"x\na,x\n0\","),
             Some(vec!["\"x\na,x\n0\","])
         );
-        assert_eq!(
-            split_csv_records("\"a\nb\"\nc"),
-            Some(vec!["\"a\nb\"", "c"])
-        );
+        // 引用符で囲んだ複数行の文章と見分けられない
+        assert_eq!(split_csv_records("\"a\nb\"\nc"), None);
+        assert_eq!(split_csv_records("\"\n\n\"\nx"), None);
     }
 
     /// `split_csv_records`: RFC 4180 に従わないテキストは CSV として読まないこと

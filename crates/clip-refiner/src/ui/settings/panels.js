@@ -37,6 +37,7 @@ export const PANEL_RENDERERS = {
     notifications: renderNotificationsPanel,
     shortcuts: renderShortcutsPanel,
     general: renderGeneralPanel,
+    about: renderAboutPanel,
 };
 
 /** サイドバーのアクティブタブ表示を DOM に反映する */
@@ -608,6 +609,25 @@ function renderGeneralPanel() {
                 '詳細設定',
                 renderMonitorAdvancedCards() + selectorCard,
                 ctx.advancedSectionOpen
+            )
+    );
+}
+
+/** @returns {string} 情報タブのパネル HTML */
+function renderAboutPanel() {
+    return panelWrap(
+        'about',
+        card(
+            '利用者向けドキュメント',
+            '' +
+                '<p class="hint">使い方・設定の詳細をブラウザで開く</p>' +
+                '<div class="card-actions"><button type="button" class="ghost-btn" id="open-user-docs-btn">ドキュメントを開く</button></div>'
+        ) +
+            card(
+                'ライセンス',
+                '' +
+                    '<p class="hint">利用者向けドキュメントに含まれる mdBook のテーマ・highlight.js・clipboard.js・Font Awesome を含む、第三者ソフトウェアのライセンス表示</p>' +
+                    '<div class="card-actions"><button type="button" class="ghost-btn" id="open-third-party-notices-btn">THIRD_PARTY_NOTICES を開く</button></div>'
             )
     );
 }

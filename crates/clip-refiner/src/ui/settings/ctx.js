@@ -11,7 +11,7 @@ export const ctx = {
     /** @type {Record<string, unknown>|null} */
     state: null,
     /** @type {string} */
-    activeTab: 'convert',
+    activeTab: 'general',
     /** @type {ReturnType<typeof setTimeout>|null} */
     applyTimer: null,
     /** @type {ReturnType<typeof setTimeout>|null} */

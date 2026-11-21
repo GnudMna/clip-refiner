@@ -29,6 +29,9 @@ pub(crate) fn dispatch_settings_ipc(
         SettingsIpcAction::OpenConfigFile => {
             dispatch::send_app_event(proxy, SettingsEvent::OpenConfigFile.into());
         }
+        SettingsIpcAction::OpenDocument(document) => {
+            dispatch::send_app_event(proxy, SettingsEvent::OpenDocument(document).into());
+        }
         SettingsIpcAction::Apply(patch) => {
             if enqueue_settings_patch(state, &patch) {
                 dispatch::send_app_event(proxy, SettingsEvent::ApplyPatch.into());

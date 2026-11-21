@@ -1,5 +1,5 @@
 use crate::tray::menu::icon::app_icon_png_data_url;
-use crate::tray::selector::apply_webview_csp;
+use crate::tray::selector::{apply_webview_csp, inline_script_block};
 
 // ======================================================================
 // HTML 組み立て
@@ -67,8 +67,9 @@ fn embed_settings_assets(html: &str) -> String {
     apply_webview_csp(
         &html
             .replace(SETTINGS_CSS_IMPORT, SETTINGS_CSS)
-            .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
+            .replace(SETTINGS_JS_TAG, &inline_script_block(&js))
             .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url()),
+        &js,
     )
 }
 
@@ -219,6 +220,7 @@ mod tests {
             "notifications",
             "shortcuts",
             "general",
+            "about",
         ] {
             // esbuild 出力はダブルクォート
             let marker = format!(r#"id: "{tab_id}""#);
@@ -241,6 +243,7 @@ mod tests {
         assert!(html.contains("default-src 'none'"));
         assert!(html.contains(r#"http-equiv="Content-Security-Policy""#));
         assert!(!html.contains("__WEBVIEW_CSP__"));
+        crate::tray::selector::assert_inline_scripts_allowed_by_csp(&html);
     }
 
     /// 分割した CSS が先頭 (変数定義) から末尾 (メディアクエリ) まで順に埋め込まれること

@@ -53,7 +53,8 @@ pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
 // ======================================================================
 /// テキストに含まれるURLからUTMパラメータ(計測用パラメータ)を除去する
 ///
-/// 空白で区切った項目ごとに、クエリ文字列(?以降)の計測用パラメータをすべて取り除く
+/// `?` から始まるクエリ文字列の計測用パラメータをすべて取り除く
+/// クエリの終わりは、空白・ASCII 以外の文字・`)` `>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点は含めない
 /// 対象は `utm_` で始まるキーと、広告のクリックID (`fbclid` / `gclid` など)
 /// キーは大文字・小文字を区別しない
 /// 他のパラメータと、URL以外の文字列・改行・空白は維持される
@@ -67,18 +68,18 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut output: Option<String> = None;
     // `input` のうち `output` へ未コピーの範囲の開始位置
     let mut copied = 0;
-    let mut offset = 0;
+    let mut search = 0;
 
-    // 区切りの空白を含めて分割し、項目ごとに処理する
-    for piece in input.split_inclusive(char::is_whitespace) {
-        let token = piece.trim_end_matches(char::is_whitespace);
-        if let Cow::Owned(cleaned) = remove_utm_from_url(token) {
+    while let Some(offset) = input[search..].find('?') {
+        let start = search + offset;
+        let end = query_end(input, start + 1);
+        if let Some(cleaned) = remove_utm_from_query(&input[start + 1..end]) {
             let output = output.get_or_insert_with(|| String::with_capacity(input.len()));
-            output.push_str(&input[copied..offset]);
+            output.push_str(&input[copied..start]);
             output.push_str(&cleaned);
-            copied = offset + token.len();
+            copied = end;
         }
-        offset += piece.len();
+        search = end;
     }
 
     match output {
@@ -96,6 +97,26 @@ const CLICK_ID_PARAMS: &[&str] = &[
     "igshid",
 ];
 
+/// クエリの直後に続いていても URL の一部とみなさない文字か判定する
+fn is_query_terminator(c: char) -> bool {
+    c.is_whitespace() || !c.is_ascii() || matches!(c, ')' | '>' | '<' | '"' | '\'' | '`')
+}
+
+/// クエリ文字列(フラグメントを含む)の終了位置を返す
+///
+/// # Arguments
+/// * `input` - 対象のテキスト全体
+/// * `from` - `?` の直後の位置
+///
+/// # Returns
+/// * `usize` - 終了位置 (排他)。文末の句読点は含めない。
+fn query_end(input: &str, from: usize) -> usize {
+    let rest = &input[from..];
+    let len = rest.find(is_query_terminator).unwrap_or(rest.len());
+    let trimmed = rest[..len].trim_end_matches(['.', ',', ';', ':', '!', '?']);
+    from + trimmed.len()
+}
+
 /// クエリパラメータのキーが計測用パラメータかを判定する (大文字・小文字を区別しない)
 fn is_tracking_param(key: &str) -> bool {
     key.get(..4)
@@ -105,20 +126,14 @@ fn is_tracking_param(key: &str) -> bool {
             .any(|name| key.eq_ignore_ascii_case(name))
 }
 
-/// 1つのURLからUTMパラメータを除去する
+/// `?` の直後のクエリ文字列からUTMパラメータを除去する
 ///
 /// # Arguments
-/// * `input` - 空白を含まないURL文字列
+/// * `query_and_fragment` - `?` の直後から始まるクエリ文字列 (`#` 以降のフラグメントを含む)
 ///
 /// # Returns
-/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。変更がない場合は元の文字列への参照を返す。
-fn remove_utm_from_url(input: &str) -> Cow<'_, str> {
-    let mut parts = input.splitn(2, '?');
-    let base = parts.next().unwrap_or("");
-    let Some(query_and_fragment) = parts.next() else {
-        return Cow::Borrowed(input);
-    };
-
+/// * `Option<String>` - 除去した場合は、`?` を含めた置き換え後の文字列。除去するものがなければ `None`。
+fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
     // クエリ文字列とフラグメント(#以降)を分離する
     let (query, fragment) = match query_and_fragment.split_once('#') {
         Some((q, f)) => (q, Some(f)),
@@ -137,22 +152,17 @@ fn remove_utm_from_url(input: &str) -> Cow<'_, str> {
 
     if params.len() == filtered_params.len() {
         // 全く削除されなかった場合
-        Cow::Borrowed(input)
+        return None;
+    }
+
+    // フラグメントを復元する
+    let fragment_str = fragment.map(|f| format!("#{f}")).unwrap_or_default();
+    if filtered_params.is_empty() {
+        // すべて削除された場合は `?` も消す
+        Some(fragment_str)
     } else {
-        // フラグメントを復元する
-        let fragment_str = fragment.map(|f| format!("#{f}")).unwrap_or_default();
-        if filtered_params.is_empty() {
-            // すべて削除された場合
-            Cow::Owned(format!("{base}{fragment_str}"))
-        } else {
-            // 一部削除された場合
-            Cow::Owned(format!(
-                "{}?{}{}",
-                base,
-                filtered_params.join("&"),
-                fragment_str
-            ))
-        }
+        // 一部削除された場合
+        Some(format!("?{}{}", filtered_params.join("&"), fragment_str))
     }
 }
 
@@ -340,6 +350,64 @@ mod tests {
         assert_eq!(
             remove_utm_params("https://a.com/?utm_source=x\r\n\r\n  https://b.com/?utm_medium=y\n"),
             "https://a.com/\r\n\r\n  https://b.com/\n"
+        );
+    }
+
+    /// URLの直後に空白なしで続く文字を、URLの一部とみなさず維持すること
+    #[test]
+    fn test_remove_utm_params_keeps_adjacent_text() {
+        // 日本語の文章中
+        assert_eq!(
+            remove_utm_params("詳細はhttps://a.com/?utm_source=xを参照"),
+            "詳細はhttps://a.com/を参照"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?id=1&utm_source=x、https://b.com/?fbclid=y。"),
+            "https://a.com/?id=1、https://b.com/。"
+        );
+        // 括弧・引用符・山括弧・バッククォートで囲まれたURL
+        assert_eq!(
+            remove_utm_params("(https://a.com/?utm_source=x)"),
+            "(https://a.com/)"
+        );
+        assert_eq!(
+            remove_utm_params("[t](https://a.com/?id=1&utm_source=x)"),
+            "[t](https://a.com/?id=1)"
+        );
+        assert_eq!(
+            remove_utm_params("<https://a.com/?utm_source=x>"),
+            "<https://a.com/>"
+        );
+        assert_eq!(
+            remove_utm_params("\"https://a.com/?utm_source=x\" 'https://b.com/?utm_medium=y'"),
+            "\"https://a.com/\" 'https://b.com/'"
+        );
+        assert_eq!(
+            remove_utm_params("`https://a.com/?utm_source=x`"),
+            "`https://a.com/`"
+        );
+        // フラグメントも終端まで保持する
+        assert_eq!(
+            remove_utm_params("(https://a.com/?utm_source=x#top)"),
+            "(https://a.com/#top)"
+        );
+    }
+
+    /// 末尾の句読点をクエリの値に含めず維持すること
+    #[test]
+    fn test_remove_utm_params_keeps_trailing_punctuation() {
+        assert_eq!(
+            remove_utm_params("see https://a.com/?id=1&utm_source=x."),
+            "see https://a.com/?id=1."
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x, https://b.com/?utm_medium=y!"),
+            "https://a.com/, https://b.com/!"
+        );
+        // 句読点を値の途中に含むパラメータは削除せず維持する
+        assert_eq!(
+            remove_utm_params("https://a.com/?id=1.5&q=a,b"),
+            "https://a.com/?id=1.5&q=a,b"
         );
     }
 

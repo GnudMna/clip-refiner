@@ -12,16 +12,28 @@ fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 }
 
 fn verify_datetime_modes(empty_ctx: &RefineContext) {
-    let timestamp_mode = RefineMode::TimestampToDatetime;
+    let timestamp_mode = RefineMode::ToDatetimeString;
     let input = "1672531200";
     let actual = timestamp_mode.refine(input, empty_ctx);
-    let expected = datetime::timestamp_to_datetime_string(input);
+    let expected = datetime::to_datetime_string(input);
     assert_eq!(actual, expected);
     assert_ne!(actual.as_ref(), input);
 
-    let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
-    let actual = RefineMode::DatetimeToTimestamp.refine(&datetime_input, empty_ctx);
+    let datetime_input = datetime::to_datetime_string("1672531200");
+    let actual = RefineMode::ToUnixTimestamp.refine(&datetime_input, empty_ctx);
     assert_eq!(actual, "1672531200");
+
+    // ローカルタイムゾーンの出力形式は、日時文字列→タイムスタンプで元の値に戻る
+    for mode in [
+        RefineMode::ToIso8601,
+        RefineMode::ToRfc2822,
+        RefineMode::ToJapaneseDatetime,
+    ] {
+        let formatted = mode.refine(input, empty_ctx);
+        assert_ne!(formatted.as_ref(), input, "mode={mode:?}");
+        let roundtrip = RefineMode::ToUnixTimestamp.refine(&formatted, empty_ctx);
+        assert_eq!(roundtrip, input, "mode={mode:?}");
+    }
 }
 
 fn verify_regex_modes() {

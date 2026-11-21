@@ -103,6 +103,15 @@ export function openConfigFile() {
 }
 
 /**
+ * 配布物に同梱する文書を OS の既定アプリで開く
+ *
+ * @param {'user-docs'|'third-party-notices'} target
+ */
+export function openDocument(target) {
+    postIpcEnvelope({ type: 'open-document', target });
+}
+
+/**
  * `SettingsPatch.mergePatch` のエイリアス
  *
  * @param {Record<string, unknown>} target

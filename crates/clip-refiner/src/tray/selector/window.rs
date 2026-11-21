@@ -12,7 +12,8 @@ use tao::window::{Window, WindowBuilder, WindowId};
 use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 use super::webview_policy::{
-    apply_webview_csp, is_allowed_webview_navigation, preview_denied_webview_url,
+    apply_webview_csp, inline_script_block, is_allowed_webview_navigation,
+    preview_denied_webview_url,
 };
 use super::webview_script;
 use crate::tray::state::AppEvent;
@@ -60,27 +61,30 @@ const CLIP_SELECTOR_JS_TAG: &str = r#"<script src="clip_selector.js"></script>"#
 /// セレクター HTML 内の共通 CSS をインライン展開する
 pub(crate) fn embed_selector_assets(html: &str) -> String {
     let css = include_str!("../../ui/selector.css");
-    apply_webview_csp(&html.replace(SELECTOR_CSS_IMPORT, css))
+    html.replace(SELECTOR_CSS_IMPORT, css)
 }
 
-/// クイックセレクター用 HTML 内のアセットをインライン展開する
+/// クイックセレクター用 HTML 内のアセットをインライン展開し、CSP を適用する
 ///
-/// JS は `npm run build:ui` で生成した `quick_selector.bundle.js` を埋め込む
+/// JS は `npm run build:ui` で生成した `quick_selector.bundle.js` を埋め込み、
+/// そのハッシュだけを `script-src` で許可する
 pub(crate) fn embed_quick_selector_assets(html: &str) -> String {
     let js = include_str!("../../ui/quick_selector.bundle.js");
-    embed_selector_assets(html)
-        .replace(QUICK_SELECTOR_JS_TAG, &format!("<script>\n{js}\n</script>"))
+    let html = embed_selector_assets(html).replace(QUICK_SELECTOR_JS_TAG, &inline_script_block(js));
+    apply_webview_csp(&html, js)
 }
 
-/// 登録クリップセレクター用 HTML 内のアセットをインライン展開する
+/// 登録クリップセレクター用 HTML 内のアセットをインライン展開し、CSP を適用する
 ///
-/// JS は `npm run build:ui` で生成した `clip_selector.bundle.js` を埋め込む
+/// JS は `npm run build:ui` で生成した `clip_selector.bundle.js` を埋め込み、
+/// そのハッシュだけを `script-src` で許可する
 pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
     let clip_css = include_str!("../../ui/clip_selector.css");
     let js = include_str!("../../ui/clip_selector.bundle.js");
-    embed_selector_assets(html)
+    let html = embed_selector_assets(html)
         .replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
-        .replace(CLIP_SELECTOR_JS_TAG, &format!("<script>\n{js}\n</script>"))
+        .replace(CLIP_SELECTOR_JS_TAG, &inline_script_block(js));
+    apply_webview_csp(&html, js)
 }
 
 // ======================================================================

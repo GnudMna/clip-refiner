@@ -11,7 +11,7 @@ use super::menu_snapshot::MenuSnapshot;
 use super::monitor_snapshot::MonitorSnapshot;
 use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
-use crate::config::{AppConfig, ConfigLoadFallback};
+use crate::config::{AppConfig, ConfigLoadFallback, RegexSettings};
 use crate::security::SecretString;
 
 // ======================================================================
@@ -151,8 +151,22 @@ impl AppState {
             auto_refine_enabled: config.auto_refine_enabled,
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
-            regex_settings: config.regex.clone(),
+            monitor_mode: config.monitor_mode,
         })
+    }
+
+    /// 加工用の正規表現設定を現在の設定へ同期する
+    ///
+    /// 内容が異なる場合のみ複製するため、変更のないティックではコピーが発生しない
+    ///
+    /// # Arguments
+    /// * `dst` - 同期先の正規表現設定
+    pub fn sync_regex_settings(&self, dst: &mut RegexSettings) {
+        self.with_config(|config| {
+            if config.regex != *dst {
+                dst.clone_from(&config.regex);
+            }
+        });
     }
 
     /// トレイメニュー構築・同期向けに設定フィールドを一括取得する

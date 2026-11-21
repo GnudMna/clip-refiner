@@ -4,7 +4,13 @@
 
 import { showConfirmDialog } from './confirm_dialog.js';
 import { ctx } from './ctx.js';
-import { postIpcEnvelope, openConfigFile, scheduleApply, showApplyFeedback } from './ipc_apply.js';
+import {
+    postIpcEnvelope,
+    openConfigFile,
+    openDocument,
+    scheduleApply,
+    showApplyFeedback,
+} from './ipc_apply.js';
 import {
     applyPipelineChange,
     syncContinuousRecordUi,
@@ -593,6 +599,16 @@ export function bindClipEvents() {
     });
 }
 
+/** 情報タブのイベントをバインドする */
+export function bindAboutEvents() {
+    document.getElementById('open-user-docs-btn')?.addEventListener('click', () => {
+        openDocument('user-docs');
+    });
+    document.getElementById('open-third-party-notices-btn')?.addEventListener('click', () => {
+        openDocument('third-party-notices');
+    });
+}
+
 /** アクティブタブに応じたパネルイベントをバインドする */
 export function bindActivePanelEvents() {
     switch (ctx.activeTab) {
@@ -616,6 +632,9 @@ export function bindActivePanelEvents() {
         case 'general':
             bindGeneralEvents();
             bindMonitorEvents();
+            break;
+        case 'about':
+            bindAboutEvents();
             break;
         default:
             break;

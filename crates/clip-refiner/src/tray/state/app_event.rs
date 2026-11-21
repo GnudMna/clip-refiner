@@ -1,4 +1,5 @@
 use crate::config::FavoriteMoveDirection;
+use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
 
 // ======================================================================
@@ -153,6 +154,8 @@ pub enum SettingsEvent {
     ClearContinuousRecord,
     /// 設定ウィンドウからの設定ファイル起動要求
     OpenConfigFile,
+    /// 設定ウィンドウからの同梱文書の起動要求
+    OpenDocument(BundledDocument),
     /// 設定ウィンドウからの正規表現プレビュー要求
     RegexPreview,
     /// 設定ウィンドウからの更新確認要求

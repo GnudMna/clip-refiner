@@ -1,7 +1,10 @@
 //! 設定ファイルの保存と更新時刻・内容指紋の取得
 
 use std::fs;
-use std::time::SystemTime;
+use std::io;
+use std::path::Path;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 use super::super::atomic_io::write_text_atomically;
 use super::super::paths::{config_file_modified_time, get_config_file_path};
@@ -10,6 +13,14 @@ use super::super::registered_clips::save_registered_clips;
 use super::super::serialize::config_to_toml;
 use super::super::types::AppConfig;
 use crate::error::ConfigError;
+
+// ======================================================================
+// 定数
+// ======================================================================
+/// 保存前に既存の設定ファイルを読む最大試行回数
+const EXISTING_READ_ATTEMPTS: u32 = 4;
+/// 既存の設定ファイルの読み取り再試行までの待ち時間
+const EXISTING_READ_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
 // ======================================================================
 // 内容指紋
@@ -71,16 +82,13 @@ impl AppConfig {
         let mut to_save = self.clone();
         to_save.normalize();
 
+        // 登録クリップの保存より前に読む (読めない場合に一部だけ書き込まれた状態を避ける)
+        let existing = read_existing_config(&config_path)?;
+
         save_registered_clips(&to_save.clips).map_err(|e| {
             tracing::error!("登録クリップの保存に失敗: {:?}", e);
             ConfigError::RegisteredClipsSave(e.to_string())
         })?;
-
-        let existing = if config_path.exists() {
-            fs::read_to_string(&config_path).ok()
-        } else {
-            None
-        };
 
         let content = config_to_toml(&to_save, existing.as_deref()).map_err(|e| {
             tracing::error!("設定のシリアライズに失敗: {:?}", e);
@@ -102,12 +110,95 @@ impl AppConfig {
 }
 
 // ======================================================================
+// プライベート関数
+// ======================================================================
+/// コメントや未知のキーを引き継ぐため、保存前に既存の設定ファイルを読む
+///
+/// 一時的なロック (エディタやウイルス対策ソフトなど) に備えて短くリトライする。
+/// リトライしても読めない場合は、コメントや未知のキーを黙って消さないよう保存を中止する。
+/// UTF-8 として不正な場合は引き継げる内容がないため、警告を出して `None` を返す。
+///
+/// # Arguments
+/// * `path` - 設定ファイルのパス
+///
+/// # Returns
+/// * `Result<Option<String>, ConfigError>` - 既存の本文。ファイルが無い場合や UTF-8 として不正な場合は `None`
+///
+/// # Errors
+/// リトライしても既存ファイルを読み取れなかった場合
+fn read_existing_config(path: &Path) -> Result<Option<String>, ConfigError> {
+    for attempt in 1..=EXISTING_READ_ATTEMPTS {
+        match fs::read_to_string(path) {
+            Ok(text) => return Ok(Some(text)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                tracing::warn!(
+                    "既存の設定ファイルが UTF-8 ではないため、コメントや未知のキーを引き継がずに保存する: {:?}",
+                    e
+                );
+                return Ok(None);
+            }
+            Err(e) if attempt == EXISTING_READ_ATTEMPTS => {
+                tracing::error!(
+                    "既存の設定ファイルを読めないため保存を中止する ({} 回試行): {:?}",
+                    attempt,
+                    e
+                );
+                return Err(ConfigError::Read(e));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "既存の設定ファイルの読み込みに失敗したため再試行する ({}/{}): {:?}",
+                    attempt,
+                    EXISTING_READ_ATTEMPTS,
+                    e
+                );
+                thread::sleep(EXISTING_READ_RETRY_INTERVAL);
+            }
+        }
+    }
+    Ok(None)
+}
+
+// ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::paths::get_config_file_path;
+
+    /// 既存ファイルを読めない場合は保存を中止し、登録クリップも書き込まないこと
+    ///
+    /// 設定ファイルの位置にディレクトリを置いて読み取り失敗を再現する
+    #[test]
+    fn save_aborts_when_existing_config_is_unreadable() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("path");
+            fs::create_dir_all(&path).expect("読めないエントリ");
+
+            let result = AppConfig::default().save();
+
+            assert!(
+                matches!(result, Err(ConfigError::Read(_))),
+                "読み取り失敗で中止されること: {result:?}"
+            );
+            assert!(path.is_dir(), "既存エントリが置き換えられないこと");
+        });
+    }
+
+    /// 既存ファイルが UTF-8 でなくても保存できること
+    #[test]
+    fn save_succeeds_when_existing_config_is_not_utf8() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("path");
+            fs::write(&path, [0xff, 0xfe, 0x00]).expect("不正なバイト列");
+
+            AppConfig::default().save().expect("保存");
+
+            assert!(fs::read_to_string(&path).is_ok());
+        });
+    }
 
     /// `save` が既存設定を原子的に置き換え、一時ファイルを残さないようにすること
     #[test]

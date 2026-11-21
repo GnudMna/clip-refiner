@@ -3,13 +3,15 @@ import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml, expe
 test.use({ e2eWindow: 'settings' });
 
 test.describe('設定 WebView', () => {
-  test('6 タブのサイドバーが表示される', async ({ page }) => {
+  test('7 タブのサイドバーが表示される', async ({ page }) => {
     await expect(page.locator('#sidebar')).toHaveAttribute('role', 'tablist');
     await expect(page.locator('#sidebar')).toHaveAttribute('aria-orientation', 'vertical');
-    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(6);
+    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(7);
     await expect(page.locator('#sidebar [role="tab"][data-tab="convert"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
+    await expect(page.locator('#sidebar [role="tab"]').first()).toHaveAttribute('data-tab', 'general');
+    await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
     await expectWebViewCsp(page);
   });
@@ -24,7 +26,7 @@ test.describe('設定 WebView', () => {
     );
     await expect(page.locator('#panel-regex')).toBeVisible();
     await expect(page.locator('#panel-regex')).toHaveAttribute('role', 'tabpanel');
-    await page.keyboard.press('End');
+    await page.keyboard.press('Home');
     await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toHaveAttribute(
       'aria-selected',
       'true'
@@ -97,6 +99,13 @@ test.describe('設定 WebView', () => {
   test('ショートカットタブに入力欄がある', async ({ page }) => {
     await page.locator('#sidebar .nav-btn[data-tab="shortcuts"]').click();
     await expect(page.locator('#hotkey-quick-selector')).toBeVisible();
+  });
+
+  test('情報タブに利用者向けドキュメントと THIRD_PARTY_NOTICES を開くボタンがある', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="about"]').click();
+    await expect(page.locator('#panel-about')).toBeVisible();
+    await expect(page.locator('#open-user-docs-btn')).toBeVisible();
+    await expect(page.locator('#open-third-party-notices-btn')).toBeVisible();
   });
 
   test('お気に入りの並べ替えが config.toml に保存される', async ({ page, configDir }) => {

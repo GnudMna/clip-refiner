@@ -45,8 +45,10 @@ clip-refiner/
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize ・ spec (ドキュメント同期テスト) など
 │           ├── native/      # DPAPI (`config`)・クリップボード画像と監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
-│           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
-│           ├── security/
+│           │   ├── mode/        # `RefineMode` / `RefineCategory` の定義・表示名・CLI 名・メニュー順
+│           │   ├── dispatch/    # モードからカテゴリ別の変換処理への振り分け
+│           │   └── transform/   # 変換処理の本体 (`regex/` はキャッシュ / マッチタイムアウト / 実行パス / プレビュー)
+│           ├── security/    # 入力サイズ上限・表示マスキング・AEAD 暗号・鍵付き指紋・ゼロ化する文字列
 │           └── test_helpers/ # コア単体テスト用
 ├── .claude/             # Claude Code 向けの共有設定 (settings.json)・規約 (rules/)・スキル (skills/)
 ├── assets/
@@ -90,7 +92,7 @@ clip-refiner/
 
 `innerHTML` へ代入してよいのは `escapeHtml` / `highlightText` と、信頼済み HTML を組み立てる関数の戻り値だけとする。許可する関数は `eslint.config.js` の `no-unsanitized` 設定に列挙し、それ以外の代入は ESLint が拒否する。
 
-Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開して `WebView` に渡す (`embed_quick_selector_assets` / `embed_clip_selector_assets`)。設定 / セレクター `WebView` は埋め込み HTML (`NavigateToString`) のみを表示する。CSP で外部 script / connect / frame を禁止し、ナビゲーションハンドラで `http(s)` / `file` 等のページ遷移・`window.open`・ダウンロードを拒否する。初期読み込みは `about:blank` または埋め込んだ HTML と一致する `data:text/html;base64` のみ許可する (`selector/webview_policy.rs`)。
+Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開して `WebView` に渡す (`embed_quick_selector_assets` / `embed_clip_selector_assets`)。設定 / セレクター `WebView` は埋め込み HTML (`NavigateToString`) のみを表示する。CSP で外部 script / connect / frame を禁止し、インライン script は埋め込んだバンドル JS の SHA-256 ハッシュだけを `script-src` で許可し (`inline_script_block` と `apply_webview_csp` が同じ本文からハッシュを作る)、ナビゲーションハンドラで `http(s)` / `file` 等のページ遷移・`window.open`・ダウンロードを拒否する。初期読み込みは `about:blank` または埋め込んだ HTML と一致する `data:text/html;base64` のみ許可する (`selector/webview_policy.rs`)。
 
 ### `tray/` の責務分担
 
@@ -261,6 +263,7 @@ flowchart TB
 | 層 | モジュール | 責務 |
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
+| **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダから既定アプリで開く。設定ウィンドウの「情報」タブから呼ぶ |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
 | **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |

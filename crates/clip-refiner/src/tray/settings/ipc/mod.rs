@@ -25,6 +25,7 @@ mod tests {
         parse_settings_ipc_message,
     };
     use crate::config::{FavoriteMoveDirection, NotificationSettings};
+    use crate::platform::bundled_docs::BundledDocument;
     use crate::refiner::RefineMode;
 
     /// JSON エンベロープ形式の `apply` を解釈できるようにすること
@@ -167,6 +168,31 @@ mod tests {
             parse_settings_ipc_message(r#"{"type":"open-config"}"#),
             Some(SettingsIpcAction::OpenConfigFile)
         ));
+    }
+
+    /// `open-document` メッセージを文書の種類ごとに解釈し、未知の種類は無視すること
+    #[test]
+    fn parse_ipc_open_document() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"open-document","target":"user-docs"}"#),
+            Some(SettingsIpcAction::OpenDocument(BundledDocument::UserDocs))
+        ));
+        assert!(matches!(
+            parse_settings_ipc_message(
+                r#"{"type":"open-document","target":"third-party-notices"}"#
+            ),
+            Some(SettingsIpcAction::OpenDocument(
+                BundledDocument::ThirdPartyNotices
+            ))
+        ));
+        // 任意のパスは受け付けない
+        assert!(
+            parse_settings_ipc_message(
+                r#"{"type":"open-document","target":"C:/Windows/notepad.exe"}"#
+            )
+            .is_none()
+        );
+        assert!(parse_settings_ipc_message(r#"{"type":"open-document"}"#).is_none());
     }
 
     /// `enqueue_settings_patch_json` で部分 JSON を深くマージできるようにすること

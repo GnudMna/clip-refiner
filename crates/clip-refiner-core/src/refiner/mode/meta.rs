@@ -103,7 +103,13 @@ impl RefineMode {
             Self::ExcelToMarkdown | Self::MarkdownToExcel | Self::ExcelToImage => {
                 RefineCategory::Excel
             }
-            Self::TimestampToDatetime | Self::DatetimeToTimestamp => RefineCategory::Datetime,
+            Self::ToDatetimeString
+            | Self::ToDatetimeStringUtc
+            | Self::ToIso8601
+            | Self::ToIso8601Utc
+            | Self::ToRfc2822
+            | Self::ToJapaneseDatetime
+            | Self::ToUnixTimestamp => RefineCategory::Datetime,
             Self::AddComma | Self::RemoveComma => RefineCategory::Number,
             Self::ToCamelCase
             | Self::ToSnakeCase
@@ -244,13 +250,10 @@ mod tests {
             RefineCategory::JsonFormat
         );
 
-        assert_eq!(
-            RefineMode::TimestampToDatetime.label(),
-            "Unixタイムスタンプ→日時文字列"
-        );
+        assert_eq!(RefineMode::ToDatetimeString.label(), "日時→日時文字列");
 
         assert_eq!(
-            RefineMode::TimestampToDatetime.category(),
+            RefineMode::ToDatetimeString.category(),
             RefineCategory::Datetime
         );
 
@@ -397,6 +400,39 @@ mod tests {
         assert_eq!(RefineMode::JsonFormat.to_string(), "json-format");
     }
 
+    /// 改名した日時変換モードの旧名 (CLI 名・設定値) を受け付け、書き出しは新名にすること
+    #[test]
+    fn test_renamed_datetime_modes_accept_old_names() {
+        for (old_cli, old_serde, mode, new_cli, new_serde) in [
+            (
+                "timestamp-to-datetime",
+                "TimestampToDatetime",
+                RefineMode::ToDatetimeString,
+                "to-datetime-string",
+                "ToDatetimeString",
+            ),
+            (
+                "datetime-to-timestamp",
+                "DatetimeToTimestamp",
+                RefineMode::ToUnixTimestamp,
+                "to-unix-timestamp",
+                "ToUnixTimestamp",
+            ),
+        ] {
+            assert_eq!(RefineMode::from_str(old_cli).expect("旧 CLI 名"), mode);
+            assert_eq!(RefineMode::from_str(new_cli).expect("新 CLI 名"), mode);
+            assert_eq!(mode.to_string(), new_cli);
+
+            let old: RefineMode =
+                serde_json::from_str(&format!("\"{old_serde}\"")).expect("旧設定値");
+            assert_eq!(old, mode);
+            assert_eq!(
+                serde_json::to_string(&mode).expect("シリアライズ"),
+                format!("\"{new_serde}\"")
+            );
+        }
+    }
+
     /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すようにすること
     #[test]
     fn test_quick_selector_modes_order() {
@@ -435,7 +471,7 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::SortLinesNaturalAsc));
         assert!(variants.contains(&RefineMode::SortLinesNaturalDesc));
-        assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 48);
+        assert!(variants.contains(&RefineMode::ToDatetimeString));
+        assert_eq!(variants.len(), 53);
     }
 }

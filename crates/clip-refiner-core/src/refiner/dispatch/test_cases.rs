@@ -109,6 +109,16 @@ pub(super) const FIXED_CASES: &[(RefineMode, &str, &str)] = &[
         "| A | B |\n|---|---|\n| 1 | 2 |",
         "A\tB\n1\t2",
     ),
+    (
+        RefineMode::ToDatetimeStringUtc,
+        "1700000000",
+        "2023-11-14 22:13:20",
+    ),
+    (
+        RefineMode::ToIso8601Utc,
+        "1700000000",
+        "2023-11-14T22:13:20Z",
+    ),
     (RefineMode::AddComma, "1000", "1,000"),
     (RefineMode::RemoveComma, "1,000", "1000"),
     (RefineMode::ToCamelCase, "foo_bar", "fooBar"),
@@ -120,5 +130,5 @@ pub(super) const FIXED_CASES: &[(RefineMode, &str, &str)] = &[
     (RefineMode::ToFullwidth, "ABC ｶﾞ", "ＡＢＣ　ガ"),
 ];
 
-/// 固定ケース以外で個別検証が必要なモード数 (日時 2 + 正規表現 4 + 画像 1)
-pub(super) const SPECIAL_MODE_COUNT: usize = 7;
+/// 固定ケース以外で個別検証が必要なモード数 (ローカル日時 5 + 正規表現 4 + 画像 1)
+pub(super) const SPECIAL_MODE_COUNT: usize = 10;

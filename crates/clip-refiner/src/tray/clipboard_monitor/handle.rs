@@ -313,7 +313,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::config::RegexSettings;
+    use crate::config::MonitorMode;
     use crate::refiner::RefineMode;
     use crate::test_helpers::InMemoryTextClipboard;
 
@@ -351,7 +351,7 @@ mod tests {
             auto_refine_enabled: true,
             history_enabled,
             continuous_record_enabled,
-            regex_settings: RegexSettings::default(),
+            monitor_mode: MonitorMode::default(),
         }
     }
 

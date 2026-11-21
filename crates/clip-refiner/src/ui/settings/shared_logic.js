@@ -406,6 +406,7 @@ const SettingsSharedLogic = (function () {
         'notifications',
         'shortcuts',
         'general',
+        'about',
     ];
 
     /**

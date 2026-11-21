@@ -221,6 +221,18 @@ export function invalidateAllPanels() {
     }
 }
 
+/**
+ * コンテンツのスクロール位置をアニメーションなしで設定する
+ *
+ * `#content` は `scroll-behavior: smooth` のため、`scrollTop` 代入では復元が滑って見える
+ *
+ * @param {HTMLElement} content
+ * @param {number} top
+ */
+function setContentScrollTop(content, top) {
+    content.scrollTo({ top, behavior: 'instant' });
+}
+
 /** アクティブタブのパネルを表示しスクロール位置を復元する */
 export function showActivePanel() {
     const content = document.getElementById('content');
@@ -232,7 +244,25 @@ export function showActivePanel() {
         panel.classList.toggle('active', isActive);
         panel.hidden = !isActive;
     });
-    content.scrollTop = ctx.tabScrollPositions[ctx.activeTab] || 0;
+    setContentScrollTop(content, ctx.tabScrollPositions[ctx.activeTab] || 0);
+}
+
+/**
+ * パネルの破棄・再描画を挟んでもスクロール位置を保つ
+ *
+ * パネルを破棄するとコンテンツの高さが縮み、ブラウザが `scrollTop` を 0 へ丸めるため、
+ * 実行前の位置を控えて実行後に戻す
+ *
+ * @param {() => void} action - パネルを再描画する処理
+ */
+export function withPreservedScroll(action) {
+    const content = document.getElementById('content');
+    const top = content ? content.scrollTop : 0;
+    action();
+    if (content) {
+        ctx.tabScrollPositions[ctx.activeTab] = top;
+        setContentScrollTop(content, top);
+    }
 }
 
 /** サーバー主導のフィールド (一時停止・連続記録など) を DOM に反映する */

@@ -120,6 +120,16 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
         "| A | B |\n|---|---|\n| 1 | 2 |",
         "A\tB\n1\t2",
     ),
+    (
+        RefineMode::ToDatetimeStringUtc,
+        "1700000000",
+        "2023-11-14 22:13:20",
+    ),
+    (
+        RefineMode::ToIso8601Utc,
+        "1700000000",
+        "2023-11-14T22:13:20Z",
+    ),
     (RefineMode::AddComma, "1000", "1,000"),
     (RefineMode::RemoveComma, "1,000", "1000"),
     (RefineMode::ToCamelCase, "foo_bar", "fooBar"),
@@ -152,17 +162,20 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 /// 全 `RefineMode` バリアントに回帰ケースが存在すること
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();
-    // 固定ケース 41 + 日時 2 + 正規表現 4 + 画像 1 = 48
+    // 固定ケース 43 + ローカル日時 5 + 正規表現 4 + 画像 1 = 53
     assert_eq!(
-        fixed.len() + 7,
+        fixed.len() + 10,
         RefineMode::iter().count(),
         "固定ケースと特殊モードの合計が RefineMode バリアント数と一致しません"
     );
 
     for mode in RefineMode::iter() {
         match mode {
-            RefineMode::TimestampToDatetime
-            | RefineMode::DatetimeToTimestamp
+            RefineMode::ToDatetimeString
+            | RefineMode::ToIso8601
+            | RefineMode::ToRfc2822
+            | RefineMode::ToJapaneseDatetime
+            | RefineMode::ToUnixTimestamp
             | RefineMode::RegexReplace
             | RefineMode::RegexExtract
             | RefineMode::RegexDelete
@@ -183,15 +196,18 @@ pub fn run_all_refine_mode_regression() {
 
     for mode in RefineMode::iter() {
         match mode {
-            RefineMode::TimestampToDatetime => {
+            RefineMode::ToDatetimeString
+            | RefineMode::ToIso8601
+            | RefineMode::ToRfc2822
+            | RefineMode::ToJapaneseDatetime => {
                 let input = "1672531200";
                 let actual = mode.refine(input, &empty_ctx);
                 assert_ne!(actual.as_ref(), input);
-                let roundtrip = RefineMode::DatetimeToTimestamp.refine(&actual, &empty_ctx);
+                let roundtrip = RefineMode::ToUnixTimestamp.refine(&actual, &empty_ctx);
                 assert_eq!(roundtrip, input);
             }
-            RefineMode::DatetimeToTimestamp => {
-                let datetime = RefineMode::TimestampToDatetime.refine("1672531200", &empty_ctx);
+            RefineMode::ToUnixTimestamp => {
+                let datetime = RefineMode::ToDatetimeString.refine("1672531200", &empty_ctx);
                 let actual = mode.refine(&datetime, &empty_ctx);
                 assert_eq!(actual, "1672531200");
             }

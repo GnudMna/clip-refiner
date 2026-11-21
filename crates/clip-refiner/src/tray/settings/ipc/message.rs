@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use super::super::model::SettingsPatch;
 use crate::config::{FavoriteMoveDirection, RegexSettings};
+use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
 
 // ======================================================================
@@ -15,6 +16,11 @@ enum SettingsIpcMessage {
     Close,
     /// 設定ファイルを既定アプリで開く
     OpenConfig,
+    /// 同梱文書を既定アプリで開く
+    OpenDocument {
+        /// 開く文書
+        target: IpcDocumentTarget,
+    },
     /// 設定の一部を適用する
     Apply {
         /// 部分更新パッチ
@@ -79,6 +85,25 @@ enum SettingsIpcMessage {
     ApplyUpdate,
 }
 
+/// IPC 向けの同梱文書の指定
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum IpcDocumentTarget {
+    /// 利用者向けドキュメント
+    UserDocs,
+    /// 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
+    ThirdPartyNotices,
+}
+
+impl From<IpcDocumentTarget> for BundledDocument {
+    fn from(target: IpcDocumentTarget) -> Self {
+        match target {
+            IpcDocumentTarget::UserDocs => Self::UserDocs,
+            IpcDocumentTarget::ThirdPartyNotices => Self::ThirdPartyNotices,
+        }
+    }
+}
+
 /// IPC 向けの表示順の移動方向 (お気に入り・登録クリップ共通)
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -108,6 +133,8 @@ pub(crate) enum SettingsIpcAction {
     Close,
     /// 設定ファイルを既定アプリで開く
     OpenConfigFile,
+    /// 同梱文書を既定アプリで開く
+    OpenDocument(BundledDocument),
     /// 設定の一部を適用する
     Apply(Box<SettingsPatch>),
     /// 履歴を全削除する
@@ -141,6 +168,7 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
         match message {
             SettingsIpcMessage::Close => Self::Close,
             SettingsIpcMessage::OpenConfig => Self::OpenConfigFile,
+            SettingsIpcMessage::OpenDocument { target } => Self::OpenDocument(target.into()),
             SettingsIpcMessage::Apply { patch } => Self::Apply(patch),
             SettingsIpcMessage::ClearHistory => Self::ClearHistory,
             SettingsIpcMessage::ClearRecord => Self::ClearContinuousRecord,

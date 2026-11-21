@@ -182,7 +182,7 @@ fn every_mode_runs_through_apply_pipeline_without_panic() {
         let _ = apply_pipeline_to_text(input, &[*mode], &ctx);
     }
     let ts_input = "1672531200";
-    let _ = apply_pipeline_to_text(ts_input, &[RefineMode::TimestampToDatetime], &ctx);
+    let _ = apply_pipeline_to_text(ts_input, &[RefineMode::ToDatetimeString], &ctx);
     let regex_ctx = common::regex_ctx(r"\d", "X");
     let _ = apply_pipeline_to_text("a1", &[RefineMode::RegexReplace], &regex_ctx);
 }

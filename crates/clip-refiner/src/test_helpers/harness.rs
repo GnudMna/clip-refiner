@@ -315,7 +315,7 @@ impl ClipboardHarness {
         if snap.is_paused {
             return false;
         }
-        self.refine_ctx.regex = snap.regex_settings.clone();
+        self.state.sync_regex_settings(&mut self.refine_ctx.regex);
         if snap.continuous_record_enabled {
             observe_continuous_record(&mut self.clipboard, &self.state);
             return false;

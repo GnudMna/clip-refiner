@@ -4,9 +4,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use windows::core::{HSTRING, PCWSTR, w};
+
 use super::permissions::restrict_private_dir_permissions;
 use crate::consts;
 use crate::error::ConfigError;
+
+// ======================================================================
+// 定数
+// ======================================================================
+/// `ShellExecuteW` が成功時に返す値の下限 (これ以下はエラーコード)
+const SHELL_EXECUTE_SUCCESS_MIN: isize = 32;
 
 // ======================================================================
 // テスト用設定ディレクトリ
@@ -37,7 +47,23 @@ thread_local! {
 /// # Errors
 /// システムディレクトリの取得に失敗した場合
 pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
-    if let Some(dir) = env_config_dir_override() {
+    resolve_config_dir(env_config_dir_override())
+}
+
+/// 環境変数の上書き値を受け取って設定ディレクトリを解決する
+///
+/// テストが環境変数 (プロセス全体で共有) を書き換えずに優先順位を検証できるよう分離している
+///
+/// # Arguments
+/// * `env_dir` - 環境変数による上書き先。未設定または空なら `None`
+///
+/// # Returns
+/// * `Result<PathBuf>` - 設定ディレクトリのパス
+///
+/// # Errors
+/// システムディレクトリの取得に失敗した場合
+fn resolve_config_dir(env_dir: Option<PathBuf>) -> Result<PathBuf, ConfigError> {
+    if let Some(dir) = env_dir {
         return Ok(dir);
     }
 
@@ -60,7 +86,18 @@ pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
 /// # Returns
 /// * `bool` - ポータブルの `data` ディレクトリを使うとき `true`
 pub fn is_portable_mode() -> bool {
-    if env_config_dir_override().is_some() {
+    portable_mode_with(env_config_dir_override().as_deref())
+}
+
+/// 環境変数の上書き値を受け取ってポータブルモードかどうかを判定する
+///
+/// # Arguments
+/// * `env_dir` - 環境変数による上書き先。未設定または空なら `None`
+///
+/// # Returns
+/// * `bool` - ポータブルの `data` ディレクトリを使うとき `true`
+fn portable_mode_with(env_dir: Option<&Path>) -> bool {
+    if env_dir.is_some() {
         return false;
     }
 
@@ -219,12 +256,28 @@ fn open_path_in_default_application(path: &Path) -> Result<(), ConfigError> {
     }
 
     let path_str = path.to_str().ok_or(ConfigError::InvalidPath)?;
+    let file = HSTRING::from(path_str);
 
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", path_str])
-        .spawn()
-        .map_err(ConfigError::Open)?;
-    Ok(())
+    // `cmd /C start` は `&` や `%` を含むパスを再解釈するため、`ShellExecuteW` に直接渡す
+    // SAFETY: `file` は NUL 終端の UTF-16 で呼び出し中は生存し、そのほかの引数は NULL か定数
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            &file,
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // 戻り値は `HINSTANCE` 型だが、32 以下ならエラーコード
+    let code = result.0 as isize;
+    if code > SHELL_EXECUTE_SUCCESS_MIN {
+        return Ok(());
+    }
+    Err(ConfigError::Open(std::io::Error::from_raw_os_error(
+        i32::try_from(code).unwrap_or(0),
+    )))
 }
 
 // ======================================================================
@@ -239,24 +292,19 @@ mod tests {
     use crate::consts;
     use crate::test_helpers::with_temp_config_dir;
 
-    /// 環境変数 `CLIP_REFINER_CONFIG_DIR` を優先すること
+    /// 環境変数による上書きをテスト用上書きより優先すること
+    ///
+    /// 環境変数はプロセス全体で共有され並列テストに影響するため、値は引数で渡す
     #[test]
     fn get_config_dir_uses_env_override() {
-        let dir =
-            std::env::temp_dir().join(format!("clip-refiner-env-config-{}", std::process::id()));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        // SAFETY: Windows の環境変数 API はスレッドセーフで、std 経由の読み書きは
-        // std 内部のロックで直列化される。環境変数を読む非 Rust コードはテスト中に動かない
-        unsafe {
-            std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
-        }
-        let resolved = get_config_dir().expect("get_config_dir");
-        // SAFETY: `set_var` と同じ理由で、他スレッドの読み取りと競合しない
-        unsafe {
-            std::env::remove_var(consts::ENV_CONFIG_DIR);
-        }
-        let _ = fs::remove_dir_all(&dir);
-        assert_eq!(resolved, dir);
+        let env_dir = PathBuf::from("env-config-dir");
+        let test_dir = PathBuf::from("test-config-dir");
+
+        set_test_config_dir(test_dir);
+        let resolved = resolve_config_dir(Some(env_dir.clone())).expect("resolve_config_dir");
+        clear_test_config_dir();
+
+        assert_eq!(resolved, env_dir);
     }
 
     /// テスト用上書き時は上書き先ディレクトリをそのまま返すようにすること
@@ -350,21 +398,7 @@ mod tests {
     /// 環境変数上書き中は `is_portable_mode` が偽になるようにすること
     #[test]
     fn is_portable_mode_false_with_env_override() {
-        let dir =
-            std::env::temp_dir().join(format!("clip-refiner-portable-env-{}", std::process::id()));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        // SAFETY: Windows の環境変数 API はスレッドセーフで、std 経由の読み書きは
-        // std 内部のロックで直列化される。環境変数を読む非 Rust コードはテスト中に動かない
-        unsafe {
-            std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
-        }
-        let portable = is_portable_mode();
-        // SAFETY: `set_var` と同じ理由で、他スレッドの読み取りと競合しない
-        unsafe {
-            std::env::remove_var(consts::ENV_CONFIG_DIR);
-        }
-        let _ = fs::remove_dir_all(&dir);
-        assert!(!portable);
+        assert!(!portable_mode_with(Some(Path::new("env-config-dir"))));
     }
 
     /// `open_config_file` がキャプチャ時に実プロセスを起動せずパスを記録すること

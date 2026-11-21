@@ -40,13 +40,13 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | クリップボード | `refiner::{TextClipboard, ImageClipboard, HtmlClipboard}` | 加工 API が使うクリップボード I/O のトレイト (テキスト / 画像 / HTML 形式)。テスト用の差し替えにも使う |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `RegexSettings`, `RegexPreset`, `RegexStep` | 正規表現加工用 (feature 不要) |
-| 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |
+| 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `MonitorMode`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |
 | 設定 | `AppConfig::load` (`ConfigLoadOutcome` / `ConfigLoadFallback`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告。移行手順が無い `version` は `unsupported_version_kept` / `format_unsupported_config_version_message` で既存項目を維持して警告する。feature `config` |
 | 設定 | `get_config_dir`, `is_portable_mode`, `open_config_file`, `disk_config_modified_time`, `disk_config_content_fingerprint` (`ConfigFileFingerprint`) | 設定ディレクトリ・ファイル操作。内容指紋は外部編集検知用。feature `config` |
 | 設定 | `format_hotkey_fixes_message` | ホットキーの不正・重複補正を UI 向け文言にする。feature `config` |
 | 設定 | `RefineContext::from_config` (feature `config`), `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | テンプレート | `expand_clip_template`, `ClipTemplateContext`, `ClipTemplateError`, `clip_template_uses_clipboard` | 登録クリップのテンプレート展開 (`{date}` / `{clipboard}` など)。feature 不要 |
-| ホットキー | `parse_hotkey_binding`, `parse_hotkey_or_default`, `ParsedHotkey`, `HotkeyModifiers`, `HotkeyKey` | `Alt+Shift+S` 形式の文字列の解釈。feature 不要 |
+| ホットキー | `parse_hotkey_binding`, `parse_hotkey_or_default`, `parse_hotkey_or_default_labeled`, `ParsedHotkey`, `HotkeyModifiers`, `HotkeyKey` | `Alt+Shift+S` 形式の文字列の解釈。feature 不要 |
 | エラー | `Error`, `ClipboardProcessError`, `ClipboardIoError`, `HotkeyParseError` | 加工・ホットキーの失敗理由 |
 | エラー | `ConfigError`, `CipherError`, `ConfigReloadError`, `AddRegisteredClipError` | 設定 I/O・AEAD の失敗理由。feature `config` |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン。feature `config` |

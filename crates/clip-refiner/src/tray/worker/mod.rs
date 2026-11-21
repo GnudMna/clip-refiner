@@ -270,7 +270,7 @@ mod tests {
         state.monitor_generation.store(1, Ordering::SeqCst);
 
         let monitor = active_monitor(1);
-        if MonitorLoopState::effective_mode(&state) != MonitorMode::Event {
+        if MonitorLoopState::effective_mode(MonitorMode::Event) != MonitorMode::Event {
             return;
         }
 
@@ -293,7 +293,7 @@ mod tests {
         state.monitor_generation.store(1, Ordering::SeqCst);
 
         let monitor = active_monitor(1);
-        if MonitorLoopState::effective_mode(&state) != MonitorMode::Event {
+        if MonitorLoopState::effective_mode(MonitorMode::Event) != MonitorMode::Event {
             return;
         }
 
@@ -329,7 +329,7 @@ mod tests {
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
 
         assert_eq!(
-            MonitorLoopState::effective_mode(&state),
+            MonitorLoopState::effective_mode(state.with_config(|c| c.monitor_mode)),
             MonitorMode::Polling
         );
     }
@@ -340,7 +340,7 @@ mod tests {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
 
-        let effective = MonitorLoopState::effective_mode(&state);
+        let effective = MonitorLoopState::effective_mode(state.with_config(|c| c.monitor_mode));
 
         if clipboard_seq::supports_event_monitor() {
             assert_eq!(effective, MonitorMode::Event);

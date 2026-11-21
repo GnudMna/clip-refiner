@@ -84,6 +84,16 @@ impl SettingsWindow {
                     clipboard_worker,
                 );
             }
+            SettingsEvent::OpenDocument(document) => {
+                handle_settings_window_command(
+                    SettingsWindowCommand::OpenDocument(document),
+                    state,
+                    menu,
+                    self,
+                    quick_selector,
+                    clipboard_worker,
+                );
+            }
             SettingsEvent::RegexPreview => {
                 if let Some(request) = state.settings_pending().take_regex_preview_request() {
                     let response = RegexPreviewResponse::from_request(&request);

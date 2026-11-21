@@ -313,5 +313,5 @@ export async function expectWebViewCsp(page: Page): Promise<void> {
   const csp = page.locator('meta[http-equiv="Content-Security-Policy"]');
   await expect(csp).toHaveAttribute('content', /default-src 'none'/);
   await expect(csp).toHaveAttribute('content', /img-src data:/);
-  await expect(csp).toHaveAttribute('content', /script-src 'unsafe-inline'/);
+  await expect(csp).toHaveAttribute('content', /script-src 'sha256-/);
 }

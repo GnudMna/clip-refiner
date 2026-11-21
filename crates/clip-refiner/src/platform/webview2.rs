@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
+use super::shell::shell_open;
+
 // ======================================================================
 // 定数
 // ======================================================================
@@ -190,11 +192,7 @@ fn open_url(url: &str) -> Result<()> {
         return Ok(());
     }
 
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn()
-        .with_context(|| format!("URL のオープンに失敗: {url}"))?;
-    Ok(())
+    shell_open(url).with_context(|| format!("URL のオープンに失敗: {url}"))
 }
 
 // ======================================================================
