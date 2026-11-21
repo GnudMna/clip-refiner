@@ -8,22 +8,27 @@ use tao::event_loop::EventLoopProxy;
 use tao::window::Window;
 use wry::{WebContext, WebViewBuilder};
 
-/// クイックセレクター（コマンドパレット）のウィンドウを管理する構造体。
+/// クイックセレクタ（モード選択用のコマンドパレット風 UI）を管理する構造体
+///
+/// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画します。
 pub struct SelectorWindow {
+    /// WebView インスタンス
     webview: wry::WebView,
+    /// 描画先のウィンドウ
     window: Arc<Window>,
+    /// WebView のコンテキスト
     _context: wry::WebContext,
 }
 
 impl SelectorWindow {
-    /// 新しい `SelectorWindow` インスタンスを生成する。
+    /// セレクタウィンドウと WebView を初期化して生成する
     ///
     /// # Arguments
-    /// * `window` - セレクターを表示するための Tao ウィンドウ。
-    /// * `proxy` - イベントを送信するための EventLoopProxy。
+    /// * `window` - ベースとなる `tao` ウィンドウ
+    /// * `proxy` - UIスレッド（イベントループ）へメッセージを送信するためのプロキシ
     ///
     /// # Returns
-    /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー。
+    /// * `anyhow::Result<Self>` - 生成に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返します。
     pub fn new(window: Window, proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let window = Arc::new(window);
         let modes_json = RefineMode::to_json_list();
@@ -67,10 +72,12 @@ impl SelectorWindow {
         })
     }
 
-    /// セレクターを表示し、現在のモードを反映させる。
+    /// セレクタを表示し、現在の加工モードを反映させる
+    ///
+    /// 表示時に UI 側の検索フォームにフォーカスを合わせ、現在のモードをハイライトします。
     ///
     /// # Arguments
-    /// * `current_mode` - 現在アプリケーションで選択されている加工モード。
+    /// * `current_mode` - 現在アプリケーションで選択されている加工モード
     pub fn show(&self, current_mode: RefineMode) {
         self.window.set_visible(true);
         self.window.set_focus();
@@ -80,36 +87,38 @@ impl SelectorWindow {
         let _ = self.webview.evaluate_script(&script);
     }
 
-    /// セレクターを非表示にする。
+    /// セレクタを非表示にする
     pub fn hide(&self) {
         self.window.set_visible(false);
     }
 
-    /// セレクターが現在表示されているかどうかを確認する。
+    /// セレクタが現在表示されているかどうかを確認する
     ///
     /// # Returns
-    /// * `bool` - 表示されている場合は `true`、それ以外は `false`。
+    /// * `bool` - 表示中であれば `true`、そうでなければ `false`
     pub fn is_visible(&self) -> bool {
         self.window.is_visible()
     }
 
-    /// セレクターウィンドウの ID を取得する。
+    /// セレクタウィンドウの内部 ID を取得する
     ///
     /// # Returns
-    /// * `tao::window::WindowId` - ウィンドウ ID。
+    /// * `tao::window::WindowId` - ウィンドウ ID
     pub fn id(&self) -> tao::window::WindowId {
         self.window.id()
     }
 }
 
-/// クイックセレクターを初期化して、非表示状態の `SelectorWindow` インスタンスを返す。
+/// セレクタウィンドウを初期化して、非表示状態のインスタンスを作成する
+///
+/// ウィンドウの各種属性（透明度、フレームなしなど）を設定し、画面中央に配置します。
 ///
 /// # Arguments
-/// * `event_loop` - ウィンドウを作成するためのイベントループのターゲット。
-/// * `proxy` - イベントを送信するための EventLoopProxy。
+/// * `event_loop` - ウィンドウ作成用のイベントループ
+/// * `proxy` - イベント送信用プロキシ
 ///
 /// # Returns
-/// * `anyhow::Result<SelectorWindow>` - 初期化に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー。
+/// * `anyhow::Result<SelectorWindow>` - 初期化に成功した場合は `SelectorWindow` インスタンス、失敗した場合はエラー内容を返します。
 pub fn init_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
     proxy: EventLoopProxy<AppEvent>,

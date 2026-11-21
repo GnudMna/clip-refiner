@@ -1,4 +1,5 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
@@ -11,13 +12,13 @@ use crate::refiner::process_clipboard;
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 
-/// クリップボード監視スレッドを開始する。
+/// クリップボード監視スレッドを開始する
 ///
-/// 現在の監視モード設定（ポーリングまたはイベント）に応じて、適切な監視スレッドを起動する。
-/// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するようにする。
+/// 現在の監視モード設定（ポーリングまたはイベント）に基づいて、適切な監視スレッドを起動します。
+/// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するように制御します。
 ///
 /// # Arguments
-/// * `state` - アプリケーションの共有状態。
+/// * `state` - アプリケーションの共有状態
 pub fn spawn_monitor_thread(state: Arc<AppState>) {
     let monitor_mode = state.get_monitor_mode();
     let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -29,14 +30,17 @@ pub fn spawn_monitor_thread(state: Arc<AppState>) {
     }
 }
 
-/// クリップボードの更新を検知し、必要であれば加工処理を行う
+/// クリップボードの内容更新を検知し、必要に応じて加工処理を行う
+///
+/// 内容に変更があった場合、現在の加工モードを適用し、結果をクリップボードに書き戻します。
+/// 通知の表示や履歴への追加もここで行われます。
 ///
 /// # Arguments
-/// * `clipboard` - クリップボードのインスタンス
-/// * `state` - アプリケーションの状態
+/// * `clipboard` - クリップボード操作用のインスタンス
+/// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// 加工が実行され、クリップボードへの書き込みも行われた場合は `true`、それ以外の場合は `false` を返す。
+/// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返します。
 pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>) -> bool {
     if let Ok(text) = clipboard.get_text() {
         let shared_last = state.get_last_processed_text();
@@ -47,13 +51,13 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
                 state.set_last_processed_text(processed.clone());
                 notifier::show_process_notification(state, current_mode, &processed);
 
-                if state.history_enabled.load(Ordering::Relaxed) {
+                if state.is_history_enabled() {
                     state.add_to_history(processed);
                 }
                 return true;
             }
 
-            if state.history_enabled.load(Ordering::Relaxed) {
+            if state.is_history_enabled() {
                 state.add_to_history(text.clone());
             }
         }
@@ -62,19 +66,23 @@ pub fn handle_clipboard_update(clipboard: &mut Clipboard, state: &Arc<AppState>)
     false // 加工されなかった
 }
 
-/// ポーリング方式でクリップボードを監視するスレッドを開始する。
+/// ポーリング（定時確認）方式でクリップボードを監視するスレッドを開始する
 ///
-/// 一定間隔でクリップボードの内容を確認し、変更があった場合に加工処理を呼び出す。
+/// 一定間隔（デフォルト1秒など）でクリップボードの内容を確認します。
 ///
 /// # Arguments
-/// * `state` - アプリケーションの共有状態。
-/// * `generation` - このスレッドの世代番号。
+/// * `state` - アプリケーションの共有状態
+/// * `generation` - このスレッドの世代番号。最新でない世代のスレッドは自動終了します。
 pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
     thread::spawn(move || {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::show_anyhow_error("監視スレッドエラー", &e);
+                crate::log_error!("ポーリング監視スレッド初期化エラー: {:?}", e);
+                notification::show_notification(
+                    "監視スレッドエラー",
+                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
+                );
                 return;
             }
         };
@@ -90,10 +98,10 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            let interval = state.interval_ms.load(Ordering::Relaxed);
+            let interval = state.interval_ms();
             thread::sleep(Duration::from_millis(interval));
 
-            if state.paused.load(Ordering::Relaxed) {
+            if state.is_paused() {
                 break;
             }
 
@@ -102,12 +110,13 @@ pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
     });
 }
 
-/// イベント方式でクリップボードを監視するスレッドを開始する（Windows限定）。
+/// OSのイベント通知方式でクリップボードを監視するスレッドを開始する（Windows限定）
 ///
-/// OSのクリップボード更新イベントをリッスンし、変更があった場合に加工処理を呼び出す。
+/// クリップボードの内容が書き換わった際にOSから送られる通知をリッスンします。
+/// ポーリングよりも低負荷かつ低遅延で動作します。
 ///
 /// # Arguments
-/// * `state` - アプリケーションの共有状態。
+/// * `state` - アプリケーションの共有状態
 /// * `generation` - このスレッドの世代番号。
 #[cfg(windows)]
 pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
@@ -117,7 +126,11 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
         let mut clipboard = match init_clipboard() {
             Ok(cb) => cb,
             Err(e) => {
-                notification::show_anyhow_error("監視スレッドエラー", &e);
+                crate::log_error!("イベント監視スレッド初期化エラー: {:?}", e);
+                notification::show_notification(
+                    "監視スレッドエラー",
+                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
+                );
                 return;
             }
         };
@@ -132,7 +145,7 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
                 break;
             }
 
-            if state.paused.load(Ordering::Relaxed) {
+            if state.is_paused() {
                 break;
             }
 
@@ -156,19 +169,21 @@ pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
     });
 }
 
-/// クリップボード機能へのアクセスを初期化する。
+/// クリップボード機能への初期アクセスを確立する
 ///
 /// # Returns
-/// 初期化に成功した場合は`Ok(Clipboard)`、失敗した場合は`Err`を返す。
+/// * `Result<Clipboard>` - 初期化された `Clipboard` インスタンス。失敗した場合はエラーを返します。
 pub fn init_clipboard() -> Result<Clipboard> {
     Clipboard::new().context("クリップボードのアクセスに失敗しました")
 }
 
-/// 監視方式切り替え時のUI更新処理（OS依存）
+/// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
+///
+/// 例えば、イベントモード時は「監視周期」の設定メニューを無効化します。
 ///
 /// # Arguments
-/// * `menu` - トレイメニューのインスタンス。
-/// * `monitor_mode` - 新しく選択された監視方式。
+/// * `menu` - トレイメニュー構造体
+/// * `monitor_mode` - 新しく選択された監視方式
 pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: MonitorMode) {
     #[cfg(windows)]
     match monitor_mode {

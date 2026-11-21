@@ -10,6 +10,8 @@ pub mod url;
 pub mod utils;
 pub mod yaml;
 
+use std::borrow::Cow;
+
 use arboard::Clipboard;
 use clap::ValueEnum;
 use indexmap::IndexMap;
@@ -17,6 +19,9 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumIter, EnumMessage, EnumProperty, IntoEnumIterator, IntoStaticStr};
 
 /// クリップボードのテキストを加工する各モードの定義
+///
+/// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応しています。
+/// `strum` マクロを使用して、UI表示用のラベルやカテゴリ情報を保持しています。
 #[derive(
     Copy,
     Clone,
@@ -164,7 +169,9 @@ pub enum RefineMode {
     RemoveComma,
 }
 
-/// メニューの階層化に使用するカテゴリ
+/// トレイメニューの階層化に使用されるカテゴリ
+///
+/// 多くの加工モードを整理するために、関連するモードをグループ化します。
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, EnumIter, EnumMessage, IntoStaticStr)]
 pub enum RefineCategory {
     /// 通常の単独メニュー
@@ -204,6 +211,9 @@ pub enum RefineCategory {
 
 impl RefineCategory {
     /// カテゴリの表示名を取得する
+    ///
+    /// # Returns
+    /// * `&'static str` - UIに表示するためのカテゴリ名。
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
@@ -244,7 +254,10 @@ impl RefineMode {
     }
 }
 
-/// JSON, YAMLキー順序保持用
+/// JSONやYAMLのパース時にキーの順序を保持するための値構造
+///
+/// `serde_json::Value` と似ていますが、オブジェクトの保持に `IndexMap` を使用し、
+/// データの順序を維持したままシリアライズ・デシリアライズが可能です。
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OrderedValue {
@@ -256,7 +269,7 @@ pub enum OrderedValue {
     Object(IndexMap<String, OrderedValue>),
 }
 
-/// クリップボードのテキストを加工するトレイト
+/// クリップボードのテキストを加工するための共通インターフェース
 pub trait Refiner {
     /// テキストを加工する
     ///
@@ -264,34 +277,24 @@ pub trait Refiner {
     /// * `text` - 加工前のテキスト
     ///
     /// # Returns
-    /// * `String` - 加工後のテキスト
-    fn refine(&self, text: &str) -> String;
+    /// * `Cow<'a, str>` - 加工後のテキスト（変更がない場合は元のテキストを借用）
+    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str>;
 }
 
 impl Refiner for RefineMode {
-    fn refine(&self, text: &str) -> String {
+    fn refine<'a>(&self, text: &'a str) -> Cow<'a, str> {
         match self {
             RefineMode::UrlEncode => url::url_encode(text),
-            RefineMode::UrlDecode => url::url_decode(text).unwrap_or_else(|_| text.to_string()),
+            RefineMode::UrlDecode => url::url_decode(text)
+                .map(Cow::Owned)
+                .unwrap_or_else(|_| Cow::Borrowed(text)),
             RefineMode::RemoveUtm => url::remove_utm_params(text),
-            RefineMode::ExtractBasename => {
-                path::extract_basename(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::ExtractBasenameQuoted => {
-                path::extract_basename_quoted(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::AddPathQuotes => {
-                path::add_path_quotes(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::RemovePathQuotes => {
-                path::remove_path_quotes(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::PathToSlash => {
-                path::convert_to_forward_slash(text).unwrap_or_else(|| text.to_string())
-            }
-            RefineMode::PathToBackslash => {
-                path::convert_to_backslash(text).unwrap_or_else(|| text.to_string())
-            }
+            RefineMode::ExtractBasename => path::extract_basename(text),
+            RefineMode::ExtractBasenameQuoted => path::extract_basename_quoted(text),
+            RefineMode::AddPathQuotes => path::add_path_quotes(text),
+            RefineMode::RemovePathQuotes => path::remove_path_quotes(text),
+            RefineMode::PathToSlash => path::convert_to_forward_slash(text),
+            RefineMode::PathToBackslash => path::convert_to_backslash(text),
             RefineMode::SortLinesAsc => line_actions::sort_lines(text, false),
             RefineMode::SortLinesDesc => line_actions::sort_lines(text, true),
             RefineMode::RemoveEmptyLines => line_actions::remove_empty_lines(text),
@@ -318,25 +321,33 @@ impl Refiner for RefineMode {
     }
 }
 
-/// クリップボードの内容を変換
+/// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
+///
+/// テキストが変更された場合のみクリップボードを更新し、その内容を返します。
 ///
 /// # Arguments
-/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス。
-/// * `mode` - 適用する `RefineMode`。
+/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
+/// * `mode` - 適用する加工モード (`RefineMode`)
 ///
 /// # Returns
-/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返す。加工されなかった場合は `None` を返す。
+/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返し、
+///   変更がなかった場合や空の場合は `None` を返します。
 pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
     let text = clipboard.get_text().ok()?;
     if text.is_empty() {
         return None;
     }
 
-    let processed = mode.refine(&text);
+    let refined = mode.refine(&text);
 
-    if processed != text {
-        let _ = clipboard.set_text(processed.clone());
-        Some(processed)
+    // 変更がない場合は更新しない
+    if refined == text {
+        return None;
+    }
+
+    let result = refined.into_owned();
+    if clipboard.set_text(result.clone()).is_ok() {
+        Some(result)
     } else {
         None
     }
