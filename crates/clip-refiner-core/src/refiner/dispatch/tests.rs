@@ -1,9 +1,9 @@
+use strum::IntoEnumIterator;
+
 use super::super::transform::datetime;
 use super::test_cases::{FIXED_CASES, SPECIAL_MODE_COUNT};
 use super::*;
 use crate::config::RegexSettings;
-
-use strum::IntoEnumIterator;
 
 fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
     let mut ctx = RefineContext::default();

@@ -95,9 +95,9 @@ fn format_panic_record(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use chrono::TimeZone;
+
+    use super::*;
 
     /// `&str` のペイロードからメッセージを取り出すこと
     #[test]

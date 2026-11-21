@@ -1,11 +1,11 @@
 use std::sync::Mutex;
 
-use crate::tray::dispatch;
-use crate::tray::menu::{RegexPresetMenu, TrayMenu};
-use crate::tray::state::{AppState, LockExt};
-
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, MenuItem, Submenu};
+
+use crate::tray::dispatch;
+use crate::tray::menu::{RegexPresetMenu, TrayMenu, escape_menu_text};
+use crate::tray::state::{AppState, LockExt};
 
 // ======================================================================
 // 正規表現プリセットメニュー
@@ -80,7 +80,8 @@ impl RegexPresetMenu {
             } else {
                 name.as_str()
             };
-            let item = CheckMenuItem::new(label, true, id == active_preset_id, None);
+            let item =
+                CheckMenuItem::new(escape_menu_text(label), true, id == active_preset_id, None);
             records.push((item, id.clone()));
         }
         for (item, _) in records.iter() {

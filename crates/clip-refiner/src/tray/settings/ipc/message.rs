@@ -1,8 +1,8 @@
+use serde::Deserialize;
+
 use super::super::model::SettingsPatch;
 use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::refiner::RefineMode;
-
-use serde::Deserialize;
 
 // ======================================================================
 // IPC メッセージ

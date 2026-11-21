@@ -1,9 +1,9 @@
+use anyhow::Result;
+
 use super::types::TrayMenu;
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::state::{AppState, LockExt, MenuSnapshot};
-
-use anyhow::Result;
 
 // ======================================================================
 // 設定同期

@@ -8,6 +8,10 @@ mod events;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+use anyhow::{Context, Result};
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowBuilder, WindowId};
+
 use super::apply::{SettingsApplyFeedback, should_notify_apply_error_via_desktop};
 use super::geometry::{
     apply_geometry_to_builder, apply_saved_position, load_settings_window_geometry,
@@ -28,10 +32,6 @@ use assets::{
     CLOSE_FROM_OS_SCRIPT, FLUSH_PENDING_APPLY_SCRIPT, assemble_settings_html,
     log_unparsed_settings_ipc,
 };
-
-use anyhow::{Context, Result};
-use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowBuilder, WindowId};
 
 // ======================================================================
 // 設定ウィンドウ

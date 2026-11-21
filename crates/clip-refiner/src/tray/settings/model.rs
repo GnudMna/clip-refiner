@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 use crate::config::{
     AppConfig, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings,
     SelectorWebviewRetention,
 };
 use crate::platform::autostart;
 use crate::refiner::RefineMode;
-
-use serde::{Deserialize, Serialize};
 
 // ======================================================================
 // 設定モデル

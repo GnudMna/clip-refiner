@@ -5,10 +5,10 @@ use std::sync::{Arc, Condvar, LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::consts::{REGEX_MATCH_MAX_IN_FLIGHT, REGEX_MATCH_TIMEOUT_MS};
-
 use regex::Regex;
 use tracing::warn;
+
+use crate::consts::{REGEX_MATCH_MAX_IN_FLIGHT, REGEX_MATCH_TIMEOUT_MS};
 
 // ======================================================================
 // マッチ実行タイムアウト
@@ -314,14 +314,14 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
+    use regex::Regex;
+
     use super::{
         MatchCancel, REGEX_MATCH_POOL, RegexMatchTimeout, check_cancel, on_match_timeout,
         replace_all_cancellable, run_with_match_timeout_duration, wait_until_pool_idle,
         with_pool_test_lock,
     };
     use crate::consts::REGEX_MATCH_MAX_IN_FLIGHT;
-
-    use regex::Regex;
 
     /// 制限時間内に終わらないマッチはタイムアウトすること
     #[test]

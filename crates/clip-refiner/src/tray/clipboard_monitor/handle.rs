@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::decision::{should_process_clipboard, should_record_continuous_clipboard};
+use super::guard::ObservedClipboard;
 use crate::refiner::{
     ClipboardProcessError, ClipboardProcessOutcome, HtmlClipboard, ImageClipboard, RefineContext,
     RefineMode, TextClipboard, process_clipboard_pipeline_io,
@@ -111,6 +112,9 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
         return ClipboardObserveResult::Observed;
     }
 
+    // 除外判定から書き戻しまでの間に別のコピーが入ったかを後で照合するため、先に控える
+    let token = clipboard.change_token();
+
     // パスワードマネージャー等の除外指定付きコピーは本文を読まずに観測済みとする
     if clipboard.is_excluded_from_monitoring() {
         crate::log_debug!("監視除外が指定されたクリップボード内容のため加工をスキップ");
@@ -146,7 +150,13 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
         }
     }
 
-    let outcome = process_clipboard_pipeline_io(clipboard, &snap.pipeline, ctx);
+    // 判定に使った本文をそのまま加工し、書き戻し前に別のコピーが入っていれば上書きしない
+    let mut observed = ObservedClipboard::new(clipboard, &text, token);
+    let outcome = process_clipboard_pipeline_io(&mut observed, &snap.pipeline, ctx);
+    if observed.is_superseded() {
+        crate::log_debug!("加工中にクリップボードが更新されたため書き戻しを見送り");
+        return ClipboardObserveResult::Observed;
+    }
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {
@@ -195,6 +205,8 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
 ) -> ClipboardObserveResult {
+    let token = clipboard.change_token();
+
     if clipboard.is_excluded_from_monitoring() {
         crate::log_debug!("監視除外が指定されたクリップボード内容のため記録をスキップ");
         return ClipboardObserveResult::Observed;
@@ -203,6 +215,12 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
     let Ok(text) = clipboard.get_text() else {
         return ClipboardObserveResult::ReadFailed;
     };
+
+    // 除外判定の後に別のコピーが入った場合、読んだ本文は判定対象と異なるため記録しない
+    if token.is_some() && clipboard.change_token() != token {
+        crate::log_debug!("読み取り中にクリップボードが更新されたため記録をスキップ");
+        return ClipboardObserveResult::Observed;
+    }
 
     let should_record = state
         .clipboard_session()
@@ -473,6 +491,68 @@ mod tests {
         assert!(!ps.matches_last_seen("  secret  "));
     }
 
+    /// 読み取り後に監視除外指定付きのコピーが入っても、その内容を加工・上書きしないこと
+    ///
+    /// 判定に使った本文と書き戻し時のクリップボードが食い違うため、履歴と Undo 元も残さない
+    #[test]
+    fn handle_update_keeps_excluded_copy_made_after_read() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
+        let mut clipboard = InMemoryTextClipboard::with_text("  public  ")
+            .with_external_copy_after_read("  secret  ", true);
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::Event,
+            &RefineContext::default(),
+        );
+
+        // 秘密情報は加工されず、除外指定のまま残る
+        assert_eq!(result, ClipboardObserveResult::Observed);
+        assert_eq!(clipboard.text(), "  secret  ");
+        assert!(clipboard.is_excluded_from_monitoring());
+        assert_eq!(collect_history(&state), Vec::<String>::new());
+        assert!(state.clipboard_session().take_undo_source().is_none());
+        let ps = state
+            .clipboard_session()
+            .with_processed_state(|s| s.clone());
+        assert!(!ps.matches_last_seen("  public  "));
+        assert!(!ps.matches_last_written("public"));
+    }
+
+    /// 読み取り後に別のコピーが入った場合、加工結果で上書きしないこと
+    #[test]
+    fn handle_update_does_not_overwrite_copy_made_after_read() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
+        let mut clipboard = InMemoryTextClipboard::with_text("  first  ")
+            .with_external_copy_after_read("  second  ", false);
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::Event,
+            &RefineContext::default(),
+        );
+
+        assert_eq!(result, ClipboardObserveResult::Observed);
+        assert_eq!(clipboard.text(), "  second  ");
+
+        // 次の更新検知で、新しい内容が改めて加工される
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::Event,
+            &RefineContext::default(),
+        );
+        assert_eq!(result, ClipboardObserveResult::ClipboardWritten);
+        assert_eq!(clipboard.text(), "second");
+    }
+
     /// ポーリングで変更を確認できないときは、テキストの無い画像を加工しないこと
     #[test]
     fn handle_update_skips_textless_image_when_polling_change_unconfirmed() {
@@ -519,6 +599,21 @@ mod tests {
         let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.continuous_record_enabled = true);
         let mut clipboard = InMemoryTextClipboard::with_text("secret").excluded_from_monitoring();
+
+        assert_eq!(
+            observe_continuous_record(&mut clipboard, &state),
+            ClipboardObserveResult::Observed
+        );
+        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+    }
+
+    /// 除外判定の後に監視除外指定付きのコピーが入っても、連続記録キューへ積まないこと
+    #[test]
+    fn continuous_record_skips_excluded_copy_made_after_check() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        let mut clipboard = InMemoryTextClipboard::with_text("public")
+            .with_external_copy_after_read("secret", true);
 
         assert_eq!(
             observe_continuous_record(&mut clipboard, &state),

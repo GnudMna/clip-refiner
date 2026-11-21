@@ -1,13 +1,6 @@
 use std::sync::Once;
 use std::time::Instant;
 
-use super::geometry::{lparam_x, lparam_y, map_client_rect_to_screen, normalize_rect, str_to_wide};
-use super::layered::LayeredOverlay;
-use super::types::{
-    DragSelection, ERROR_CLASS_ALREADY_EXISTS, MIN_SELECTION_SIZE, OVERLAY_CLASS_NAME,
-    REDRAW_INTERVAL,
-};
-
 use anyhow::Result;
 use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, RECT, WIN32_ERROR, WPARAM};
 use windows::Win32::Graphics::Gdi::{HBRUSH, ValidateRect};
@@ -19,6 +12,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WNDCLASS_STYLES, WNDCLASSW,
 };
 use windows::core::PCWSTR;
+
+use super::geometry::{lparam_x, lparam_y, map_client_rect_to_screen, normalize_rect, str_to_wide};
+use super::layered::LayeredOverlay;
+use super::types::{
+    DragSelection, ERROR_CLASS_ALREADY_EXISTS, MIN_SELECTION_SIZE, OVERLAY_CLASS_NAME,
+    REDRAW_INTERVAL,
+};
 
 // ======================================================================
 // ウィンドウ状態

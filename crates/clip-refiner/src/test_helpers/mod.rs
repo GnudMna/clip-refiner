@@ -32,14 +32,15 @@ mod worker;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 mod ipc;
 
+pub use clip_refiner_core::config::MonitorMode;
+pub use clip_refiner_core::test_helpers::{InMemoryTextClipboard, with_temp_config_dir};
+
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use crate::ipc::{
     ClientError, OneshotIpcResponse, OneshotIpcServer, OneshotIpcStatus, OneshotProcessResult,
 };
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-pub use clip_refiner_core::config::MonitorMode;
-pub use clip_refiner_core::test_helpers::{InMemoryTextClipboard, with_temp_config_dir};
 pub use harness::ClipboardHarness;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use ipc::{

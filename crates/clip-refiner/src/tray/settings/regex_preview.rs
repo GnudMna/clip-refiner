@@ -1,7 +1,7 @@
+use serde::Serialize;
+
 use crate::refiner::preview_regex_replace;
 use crate::tray::state::RegexPreviewRequest;
-
-use serde::Serialize;
 
 // ======================================================================
 // プレビュー応答

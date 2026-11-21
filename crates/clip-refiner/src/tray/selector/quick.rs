@@ -2,6 +2,9 @@ use std::cell::{Cell, RefCell};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowId};
+
 use super::retention::RetainedSelector;
 use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
@@ -12,9 +15,6 @@ use crate::consts;
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, FavoritesEvent, LockExt, SelectorEvent};
-
-use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowId};
 
 // ======================================================================
 // クイックセレクター IPC

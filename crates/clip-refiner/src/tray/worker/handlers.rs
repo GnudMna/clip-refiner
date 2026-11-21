@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+use chrono::Local;
+
 use super::super::dispatch;
 use super::super::notify::{
     NotificationCategory, show_category_notification, show_image_process_notification,
@@ -22,8 +24,6 @@ use crate::user_error::{
     ClipboardWriteContext, UserNotification, registered_clip_register_failure,
     registered_clip_template_failure, titles,
 };
-
-use chrono::Local;
 
 // ======================================================================
 // コマンド処理

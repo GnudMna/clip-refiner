@@ -1,4 +1,20 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$p = ($input | ConvertFrom-Json).tool_input.file_path.Replace([string][char]92, '/'); if ($p.Contains('crates/clip-refiner/src/ui/') -and $p.EndsWith('.js') -and -not $p.EndsWith('.bundle.js')) { $out = npm run build:ui 2>&1 | Out-String; if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine($out); exit 2 } }",
+            "statusMessage": "UI バンドルを再生成中"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(cargo fmt:*)",
@@ -10,22 +26,56 @@
       "Bash(cargo deny:*)",
       "Bash(npm run build:ui:*)",
       "Bash(npm run lint:*)",
-      "Bash(npm run format:check)",
+      "Bash(npm run format:check:*)",
+      "Bash(npm run test:e2e:*)",
+      "Bash(pwsh ./scripts/windows/check.ps1:*)",
+      "Bash(pwsh ./scripts/windows/clippy.ps1:*)",
+      "Bash(pwsh ./scripts/windows/format.ps1:*)",
+      "PowerShell(./scripts/windows/check.ps1:*)",
+      "PowerShell(./scripts/windows/clippy.ps1:*)",
+      "PowerShell(./scripts/windows/format.ps1:*)",
+      "PowerShell(cargo fmt:*)",
+      "PowerShell(cargo test:*)",
+      "PowerShell(cargo clippy:*)",
+      "PowerShell(cargo check:*)",
+      "PowerShell(cargo build:*)",
+      "PowerShell(cargo doc:*)",
+      "PowerShell(cargo deny:*)",
+      "PowerShell(npm run build:ui:*)",
+      "PowerShell(npm run lint:*)",
+      "PowerShell(npm run format:check:*)",
+      "PowerShell(npm run test:e2e:*)",
+      "PowerShell($env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git worktree list)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch -vv)",
+      "PowerShell(git status:*)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git show:*)",
+      "PowerShell(git fetch:*)",
+      "PowerShell(git worktree list)",
+      "PowerShell(git branch --show-current)",
+      "PowerShell(git branch -vv)"
     ],
     "ask": [
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "PowerShell(git push:*)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Edit(./.env)",
-      "Edit(./.env.*)",
-      "Write(./.env)",
-      "Write(./.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Bash(cat .env*)",
+      "PowerShell(Get-Content .env*)",
       "Edit(**/*.bundle.js)",
       "Write(**/*.bundle.js)",
       "Edit(./keys/**)",

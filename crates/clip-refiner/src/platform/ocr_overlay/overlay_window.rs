@@ -2,12 +2,6 @@
 
 use std::ptr::NonNull;
 
-use super::geometry;
-use super::layered::LayeredOverlay;
-use super::types::{DragSelection, OVERLAY_CLASS_NAME, OverlayCompleteFn};
-use super::wndproc::{OverlayState, hide_overlay, register_overlay_class};
-use crate::platform::screen_capture::virtual_screen_bounds;
-
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -17,6 +11,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
     ShowWindow, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
+
+use super::geometry;
+use super::layered::LayeredOverlay;
+use super::types::{DragSelection, OVERLAY_CLASS_NAME, OverlayCompleteFn};
+use super::wndproc::{OverlayState, hide_overlay, register_overlay_class};
+use crate::platform::screen_capture::virtual_screen_bounds;
 
 // ======================================================================
 // オーバーレイウィンドウ
@@ -179,16 +179,16 @@ impl Drop for OverlayWindow {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use super::*;
-    use crate::platform::ocr_overlay::geometry::make_lparam;
-    use crate::platform::ocr_overlay::types::{BORDER_PIXEL, SelectionRect};
-    use crate::platform::screen_capture::ScreenRect;
-
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
     use windows::Win32::UI::WindowsAndMessaging::{
         SendMessageW, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
     };
+
+    use super::*;
+    use crate::platform::ocr_overlay::geometry::make_lparam;
+    use crate::platform::ocr_overlay::types::{BORDER_PIXEL, SelectionRect};
+    use crate::platform::screen_capture::ScreenRect;
 
     impl OverlayWindow {
         /// テスト用に HWND を公開する

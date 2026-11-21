@@ -1,9 +1,9 @@
+use anyhow::Result;
+
 use crate::platform;
 use crate::security::secret_from;
 use crate::tray::dispatch;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use anyhow::Result;
 
 // ======================================================================
 // OCR 実行

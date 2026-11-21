@@ -7,9 +7,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use super::error::UpdateError;
-
 use minisign_verify::{PublicKey, Signature};
+
+use super::error::UpdateError;
 
 include!(concat!(env!("OUT_DIR"), "/update_signing_keys.rs"));
 
@@ -195,9 +195,9 @@ mod tests {
     use std::io::Cursor;
     use std::path::PathBuf;
 
-    use super::*;
-
     use minisign::KeyPair;
+
+    use super::*;
 
     /// テスト用の一時ファイルへ内容を書き、そのパスを返す
     fn write_temp_file(name: &str, body: &[u8]) -> PathBuf {

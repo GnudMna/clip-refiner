@@ -153,9 +153,9 @@ define_hotkey_key_to_code! {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use clip_refiner_core::hotkey_binding::{HotkeyModifiers, parse_hotkey_binding};
+
+    use super::*;
 
     /// core の解析結果が `global-hotkey` に変換できるようにすること
     #[test]

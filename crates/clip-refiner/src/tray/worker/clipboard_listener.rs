@@ -7,10 +7,10 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use super::command::ClipboardCommand;
-
 use clipboard_win::monitor::{Monitor, Shutdown};
 use thiserror::Error;
+
+use super::command::ClipboardCommand;
 
 // ======================================================================
 // エラー

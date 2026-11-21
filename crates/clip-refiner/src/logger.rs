@@ -280,9 +280,9 @@ mod tests {
     use std::sync::atomic::{AtomicU8, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::*;
-
     use chrono::NaiveDate;
+
+    use super::*;
 
     /// テスト用の一時ディレクトリを作成する
     fn temp_log_dir(label: &str) -> PathBuf {

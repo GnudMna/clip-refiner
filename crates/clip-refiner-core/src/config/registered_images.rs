@@ -2,14 +2,14 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
+use image::{ImageBuffer, ImageFormat, RgbaImage};
+
 use super::clip_store_key::clip_store_key;
 use super::paths::get_config_dir;
 use super::permissions::{restrict_private_dir_permissions, restrict_private_file_permissions};
 use crate::consts;
 use crate::error::ConfigError;
 use crate::security::{decrypt_bytes, encrypt_bytes};
-
-use image::{ImageBuffer, ImageFormat, RgbaImage};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

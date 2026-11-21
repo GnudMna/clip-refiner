@@ -39,6 +39,10 @@ pub(crate) use signature::{expected_trusted_comment, signature_asset_name};
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use types::UpdatePackageKind;
 
+use std::path::PathBuf;
+
+use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
+
 // ======================================================================
 // 定数
 // ======================================================================
@@ -57,4 +61,25 @@ pub(crate) const UPDATE_WORK_DIR_NAME: &str = "clip-refiner-update";
 /// * `&'static str` - Cargo パッケージバージョン
 pub(crate) fn current_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// システムフォルダ内の実行ファイルの絶対パスを返す
+///
+/// 実行ファイルと同じフォルダの同名ファイルや `PATH` 上の偽物を拾わないよう、
+/// 外部コマンドはこのパスで起動する
+///
+/// # Arguments
+/// * `file_name` - 実行ファイル名 (例: `msiexec.exe`)
+///
+/// # Returns
+/// * `Option<PathBuf>` - システムフォルダを取得できない場合は `None`
+pub(crate) fn system_exe_path(file_name: &str) -> Option<PathBuf> {
+    let mut buf = [0u16; 260];
+    // SAFETY: `buf` は呼び出し中有効な書き込み可能バッファで、長さはスライスから渡す
+    let len = usize::try_from(unsafe { GetSystemDirectoryW(Some(&mut buf)) }).ok()?;
+    if len == 0 || len >= buf.len() {
+        return None;
+    }
+    let dir = PathBuf::from(String::from_utf16(&buf[..len]).ok()?);
+    Some(dir.join(file_name))
 }

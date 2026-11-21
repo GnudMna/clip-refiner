@@ -3,10 +3,10 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use clap::Parser;
+
 use crate::refiner::RefineMode;
 use crate::tray::E2eWindow;
-
-use clap::Parser;
 
 // ======================================================================
 // 引数設定

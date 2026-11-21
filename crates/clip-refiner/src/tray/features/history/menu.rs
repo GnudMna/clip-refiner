@@ -1,13 +1,13 @@
 use std::sync::Mutex;
 
+use anyhow::Result;
+use tray_icon::menu::{CheckMenuItem, IsMenuItem, MenuItem, PredefinedMenuItem, Submenu};
+
 use crate::security::format_public_snippet;
 use crate::tray::menu::{
     DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, HistoryMenu, TrayMenu, rebuild_toggle_records_submenu,
 };
 use crate::tray::state::{AppState, LockExt};
-
-use anyhow::Result;
-use tray_icon::menu::{CheckMenuItem, IsMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 /// 履歴メニュー表示用にテキストを短縮する
 pub(crate) fn format_history_menu_label(text: &str) -> String {

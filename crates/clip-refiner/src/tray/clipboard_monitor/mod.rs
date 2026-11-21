@@ -1,5 +1,6 @@
 mod decision;
 mod generation;
+mod guard;
 mod handle;
 
 pub use generation::{bump_monitor_generation, bump_monitor_generation_unchecked};

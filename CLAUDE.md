@@ -36,35 +36,21 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 ## ドキュメント同期
 
-`cargo test` はコードとドキュメントのずれを検出する。次を変えたら同じ変更で更新する。
-
-- 設定キー・既定値・処理上限・既定ホットキー・`CONFIG_VERSION` → `docs/user/configuration.md` の設定項目表 / 処理の制限、README のホットキー表 (`crates/clip-refiner-core/src/config/spec.rs` が検証)
-- UI の JavaScript → `*.bundle.js` を再生成 (`tests/ui_bundle_flow.rs` が検証)
-- ディレクトリ・ファイルの移動 / 改名 / 削除 → `docs/dev/architecture.md` の構成図と表 (`tests/architecture_doc_flow.rs` が検証)。同書はディレクトリ・命名規則の単位で書き、ファイル単位の責務表を増やさない
-- 利用者に見える挙動 → README / `docs/user/` の該当節
-
-ドキュメントは常体 (だ・である調) で書く。
+設定 (キー・既定値・上限・ホットキー・`CONFIG_VERSION`)・UI の JavaScript・ディレクトリ構成・利用者に見える挙動を変えたら、同じ変更で対応するドキュメントも更新する。更新先は [docs/dev/contributing.md のドキュメント同期](docs/dev/contributing.md#ドキュメント同期) の表に従う。ずれは `cargo test` が検出する。
 
 ## Git
 
-- 作業ブランチは `develop` から切り、PR の向き先も `develop`
-- ブランチ名は `<type>/<kebab-case>` (例: `fix/...`, `refactor/...`, `chore/...`, `security/...`, `docs/...`)
-- コミットメッセージは `<Type>: <日本語の要約>` (例: `Fix: DPAPI 平文のゼロ化を修正`)。Type は `Feat` / `Update` / `Fix` / `Refactor` / `Test` / `Docs` / `Chore` / `Security`
-- 利用者に影響する変更は [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` に追記する。節は `Breaking changes` / `Settings` / `Added` / `Changed` / `Fixed` / `Security` / `Removed`
+ブランチ名 (prefix の一覧)・コミットメッセージ・CHANGELOG の追記・PR の書き方は [docs/dev/contributing.md の Git 運用](docs/dev/contributing.md#git-運用) に従う。ここには作業時に間違えやすい点だけを置く。
+
+- ブランチは `develop` を checkout / pull せず、`git fetch origin develop` のうえ `origin/develop` から切る (`git switch -c <prefix>/<kebab-case> origin/develop`)。グローバルの「develop で `git pull`」より、このリポジトリではこちらを優先する
+- worktree の自動命名ブランチは、最初のコミットの前に `git branch -m` で規約の名前へ改める。新機能・既存機能の変更の prefix は `feat` ではなく `feature`
+- フックのスキップ (`--no-verify` / `CLIP_REFINER_SKIP_HOOK`) は指示がない限り使わない
 
 ## コーディング規約
 
-規約は `.claude/rules/` に置く (対象ファイルを扱うときに自動で読み込まれる)。
-
-- [comments.md](.claude/rules/comments.md) — Rust のコメント・ドキュメントコメント・`SAFETY` コメント・テストの記述規約
-- [imports.md](.claude/rules/imports.md) — Rust の `use` 文のグループ分けと並び順
-- [javascript.md](.claude/rules/javascript.md) — WebView UI の JavaScript (バンドル・`innerHTML` のサニタイズ・純粋ロジックの分離)
-- [docs.md](.claude/rules/docs.md) — ドキュメントの文体・`docs/user/` の制約・CHANGELOG の書き方
-
-`.claude/settings.json` は共有の権限設定を持つ。`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
+規約は `.claude/rules/` (`comments.md` / `imports.md` / `javascript.md` / `docs.md`) に置き、対象ファイルを扱うときに自動で読み込まれる。品質チェックと CHANGELOG 追記はスキル `/check`・`/changelog` (`.claude/skills/`) で行う。共有の権限設定とフックは `.claude/settings.json`、個人用の上書きは `.claude/settings.local.json` (Git 管理外) に置く。
 
 ## 注意点
 
-- `unwrap` / `expect` は clippy で警告になる (テストは除く)。`unsafe` には `// SAFETY:` を付ける
+- `unwrap` / `expect` は clippy で警告になる (テストは除く)
 - Git フック (`scripts/git/hooks/`: pre-commit は fmt、pre-push は `check.ps1`) は `./scripts/windows/install-hooks.ps1` で有効化できる。スキップは `CLIP_REFINER_SKIP_HOOK=1` (pre-commit / pre-push)、`CLIP_REFINER_SKIP_E2E=1` (E2E のみ)
-- `docs/user/` は MSI / ZIP に同梱する mdBook 原稿のため、`docs/dev/` など外部へリンクしない

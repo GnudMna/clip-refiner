@@ -9,7 +9,9 @@ mod sync;
 mod types;
 
 pub use icon::create_window_icon;
-pub(crate) use rebuild::{DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, rebuild_toggle_records_submenu};
+pub(crate) use rebuild::{
+    DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, escape_menu_text, rebuild_toggle_records_submenu,
+};
 pub use types::{
     CategoryGroup, ClipsMenu, ContinuousRecordMenu, HistoryMenu, RefineMenu, RegexPresetMenu,
     TrayMenu,
@@ -22,15 +24,15 @@ pub use types::{
 mod tests {
     use std::sync::Mutex;
 
-    use super::icon::create_icon;
-    use super::*;
-    use crate::config::HotkeySettings;
-    use crate::refiner::{RefineCategory, RefineMode};
-
     use tray_icon::{
         TrayIconBuilder,
         menu::{CheckMenuItem, MenuItem, Submenu},
     };
+
+    use super::icon::create_icon;
+    use super::*;
+    use crate::config::HotkeySettings;
+    use crate::refiner::{RefineCategory, RefineMode};
 
     /// 変換モードメニューに全モードが含まれるようにすること
     #[test]

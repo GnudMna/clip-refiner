@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tao::event_loop::EventLoopWindowTarget;
+
 use super::super::apply::{
     SettingsApplyFeedback, SettingsWindowCommand, handle_settings_window_command,
 };
@@ -13,8 +15,6 @@ use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::refresh_settings_window;
 use crate::tray::state::{AppEvent, AppState, SettingsEvent};
 use crate::tray::worker::ClipboardWorkerHandle;
-
-use tao::event_loop::EventLoopWindowTarget;
 
 // ======================================================================
 // イベント処理

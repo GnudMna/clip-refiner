@@ -1,10 +1,10 @@
-use super::app::App;
-use super::e2e::E2eWindow;
-use super::state::{AppEvent, SelectorEvent, SettingsEvent};
-
 use anyhow::Result;
 use tao::event_loop::{EventLoop, EventLoopBuilder};
 use tao::platform::windows::EventLoopBuilderExtWindows;
+
+use super::app::App;
+use super::e2e::E2eWindow;
+use super::state::{AppEvent, SelectorEvent, SettingsEvent};
 
 // ======================================================================
 // メインループ

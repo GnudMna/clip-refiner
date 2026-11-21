@@ -7,6 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use anyhow::{Context, Result};
+use tao::event_loop::EventLoopProxy;
+
 use crate::platform::ocr;
 use crate::platform::ocr_overlay::OverlayWindow;
 use crate::platform::screen_capture::{ScreenRect, capture_screen_region};
@@ -14,9 +17,6 @@ use crate::tray::dispatch;
 use crate::tray::event::dispatch_ocr_result;
 use crate::tray::state::{AppEvent, LockExt, OcrEvent};
 use crate::tray::worker::ClipboardWorkerHandle;
-
-use anyhow::{Context, Result};
-use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // OCR ジョブ制御

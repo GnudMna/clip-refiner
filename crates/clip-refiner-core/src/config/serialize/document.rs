@@ -1,9 +1,10 @@
+use serde::Serialize;
+use toml_edit::{DocumentMut, Item, Table};
+
 use super::format::{field_comment_prefix, section_header_prefix};
 use super::scalar::serde_to_toml_value;
 
 use crate::error::ConfigError;
-use serde::Serialize;
-use toml_edit::{DocumentMut, Item, Table};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

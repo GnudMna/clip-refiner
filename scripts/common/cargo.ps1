@@ -15,6 +15,43 @@ $ErrorActionPreference = 'Stop'
 
 $script:CargoTestFeatures = 'test-helpers'
 
+# リンカーがライブラリを開けない一過性の失敗 (LNK1104) のときだけ 1 回再実行する
+#
+# 並列リンク中に `msvcrt.lib` などを開けず失敗することがある (ウイルス対策ソフトのスキャンによるロックと推定)。
+# 再実行ではビルド済みの成果物を再利用し、失敗したバイナリだけをリンクし直す。
+# 判定のため出力を行単位で中継するので、cargo の進捗バーと色は出ない
+function Invoke-CargoWithLinkRetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$CargoArgs,
+
+        [Parameter(Mandatory = $true)]
+        [string]$CommandLabel
+    )
+
+    $maxAttempts = 2
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        $linkFileLocked = $false
+        cargo @CargoArgs 2>&1 | ForEach-Object {
+            $line = "$_"
+            Write-Host $line
+            if ($line -match '\bLNK1104\b') {
+                $linkFileLocked = $true
+            }
+        }
+
+        if ($LASTEXITCODE -eq 0 -or -not $linkFileLocked -or $attempt -eq $maxAttempts) {
+            break
+        }
+
+        Write-Host ''
+        Write-Host "note: リンカーがファイルを開けなかったため (LNK1104) $CommandLabel を再実行します"
+        Write-Host ''
+    }
+    Assert-LastExitCode -CommandLabel $CommandLabel
+}
+
 # rustfmt でコードを整形する
 function Invoke-CargoFmt {
     [CmdletBinding()]
@@ -52,16 +89,27 @@ function Invoke-CargoTest {
         [switch]$IncludeDocTests
     )
 
-    cargo test --all-targets --features $script:CargoTestFeatures
-    Assert-LastExitCode -CommandLabel 'cargo test'
+    Invoke-CargoWithLinkRetry -CommandLabel 'cargo test' -CargoArgs @(
+        'test', '--all-targets', '--features', $script:CargoTestFeatures
+    )
 
-    cargo test -p clip-refiner-core --no-default-features --all-targets
-    Assert-LastExitCode -CommandLabel 'cargo test -p clip-refiner-core --no-default-features'
+    Invoke-CargoWithLinkRetry -CommandLabel 'cargo test -p clip-refiner-core --no-default-features' -CargoArgs @(
+        'test', '-p', 'clip-refiner-core', '--no-default-features', '--all-targets'
+    )
 
     if ($IncludeDocTests) {
-        cargo test --doc --features $script:CargoTestFeatures
-        Assert-LastExitCode -CommandLabel 'cargo test --doc'
+        Invoke-CargoDocTest
     }
+}
+
+# doctests を実行する
+function Invoke-CargoDocTest {
+    [CmdletBinding()]
+    param()
+
+    Invoke-CargoWithLinkRetry -CommandLabel 'cargo test --doc' -CargoArgs @(
+        'test', '--doc', '--features', $script:CargoTestFeatures
+    )
 }
 
 # ベンチマーク (criterion) を実行し、基準との比較で悪化したベンチ名を返す
@@ -110,12 +158,17 @@ function Invoke-CargoBench {
 }
 
 # デバッグバイナリをビルドする (E2E 用など)
+#
+# 対象と feature を `cargo test` と揃え、互いのビルド結果を無効にし合わないようにする。
+# `-p clip-refiner` だけでは dev-dependencies の feature が統合されず、依存クレートの構成がずれる
+# (デバッグビルドでは `test-helpers` の有無で挙動は変わらない)
 function Invoke-CargoBuild {
     [CmdletBinding()]
     param()
 
-    cargo build -p clip-refiner
-    Assert-LastExitCode -CommandLabel 'cargo build -p clip-refiner'
+    Invoke-CargoWithLinkRetry -CommandLabel 'cargo build --all-targets' -CargoArgs @(
+        'build', '--all-targets', '--features', $script:CargoTestFeatures
+    )
 }
 
 # cargo-llvm-cov と llvm-tools-preview が使えることを検証する
@@ -174,8 +227,7 @@ function Invoke-CargoLlvmCov {
         $llvmCovArgs += '--html'
     }
 
-    cargo @llvmCovArgs
-    Assert-LastExitCode -CommandLabel 'cargo llvm-cov'
+    Invoke-CargoWithLinkRetry -CargoArgs $llvmCovArgs -CommandLabel 'cargo llvm-cov'
 
     if ($Open -or $Html) {
         $targetRoot = if ($env:CARGO_TARGET_DIR) {

@@ -1,8 +1,5 @@
 use std::ptr;
 
-use super::geometry::{clamp_rect, expand_rect};
-use super::types::{BORDER_PIXEL, BORDER_WIDTH, DIM_ALPHA, SelectionRect};
-
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::{COLORREF, HWND, POINT, SIZE};
 use windows::Win32::Graphics::Gdi::{
@@ -11,6 +8,9 @@ use windows::Win32::Graphics::Gdi::{
     RGBQUAD, ReleaseDC, SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ULW_ALPHA, UpdateLayeredWindow};
+
+use super::geometry::{clamp_rect, expand_rect};
+use super::types::{BORDER_PIXEL, BORDER_WIDTH, DIM_ALPHA, SelectionRect};
 
 // ======================================================================
 // レイヤード描画

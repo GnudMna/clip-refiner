@@ -8,7 +8,6 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 
-use crate::error::ConfigError;
 use windows::Win32::Foundation::{
     CloseHandle, GENERIC_ALL, GetLastError, HANDLE, HLOCAL, LocalFree,
 };
@@ -25,6 +24,8 @@ use windows::Win32::Security::{
 };
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows::core::{PCWSTR, PWSTR};
+
+use crate::error::ConfigError;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

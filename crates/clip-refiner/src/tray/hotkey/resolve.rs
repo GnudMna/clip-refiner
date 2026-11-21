@@ -1,9 +1,9 @@
+use clip_refiner_core::hotkey_binding::parse_hotkey_or_default_labeled;
+use global_hotkey::hotkey::HotKey;
+
 use super::convert::to_global_hotkey;
 use crate::config::HotkeySettings;
 use crate::consts;
-
-use clip_refiner_core::hotkey_binding::parse_hotkey_or_default_labeled;
-use global_hotkey::hotkey::HotKey;
 
 // ======================================================================
 // 解決済みホットキー

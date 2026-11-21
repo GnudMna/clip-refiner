@@ -2,13 +2,13 @@
 //!
 //! 起動時に生成した鍵で履歴を暗号化し、プロセス終了時に鍵とデータを破棄する
 
+use anyhow::Result;
+use thiserror::Error;
+
 use crate::security::{
     CIPHER_KEY_LEN, ContentFingerprint, SecretString, decrypt_bytes, encrypt_bytes,
     generate_cipher_key, zeroize_cipher_key,
 };
-
-use anyhow::Result;
-use thiserror::Error;
 
 // ======================================================================
 // エラー

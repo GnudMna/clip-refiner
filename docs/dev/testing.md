@@ -170,7 +170,7 @@ fuzz とは別の観点で、巨大入力での処理時間の悪化を検知す
 対話 GUI セッションと WebView2 Runtime が必要 (ヘッドレス非対応)。`check.ps1` / pre-push でデフォルト実行する。
 
 ```powershell
-cargo build -p clip-refiner
+cargo build --all-targets --features test-helpers
 npm run test:e2e
 ```
 
@@ -332,7 +332,9 @@ $env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
 | 4 | Node.js の確認 (`CLIP_REFINER_REQUIRE_NODE=1` を設定) | — |
 | 5 | UI バンドルの最新性・ESLint・Prettier | `npm run build:ui:check` / `npm run lint` / `npm run format:check` |
 | 6 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
-| 7 | WebView E2E (`CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build` → `npm run test:e2e` |
+| 7 | WebView E2E (`CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build --all-targets --features test-helpers` → `npm run test:e2e` |
+
+E2E 用のビルドは対象と feature を `cargo test` と揃え、互いのビルド結果を無効にし合わないようにする (`-p clip-refiner` だけでは dev-dependencies の feature が統合されず、毎回再コンパイルになる。デバッグビルドでは `test-helpers` の有無で挙動は変わらない)。テスト・E2E 用ビルド・カバレッジの cargo は、リンカーがライブラリを開けない一過性の失敗 (`LNK1104`。並列リンク中にウイルス対策ソフトのスキャンと競合して起きると推定) のときだけ 1 回再実行する。判定のため出力を行単位で中継するので、cargo の進捗バーと色は出ない。
 
 個別に実行する場合:
 

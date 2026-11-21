@@ -1,5 +1,7 @@
 //! version API レスポンスから更新の有無を判定する
 
+use semver::Version;
+
 use super::super::error::UpdateError;
 use super::super::types::{
     AvailableUpdate, UpdateCheckOutcome, UpdatePackageKind, VersionApiResponse,
@@ -9,8 +11,6 @@ use super::super::verify::{
 };
 use super::asset::{asset_matches_kind, select_asset};
 use super::version::{parse_semver, strip_version_prefix};
-
-use semver::Version;
 
 /// version API レスポンスから更新結果を判定する
 ///
@@ -98,13 +98,13 @@ pub(crate) fn evaluate_update(
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use semver::Version;
+
     use super::super::super::types::{
         UpdateCheckOutcome, UpdatePackageKind, VersionApiAsset, VersionApiResponse,
     };
     use super::super::super::verify::MAX_UPDATE_DOWNLOAD_BYTES;
     use super::evaluate_update;
-
-    use semver::Version;
 
     fn asset(name: &str, size: u64) -> VersionApiAsset {
         VersionApiAsset {

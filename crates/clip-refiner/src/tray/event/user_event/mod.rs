@@ -36,6 +36,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
+    use tao::event_loop::{ControlFlow, EventLoopBuilder};
+    use tao::platform::windows::EventLoopBuilderExtWindows;
+
     use super::handle_user_event;
     use crate::config::HotkeySettings;
     use crate::test_helpers::{stub_worker, test_app_state_arc, test_tray_menu};
@@ -44,9 +47,6 @@ mod tests {
     use crate::tray::selector::SelectorUi;
     use crate::tray::settings::SettingsWindow;
     use crate::tray::state::{AppEvent, OcrEvent, SelectorEvent};
-
-    use tao::event_loop::{ControlFlow, EventLoopBuilder};
-    use tao::platform::windows::EventLoopBuilderExtWindows;
 
     /// セレクター / OCR の非表示系 `AppEvent` を検証すること
     ///

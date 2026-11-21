@@ -2,6 +2,9 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
 
+use global_hotkey::HotKeyState;
+use tao::event_loop::ControlFlow;
+
 use super::register::HotkeyRegistrationFailure;
 use super::*;
 use crate::config::HotkeySettings;
@@ -12,9 +15,6 @@ use crate::tray::ocr::{OcrCaptureWindow, init_ocr_capture};
 use crate::tray::selector::{ClipSelectorWindow, QuickSelectorWindow};
 use crate::tray::state::AppState;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use global_hotkey::HotKeyState;
-use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // テスト用コンテキスト

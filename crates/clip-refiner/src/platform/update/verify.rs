@@ -2,9 +2,9 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
-use super::error::UpdateError;
-
 use sha2::{Digest, Sha256};
+
+use super::error::UpdateError;
 
 // ======================================================================
 // 定数

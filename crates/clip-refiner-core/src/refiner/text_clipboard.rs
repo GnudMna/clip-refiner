@@ -49,6 +49,20 @@ pub trait TextClipboard {
     fn is_excluded_from_monitoring(&mut self) -> bool {
         false
     }
+
+    /// クリップボードの内容が変わると進むトークンを返す
+    ///
+    /// 読み取りと書き戻しの間に別のコピーが入っていないかの確認に使う。
+    /// 既定実装は変更を検知できないため `None`
+    ///
+    /// # Arguments
+    /// * `self` - 判定対象のクリップボード
+    ///
+    /// # Returns
+    /// * `Option<u64>` - 取得できた場合は `Some(トークン)`、未対応なら `None`
+    fn change_token(&mut self) -> Option<u64> {
+        None
+    }
 }
 
 /// 画像形式のクリップボード読み書き

@@ -2,6 +2,8 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use zip::ZipArchive;
+
 use super::error::UpdateError;
 use super::replace::{current_install_dir, launch_portable_replace_helper};
 use super::signature::{
@@ -11,10 +13,8 @@ use super::types::{AvailableUpdate, UpdateApplyOutcome};
 use super::verify::{download_and_verify_with_key, validate_asset_name};
 use super::{
     BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME, bridge_download_key,
+    system_exe_path,
 };
-
-use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
-use zip::ZipArchive;
 
 // ======================================================================
 // パブリック関数
@@ -267,7 +267,7 @@ fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
     let Some(path_str) = msi_path.to_str() else {
         return UpdateError::MsiPathInvalid.into();
     };
-    let Some(msiexec) = system_msiexec_path() else {
+    let Some(msiexec) = system_exe_path("msiexec.exe") else {
         crate::log_warn!("システムフォルダの取得に失敗");
         return UpdateError::MsiLaunch.into();
     };
@@ -282,21 +282,6 @@ fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
             UpdateError::MsiLaunch.into()
         }
     }
-}
-
-/// システムフォルダの `msiexec.exe` の絶対パスを返す
-///
-/// # Returns
-/// * `Option<PathBuf>` - 取得できない場合は `None`
-fn system_msiexec_path() -> Option<PathBuf> {
-    let mut buf = [0u16; 260];
-    // SAFETY: `buf` は呼び出し中有効な書き込み可能バッファで、長さはスライスから渡す
-    let len = usize::try_from(unsafe { GetSystemDirectoryW(Some(&mut buf)) }).ok()?;
-    if len == 0 || len >= buf.len() {
-        return None;
-    }
-    let dir = PathBuf::from(String::from_utf16(&buf[..len]).ok()?);
-    Some(dir.join("msiexec.exe"))
 }
 
 /// ポータブル ZIP を展開し、可能なら差し替えヘルパーを起動する
@@ -436,10 +421,10 @@ fn open_in_explorer(path: &Path) {
 mod tests {
     use std::io::Write;
 
-    use super::*;
-
     use zip::ZipWriter;
     use zip::write::SimpleFileOptions;
+
+    use super::*;
 
     /// ダウンロード URL が bridge パス規約に従うようにすること
     #[test]
@@ -449,14 +434,6 @@ mod tests {
             url,
             "https://gh-release-bridge.gnudlemna-4656.workers.dev/GnudMna/clip-refiner/v0.13.1/clip-refiner-0.13.1-x86_64.msi"
         );
-    }
-
-    /// `msiexec` をシステムフォルダの絶対パスで解決できるようにすること
-    #[test]
-    fn system_msiexec_path_is_absolute_and_exists() {
-        let path = system_msiexec_path().expect("msiexec path");
-        assert!(path.is_absolute());
-        assert!(path.is_file(), "{}", path.display());
     }
 
     /// ZIP を展開してファイル内容を復元できるようにすること

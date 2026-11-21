@@ -1,6 +1,7 @@
-use crate::error::ConfigError;
 use serde::Serialize;
 use toml_edit::{DocumentMut, Value};
+
+use crate::error::ConfigError;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

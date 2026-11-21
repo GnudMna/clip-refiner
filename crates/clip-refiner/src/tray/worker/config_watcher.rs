@@ -10,8 +10,6 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use super::command::ClipboardCommand;
-
 use thiserror::Error;
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::Storage::FileSystem::{
@@ -21,6 +19,8 @@ use windows::Win32::Storage::FileSystem::{
 };
 use windows::Win32::System::Threading::WaitForSingleObject;
 use windows::core::PCWSTR;
+
+use super::command::ClipboardCommand;
 
 // ======================================================================
 // 定数

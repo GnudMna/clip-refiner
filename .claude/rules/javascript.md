@@ -8,11 +8,12 @@ paths:
 
 # JavaScript 規約
 
-WebView UI (`crates/clip-refiner/src/ui/`) とビルドスクリプトの規約。整形は Prettier (`.prettierrc.json`)、静的検査は ESLint (`eslint.config.js`) に従う。
+WebView UI (`crates/clip-refiner/src/ui/`)・Node.js テスト・ビルドスクリプトの規約。整形は Prettier (`.prettierrc.json`)、静的検査は ESLint (`eslint.config.js`) に従う。E2E (`e2e/*.ts`) は両者の対象外で、「E2E」節に従う。
 
 ## バンドル
 
-- `*.bundle.js` は esbuild の生成物のため直接編集しない。ソースを変えたら `npm run build:ui` で再生成し、同じコミットに含める (`tests/ui_bundle_flow.rs` が再生成忘れを検出する)
+- `*.bundle.js` は esbuild の生成物のため直接編集しない。ソースを変えたら再生成し、同じコミットに含める (`tests/ui_bundle_flow.rs` が再生成忘れを検出する)
+- Claude Code では `src/ui/` の `.js` を編集するたびに PostToolUse フックが `npm run build:ui` を実行する。フックがエラーを返したらビルドエラーを直す。複数ファイルにまたがる変更の途中で出たエラーは、変更を終えてから再確認すればよい
 - 新しいエントリや入力を足すときは `scripts/common/build-ui.mjs` の `bundles` に追加する
 
 ## HTML の組み立て
@@ -35,10 +36,17 @@ WebView UI (`crates/clip-refiner/src/ui/`) とビルドスクリプトの規約�
 - 関数には JSDoc (`@param` / `@returns`) を付け、型は JSDoc の型注釈で書く
 - 括弧・コロンは半角を使う
 
+## E2E
+
+- `e2e/` は Playwright の TypeScript。型は JSDoc ではなく TypeScript の型注釈で書く
+- ESLint / Prettier の対象外のため、既存ファイル (`e2e/fixtures.ts` など) の書式に手で合わせる
+- コメントの文体は「コメント」節に従う
+
 ## 完了前の確認
 
+UI のバンドルはフックが再生成するため、手動では次を確認する (フックが無い環境では先に `npm run build:ui` を実行する)。
+
 ```powershell
-npm run build:ui
 npm run lint
 npm run format:check
 ```

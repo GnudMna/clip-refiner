@@ -9,23 +9,33 @@ const MIN_OCR_DIMENSION: u32 = 96;
 /// 小画像の最大拡大倍率
 const MAX_UPSCALE: u32 = 4;
 
+/// `OcrEngine::MaxImageDimension` に相当する、OCR に渡せる画像の一辺の上限 (物理ピクセル)
+const MAX_OCR_IMAGE_DIMENSION: u32 = 10_000;
+
 // ======================================================================
 // パブリック関数
 // ======================================================================
 /// OCR 向けに画像を拡大する
 ///
-/// 短辺が小さい画像は認識率向上のため拡大する
+/// 短辺が小さい画像は認識率向上のため拡大する。長辺が `MAX_OCR_IMAGE_DIMENSION` に
+/// 収まるよう倍率を抑え、収まらない場合は拡大しない
 pub(crate) fn prepare_ocr_image(image: &RgbaImage) -> RgbaImage {
     let min_dimension = image.width.min(image.height);
     if min_dimension >= MIN_OCR_DIMENSION {
         return image.clone();
     }
 
+    let max_dimension = image.width.max(image.height);
     let scale = MIN_OCR_DIMENSION
         .saturating_add(min_dimension.saturating_sub(1))
         .checked_div(min_dimension)
         .unwrap_or(1)
-        .clamp(2, MAX_UPSCALE);
+        .clamp(2, MAX_UPSCALE)
+        .min(
+            MAX_OCR_IMAGE_DIMENSION
+                .checked_div(max_dimension)
+                .unwrap_or(1),
+        );
     upscale_nearest(image, scale)
 }
 
@@ -136,5 +146,33 @@ mod tests {
         let prepared = prepare_ocr_image(&image);
         assert_eq!(prepared.width, MAX_UPSCALE);
         assert_eq!(prepared.height, MAX_UPSCALE);
+    }
+
+    /// 横長で背の低い画像は長辺が上限に収まるよう倍率を抑えること
+    #[test]
+    fn prepare_ocr_image_limits_scale_by_long_side() {
+        // 4 倍だと 12000px になるため 3 倍 (9000px) に抑える
+        let image = RgbaImage {
+            width: 3000,
+            height: 24,
+            rgba: vec![255; 3000 * 24 * 4],
+        };
+        let prepared = prepare_ocr_image(&image);
+        assert_eq!(prepared.width, 9000);
+        assert_eq!(prepared.height, 72);
+        assert!(prepared.width <= MAX_OCR_IMAGE_DIMENSION);
+    }
+
+    /// 長辺が拡大すると上限を超える画像は拡大しないこと
+    #[test]
+    fn prepare_ocr_image_skips_upscale_when_long_side_too_large() {
+        let image = RgbaImage {
+            width: 6000,
+            height: 20,
+            rgba: vec![255; 6000 * 20 * 4],
+        };
+        let prepared = prepare_ocr_image(&image);
+        assert_eq!(prepared.width, 6000);
+        assert_eq!(prepared.height, 20);
     }
 }

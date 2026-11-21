@@ -1,6 +1,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use tao::event::WindowEvent;
+use tao::event_loop::ControlFlow;
+use tray_icon::menu::MenuEvent;
+
 use super::features::{
     handle_app_control, handle_clips_event, handle_continuous_record_event, handle_favorites_event,
     handle_history_event, handle_refine_mode_event, handle_regex_preset_event,
@@ -12,10 +16,6 @@ use super::selector::{
 use super::state::AppState;
 use super::worker::ClipboardWorkerHandle;
 use crate::config::SelectorWebviewRetention;
-
-use tao::event::WindowEvent;
-use tao::event_loop::ControlFlow;
-use tray_icon::menu::MenuEvent;
 
 mod config_reload;
 mod context;

@@ -1,16 +1,16 @@
 use std::ptr;
 use std::slice;
 
-use super::super::screen_capture::RgbaImage;
-use super::normalize::normalize_ocr_text;
-use super::prepare::prepare_ocr_image;
-
 use anyhow::{Context, Result, bail};
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::{BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
 use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 use windows::core::{HSTRING, Interface};
+
+use super::super::screen_capture::RgbaImage;
+use super::normalize::normalize_ocr_text;
+use super::prepare::prepare_ocr_image;
 
 // ======================================================================
 // パブリック関数
@@ -30,17 +30,35 @@ pub(crate) fn recognize_text(image: &RgbaImage) -> Result<String> {
         .join()
         .context("OCR の完了待ちに失敗")?;
 
-    Ok(normalize_ocr_text(
-        &result
-            .Text()
-            .context("OCR 結果テキストの取得に失敗")?
-            .to_string(),
-    ))
+    // `OcrResult::Text` は行を空白でつなぐため、改行が失われる。行ごとに取り出す
+    let lines = result
+        .Lines()
+        .context("OCR 結果の行一覧の取得に失敗")?
+        .into_iter()
+        .map(|line| {
+            line.Text()
+                .map(|text| text.to_string())
+                .context("OCR 行テキストの取得に失敗")
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(join_normalized_lines(&lines))
 }
 
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// 行ごとに正規化し、改行でつなぐ
+///
+/// 行をまたいで空白を詰めないよう、正規化は行単位で行う
+fn join_normalized_lines<S: AsRef<str>>(lines: &[S]) -> String {
+    lines
+        .iter()
+        .map(|line| normalize_ocr_text(line.as_ref()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// OCR 対象画像が空でないことを検証する
 fn validate_ocr_image(image: &RgbaImage) -> Result<()> {
     if image.width == 0 || image.height == 0 {
@@ -125,6 +143,29 @@ fn copy_rgba_to_bgra(rgba: &[u8], dest: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 複数行は改行を保ったまま行ごとに正規化すること
+    ///
+    /// 行をまたいで日本語の間の空白とみなして詰めない
+    #[test]
+    fn join_normalized_lines_keeps_line_breaks_between_japanese_lines() {
+        assert_eq!(
+            join_normalized_lines(&["日 本 語 の 一 行 目", "二 行 目 の テ キ ス ト"]),
+            "日本語の一行目\n二行目のテキスト"
+        );
+    }
+
+    /// 1 行だけの場合は改行を付けないこと
+    #[test]
+    fn join_normalized_lines_single_line_has_no_line_break() {
+        assert_eq!(join_normalized_lines(&["あ い"]), "あい");
+    }
+
+    /// 行がない場合は空文字列を返すこと
+    #[test]
+    fn join_normalized_lines_empty_returns_empty() {
+        assert_eq!(join_normalized_lines::<&str>(&[]), "");
+    }
 
     /// 幅または高さが 0 の画像は拒否すること
     #[test]

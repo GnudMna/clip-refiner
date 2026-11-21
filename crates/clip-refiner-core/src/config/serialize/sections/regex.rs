@@ -1,13 +1,13 @@
 use std::fmt::Write;
 
+use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
+
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{DOC_REGEX_ACTIVE_PRESET_ID, SECTION_REGEX, doc_regex_presets};
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{field_comment_prefix, write_field, write_table_section};
 use crate::config::types::{AppConfig, RegexPreset, RegexStep};
 use crate::error::ConfigError;
-
-use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

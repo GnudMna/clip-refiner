@@ -1,8 +1,8 @@
+use zeroize::Zeroize;
+
 use super::bridge_key_obfuscate::{OBFUSCATE_MASK_LEN, xor_obfuscate};
 
 use crate::security::{SecretString, decrypt_bytes, secret_from, zeroize_cipher_key};
-
-use zeroize::Zeroize;
 
 include!(concat!(env!("OUT_DIR"), "/bridge_key_blob.rs"));
 

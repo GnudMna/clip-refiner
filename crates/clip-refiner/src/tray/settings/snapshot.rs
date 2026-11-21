@@ -1,11 +1,11 @@
+use serde::Serialize;
+
 use super::model::SettingsWritable;
 use crate::config::AppConfig;
 use crate::consts;
 use crate::refiner::{REGEX_PREVIEW_SAMPLE, RefineMode};
 use crate::tray::hotkey::settings::shortcut_list_entries;
 use crate::tray::selector::{clip_selector_json, clip_selector_value, quick_selector_value};
-
-use serde::Serialize;
 
 // ======================================================================
 // UI 制約

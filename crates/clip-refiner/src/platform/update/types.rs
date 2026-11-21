@@ -1,6 +1,6 @@
-use super::error::UpdateError;
-
 use serde::{Deserialize, Serialize};
+
+use super::error::UpdateError;
 
 // ======================================================================
 // リリース照会

@@ -5,9 +5,9 @@
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::consts;
-
 use clap::ValueEnum;
+
+use crate::consts;
 
 // ======================================================================
 // 定数

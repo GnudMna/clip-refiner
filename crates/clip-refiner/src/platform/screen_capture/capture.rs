@@ -1,5 +1,3 @@
-use super::types::{RgbaImage, ScreenRect};
-
 use anyhow::{Context, Result, bail};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::{
@@ -10,6 +8,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
+
+use super::types::{RgbaImage, ScreenRect};
 
 // ======================================================================
 // パブリック関数

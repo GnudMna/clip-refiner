@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use crate::config::get_config_dir;
-
 use serde::{Deserialize, Serialize};
 use tao::dpi::{LogicalPosition, LogicalSize};
 use tao::window::{Window, WindowBuilder};
+
+use crate::config::get_config_dir;
 
 // ======================================================================
 // 定数

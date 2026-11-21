@@ -1,5 +1,7 @@
 use std::fmt::Write;
 
+use toml_edit::DocumentMut;
+
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
     DOC_NS_ENABLED, DOC_NS_NOTIFY_CONTINUOUS_RECORD, DOC_NS_NOTIFY_FAVORITES,
@@ -10,8 +12,6 @@ use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
 use crate::config::types::AppConfig;
 use crate::error::ConfigError;
-
-use toml_edit::DocumentMut;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

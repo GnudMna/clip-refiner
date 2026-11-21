@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::refiner::OrderedValue;
-use crate::security::is_within_parser_limit;
-
 use indexmap::IndexMap;
 use serde::de::{Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::Number;
 use serde_norway::Value;
+
+use crate::refiner::OrderedValue;
+use crate::security::is_within_parser_limit;
 
 // ======================================================================
 // YAML → JSON 変換

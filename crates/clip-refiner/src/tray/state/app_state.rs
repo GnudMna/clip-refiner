@@ -1,5 +1,7 @@
 use std::sync::{RwLock, atomic::AtomicU64};
 
+use tao::event_loop::EventLoopProxy;
+
 use super::super::dispatch;
 use super::app_event::{AppEvent, MenuRefreshEvent};
 use super::clipboard_session::ClipboardSessionState;
@@ -11,8 +13,6 @@ use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
 use crate::config::{AppConfig, ConfigLoadFallback};
 use crate::security::SecretString;
-
-use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // アプリケーション状態
@@ -285,11 +285,11 @@ pub(crate) fn test_app_state_with_persistence() -> AppState {
 )]
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 fn test_app_state_inner(persist_config: bool) -> AppState {
-    use crate::config::AppConfig;
-    use crate::refiner::RefineMode;
-
     use tao::event_loop::EventLoopBuilder;
     use tao::platform::windows::EventLoopBuilderExtWindows;
+
+    use crate::config::AppConfig;
+    use crate::refiner::RefineMode;
 
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
         .with_any_thread(true)

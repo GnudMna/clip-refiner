@@ -1,5 +1,7 @@
 use std::fmt::Write;
 
+use toml_edit::{DocumentMut, Table};
+
 use super::super::docs::{
     DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_IS_PAUSED,
     DOC_MODE, DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC,
@@ -11,8 +13,6 @@ use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
 use crate::config::types::AppConfig;
 use crate::error::ConfigError;
-
-use toml_edit::{DocumentMut, Table};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

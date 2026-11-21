@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::Result;
+use tao::event_loop::EventLoopProxy;
+
 use super::super::clipboard_monitor::{bump_monitor_generation, bump_monitor_generation_unchecked};
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
@@ -11,9 +14,6 @@ use super::App;
 use crate::ipc::OneshotIpcServer;
 use crate::tray::selector::SelectorUi;
 use crate::user_error::oneshot_ipc_start_failure;
-
-use anyhow::Result;
-use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // 初期化

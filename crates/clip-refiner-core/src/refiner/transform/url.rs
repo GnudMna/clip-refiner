@@ -32,8 +32,8 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 
 /// URLエンコードされた文字列をデコードする
 ///
-/// `%XX` 形式の記述を元の文字に戻し、`+` を空白に戻す。結果はUTF-8として解釈される。
-/// `+` そのものは `%2B` と書く。
+/// `%XX` 形式の記述を元の文字に戻す。結果はUTF-8として解釈される。
+/// `+` はメールアドレスの `user+tag@example.com` などで文字そのものとして使われるため、そのまま残す。
 ///
 /// # Arguments
 /// * `input` - デコード対象の文字列
@@ -44,21 +44,18 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 /// # Errors
 /// 不正なパーセントエンコード、または UTF-8 として不正な場合
 pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
-    // フォーム形式 (application/x-www-form-urlencoded) の `+` を空白として扱う
-    let input: Cow<'_, str> = if input.contains('+') {
-        Cow::Owned(input.replace('+', " "))
-    } else {
-        Cow::Borrowed(input)
-    };
-    let decoded = percent_decode_str(&input).decode_utf8()?;
+    let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
+
 // ======================================================================
 // UTM パラメータ削除
 // ======================================================================
 /// テキストに含まれるURLからUTMパラメータ(計測用パラメータ)を除去する
 ///
-/// 空白で区切った項目ごとに、クエリ文字列(?以降)の `utm_` で始まるパラメータをすべて取り除く
+/// 空白で区切った項目ごとに、クエリ文字列(?以降)の計測用パラメータをすべて取り除く
+/// 対象は `utm_` で始まるキーと、広告のクリックID (`fbclid` / `gclid` など)
+/// キーは大文字・小文字を区別しない
 /// 他のパラメータと、URL以外の文字列・改行・空白は維持される
 ///
 /// # Arguments
@@ -93,6 +90,21 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     }
 }
 
+/// 除去する広告クリックIDのキー (小文字)
+const CLICK_ID_PARAMS: &[&str] = &[
+    "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid", "ttclid",
+    "igshid",
+];
+
+/// クエリパラメータのキーが計測用パラメータかを判定する (大文字・小文字を区別しない)
+fn is_tracking_param(key: &str) -> bool {
+    key.get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("utm_"))
+        || CLICK_ID_PARAMS
+            .iter()
+            .any(|name| key.eq_ignore_ascii_case(name))
+}
+
 /// 1つのURLからUTMパラメータを除去する
 ///
 /// # Arguments
@@ -119,7 +131,7 @@ fn remove_utm_from_url(input: &str) -> Cow<'_, str> {
         .copied()
         .filter(|param| {
             let key = param.split('=').next().unwrap_or("");
-            !key.starts_with("utm_")
+            !is_tracking_param(key)
         })
         .collect();
 
@@ -177,12 +189,23 @@ mod tests {
         assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
-    /// `+` を空白に戻し、`%2B` は `+` に戻すようにすること
+    /// `+` は空白にせずそのまま残し、`%2B` は `+` に戻すこと
     #[test]
     fn test_url_decode_plus() {
-        assert_eq!(url_decode("foo+bar").unwrap(), "foo bar");
+        assert_eq!(url_decode("foo+bar").unwrap(), "foo+bar");
+        assert_eq!(
+            url_decode("user+tag%40example.com").unwrap(),
+            "user+tag@example.com"
+        );
         assert_eq!(url_decode("a%2Bb").unwrap(), "a+b");
         assert_eq!(url_decode("a%26b%3Dc%2Bd%2Fe").unwrap(), "a&b=c+d/e");
+    }
+
+    /// `url_encode` の結果を `url_decode` で元に戻せること
+    #[test]
+    fn test_url_encode_decode_roundtrip() {
+        let original = "user+tag@example.com a&b=c/d";
+        assert_eq!(url_decode(&url_encode(original)).unwrap(), original);
     }
 
     /// マルチバイト文字のURLデコードできるようにすること
@@ -255,10 +278,42 @@ mod tests {
             remove_utm_params("http://example.com?a=1&utm_source=s&b=2"),
             "http://example.com?a=1&b=2"
         );
-        // utm_ は小文字のみ対象。大文字の UTM_SOURCE は削除しない
+    }
+
+    /// キーの大文字・小文字を区別せず utm_ パラメータを除去すること
+    #[test]
+    fn test_remove_utm_params_case_insensitive() {
         assert_eq!(
-            remove_utm_params("http://example.com?UTM_SOURCE=S"),
-            "http://example.com?UTM_SOURCE=S"
+            remove_utm_params("http://example.com?UTM_SOURCE=S&Utm_Medium=m&id=1"),
+            "http://example.com?id=1"
+        );
+        // utm_ で始まらないキーは残す
+        assert_eq!(
+            remove_utm_params("http://example.com?utm=1&xutm_source=2"),
+            "http://example.com?utm=1&xutm_source=2"
+        );
+        // マルチバイト文字で始まるキーでも panic しないこと
+        assert_eq!(
+            remove_utm_params("http://example.com?あutm=1"),
+            "http://example.com?あutm=1"
+        );
+    }
+
+    /// 広告のクリックID (fbclid / gclid など) を除去すること
+    #[test]
+    fn test_remove_utm_params_click_ids() {
+        assert_eq!(
+            remove_utm_params("https://example.com/?id=1&fbclid=abc&gclid=def"),
+            "https://example.com/?id=1"
+        );
+        assert_eq!(
+            remove_utm_params("https://example.com/?FBCLID=abc&MsClkId=x#top"),
+            "https://example.com/#top"
+        );
+        // 完全一致のみ対象。前方一致や部分一致のキーは残す
+        assert_eq!(
+            remove_utm_params("https://example.com/?fbclid_x=1&my_gclid=2"),
+            "https://example.com/?fbclid_x=1&my_gclid=2"
         );
     }
 

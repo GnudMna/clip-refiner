@@ -14,6 +14,14 @@ pub struct InMemoryTextClipboard {
     fail_on_read: bool,
     fail_on_write: bool,
     excluded_from_monitoring: bool,
+    change_token: u64,
+    external_copy_after_read: Option<ExternalCopy>,
+}
+
+/// `get_text` の直後に割り込む別アプリのコピー
+struct ExternalCopy {
+    text: String,
+    excluded_from_monitoring: bool,
 }
 
 impl InMemoryTextClipboard {
@@ -34,6 +42,8 @@ impl InMemoryTextClipboard {
             fail_on_read: false,
             fail_on_write: false,
             excluded_from_monitoring: false,
+            change_token: 0,
+            external_copy_after_read: None,
         }
     }
 
@@ -110,6 +120,31 @@ impl InMemoryTextClipboard {
         self
     }
 
+    /// 次の `get_text` の直後に別アプリがコピーしたものとして内容を差し替える
+    ///
+    /// 本文の読み取りと書き戻しの間に入るコピー (パスワードマネージャー等) を再現する。
+    /// 差し替え時に変更トークンが進む
+    ///
+    /// # Arguments
+    /// * `self` - 設定対象のインメモリクリップボード
+    /// * `text` - 差し替え後のテキスト
+    /// * `excluded_from_monitoring` - 差し替え後の内容が監視除外指定付きの場合は `true`
+    ///
+    /// # Returns
+    /// * `Self` - 割り込みコピーを予約したクリップボード
+    #[must_use]
+    pub fn with_external_copy_after_read(
+        mut self,
+        text: impl Into<String>,
+        excluded_from_monitoring: bool,
+    ) -> Self {
+        self.external_copy_after_read = Some(ExternalCopy {
+            text: text.into(),
+            excluded_from_monitoring,
+        });
+        self
+    }
+
     /// 保持中のテキストを返す
     ///
     /// # Arguments
@@ -151,7 +186,14 @@ impl TextClipboard for InMemoryTextClipboard {
         if self.fail_on_read {
             return Err(ClipboardIoError::ReadFailed("read failed".to_string()));
         }
-        Ok(self.text.clone())
+        let text = self.text.clone();
+        if let Some(copy) = self.external_copy_after_read.take() {
+            self.text = copy.text;
+            self.html = None;
+            self.excluded_from_monitoring = copy.excluded_from_monitoring;
+            self.change_token += 1;
+        }
+        Ok(text)
     }
 
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
@@ -161,11 +203,16 @@ impl TextClipboard for InMemoryTextClipboard {
         // OS クリップボードと同様に、テキストの書き込みで他の形式を消す
         self.text = text;
         self.html = None;
+        self.change_token += 1;
         Ok(())
     }
 
     fn is_excluded_from_monitoring(&mut self) -> bool {
         self.excluded_from_monitoring
+    }
+
+    fn change_token(&mut self) -> Option<u64> {
+        Some(self.change_token)
     }
 }
 
@@ -183,6 +230,7 @@ impl ImageClipboard for InMemoryTextClipboard {
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
         self.written_image = Some((width, height, rgba));
+        self.change_token += 1;
         Ok(())
     }
 }
@@ -198,6 +246,7 @@ impl HtmlClipboard for InMemoryTextClipboard {
         }
         self.text = alt_text;
         self.html = Some(html);
+        self.change_token += 1;
         Ok(())
     }
 }

@@ -1,13 +1,13 @@
 //! ライブラリ公開 API のエラー型
 
+use thiserror::Error;
+
 #[cfg(feature = "config")]
 pub use crate::config::AddRegisteredClipError;
 #[cfg(feature = "config")]
 pub use crate::config::ConfigReloadError;
 pub use crate::hotkey_binding::HotkeyParseError;
 pub use crate::refiner::{ClipboardIoError, ClipboardProcessError};
-
-use thiserror::Error;
 
 // ======================================================================
 // 暗号化

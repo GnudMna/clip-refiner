@@ -5,11 +5,11 @@
 
 use std::fmt::Write as _;
 
-use crate::consts::MAX_CLIPBOARD_TEXT_BYTES;
-
 use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, Datelike, FixedOffset};
 use thiserror::Error;
+
+use crate::consts::MAX_CLIPBOARD_TEXT_BYTES;
 
 // ======================================================================
 // 定数
@@ -286,9 +286,9 @@ fn write_uuid_v4(out: &mut String, mut bytes: [u8; 16]) {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use chrono::TimeZone;
+
+    use super::*;
 
     /// 2026-10-08 (木) 09:05:03 +09:00 を基準日時とするコンテキスト
     fn ctx<'a>(clipboard: Option<&'a str>, user_name: Option<&'a str>) -> ClipTemplateContext<'a> {

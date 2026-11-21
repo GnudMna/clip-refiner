@@ -1,10 +1,10 @@
 use std::sync::Mutex;
 
-use crate::tray::menu::{ClipsMenu, TrayMenu};
-use crate::tray::state::{AppState, LockExt};
-
 use anyhow::Result;
 use tray_icon::menu::{MenuItem, PredefinedMenuItem, Submenu};
+
+use crate::tray::menu::{ClipsMenu, TrayMenu, escape_menu_text};
+use crate::tray::state::{AppState, LockExt};
 
 // ======================================================================
 // 登録クリップメニュー
@@ -73,7 +73,7 @@ impl ClipsMenu {
                 .append_items(&[&self.empty_hint_item as &dyn tray_icon::menu::IsMenuItem])?;
         } else {
             for (label, index) in entries {
-                let item = MenuItem::new(label, true, None);
+                let item = MenuItem::new(escape_menu_text(&label), true, None);
                 records.push((item.id().clone(), index));
                 self.main_submenu
                     .append_items(&[&item as &dyn tray_icon::menu::IsMenuItem])?;

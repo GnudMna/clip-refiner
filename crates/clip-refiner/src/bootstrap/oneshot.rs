@@ -1,13 +1,13 @@
 //! ワンショット加工 (IPC 委譲またはローカル実行)
 
+use anyhow::{Context, Result};
+
 use super::args::Args;
 use crate::config::{self, AppConfig};
 use crate::refiner::{
     self, ClipboardProcessError, ClipboardProcessOutcome, OwnedClipboard, RefineContext, RefineMode,
 };
 use crate::{log_error, log_info, log_warn};
-
-use anyhow::{Context, Result};
 
 // ======================================================================
 // ワンショット実行

@@ -1,11 +1,11 @@
 use std::sync::Mutex;
 
-use crate::refiner::{RefineCategory, RefineMode};
-
 use tray_icon::{
     TrayIcon,
     menu::{CheckMenuItem, MenuItem, Submenu},
 };
+
+use crate::refiner::{RefineCategory, RefineMode};
 
 // ======================================================================
 // メニュー構造体定義

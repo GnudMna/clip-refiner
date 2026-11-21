@@ -7,11 +7,11 @@ use std::fs::File;
 use std::io;
 use std::os::windows::io::AsRawHandle;
 
-use crate::consts;
-
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Pipes::GetNamedPipeServerSessionId;
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+
+use crate::consts;
 
 // ======================================================================
 // パブリック関数

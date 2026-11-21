@@ -1,9 +1,9 @@
 use std::fmt;
 
-use crate::security::SecretString;
-
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::security::SecretString;
 
 // ======================================================================
 // 登録クリップ

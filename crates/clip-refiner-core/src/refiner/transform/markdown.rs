@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 
-use crate::security::is_within_parser_limit;
-
 use pulldown_cmark::{Options, Parser, html};
+
+use crate::security::is_within_parser_limit;
 
 // ======================================================================
 // Markdown → HTML
@@ -156,7 +156,8 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 /// Markdownの表形式テキストをExcel(TSV)形式へ変換する
 ///
 /// パイプ区切りのMarkdownテーブルを解析し、タブ区切り(TSV)に変換する
-/// セル内の `<br>` は改行に戻し、エスケープされたパイプ (`\|`) は復元する
+/// セル内の `<br>` (`<br/>`・`<br />` を含む) は改行に戻し、エスケープされたパイプ (`\|`) は復元する
+/// インラインコード内の `|` はセルの区切りとみなさない
 /// 区切り行 (`|---|`) はスキップする
 ///
 /// # Arguments
@@ -242,30 +243,71 @@ fn parse_markdown_table_rows(text: &str) -> Vec<Vec<String>> {
     records
 }
 
-/// パイプ区切りのテーブル行をセルに分割する (`\|` はエスケープとして扱う)
+/// パイプ区切りのテーブル行をセルに分割する
+///
+/// `\|` はエスケープとして `|` に戻す。インラインコード (`` `a|b` ``) 内の `|` は区切りとみなさない
 fn split_table_row(line: &str) -> Vec<String> {
     let line = line.trim();
     let line = line.strip_prefix('|').unwrap_or(line);
     let line = line.strip_suffix('|').unwrap_or(line);
 
+    let chars: Vec<char> = line.chars().collect();
     let mut cells = Vec::new();
     let mut current = String::new();
-    let mut chars = line.chars().peekable();
+    // 開いているインラインコードのバッククォート数 (0 はインラインコード外)
+    let mut code_ticks = 0;
+    let mut i = 0;
 
-    while let Some(ch) = chars.next() {
-        if ch == '\\' && chars.peek() == Some(&'|') {
+    while let Some(&ch) = chars.get(i) {
+        let next = chars.get(i + 1).copied();
+        if ch == '\\' && next == Some('|') {
             current.push('|');
-            chars.next();
-        } else if ch == '|' {
-            cells.push(current.clone());
-            current.clear();
+            i += 2;
+        } else if ch == '\\' && next == Some('`') && code_ticks == 0 {
+            // エスケープしたバッククォートはインラインコードを開かない
+            current.push_str("\\`");
+            i += 2;
+        } else if ch == '`' {
+            let run = backtick_run_len(&chars[i..]);
+            if code_ticks == 0 {
+                // 閉じる側が無いバッククォートは通常の文字として扱う
+                if has_closing_backticks(&chars[i + run..], run) {
+                    code_ticks = run;
+                }
+            } else if run == code_ticks {
+                code_ticks = 0;
+            }
+            current.extend(&chars[i..i + run]);
+            i += run;
+        } else if ch == '|' && code_ticks == 0 {
+            cells.push(std::mem::take(&mut current));
+            i += 1;
         } else {
             current.push(ch);
+            i += 1;
         }
     }
     cells.push(current);
 
     cells
+}
+
+/// 先頭から連続するバッククォートの数を返す
+fn backtick_run_len(chars: &[char]) -> usize {
+    chars.iter().take_while(|&&ch| ch == '`').count()
+}
+
+/// 同じ数のバッククォートの連なりが後続にあるかどうかを判定する
+fn has_closing_backticks(chars: &[char], run: usize) -> bool {
+    let mut i = 0;
+    while i < chars.len() {
+        let len = backtick_run_len(&chars[i..]);
+        if len == run {
+            return true;
+        }
+        i += len.max(1);
+    }
+    false
 }
 
 /// 区切り行 (`|---|`, `|:---:|` など) かどうかを判定する
@@ -281,9 +323,47 @@ fn is_separator_row(cells: &[String]) -> bool {
     })
 }
 
-/// セル内のエスケープと `<br>` を復元する
+/// セル内の `<br>` を改行に戻す (`\|` は `split_table_row` で復元済み)
+///
+/// `<br/>`・`<br />`・`<BR>` のような表記揺れも改行とみなす
 fn unescape_table_cell(cell: &str) -> String {
-    cell.trim().replace("\\|", "|").replace("<br>", "\n")
+    let cell = cell.trim();
+    let mut result = String::with_capacity(cell.len());
+    let mut rest = cell;
+
+    while let Some(pos) = rest.find('<') {
+        result.push_str(&rest[..pos]);
+        let tag = &rest[pos..];
+        if let Some(len) = br_tag_len(tag) {
+            result.push('\n');
+            rest = &tag[len..];
+        } else {
+            result.push('<');
+            rest = &tag[1..];
+        }
+    }
+    result.push_str(rest);
+
+    result
+}
+
+/// 先頭が `<br>` タグ (`<br/>`・`<br />` を含み、大文字小文字を区別しない) ならその長さを返す
+fn br_tag_len(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    if !bytes
+        .get(1..3)
+        .is_some_and(|name| name.eq_ignore_ascii_case(b"br"))
+    {
+        return None;
+    }
+    let mut i = 3;
+    while bytes.get(i).is_some_and(u8::is_ascii_whitespace) {
+        i += 1;
+    }
+    if bytes.get(i) == Some(&b'/') {
+        i += 1;
+    }
+    (bytes.get(i) == Some(&b'>')).then_some(i + 1)
 }
 
 // ======================================================================
@@ -398,6 +478,38 @@ mod tests {
         let input = "| Col |\n|---|\n| a<br>b |";
         let output = markdown_table_to_excel(input);
         assert_eq!(output, "Col\n\"a\nb\"");
+    }
+
+    /// `markdown_table_to_excel`: `<br/>`・`<br />`・大文字の `<BR>` も改行に戻すこと
+    #[test]
+    fn test_markdown_table_to_excel_br_variants_to_newline() {
+        let input = "| Col |\n|---|\n| a<br/>b<br />c<BR>d<Br  />e |";
+        assert_eq!(markdown_table_to_excel(input), "Col\n\"a\nb\nc\nd\ne\"");
+
+        // `<br` で始まる別のタグや閉じていないタグはそのまま残す
+        let input = "| Col |\n|---|\n| <bra> <br <b>x |";
+        assert_eq!(markdown_table_to_excel(input), "Col\n<bra> <br <b>x");
+    }
+
+    /// `markdown_table_to_excel`: インラインコード内の `|` をセルの区切りとみなさないこと
+    #[test]
+    fn test_markdown_table_to_excel_keeps_pipe_in_code_span() {
+        let input = "| Cmd | Note |\n|---|---|\n| `a | b` | x |\n| ``c ` | d`` | y |";
+        assert_eq!(
+            markdown_table_to_excel(input),
+            "Cmd\tNote\n`a | b`\tx\n``c ` | d``\ty"
+        );
+
+        // 閉じていないバッククォートやエスケープしたバッククォートはインラインコードを開かない
+        let input = "| A | B |\n|---|---|\n| `x | y |\n| \\`p | q` |";
+        assert_eq!(markdown_table_to_excel(input), "A\tB\n`x\ty\n\\`p\tq`");
+    }
+
+    /// `markdown_table_to_excel`: インラインコード内の `\|` も `|` に戻すこと
+    #[test]
+    fn test_markdown_table_to_excel_unescapes_pipe_in_code_span() {
+        let input = "| Cmd |\n|---|\n| `a \\| b` |";
+        assert_eq!(markdown_table_to_excel(input), "Cmd\n`a | b`");
     }
 
     /// `markdown_table_to_excel`: 中身が空の行を区切り行とみなさず残すこと

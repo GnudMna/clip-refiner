@@ -2,11 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::consts;
-
 use anyhow::{Context, Result};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
+
+use crate::consts;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 

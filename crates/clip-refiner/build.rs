@@ -11,11 +11,11 @@ use std::path::Path;
 #[path = "src/platform/update/bridge_key_obfuscate.rs"]
 mod bridge_key_obfuscate;
 
-use bridge_key_obfuscate::{OBFUSCATE_MASK_LEN, xor_obfuscate};
-
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use zeroize::Zeroize;
+
+use bridge_key_obfuscate::{OBFUSCATE_MASK_LEN, xor_obfuscate};
 
 #[cfg(not(target_os = "windows"))]
 compile_error!("ClipRefiner は Windows 専用です");

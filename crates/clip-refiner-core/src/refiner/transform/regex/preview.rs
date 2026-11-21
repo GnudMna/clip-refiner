@@ -1,9 +1,9 @@
+use regex::RegexBuilder;
+
 use super::cache::validate_regex_step;
 use super::match_timeout::{RegexMatchTimeout, replace_all_cancellable, run_with_match_timeout};
 use crate::config::{RegexSettings, RegexStep};
 use crate::consts::REGEX_MATCH_TIMEOUT_MS;
-
-use regex::RegexBuilder;
 
 // ======================================================================
 // プレビュー

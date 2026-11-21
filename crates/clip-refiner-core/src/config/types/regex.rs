@@ -1,10 +1,10 @@
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
+
 use crate::consts::{
     DEFAULT_REGEX_PRESET_ID, DEFAULT_REGEX_PRESET_NAME, MAX_REGEX_PRESETS,
     MAX_REGEX_STEPS_PER_PRESET,
 };
-
-use serde::de::{self, MapAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize};
 
 // ======================================================================
 // 正規表現ステップ

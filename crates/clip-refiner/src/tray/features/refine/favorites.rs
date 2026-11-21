@@ -135,14 +135,14 @@ pub(crate) fn refresh_quick_selector_modes(
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
+
     use super::*;
     use crate::config::FavoriteMoveDirection;
     use crate::consts;
     use crate::refiner::RefineMode;
     use crate::test_helpers::TrayTestContext;
     use crate::tray::state::LockExt;
-
-    use strum::IntoEnumIterator;
 
     /// お気に入り登録で設定とメニュー表示が更新されるようにすること
     #[test]

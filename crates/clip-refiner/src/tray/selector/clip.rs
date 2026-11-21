@@ -1,6 +1,9 @@
 use std::cell::{Cell, RefCell};
 use std::time::Instant;
 
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowId};
+
 use super::retention::RetainedSelector;
 use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
@@ -10,9 +13,6 @@ use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, ClipsEvent, SelectorEvent};
-
-use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowId};
 
 // ======================================================================
 // 登録クリップセレクタ IPC

@@ -8,14 +8,14 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
+use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
+
 use crate::platform::update::{
     RELEASE_OWNER, RELEASE_REPO, apply_update_at, apply_update_at_with_key, check_for_update_at,
     expected_trusted_comment, signature_asset_name,
 };
-
-use sha2::{Digest, Sha256};
-use zip::ZipWriter;
-use zip::write::SimpleFileOptions;
 
 // ======================================================================
 // 定数

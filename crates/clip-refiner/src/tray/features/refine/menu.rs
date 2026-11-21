@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 
+use anyhow::{Context, Result};
+use strum::IntoEnumIterator;
+use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
+
 use crate::config::HotkeySettings;
 use crate::refiner::{RefineCategory, RefineMode};
 use crate::tray::menu::{CategoryGroup, RefineMenu, TrayMenu};
 use crate::tray::state::{AppState, LockExt};
-
-use anyhow::{Context, Result};
-use strum::IntoEnumIterator;
-use tray_icon::menu::{CheckMenuItem, MenuItem, PredefinedMenuItem, Submenu};
 
 // ======================================================================
 // プライベート関数

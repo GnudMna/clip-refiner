@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use thiserror::Error;
+
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
@@ -11,8 +13,6 @@ use crate::config::{
 use crate::platform;
 use crate::tray::selector::{ClipSelectorWindow, clip_selector_json};
 use crate::user_error::{UserNotification, titles};
-
-use thiserror::Error;
 
 // ======================================================================
 // 設定再読み込み

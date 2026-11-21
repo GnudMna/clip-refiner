@@ -1,3 +1,6 @@
+use tao::event_loop::ControlFlow;
+use tray_icon::menu::MenuEvent;
+
 use super::{
     handle_menu_event, should_hide_selector_on_focus_loss, update_monitor_mode, update_refine,
 };
@@ -5,9 +8,6 @@ use crate::config::MonitorMode;
 use crate::refiner::RefineMode;
 use crate::test_helpers::{ClipboardCommand, TrayTestContext};
 use crate::tray::state::LockExt;
-
-use tao::event_loop::ControlFlow;
-use tray_icon::menu::MenuEvent;
 
 fn menu_event(id: &tray_icon::menu::MenuId) -> MenuEvent {
     MenuEvent { id: id.clone() }

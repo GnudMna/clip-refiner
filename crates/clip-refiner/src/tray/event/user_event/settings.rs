@@ -1,10 +1,10 @@
 //! 設定ウィンドウ / アプリ更新のユーザーイベント処理
 
+use tao::event_loop::ControlFlow;
+
 use crate::tray::event::AppEventContext;
 use crate::tray::features::{handle_update_apply_finished, handle_update_check_finished};
 use crate::tray::state::{SettingsEvent, UpdateEvent};
-
-use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // 設定ウィンドウ

@@ -1,10 +1,10 @@
+use global_hotkey::hotkey::HotKey;
+use serde::Serialize;
+
 use super::convert::parse_global_hotkey;
 use crate::config::HotkeySettings;
 use crate::consts;
 use crate::refiner::RefineMode;
-
-use global_hotkey::hotkey::HotKey;
-use serde::Serialize;
 
 // ======================================================================
 // ショートカット一覧

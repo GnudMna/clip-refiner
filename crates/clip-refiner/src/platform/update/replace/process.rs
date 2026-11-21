@@ -8,12 +8,6 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use super::super::error::UpdateError;
-use super::CREATE_NO_WINDOW;
-use super::files::{path_to_string, portable_exe_name};
-use super::validate::canonicalize_dir;
-use crate::consts::APP_NAME;
-
 use windows::Win32::Foundation::{
     CloseHandle, ERROR_INVALID_PARAMETER, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
@@ -22,6 +16,13 @@ use windows::Win32::System::Threading::{
     QueryFullProcessImageNameW, WaitForSingleObject,
 };
 use windows::core::{PCWSTR, PWSTR};
+
+use super::super::error::UpdateError;
+use super::super::system_exe_path;
+use super::CREATE_NO_WINDOW;
+use super::files::{path_to_string, portable_exe_name};
+use super::validate::canonicalize_dir;
+use crate::consts::APP_NAME;
 
 // ======================================================================
 // 定数
@@ -148,14 +149,37 @@ pub(super) fn schedule_dir_delete(dir: &Path) {
         );
         return;
     };
-    let script = format!("ping 127.0.0.1 -n {CLEANUP_PING_COUNT} >nul & rmdir /s /q \"{dir_str}\"");
-    let mut command = Command::new("cmd.exe");
-    command
-        .args(["/C", &script])
-        .creation_flags(CREATE_NO_WINDOW);
+    let Some(mut command) = cleanup_command(&dir_str, CLEANUP_PING_COUNT) else {
+        crate::log_warn!("システムフォルダの取得に失敗 (更新一時フォルダの削除をスキップ)");
+        return;
+    };
     if let Err(err) = command.spawn() {
         crate::log_warn!("更新一時フォルダの削除予約に失敗: {err}");
     }
+}
+
+/// 遅延後に `rmdir` を実行する `cmd.exe` コマンドを組み立てる
+///
+/// `cmd.exe` はシステムフォルダの絶対パスで起動する。スクリプトは `"` を含むため、
+/// `args` だと Rust が `\"` へエスケープして `cmd.exe` が解釈できず `rmdir` が失敗する。
+/// `raw_arg` でそのまま渡す
+///
+/// # Arguments
+/// * `dir_str` - 削除対象のパス (`path_for_cmd_rmdir` で検証済み)
+/// * `ping_count` - 遅延に使う `ping` の回数
+///
+/// # Returns
+/// * `Option<Command>` - システムフォルダを取得できない場合は `None`
+fn cleanup_command(dir_str: &str, ping_count: u32) -> Option<Command> {
+    let cmd_exe = system_exe_path("cmd.exe")?;
+    let mut command = Command::new(cmd_exe);
+    command
+        .arg("/C")
+        .raw_arg(format!(
+            "ping 127.0.0.1 -n {ping_count} >nul & rmdir /s /q \"{dir_str}\""
+        ))
+        .creation_flags(CREATE_NO_WINDOW);
+    Some(command)
 }
 
 /// 差し替え失敗をユーザーへ通知する
@@ -239,5 +263,35 @@ mod tests {
         assert!(!cmd_path.starts_with(r"\\?\"), "{cmd_path}");
         assert!(!cmd_path.contains('"'));
         cleanup_layout(&work_dir, &install);
+    }
+
+    /// システムフォルダの絶対パスで `cmd.exe` と `msiexec.exe` を解決できるようにすること
+    #[test]
+    fn system_exe_path_is_absolute_and_exists() {
+        for name in ["cmd.exe", "msiexec.exe"] {
+            let path = system_exe_path(name).expect("system exe path");
+            assert!(path.is_absolute(), "{}", path.display());
+            assert!(path.is_file(), "{}", path.display());
+        }
+    }
+
+    /// 空白を含むパスでも遅延削除コマンドが作業フォルダを実際に削除すること
+    ///
+    /// パスを `"` で囲むため、`args` 経由のエスケープ (`\"`) で `rmdir` が失敗する退行を検出する
+    #[test]
+    fn cleanup_command_removes_directory_with_spaces() {
+        let dir =
+            std::env::temp_dir().join(format!("clip-refiner cleanup test {}", std::process::id()));
+        std::fs::create_dir_all(dir.join("nested")).expect("create dir");
+        std::fs::write(dir.join("nested").join("file.txt"), b"x").expect("write file");
+
+        let dir_str = path_for_cmd_rmdir(&dir).expect("cmd path");
+        let status = cleanup_command(&dir_str, 1)
+            .expect("cleanup command")
+            .status()
+            .expect("run cleanup");
+
+        assert!(status.success(), "{status}");
+        assert!(!dir.exists(), "{}", dir.display());
     }
 }

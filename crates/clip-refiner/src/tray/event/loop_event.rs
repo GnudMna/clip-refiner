@@ -1,14 +1,14 @@
+use tao::event::Event;
+use tao::event::WindowEvent;
+use tao::event_loop::ControlFlow;
+use tray_icon::menu::MenuEvent;
+
 use super::super::state::AppEvent;
 use super::context::AppEventContext;
 use super::handle_menu_event;
 use super::handle_window_event;
 use super::user_event::handle_user_event;
 use crate::tray::selector::{apply_idle_control_flow, sync_selector_retention};
-
-use tao::event::Event;
-use tao::event::WindowEvent;
-use tao::event_loop::ControlFlow;
-use tray_icon::menu::MenuEvent;
 
 // ======================================================================
 // イベントループ処理

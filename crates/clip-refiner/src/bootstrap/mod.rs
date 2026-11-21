@@ -9,6 +9,9 @@ mod oneshot;
 mod panic_hook;
 mod portable;
 
+use anyhow::Result;
+use clap::Parser;
+
 use crate::log_error;
 use crate::platform;
 use crate::tray;
@@ -18,9 +21,6 @@ use instance::ensure_single_instance;
 use logging::{setup_console, setup_logging};
 use oneshot::run_once;
 use portable::run_portable_update_helper;
-
-use anyhow::Result;
-use clap::Parser;
 
 // ======================================================================
 // エントリポイント

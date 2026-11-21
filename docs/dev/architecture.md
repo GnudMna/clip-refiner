@@ -48,7 +48,7 @@ clip-refiner/
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
 │           └── test_helpers/ # コア単体テスト用
-├── .claude/             # Claude Code 向けの共有設定 (settings.json) と規約 (rules/)
+├── .claude/             # Claude Code 向けの共有設定 (settings.json)・規約 (rules/)・スキル (skills/)
 ├── assets/
 ├── keys/
 │   └── update-signing/  # 更新署名の minisign 公開鍵 (`*.pub`。build.rs が埋め込む)

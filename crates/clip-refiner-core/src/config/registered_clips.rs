@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use super::atomic_io::write_bytes_atomically;
 use super::clip_store_key::{clip_store_key, ensure_clip_store_key};
 use super::paths::get_config_dir;
@@ -13,8 +15,6 @@ use crate::security::{
     SecretString, decrypt_bytes, encrypt_bytes, format_public_snippet, is_within_clipboard_limit,
     secret_from,
 };
-
-use serde::{Deserialize, Serialize};
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

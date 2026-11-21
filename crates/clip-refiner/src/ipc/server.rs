@@ -12,13 +12,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::protocol::{
-    BoundedLine, OneshotIpcRequest, OneshotIpcResponse, parse_request, read_bounded_line,
-};
-use super::session::resident_pipe_name;
-use crate::config::permissions::OwnerOnlySecurityAttributes;
-use crate::tray::worker::ClipboardWorkerHandle;
-
 use anyhow::{Context, Result};
 use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_CONNECTED, HANDLE};
 use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX};
@@ -27,6 +20,13 @@ use windows::Win32::System::Pipes::{
     PIPE_TYPE_BYTE, PIPE_WAIT, PeekNamedPipe,
 };
 use windows::core::PCWSTR;
+
+use super::protocol::{
+    BoundedLine, OneshotIpcRequest, OneshotIpcResponse, parse_request, read_bounded_line,
+};
+use super::session::resident_pipe_name;
+use crate::config::permissions::OwnerOnlySecurityAttributes;
+use crate::tray::worker::ClipboardWorkerHandle;
 
 // ======================================================================
 // 定数
@@ -293,14 +293,18 @@ fn run_server_loop(
 ) {
     let active = Arc::new(AtomicU32::new(0));
     let mut listening: Option<File> = None;
+    // FIRST_PIPE_INSTANCE を付けるのは名前の最初の確保だけ
+    // 以降は処理中の接続がインスタンスを保持しており、付けると作成が失敗し続ける
+    let mut claim_name = first_instance_only;
 
     while !stop.load(Ordering::SeqCst) {
-        // 手持ちのインスタンスが無いときは他プロセスの先取りを避けるため FIRST_PIPE_INSTANCE で作る
-        // (処理中の接続が残っている間は作成に失敗し、再試行する)
         let pipe = match listening.take() {
             Some(pipe) => pipe,
-            None => match create_pipe_instance_named(pipe_name, first_instance_only) {
-                Ok(pipe) => pipe,
+            None => match create_pipe_instance_named(pipe_name, claim_name) {
+                Ok(pipe) => {
+                    claim_name = false;
+                    pipe
+                }
                 Err(err) => {
                     crate::log_warn!("ワンショット IPC パイプの作成に失敗: {err}");
                     thread::sleep(Duration::from_millis(200));

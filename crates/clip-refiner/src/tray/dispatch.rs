@@ -1,9 +1,9 @@
 //! イベントループ・ワーカーへの非同期送信と失敗時のログ記録
 
+use tao::event_loop::EventLoopProxy;
+
 use super::state::AppEvent;
 use super::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // 送信ヘルパー

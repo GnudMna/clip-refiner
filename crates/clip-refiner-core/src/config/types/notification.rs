@@ -1,6 +1,6 @@
-use crate::consts;
-
 use serde::{Deserialize, Serialize};
+
+use crate::consts;
 
 // ======================================================================
 // 通知設定

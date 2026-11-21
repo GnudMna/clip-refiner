@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use global_hotkey::GlobalHotKeyEvent;
+use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
+
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
 use super::super::event::apply_refine_once;
@@ -15,14 +18,11 @@ use super::super::selector::{
     ClipSelectorWindow, QuickSelectorWindow, clip_selector_json, hide_with_retention,
     quick_selector_current_mode, quick_selector_json,
 };
-use super::super::state::AppState;
+use super::super::state::{AppState, SettingsEvent};
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::register::HotkeyHandler;
 use crate::platform;
 use crate::tray::state::AppEvent;
-
-use global_hotkey::GlobalHotKeyEvent;
-use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
 // ======================================================================
 // イベント処理コンテキスト
@@ -212,6 +212,7 @@ impl HotkeyHandler {
             c.notification_settings.enabled
         });
         ctx.state.save_config();
+        let _ = ctx.state.proxy.send_event(SettingsEvent::Refresh.into());
         platform::show_notification(
             "ショートカット",
             if new_val {
@@ -232,6 +233,7 @@ impl HotkeyHandler {
         ctx.state.save_config();
         show_pause_notification(ctx.state, new_paused, "ショートカット");
         bump_monitor_generation(ctx.state);
+        let _ = ctx.state.proxy.send_event(SettingsEvent::Refresh.into());
     }
 
     /// 連続記録の有効/無効を切り替える

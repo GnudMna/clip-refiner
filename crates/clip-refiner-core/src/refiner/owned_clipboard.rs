@@ -44,6 +44,10 @@ impl TextClipboard for OwnedClipboard {
     fn is_excluded_from_monitoring(&mut self) -> bool {
         crate::native::clipboard_exclusion::is_excluded_from_monitoring()
     }
+
+    fn change_token(&mut self) -> Option<u64> {
+        clipboard_win::raw::seq_num().map(|s| u64::from(s.get()))
+    }
 }
 
 impl ImageClipboard for OwnedClipboard {

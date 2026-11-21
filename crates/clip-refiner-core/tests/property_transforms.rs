@@ -51,7 +51,7 @@ fn lines_text() -> impl Strategy<Value = String> {
 
 /// クォート内改行を含むレコードが混ざる CSV テキスト
 ///
-/// レコード単位の並べ替え経路 (`sort_csv_records`) を通すための入力
+/// 並べ替えのレコード単位の経路 (`split_csv_records`) を通すための入力
 fn multiline_csv_text() -> impl Strategy<Value = String> {
     let cell = prop_oneof![
         "[a-zA-Z0-9 ]{0,6}",
@@ -326,7 +326,7 @@ proptest! {
 
     /// 正規表現エスケープ後にアンエスケープすると元の文字列に戻るようにすること
     #[test]
-    fn regex_escape_unescape_roundtrip(input in "[A-Za-z0-9_]*") {
+    fn regex_escape_unescape_roundtrip(input in "[\\x20-\\x7E]*") {
         let ctx = RefineContext::default();
         let escaped = RefineMode::RegexEscape.refine(&input, &ctx);
         let unescaped = RefineMode::RegexUnescape.refine(&escaped, &ctx);
@@ -445,7 +445,7 @@ proptest! {
     /// 結合して CRLF になる (旧 Mac 形式の改行で、クリップボードではまず現れない)
     #[test]
     fn modes_are_idempotent(
-        input in prop_oneof![lines_text(), any_text()]
+        input in prop_oneof![lines_text(), any_text(), multiline_csv_text()]
             .prop_filter("末尾が単独の CR", |text| !text.ends_with('\r'))
     ) {
         for &mode in IDEMPOTENT_MODES {

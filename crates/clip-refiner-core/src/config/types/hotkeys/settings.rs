@@ -1,8 +1,8 @@
 //! ホットキー設定の型と既定値
 
-use crate::consts;
-
 use serde::{Deserialize, Serialize};
+
+use crate::consts;
 
 // ======================================================================
 // ホットキー設定

@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
+use tao::event_loop::EventLoopProxy;
+
 use super::clip::{ClipSelectorWindow, init_clip_selector};
 use super::quick::{QuickSelectorWindow, init_quick_selector};
 use crate::tray::ocr::{OcrCaptureWindow, init_ocr_capture};
 use crate::tray::state::AppEvent;
 use crate::tray::worker::ClipboardWorkerHandle;
-
-use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // セレクター UI

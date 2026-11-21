@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
-use crate::consts::MAX_HTML_NESTING_DEPTH;
-
 use htmd::options::{BrStyle, BulletListMarker, HrStyle, Options};
 use htmd::{HtmlToMarkdown, Node};
+
+use crate::consts::MAX_HTML_NESTING_DEPTH;
 
 // ======================================================================
 // 定数

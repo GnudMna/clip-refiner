@@ -41,8 +41,7 @@ Invoke-ScriptMain {
     Write-Host ''
 
     Write-Host 'doctests を実行中 (カバレッジ対象外)...'
-    cargo test --doc --features $script:CargoTestFeatures
-    Assert-LastExitCode -CommandLabel 'cargo test --doc'
+    Invoke-CargoDocTest
     Write-Host ''
 
     Write-Host 'カバレッジ計測が完了しました'

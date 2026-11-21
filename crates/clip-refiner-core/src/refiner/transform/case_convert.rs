@@ -56,6 +56,8 @@ fn capitalize_word(word: &str) -> String {
 // 行単位変換
 // ======================================================================
 /// 各行を識別子ケースへ変換する
+///
+/// 行頭のインデントと行末の空白は変換せず維持する
 fn convert_lines<F>(input: &str, convert: F) -> Cow<'_, str>
 where
     F: Fn(&str) -> String,
@@ -66,14 +68,21 @@ where
         .split('\n')
         .map(|line| {
             let body = line.trim_end_matches('\r');
-            if body.trim().is_empty() {
+            let identifier = body.trim();
+            if identifier.is_empty() {
                 return body.to_string();
             }
-            let converted = convert(body);
-            if converted != body {
+            let converted = convert(identifier);
+            if converted != identifier {
                 changed = true;
             }
-            converted
+            let indent_len = body.len() - body.trim_start().len();
+            let trailing_start = indent_len + identifier.len();
+            format!(
+                "{}{converted}{}",
+                &body[..indent_len],
+                &body[trailing_start..]
+            )
         })
         .collect();
 
@@ -269,6 +278,22 @@ mod tests {
     fn test_convert_multiline() {
         assert_eq!(to_snake_case("fooBar\nhelloWorld"), "foo_bar\nhello_world");
         assert_eq!(to_camel_case("foo_bar\r\nbaz_qux"), "fooBar\r\nbazQux");
+    }
+
+    /// 行頭のインデントと行末の空白を維持して変換すること
+    #[test]
+    fn test_convert_preserves_indent() {
+        assert_eq!(to_snake_case("    fooBar"), "    foo_bar");
+        assert_eq!(to_camel_case("\tfoo_bar  "), "\tfooBar  ");
+        assert_eq!(to_snake_case("\u{3000}fooBar"), "\u{3000}foo_bar");
+        assert_eq!(
+            to_kebab_case("  fooBar\r\n    bazQux\r\n"),
+            "  foo-bar\r\n    baz-qux\r\n"
+        );
+        // 語の間の空白は区切りとして変換する
+        assert_eq!(to_snake_case("  foo bar"), "  foo_bar");
+        // 変更がない場合はインデントがあっても Borrowed を返す
+        assert!(matches!(to_snake_case("    foo_bar"), Cow::Borrowed(_)));
     }
 
     /// 空行はそのまま維持すること

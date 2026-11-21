@@ -1,11 +1,11 @@
 use std::io::Cursor;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use image::{DynamicImage, ImageBuffer, ImageFormat};
+
 use crate::config::{AppConfig, RegisteredClip, ResolvedClip};
 use crate::consts;
 use crate::refiner::RefineMode;
-
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use image::{DynamicImage, ImageBuffer, ImageFormat};
 
 // ======================================================================
 // セレクター表示モデル

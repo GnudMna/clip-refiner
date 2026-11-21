@@ -6,14 +6,6 @@ use std::os::windows::io::AsRawHandle;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use super::protocol::{
-    BoundedLine, MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request,
-    parse_response, read_bounded_line,
-};
-use super::session::{is_server_in_current_session, resident_pipe_name};
-use crate::consts;
-use crate::refiner::{RefineContext, RefineMode};
-
 use single_instance::SingleInstance;
 use thiserror::Error;
 use windows::Win32::Foundation::HANDLE;
@@ -22,6 +14,14 @@ use windows::Win32::System::Pipes::PeekNamedPipe;
 use windows::Win32::System::Pipes::WaitNamedPipeW;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use windows::core::PCWSTR;
+
+use super::protocol::{
+    BoundedLine, MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request,
+    parse_response, read_bounded_line,
+};
+use super::session::{is_server_in_current_session, resident_pipe_name};
+use crate::consts;
+use crate::refiner::{RefineContext, RefineMode};
 
 // ======================================================================
 // 定数

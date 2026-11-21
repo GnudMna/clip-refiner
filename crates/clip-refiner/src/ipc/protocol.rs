@@ -2,10 +2,10 @@
 
 use std::io::{self, BufRead, Read};
 
+use serde::{Deserialize, Serialize};
+
 use crate::config::RegexStep;
 use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode};
-
-use serde::{Deserialize, Serialize};
 
 // ======================================================================
 // 定数

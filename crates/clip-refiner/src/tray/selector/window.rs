@@ -6,16 +6,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::Context;
+use tao::event_loop::EventLoopWindowTarget;
+use tao::window::{Window, WindowBuilder, WindowId};
+use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
+
 use super::webview_policy::{
     apply_webview_csp, is_allowed_webview_navigation, preview_denied_webview_url,
 };
 use super::webview_script;
 use crate::tray::state::AppEvent;
-
-use anyhow::Context;
-use tao::event_loop::EventLoopWindowTarget;
-use tao::window::{Window, WindowBuilder, WindowId};
-use wry::{NewWindowResponse, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
 // ======================================================================
 // ウィンドウ配置

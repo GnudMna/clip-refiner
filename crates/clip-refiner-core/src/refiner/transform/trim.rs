@@ -23,6 +23,7 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 ///
 /// 行ごとにトリムを行い、改行で結合し直す
 /// 各行末の `\r` も適切に処理される
+/// 削除する空白文字は `trim_text` と同じ (全角スペースを含む)
 ///
 /// # Arguments
 /// * `input` - 各行をトリムする対象の文字列
@@ -33,7 +34,7 @@ pub fn trim_lines(input: &str) -> Cow<'_, str> {
     let line_ending = super::utils::detect_line_ending(input);
     let result = input
         .split('\n')
-        .map(|line| line.trim_matches(['\r', ' ', '\t']))
+        .map(str::trim)
         .collect::<Vec<_>>()
         .join(line_ending);
 
@@ -72,6 +73,20 @@ mod tests {
         let input = "  hello  \r\n  world \r\n  rust ";
         let expected = "hello\r\nworld\r\nrust";
         assert_eq!(trim_lines(input), expected);
+    }
+
+    /// 全角スペースも `trim_text` と同様に削除すること
+    #[test]
+    fn test_trim_lines_ideographic_space() {
+        assert_eq!(
+            trim_lines("\u{3000}hello\u{3000}\n \u{3000}world"),
+            "hello\nworld"
+        );
+        assert_eq!(trim_lines("\u{3000}a\u{3000}\r\n\u{3000}b"), "a\r\nb");
+        assert_eq!(
+            trim_lines("\u{3000}x\u{3000}"),
+            trim_text("\u{3000}x\u{3000}")
+        );
     }
 
     /// 空文字列に対する行トリムできるようにすること

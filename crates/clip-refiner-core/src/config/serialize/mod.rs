@@ -5,10 +5,10 @@ mod scalar;
 mod sections;
 mod template;
 
+use toml_edit::DocumentMut;
+
 use crate::config::types::AppConfig;
 use crate::error::ConfigError;
-
-use toml_edit::DocumentMut;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 

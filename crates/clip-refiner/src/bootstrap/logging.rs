@@ -2,16 +2,16 @@
 
 use std::sync::Arc;
 
-use super::panic_hook::install_panic_hook;
-use crate::config;
-use crate::logger;
-use crate::{log_info, log_warn};
-
 use anyhow::{Context, Result};
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+
+use super::panic_hook::install_panic_hook;
+use crate::config;
+use crate::logger;
+use crate::{log_info, log_warn};
 
 // ======================================================================
 // コンソール設定

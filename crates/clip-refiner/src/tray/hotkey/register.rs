@@ -1,10 +1,10 @@
+use anyhow::Result;
+use global_hotkey::{GlobalHotKeyManager, hotkey::HotKey};
+
 use super::resolve::ResolvedHotkeys;
 use crate::config::HotkeySettings;
 use crate::platform;
 use crate::refiner::RefineMode;
-
-use anyhow::Result;
-use global_hotkey::{GlobalHotKeyManager, hotkey::HotKey};
 
 // ======================================================================
 // 登録結果

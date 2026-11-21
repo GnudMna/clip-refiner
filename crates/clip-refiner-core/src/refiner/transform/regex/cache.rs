@@ -1,7 +1,7 @@
+use regex::{Regex, RegexBuilder};
+
 use crate::config::RegexStep;
 use crate::consts::{MAX_REGEX_PATTERN_BYTES, REGEX_PATTERN_CACHE_CAPACITY};
-
-use regex::{Regex, RegexBuilder};
 
 // ======================================================================
 // コンパイルキャッシュ

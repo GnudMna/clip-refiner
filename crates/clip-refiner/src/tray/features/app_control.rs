@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use tao::event_loop::ControlFlow;
+
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify;
 use crate::tray::state::{AppState, SelectorEvent, SettingsEvent, WorkerEvent};
-
-use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // メニューイベント処理
@@ -56,10 +56,10 @@ pub(crate) fn handle_app_control(
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use tao::event_loop::ControlFlow;
+
     use super::*;
     use crate::test_helpers::TrayTestContext;
-
-    use tao::event_loop::ControlFlow;
 
     /// 監視再開メニューで `RestartClipboardWorker` をキューすること
     #[test]

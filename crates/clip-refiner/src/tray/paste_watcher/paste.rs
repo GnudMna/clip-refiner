@@ -1,12 +1,12 @@
 use std::mem;
 
-use super::super::state::AppState;
-use crate::refiner::TextClipboard;
-
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput,
     VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT, VK_V,
 };
+
+use super::super::state::AppState;
+use crate::refiner::TextClipboard;
 
 // ======================================================================
 // キュー先頭のクリップボード書き込み

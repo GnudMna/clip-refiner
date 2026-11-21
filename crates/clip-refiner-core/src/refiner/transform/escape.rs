@@ -23,23 +23,24 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
 
     for c in input.chars() {
         match c {
-            '"' | '\\' | '/' | '\x08' | '\x0c' | '\n' | '\r' | '\t' => {
-                result.push('\\');
-                result.push(match c {
-                    '"' => '"',
-                    '\\' => '\\',
-                    '/' => '/',
-                    '\x08' => 'b',
-                    '\x0c' => 'f',
-                    '\n' => 'n',
-                    '\r' => 'r',
-                    '\t' => 't',
-                    _ => unreachable!(),
-                });
-                changed = true;
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '/' => result.push_str("\\/"),
+            '\x08' => result.push_str("\\b"),
+            '\x0c' => result.push_str("\\f"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            // 上記以外の制御文字は JSON 文字列内で \uXXXX 形式にする必要がある
+            c if c < '\x20' => {
+                let _ = write!(result, "\\u{:04x}", u32::from(c));
             }
-            _ => result.push(c),
+            _ => {
+                result.push(c);
+                continue;
+            }
         }
+        changed = true;
     }
 
     if changed {
@@ -55,6 +56,7 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
 /// 文字列のエスケープを解除する
 ///
 /// バックスラッシュでエスケープされた特殊文字(`\n`, `\t` など)を元の文字に戻す
+/// 4 桁の 16 進数が続かない `\u` や、対にならないサロゲートはそのまま残す
 ///
 /// # Arguments
 /// * `input` - エスケープ解除対象の文字列
@@ -66,93 +68,69 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
         return Cow::Borrowed(input);
     }
     let mut result = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
+    let mut rest = input;
     let mut changed = false;
 
-    while let Some(c) = chars.next() {
-        if c == '\\'
-            && let Some(&next) = chars.peek()
-        {
-            match next {
-                '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => {
-                    chars.next();
-                    result.push(match next {
-                        '"' => '"',
-                        '\\' => '\\',
-                        '/' => '/',
-                        'b' => '\x08',
-                        'f' => '\x0c',
-                        'n' => '\n',
-                        'r' => '\r',
-                        't' => '\t',
-                        _ => unreachable!(),
-                    });
-                    changed = true;
-                    continue;
-                }
-                'u' => {
-                    chars.next(); // 'u' を消費
-                    let hex: String = std::iter::from_fn(|| chars.next()).take(4).collect();
-                    if hex.len() == 4 {
-                        if let Some(code) = parse_hex4(&hex) {
-                            // サロゲートペア上位 (U+D800..U+DBFF) の処理
-                            if (0xD800..=0xDBFF).contains(&code) {
-                                // \uXXXX の次に \uYYYY があるか確認
-                                let mut temp_chars = chars.clone();
-                                if temp_chars.next() == Some('\\') && temp_chars.next() == Some('u')
-                                {
-                                    let low_hex: String =
-                                        std::iter::from_fn(|| temp_chars.next()).take(4).collect();
-                                    if low_hex.len() == 4
-                                        && let Some(low) = parse_hex4(&low_hex)
-                                        && (0xDC00..=0xDFFF).contains(&low)
-                                    {
-                                        // サロゲートペアをUnicodeスカラー値に変換
-                                        let scalar = 0x10000u32
-                                            + ((u32::from(code) - 0xD800) << 10)
-                                            + (u32::from(low) - 0xDC00);
-                                        if let Some(ch) = char::from_u32(scalar) {
-                                            // 消費済みの分だけ chars を進める
-                                            chars.next(); // '\'
-                                            chars.next(); // 'u'
-                                            for _ in 0..4 {
-                                                chars.next();
-                                            }
-                                            result.push(ch);
-                                            changed = true;
-                                            continue;
-                                        }
-                                    }
-                                }
-                                // サロゲートペアでない場合はそのまま出力
-                                let _ = write!(result, "\\u{hex}");
-                            } else if let Some(ch) = char::from_u32(u32::from(code)) {
-                                result.push(ch);
-                                changed = true;
-                                continue;
-                            } else {
-                                let _ = write!(result, "\\u{hex}");
-                            }
-                        } else {
-                            let _ = write!(result, "\\u{hex}");
-                        }
-                    } else {
-                        let _ = write!(result, "\\u{hex}");
-                    }
-                    changed = true;
-                    continue;
-                }
-                _ => {}
-            }
+    while let Some(pos) = rest.find('\\') {
+        result.push_str(&rest[..pos]);
+        let after = &rest[pos + 1..];
+        if let Some((ch, consumed)) = decode_escape(after) {
+            result.push(ch);
+            rest = &after[consumed..];
+            changed = true;
+        } else {
+            result.push('\\');
+            rest = after;
         }
-        result.push(c);
     }
+    result.push_str(rest);
 
     if changed {
         Cow::Owned(result)
     } else {
         Cow::Borrowed(input)
     }
+}
+
+/// バックスラッシュの直後にあるエスケープシーケンスを 1 つ解釈する
+///
+/// # Arguments
+/// * `after` - バックスラッシュの次の文字から始まる文字列
+///
+/// # Returns
+/// * `Option<(char, usize)>` - 解釈できた場合は `Some((変換後の文字, 消費したバイト数))`、
+///   解釈できない場合は `None`
+fn decode_escape(after: &str) -> Option<(char, usize)> {
+    let simple = match after.as_bytes().first()? {
+        b'"' => Some('"'),
+        b'\\' => Some('\\'),
+        b'/' => Some('/'),
+        b'b' => Some('\x08'),
+        b'f' => Some('\x0c'),
+        b'n' => Some('\n'),
+        b'r' => Some('\r'),
+        b't' => Some('\t'),
+        _ => None,
+    };
+    if let Some(ch) = simple {
+        return Some((ch, 1));
+    }
+    if !after.starts_with('u') {
+        return None;
+    }
+
+    let code = u32::from(parse_hex4(after.get(1..5)?)?);
+    if (0xD800..=0xDBFF).contains(&code) {
+        // サロゲートペア上位は、直後の \uXXXX が下位 (U+DC00..U+DFFF) のときだけ結合する
+        let low_hex = after.get(5..)?.strip_prefix("\\u")?.get(..4)?;
+        let low = u32::from(parse_hex4(low_hex)?);
+        if !(0xDC00..=0xDFFF).contains(&low) {
+            return None;
+        }
+        let scalar = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
+        return Some((char::from_u32(scalar)?, 11));
+    }
+    Some((char::from_u32(code)?, 5))
 }
 
 /// 4 桁の 16 進数文字列を `u16` に変換する
@@ -175,6 +153,11 @@ fn parse_hex4(hex: &str) -> Option<u16> {
 // ======================================================================
 // 正規表現エスケープ
 // ======================================================================
+/// `regex::escape` がエスケープする文字
+///
+/// `regex_unescape` の解除対象と一致させ、`regex_escape` の逆変換にする
+const REGEX_META_CHARS: &str = "\\.+*?()|[]{}^$#&-~";
+
 /// 正規表現のメタ文字をエスケープする
 ///
 /// 正規表現内で特殊な意味を持つ文字(`.`, `*`, `+` など)の前にバックスラッシュを挿入し、
@@ -214,7 +197,7 @@ pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     while let Some(c) = chars.next() {
         if c == '\\'
             && let Some(&next) = chars.peek()
-            && "\\^$.|?*+()[]{}".contains(next)
+            && REGEX_META_CHARS.contains(next)
         {
             chars.next();
             result.push(next);
@@ -304,6 +287,39 @@ mod tests {
         assert_eq!(escape_string("\t"), "\\t");
     }
 
+    /// `escape_string`: 名前付きエスケープを持たない制御文字を `\u00XX` にすること
+    #[test]
+    fn test_escape_string_control_chars() {
+        assert_eq!(escape_string("\0"), "\\u0000");
+        assert_eq!(escape_string("a\x01b"), "a\\u0001b");
+        assert_eq!(escape_string("\x1b[0m"), "\\u001b[0m");
+        assert_eq!(escape_string("\x1f"), "\\u001f");
+        // U+0020 以上は対象外
+        assert!(matches!(escape_string(" \x7f"), Cow::Borrowed(_)));
+        // 全制御文字がエスケープ後に制御文字を含まず、アンエスケープで元に戻る
+        let all: String = ('\0'..'\x20').collect();
+        let escaped = escape_string(&all);
+        assert!(escaped.chars().all(|c| c >= '\x20'));
+        assert_eq!(unescape_string(&escaped), all);
+    }
+
+    /// `unescape_string`: 4 桁に満たない `\u` は後続のエスケープを巻き込まず、変更なしとして扱うこと
+    #[test]
+    fn test_unescape_string_incomplete_unicode() {
+        assert_eq!(unescape_string("\\u12\\n"), "\\u12\n");
+        assert_eq!(unescape_string("\\u12 \\t"), "\\u12 \t");
+        // 変換が 1 つもない場合は Borrowed を返す
+        assert!(matches!(unescape_string("\\u12"), Cow::Borrowed(_)));
+        assert!(matches!(unescape_string("\\uGHIJ"), Cow::Borrowed(_)));
+        assert!(matches!(unescape_string("\\uD83D"), Cow::Borrowed(_)));
+        assert!(matches!(unescape_string("\\uDE00"), Cow::Borrowed(_)));
+        assert!(matches!(unescape_string("end\\"), Cow::Borrowed(_)));
+        // 上位サロゲートの後ろが下位でない場合は、後続のエスケープだけ変換する
+        assert_eq!(unescape_string("\\uD83D\\u0041"), "\\uD83DA");
+        // 4 バイト目がマルチバイト文字の途中になっても panic しない
+        assert_eq!(unescape_string("\\uあいう"), "\\uあいう");
+    }
+
     /// `escape_string`: 空文字列は Borrowed を返すようにすること
     #[test]
     fn test_escape_string_empty() {
@@ -343,5 +359,24 @@ mod tests {
         let escaped = regex_escape(original);
         let unescaped = regex_unescape(&escaped);
         assert_eq!(unescaped, original);
+    }
+
+    /// `regex::escape` がエスケープする全メタ文字を `regex_unescape` で戻せるようにすること
+    ///
+    /// `-` `#` `&` `~` を含む
+    #[test]
+    fn test_regex_unescape_all_meta_chars() {
+        for c in REGEX_META_CHARS.chars() {
+            let original = format!("a{c}b");
+            let escaped = regex_escape(&original);
+            assert_eq!(
+                escaped,
+                format!("a\\{c}b"),
+                "regex::escape が {c:?} をエスケープしない"
+            );
+            assert_eq!(regex_unescape(&escaped), original);
+        }
+        assert_eq!(regex_unescape("a\\-b"), "a-b");
+        assert_eq!(regex_unescape("\\#\\&\\~"), "#&~");
     }
 }

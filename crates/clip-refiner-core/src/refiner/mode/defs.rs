@@ -32,7 +32,7 @@ pub enum RefineMode {
     /// URLデコードを行う。失敗した場合は元のテキストを維持する
     #[strum(message = "URLデコード")]
     UrlDecode,
-    /// URLから utm_ で始まる計測用パラメータを削除する
+    /// URLから utm_ で始まるパラメータと広告のクリックID (fbclid / gclid など) を削除する
     #[strum(message = "UTM除去")]
     RemoveUtm,
     /// パスからベースネームを抽出する

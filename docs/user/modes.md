@@ -10,8 +10,8 @@
 
 | カテゴリ               | モード名 (`--mode`)                                                                                | 説明                                                                                                            |
 | :--------------------- | :------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
-| **URL 操作**           | `url-encode` / `url-decode`                                                                        | URL のエンコード・デコード (エンコードは英数字と `-` `.` `_` `~` 以外の文字が対象。デコードは `+` を空白に戻す) |
-|                        | `remove-utm`                                                                                       | URL から `utm_*` 計測パラメータを削除                                                                           |
+| **URL 操作**           | `url-encode` / `url-decode`                                                                        | URL のエンコード・デコード (エンコードは英数字と `-` `.` `_` `~` 以外の文字が対象。デコードは `+` を変えない)   |
+|                        | `remove-utm`                                                                                       | URL から `utm_*` と `fbclid` / `gclid` などの計測パラメータを削除                                               |
 | **ファイルパス**       | `extract-basename` / `extract-basename-quoted`                                                     | パスからファイル名のみを抽出 (引用符付きオプションあり)                                                         |
 |                        | `add-path-quotes` / `remove-path-quotes`                                                           | パスへの引用符 (`"`) の付与・削除                                                                               |
 |                        | `path-to-slash` / `path-to-backslash`                                                              | パス区切り文字をスラッシュ / バックスラッシュに変換                                                             |
@@ -20,7 +20,7 @@
 |                        | `remove-empty-lines`                                                                               | 空行を削除                                                                                                      |
 |                        | `remove-duplicate-lines`                                                                           | 重複行を削除                                                                                                    |
 | **空白の除去**         | `trim`                                                                                             | テキスト全体の前後の空白・改行を削除                                                                            |
-|                        | `trim-lines`                                                                                       | 行ごとに前後の空白を削除                                                                                        |
+|                        | `trim-lines`                                                                                       | 行ごとに前後の空白 (全角含む) を削除                                                                            |
 | **エスケープ・解除**   | `escape` / `unescape`                                                                              | バックスラッシュエスケープの付与・解除                                                                          |
 |                        | `regex-escape` / `regex-unescape`                                                                  | 正規表現メタ文字のエスケープ・解除                                                                              |
 | **正規表現**           | `regex-replace`                                                                                    | パターンに一致する部分を置換 (`[regex]` 設定を使用)                                                             |
@@ -39,9 +39,9 @@
 | **Excel**              | `excel-to-markdown`                                                                                | Excel コピーデータを Markdown テーブルへ変換                                                                    |
 |                        | `markdown-to-excel`                                                                                | Markdown 表を Excel (TSV) 形式へ変換                                                                            |
 |                        | `excel-to-image`                                                                                   | Excel コピーデータの見た目を画像としてクリップボードへ保存                                                      |
-| **Unixタイムスタンプ** | `timestamp-to-datetime` / `datetime-to-timestamp`                                                  | Unix タイムスタンプ ↔ 日時文字列の変換 (ローカルタイムゾーン)                                                   |
+| **Unixタイムスタンプ** | `timestamp-to-datetime` / `datetime-to-timestamp`                                                  | Unix タイムスタンプ (秒・ミリ秒) ↔ 日時文字列の変換 (ローカルタイムゾーン)                                      |
 | **桁区切りカンマ**     | `add-comma` / `remove-comma`                                                                       | 数値への 3 桁カンマ区切り付与・削除                                                                             |
-| **識別子の書式**       | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | 識別子のケース変換                                                                                              |
+| **識別子の書式**       | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | 識別子のケース変換 (行頭のインデントは維持)                                                                     |
 | **全角・半角**         | `to-halfwidth` / `to-fullwidth`                                                                    | 英数字・記号・スペース・カタカナの全角 ↔ 半角変換                                                               |
 
 全角・半角変換の対象は英数字・記号 (`!` 〜 `~` ↔ `！` 〜 `～`)、スペース (半角スペース ↔ 全角スペース)、カタカナと約物 (`。` `「` `」` `、` `・` `ー` `゛` `゜`) である。半角へ変換すると濁音・半濁音は清音と `ﾞ` / `ﾟ` の 2 文字に分かれ、全角へ変換すると半角カナ直後の `ﾞ` / `ﾟ` を 1 文字に合成する。ひらがな・漢字や、半角に対応する文字が無いカタカナ (`ヵ` `ヶ` `ヰ` `ヱ` `ヮ`) は変換しない。
@@ -197,6 +197,8 @@ items:
 | :------- | :--------------------------------------------------------------------- |
 | **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
 | **出力** | `https://example.com/page?id=123`                                      |
+
+削除するのは `utm_` で始まるパラメータと、広告のクリック ID (`fbclid` `gclid` `dclid` `gbraid` `wbraid` `msclkid` `yclid` `twclid` `ttclid` `igshid`)。キーの大文字・小文字は区別しない (`UTM_Source` も削除する)。
 
 URL を含む文章や URL の一覧も扱える。空白 (改行を含む) で区切った項目ごとに処理し、URL 以外の文字列はそのまま残す。
 

@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use super::defs::{RefineCategory, RefineMode};
-
 use strum::{EnumMessage, IntoEnumIterator};
+
+use super::defs::{RefineCategory, RefineMode};
 
 // ======================================================================
 // メタデータ取得
@@ -228,9 +228,9 @@ impl RefineMode {
 mod tests {
     use std::str::FromStr;
 
-    use super::super::defs::{RefineCategory, RefineMode};
-
     use strum::IntoEnumIterator;
+
+    use super::super::defs::{RefineCategory, RefineMode};
 
     /// `RefineMode` のラベルとカテゴリが期待どおりであようにすること
     #[test]

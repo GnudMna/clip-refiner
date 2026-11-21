@@ -9,6 +9,28 @@ pub(crate) const DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS: usize = 30;
 // ======================================================================
 // パブリック関数
 // ======================================================================
+/// メニュー項目の表示文字列として安全な形に変換する
+///
+/// muda は `&` をショートカット文字の指定として解釈するため `&&` にする
+/// 改行・タブは表示が崩れるため空白に置き換える
+///
+/// # Arguments
+/// * `text` - メニューに表示するユーザー由来の文字列
+///
+/// # Returns
+/// * `String` - エスケープ済みの表示文字列
+pub(crate) fn escape_menu_text(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&&"),
+            '\r' | '\n' | '\t' => escaped.push(' '),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
 /// 有効トグル + 区切り + 動的レコード (+ 区切り) + フッターでサブメニューを再構築する
 ///
 /// 既存項目をすべて削除し、`enabled_item`・レコード・`footer_items` の順に載せ直す
@@ -43,7 +65,7 @@ pub(crate) fn rebuild_toggle_records_submenu(
 
     let mut has_records = false;
     for (index, label) in entry_labels {
-        let item = MenuItem::new(label, true, None);
+        let item = MenuItem::new(escape_menu_text(&label), true, None);
         records.push((item.id().clone(), index));
         submenu.append_items(&[&item as &dyn IsMenuItem])?;
         has_records = true;
@@ -66,6 +88,39 @@ pub(crate) fn rebuild_toggle_records_submenu(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `&` は `&&` にし、改行とタブは空白に置き換えること
+    #[test]
+    fn escape_menu_text_escapes_ampersand_and_control_chars() {
+        assert_eq!(escape_menu_text("Q&A"), "Q&&A");
+        assert_eq!(escape_menu_text("?a=1&b=2"), "?a=1&&b=2");
+        assert_eq!(escape_menu_text("a\r\nb\tc\nd"), "a  b c d");
+        assert_eq!(escape_menu_text("plain"), "plain");
+    }
+
+    /// 動的レコードのラベルがエスケープされて項目に載ること
+    #[test]
+    fn rebuild_escapes_record_labels() {
+        let enabled = CheckMenuItem::new("有効", true, true, None);
+        let submenu = Submenu::new("一覧", true);
+        let mut records = Vec::new();
+
+        rebuild_toggle_records_submenu(
+            &submenu,
+            &mut records,
+            &enabled,
+            [(0, "Q&A\nnext".to_string())],
+            &[],
+        )
+        .expect("再構築に失敗");
+
+        // 有効 + 区切り + レコード + 区切り
+        let item = submenu.items()[2]
+            .as_menuitem()
+            .map(MenuItem::text)
+            .expect("レコード項目が MenuItem ではない");
+        assert_eq!(item, "Q&&A next");
+    }
 
     /// レコードありのとき有効トグル・レコード・フッターの順になるようにすること
     #[test]

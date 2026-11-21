@@ -1,10 +1,10 @@
 //! OCR / 連続記録のユーザーイベント処理と共有ヘルパー
 
+use tao::event_loop::ControlFlow;
+
 use crate::tray::e2e;
 use crate::tray::event::AppEventContext;
 use crate::tray::state::{OcrEvent, RecordEvent};
-
-use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // OCR

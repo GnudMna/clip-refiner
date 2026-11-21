@@ -4,11 +4,62 @@
 
 ## Git 運用
 
-- 作業ブランチは `develop` から切り、Pull Request の向き先も `develop`
-- ブランチ名は `<type>/<kebab-case>` (例: `fix/ipc-line-limit`, `refactor/split-large-files`, `docs/...`)
-- コミットメッセージは `<Type>: <日本語の要約>`。主な Type は `Feat` / `Update` / `Fix` / `Refactor` / `Test` / `Docs` / `Chore` / `Security` (リリースは `Release: v{version}`)
-- 利用者に影響する変更は [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` に同じ変更で追記する。書き方は CHANGELOG.md 冒頭の規約に従う (1 項目 1 文・体言止め・症状と変更後の挙動を書く。テスト・リファクタリング・ドキュメント整理など利用者に見えない変更は書かない)
-- Pull Request 前に [品質チェック](testing.md#品質チェック) を通す
+### ブランチ
+
+- 作業ブランチは最新の `origin/develop` から切り、Pull Request の向き先も `develop` にする。`main` へはリリースのときだけ取り込む
+- 1 ブランチ 1 目的にする。無関係な修正は別ブランチに分ける
+- ブランチ名は `<prefix>/<kebab-case>`。後半は内容が分かる英小文字・数字・ハイフンで書く (例: `fix/ipc-line-limit`, `refactor/split-large-files`)
+- prefix は次から選ぶ。新機能と既存機能の変更はどちらも `feature` を使う (`feat` / `update` は使わない)
+
+| prefix | 用途 | コミットの Type |
+| :--- | :--- | :--- |
+| `feature` | 新機能・既存機能の変更 | `Feat` / `Update` |
+| `fix` | 不具合修正 | `Fix` |
+| `refactor` | 挙動を変えない内部の整理 | `Refactor` |
+| `chore` | ビルド・依存・設定・開発環境 | `Chore` |
+| `docs` | ドキュメント | `Docs` |
+| `test` | テストの追加・修正 | `Test` |
+| `security` | 脆弱性・防御の強化 | `Security` |
+| `release` | `release/v{version}` の形式 | `Release` |
+
+### worktree
+
+`git worktree` で作ったブランチは `<ユーザー名>/<作業名>` のような自動の名前が付く。そのまま使わず、最初のコミットの前に規約の名前へ改める。
+
+```powershell
+git fetch origin develop
+
+# 新しくブランチを切る (develop を checkout しない)
+git switch -c <prefix>/<kebab-case> origin/develop
+
+# 自動命名のブランチを使う (origin/develop より進んでいないことを確認する)
+git branch -m <prefix>/<kebab-case>
+```
+
+- `develop` は別の worktree が checkout していることがあるため、worktree 内で `develop` を切り替えて `git pull` しない。常に `git fetch` して `origin/develop` を起点にする
+- 起点が古いときは、未 push に限り `git rebase origin/develop` で取り込む
+
+### コミット
+
+- コミットメッセージは `<Type>: <日本語の要約>`。Type は上表の `Feat` / `Update` / `Fix` / `Refactor` / `Test` / `Docs` / `Chore` / `Security` (リリースは `Release: v{version}`)
+- 要約は体言止めで、不具合は症状と修正を書く (例: `Fix: UTM 除去で URL より後ろのテキストが消える問題を修正`)。句点は付けない
+- 1 コミット 1 目的にする。コードを変えたら、対応するテスト・ドキュメント・再生成した `*.bundle.js` と [ドキュメント同期](#ドキュメント同期) の対象を同じコミットに含める
+- 利用者に影響する変更は [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` に同じコミットで追記する。書き方は CHANGELOG.md 冒頭の規約に従う
+- [Git フック](testing.md#git-フック) を有効にしておく。`--no-verify` や `CLIP_REFINER_SKIP_HOOK` でのスキップは、原因が分かっていて Pull Request に理由を書けるときだけにする
+
+### Pull Request
+
+- 作成前に [品質チェック](testing.md#品質チェック) を通す。通せなかった項目は本文に書く
+- タイトルはコミットメッセージと同じ `<Type>: <日本語の要約>` にする。マージコミットの件名になる
+- 本文には次を書く
+
+| 項目 | 内容 |
+| :--- | :--- |
+| 概要 | 何を変えたか。不具合修正なら症状と原因 |
+| 確認 | 実行した品質チェックと手動確認の内容 |
+| 利用者への影響 | CHANGELOG へ追記した内容。無いときは「なし」 |
+
+- マージはマージコミットで行い、squash はしない。ブランチの履歴をそのまま残す
 
 ## コーディング規約
 
@@ -17,13 +68,15 @@
 | ファイル | 内容 |
 | :------- | :--- |
 | `comments.md` | Rust のコメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
-| `imports.md` | Rust の `use` 文のグループ順 (`std` → `super` / `crate` → 外部クレート)・空行・アルファベット順 |
-| `javascript.md` | WebView UI の JavaScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント) |
-| `docs.md` | ドキュメントの文体、`docs/user/` の制約、CHANGELOG の書き方 |
+| `imports.md` | Rust の `use` 文のグループ順 (`std` → 外部クレート → `self` / `super` / `crate` / 子モジュール)・空行・グループ内の並び |
+| `javascript.md` | WebView UI の JavaScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント)、E2E の TypeScript |
+| `docs.md` | ドキュメント (`CLAUDE.md`・`.claude/rules/` を含む) の文体、`docs/user/` の制約、CHANGELOG の書き方 |
 
-JavaScript の整形・静的検査は ESLint / Prettier の設定に従う ([JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。
+定型作業は `.claude/skills/` のスキルにまとめている。`check` は `check.ps1` を実行して失敗を直し、`changelog` は利用者に影響する変更を `CHANGELOG.md` の `[Unreleased]` に追記する。
 
-`.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
+JavaScript の整形・静的検査は ESLint / Prettier の設定に従う (`e2e/` は対象外。[JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。
+
+`.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。UI の JavaScript を編集すると PostToolUse フックが `npm run build:ui` を実行する。読み取り系の Git コマンドと `git fetch` は許可する。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
 
 ## ドキュメントの配置
 

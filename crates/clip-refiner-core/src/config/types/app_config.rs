@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::favorites::{FavoriteMoveDirection, FavoriteToggleResult};
 use super::hotkeys::HotkeySettings;
 use super::monitor::MonitorMode;
@@ -7,8 +9,6 @@ use super::registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedCli
 use super::selector_webview::{SelectorWebviewRetention, default_selector_webview_idle_minutes};
 use crate::consts;
 use crate::refiner::RefineMode;
-
-use serde::{Deserialize, Serialize};
 
 /// 設定ファイルに `version` が無い場合のデシリアライズ用デフォルト
 fn default_config_version() -> u32 {

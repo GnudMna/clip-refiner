@@ -5,6 +5,9 @@ mod init;
 use std::sync::Arc;
 use std::time::Instant;
 
+use tao::event::Event;
+use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
+
 use super::event;
 use super::hotkey::{HotkeyHandler, HotkeyListenerStop};
 use super::menu::TrayMenu;
@@ -13,9 +16,6 @@ use super::settings::SettingsWindow;
 use super::state::{AppEvent, AppState};
 use super::worker::ClipboardWorkerHandle;
 use crate::ipc::OneshotIpcServer;
-
-use tao::event::Event;
-use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
 // ======================================================================
 // アプリケーション構造体

@@ -1,7 +1,7 @@
+use windows::Win32::Foundation::LPARAM;
+
 use super::types::SelectionRect;
 use crate::platform::screen_capture::ScreenRect;
-
-use windows::Win32::Foundation::LPARAM;
 
 // ======================================================================
 // 座標変換

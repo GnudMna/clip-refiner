@@ -3,6 +3,8 @@
 use std::fs;
 use std::path::Path;
 
+use serde::Deserialize;
+
 use super::super::paths::get_config_file_path;
 use super::super::permissions::restrict_private_file_permissions;
 use super::super::registered_clips::{
@@ -12,8 +14,6 @@ use super::super::types::{AppConfig, RegisteredClip};
 use super::super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
 use crate::error::ConfigError;
-
-use serde::Deserialize;
 
 impl AppConfig {
     /// 設定ファイルを読み込む

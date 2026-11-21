@@ -2,10 +2,10 @@
 
 use std::time::{Duration, Instant};
 
+use tao::event_loop::ControlFlow;
+
 use crate::config::SelectorWebviewRetention;
 use crate::consts;
-
-use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // 保持対象セレクター
