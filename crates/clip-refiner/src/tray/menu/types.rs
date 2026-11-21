@@ -66,8 +66,10 @@ pub struct MonitorMenu {
 pub struct IntervalMenu {
     /// 「監視周期」サブメニュー
     pub main_submenu: Submenu,
-    /// 各時間間隔ごとのチェックメニュー項目
+    /// プリセット間隔ごとのチェックメニュー項目
     pub items: Vec<(CheckMenuItem, u64)>,
+    /// プリセット外の間隔を示す項目 (クリックで設定ウィンドウを開く)
+    pub custom_item: CheckMenuItem,
 }
 
 /// クリップボード履歴に関連するメニューの構成

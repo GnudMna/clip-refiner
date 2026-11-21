@@ -35,7 +35,7 @@ macro_rules! define_settings_model {
             ///
             /// # Arguments
             /// * `patch` - 適用する部分更新
-            #[cfg_attr(not(test), allow(dead_code))]
+            #[cfg(test)]
             pub fn apply_patch(&mut self, patch: &SettingsPatch) {
                 $(
                     if let Some(value) = patch.$field.clone() {
@@ -94,7 +94,7 @@ impl SettingsPatch {
     /// 後から届いた部分更新を既存パッチへマージする
     ///
     /// ネスト項目 (`notification_settings` / `regex` / `hotkeys`) は JSON 単位で深くマージする
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn merge_from(&mut self, other: &Self) {
         let Ok(mut base_json) = serde_json::to_value(&*self) else {
             return;

@@ -40,9 +40,7 @@ pub(super) fn apply_monitor_patch(
             c.normalize();
         });
         let interval_ms = state.with_config(|c| c.interval_ms);
-        for (item, ms) in &menu.interval.items {
-            item.set_checked(*ms == interval_ms);
-        }
+        menu.sync_interval_menu(interval_ms);
         *config_dirty = true;
     }
 }
@@ -175,5 +173,37 @@ mod tests {
                 .iter()
                 .any(|(item, ms)| *ms == 500 && item.is_checked())
         );
+        assert!(!menu.interval.custom_item.is_checked());
+    }
+
+    /// プリセット外の周期パッチでカスタム項目がチェックされること
+    #[test]
+    fn interval_ms_patch_marks_custom_item() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let patch = SettingsPatch {
+            interval_ms: Some(750),
+            ..SettingsPatch::default()
+        };
+        let mut outcome = PatchApplyOutcome {
+            monitor_mode_changed: false,
+            bump_monitor: false,
+            mode_changed: false,
+            pipeline_changed: false,
+        };
+        let mut config_dirty = false;
+
+        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+
+        assert_eq!(state.with_config(|c| c.interval_ms), 750);
+        assert!(menu.interval.custom_item.is_checked());
+        assert!(menu.interval.custom_item.text().contains("750"));
+        assert!(
+            menu.interval
+                .items
+                .iter()
+                .all(|(item, _)| !item.is_checked())
+        );
+        assert!(config_dirty);
     }
 }

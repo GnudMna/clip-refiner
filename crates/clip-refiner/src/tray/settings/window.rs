@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use super::apply::{
@@ -24,7 +25,7 @@ use crate::user_error::titles;
 
 use anyhow::{Context, Result};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
-use tao::window::{Window, WindowBuilder};
+use tao::window::{Window, WindowBuilder, WindowId};
 
 // ======================================================================
 // HTML 組み立て
@@ -83,31 +84,46 @@ fn assemble_settings_html() -> String {
 // 設定ウィンドウ
 // ======================================================================
 /// 設定編集用 `WebView` ウィンドウ
+///
+/// `WebView` は初回表示時に生成し、非表示時に破棄してアイドル RSS を抑える
 pub struct SettingsWindow {
-    inner: WebSelectorWindow,
+    /// イベント送信用プロキシ
+    proxy: EventLoopProxy<AppEvent>,
+    /// 共有アプリケーション状態
+    state: Arc<AppState>,
+    /// 遅延生成された `WebView` (非表示時は `None`)
+    inner: RefCell<Option<WebSelectorWindow>>,
 }
 
 impl SettingsWindow {
-    /// 設定ウィンドウと `WebView` を初期化して生成する
+    /// `WebView` 未生成の空シェルを生成する
     ///
     /// # Arguments
-    /// * `window` - ベースとなる `tao` ウィンドウ
     /// * `proxy` - イベント送信用プロキシ
     /// * `state` - アプリケーションの共有状態
     ///
     /// # Returns
-    /// * `Result<Self>` - 成功時は `SettingsWindow`、失敗時はエラー
-    pub fn new(
+    /// * `Self` - 遅延生成用の空シェル
+    pub fn new_shell(proxy: EventLoopProxy<AppEvent>, state: Arc<AppState>) -> Self {
+        Self {
+            proxy,
+            state,
+            inner: RefCell::new(None),
+        }
+    }
+
+    /// `WebView` を構築する
+    fn build_webview(
         window: Window,
         proxy: &EventLoopProxy<AppEvent>,
         state: &Arc<AppState>,
-    ) -> Result<Self> {
+    ) -> Result<WebSelectorWindow> {
         let html = assemble_settings_html();
         let proxy_clone = proxy.clone();
         let state_clone = Arc::clone(state);
         let data_dir = format!("{}-Settings-WebView2", consts::APP_NAME);
 
-        let inner = WebSelectorWindow::build(
+        WebSelectorWindow::build(
             window,
             &data_dir,
             &html,
@@ -120,19 +136,41 @@ impl SettingsWindow {
                 }
             },
             WebViewWindowOptions::OPAQUE,
-        )?;
+        )
+    }
 
-        Ok(Self { inner })
+    /// 未生成なら `WebView` を生成する
+    fn ensure_created(&self, event_loop: &EventLoopWindowTarget<AppEvent>) -> Result<()> {
+        if self.inner.borrow().is_some() {
+            return Ok(());
+        }
+        let window = build_hidden_settings_window(event_loop)?;
+        let webview = Self::build_webview(window, &self.proxy, &self.state)?;
+        *self.inner.borrow_mut() = Some(webview);
+        Ok(())
     }
 
     /// 設定ウィンドウを表示し、スナップショットを読み込む
     ///
+    /// 未生成なら `WebView` を遅延生成する
+    ///
     /// # Arguments
+    /// * `event_loop` - 遅延生成用のイベントループ
     /// * `snapshot_json` - 設定スナップショット JSON
-    pub fn show(&self, snapshot_json: &str) {
-        self.inner.window().set_visible(true);
-        self.inner.window().set_focus();
-        self.load_snapshot(snapshot_json);
+    pub fn show(&self, event_loop: &EventLoopWindowTarget<AppEvent>, snapshot_json: &str) {
+        if let Err(err) = self.ensure_created(event_loop) {
+            crate::log_warn!("設定ウィンドウの初期化に失敗: {err:#}");
+            crate::platform::show_notification("設定", "ウィンドウの初期化に失敗しました");
+            return;
+        }
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
+        inner.window().set_visible(true);
+        inner.window().set_focus();
+        let script = settings_load_script(snapshot_json, false, false);
+        inner.evaluate_script(&script);
     }
 
     /// 前面へフォーカスを移す
@@ -140,7 +178,9 @@ impl SettingsWindow {
     /// # Arguments
     /// * `self` - この `SettingsWindow`
     pub fn focus(&self) {
-        self.inner.window().set_focus();
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.window().set_focus();
+        }
     }
 
     /// JavaScript へスナップショットを渡す
@@ -163,20 +203,32 @@ impl SettingsWindow {
         force: bool,
         external_sync: bool,
     ) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
         let script = settings_load_script(snapshot_json, force, external_sync);
-        self.inner.evaluate_script(&script);
+        inner.evaluate_script(&script);
     }
 
     /// 登録クリップ一覧のみ JavaScript へ反映する
     pub(crate) fn update_clips(&self, clips_json: &str) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
         let script = json_parse_call_script("updateClips", clips_json);
-        self.inner.evaluate_script(&script);
+        inner.evaluate_script(&script);
     }
 
     /// お気に入りとショートカット一覧のみ JavaScript へ反映する
     pub(crate) fn update_favorites_and_shortcuts(&self, json: &str) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
         let script = json_parse_call_script("updateFavoritesAndShortcuts", json);
-        self.inner.evaluate_script(&script);
+        inner.evaluate_script(&script);
     }
 
     /// debounce 中の設定変更を即時送信する
@@ -184,7 +236,11 @@ impl SettingsWindow {
     /// # Arguments
     /// * `self` - この `SettingsWindow`
     pub fn flush_pending_apply(&self) {
-        self.inner.evaluate_script(FLUSH_PENDING_APPLY_SCRIPT);
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
+        inner.evaluate_script(FLUSH_PENDING_APPLY_SCRIPT);
     }
 
     /// 設定適用結果を JavaScript へ通知する
@@ -196,7 +252,9 @@ impl SettingsWindow {
                 return;
             };
             let script = json_parse_call_script("onApplyFeedback", &json);
-            self.inner.evaluate_script(&script);
+            if let Some(inner) = self.inner.borrow().as_ref() {
+                inner.evaluate_script(&script);
+            }
             return;
         }
 
@@ -214,17 +272,35 @@ impl SettingsWindow {
             return;
         };
         let script = json_parse_call_script("onRegexPreview", &json);
-        self.inner.evaluate_script(&script);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.evaluate_script(&script);
+        }
     }
 
-    /// 設定ウィンドウを非表示にする
+    /// 設定ウィンドウを非表示にし、`WebView` を破棄する
     ///
     /// # Arguments
     /// * `self` - この `SettingsWindow`
     pub fn hide(&self) {
         self.flush_pending_apply();
-        save_settings_window_geometry(self.inner.window());
-        self.inner.hide();
+        {
+            let guard = self.inner.borrow();
+            if let Some(inner) = guard.as_ref() {
+                save_settings_window_geometry(inner.window());
+            }
+        }
+        *self.inner.borrow_mut() = None;
+    }
+
+    /// OS の閉じる操作向けに JS の `closeWindow` を実行する
+    ///
+    /// デバウンス中パッチを IPC 経由で先に送ってから非表示にする
+    pub(crate) fn request_close_from_os(&self) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
+        inner.evaluate_script("typeof closeWindow==='function'&&closeWindow();");
     }
 
     /// 設定ウィンドウが表示中かどうか
@@ -235,7 +311,10 @@ impl SettingsWindow {
     /// # Returns
     /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
-        self.inner.is_visible()
+        self.inner
+            .borrow()
+            .as_ref()
+            .is_some_and(WebSelectorWindow::is_visible)
     }
 
     /// ウィンドウ ID を返す
@@ -244,22 +323,23 @@ impl SettingsWindow {
     /// * `self` - この `SettingsWindow`
     ///
     /// # Returns
-    /// * `tao::window::WindowId` - ウィンドウ ID
-    pub fn id(&self) -> tao::window::WindowId {
-        self.inner.id()
+    /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
+    pub fn id(&self) -> Option<WindowId> {
+        self.inner.borrow().as_ref().map(WebSelectorWindow::id)
     }
 
     /// 設定ウィンドウ関連の `AppEvent` を処理する
     pub(crate) fn handle_event(
         &self,
         event: AppEvent,
+        event_loop: &EventLoopWindowTarget<AppEvent>,
         state: &Arc<AppState>,
         menu: &TrayMenu,
         quick_selector: Option<&QuickSelectorWindow>,
         clipboard_worker: &ClipboardWorkerHandle,
     ) {
         match event {
-            AppEvent::ShowSettingsWindow => open_settings_window(state, self),
+            AppEvent::ShowSettingsWindow => open_settings_window(event_loop, state, self),
             AppEvent::HideSettingsWindow => self.hide(),
             AppEvent::SettingsApplyPatch => {
                 if let Some(json) = state.take_pending_settings_patch() {
@@ -342,32 +422,33 @@ fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) ->
     Ok(window)
 }
 
-/// 設定ウィンドウを初期化する
+/// 設定ウィンドウの空シェルを初期化する (`WebView` は初回表示まで作らない)
 ///
 /// # Arguments
-/// * `event_loop` - ウィンドウ作成用のイベントループ
 /// * `proxy` - イベント送信用プロキシ
 /// * `state` - アプリケーションの共有状態
 ///
 /// # Returns
-/// * `Result<SettingsWindow>` - 成功時は `SettingsWindow`、失敗時はエラー
+/// * `SettingsWindow` - 遅延生成用シェル
 pub fn init_settings_window(
-    event_loop: &EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
     state: &Arc<AppState>,
-) -> Result<SettingsWindow> {
-    let window = build_hidden_settings_window(event_loop)?;
-    SettingsWindow::new(window, proxy, state)
+) -> SettingsWindow {
+    SettingsWindow::new_shell(proxy.clone(), Arc::clone(state))
 }
 
 /// 設定ウィンドウを開く (既に表示中なら前面へ)
-pub(crate) fn open_settings_window(state: &Arc<AppState>, settings: &SettingsWindow) {
+pub(crate) fn open_settings_window(
+    event_loop: &EventLoopWindowTarget<AppEvent>,
+    state: &Arc<AppState>,
+    settings: &SettingsWindow,
+) {
     let snapshot = state.with_config(SettingsSnapshot::from_config);
     if settings.is_visible() {
         settings.load_snapshot(&snapshot.to_json());
         settings.focus();
     } else {
-        settings.show(&snapshot.to_json());
+        settings.show(event_loop, &snapshot.to_json());
     }
 }
 
@@ -376,7 +457,27 @@ pub(crate) fn open_settings_window(state: &Arc<AppState>, settings: &SettingsWin
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::{assemble_settings_html, assemble_settings_js};
+    use std::sync::Arc;
+
+    use super::{SettingsWindow, assemble_settings_html, assemble_settings_js};
+
+    use crate::tray::state::test_app_state;
+
+    /// 空シェルは非表示でウィンドウ ID もなく、未生成時の操作が no-op であること
+    #[test]
+    fn empty_shell_lifecycle_is_safe() {
+        let state = Arc::new(test_app_state());
+        let settings = SettingsWindow::new_shell(state.proxy.clone(), Arc::clone(&state));
+
+        assert!(!settings.is_visible());
+        assert!(settings.id().is_none());
+        settings.load_snapshot("{}");
+        settings.focus();
+        settings.flush_pending_apply();
+        settings.hide();
+        assert!(!settings.is_visible());
+        assert!(settings.id().is_none());
+    }
 
     /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれるようにすること
     #[test]

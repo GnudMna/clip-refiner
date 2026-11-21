@@ -17,9 +17,10 @@ use super::register::HotkeyHandler;
 
 use crate::config::AppConfig;
 use crate::platform;
+use crate::tray::state::AppEvent;
 
 use global_hotkey::GlobalHotKeyEvent;
-use tao::event_loop::ControlFlow;
+use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
 // ======================================================================
 // イベント処理コンテキスト
@@ -36,6 +37,8 @@ pub struct HotkeyEventContext<'a> {
     pub clip_selector: Option<&'a ClipSelectorWindow>,
     /// OCR キャプチャオーバーレイ (OCR 操作時のみ必要)
     pub ocr_capture: Option<&'a OcrCaptureWindow>,
+    /// 遅延ウィンドウ生成用のイベントループ (セレクター表示時に必要)
+    pub event_loop: Option<&'a EventLoopWindowTarget<AppEvent>>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
     /// クイックセレクターが最後に表示された時刻(更新用)
@@ -122,8 +125,11 @@ impl HotkeyHandler {
                 clip_selector.hide();
             }
             *ctx.last_quick_selector_show = Instant::now();
+            let Some(event_loop) = ctx.event_loop else {
+                return;
+            };
             let modes_json = ctx.state.with_config(AppConfig::modes_to_json_list);
-            quick_selector.show(ctx.state.with_config(|c| c.mode), &modes_json);
+            quick_selector.show(event_loop, ctx.state.with_config(|c| c.mode), &modes_json);
         }
     }
 
@@ -142,8 +148,11 @@ impl HotkeyHandler {
                 quick_selector.hide();
             }
             *ctx.last_clip_selector_show = Instant::now();
+            let Some(event_loop) = ctx.event_loop else {
+                return;
+            };
             let clips_json = ctx.state.with_config(AppConfig::clips_to_json_list);
-            clip_selector.show(&clips_json);
+            clip_selector.show(event_loop, &clips_json);
         }
     }
 

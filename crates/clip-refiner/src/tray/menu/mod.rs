@@ -126,6 +126,17 @@ mod tests {
                 .iter()
                 .any(|(item, ms)| *ms == 1000 && !item.is_checked())
         );
+        assert!(!interval.custom_item.is_checked());
+    }
+
+    /// プリセット外の間隔ではカスタム項目がチェックされること
+    #[test]
+    fn build_interval_menu_checks_custom_interval() {
+        let interval = TrayMenu::build_interval_menu(750, MonitorMode::Polling)
+            .expect("監視周期メニューの構築に失敗");
+        assert!(interval.custom_item.is_checked());
+        assert!(interval.custom_item.text().contains("750"));
+        assert!(interval.items.iter().all(|(item, _)| !item.is_checked()));
     }
 
     /// 通知メニューの有効状態が初期値を反映すること

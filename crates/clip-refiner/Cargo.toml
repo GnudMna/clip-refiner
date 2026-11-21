@@ -138,16 +138,16 @@ path = "tests/platform_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.4" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.5" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }
 chrono = { version = "0.4.45", optional = true, features = ["serde"] }
 clap = { version = "4.6.1", optional = true, features = ["derive"] }
 global-hotkey = { version = "0.8.0", optional = true }
-image = { version = "0.25.9", optional = true, default-features = false, features = ["bmp", "jpeg", "png"] }
+image = { version = "0.25.10", optional = true, default-features = false, features = ["bmp", "jpeg", "png"] }
 png = { version = "0.18.1", optional = true }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.150", optional = true }
 single-instance = { version = "0.3.3", optional = true }
 strum = { version = "0.28.0", optional = true, features = ["derive"] }
@@ -157,7 +157,7 @@ tracing-appender = { version = "0.2.5", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true, features = ["env-filter"] }
 tray-icon = { version = "0.24.1", optional = true }
 wry = { version = "0.55.1", optional = true }
-clipboard-win = { version = "5.0", optional = true, features = ["std"] }
+clipboard-win = { version = "5.4.1", optional = true, features = ["std"] }
 windows = { version = "0.62.2", optional = true, features = [
     "Data_Xml_Dom",
     "Foundation",
@@ -185,7 +185,7 @@ winreg = { version = "0.56.0", optional = true }
 toml = "1.1.2"
 
 [build-dependencies]
-winres = "0.1"
+winres = "0.1.12"
 
 [lints]
 workspace = true

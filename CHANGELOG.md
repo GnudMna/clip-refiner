@@ -6,8 +6,16 @@
 
 ## [Unreleased]
 
-## [0.12.4] - 2026-07-10
+## [0.12.5] - 2026-07-11
 
+### Changed
+
+- 設定ウィンドウの監視周期を 4 択セレクトから 100〜60000 ms の数値入力へ変更。トレイは従来プリセットに加え「カスタム…」から設定ウィンドウを開き、プリセット外の値は `カスタム (N ms)` として表示
+- クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイを起動時常駐から遅延生成へ変更。初回表示時に生成し非表示時に破棄することで、アイドル時のメモリ使用量 (RSS) を削減
+- 未使用の内部 API とテスト専用コードを `cfg(test)` へ限定して整理 (公開 API に影響なし)
+- 依存クレートを更新
+
+## [0.12.4] - 2026-07-10
 
 ### Added
 
@@ -27,13 +35,11 @@
 
 ## [0.12.3] - 2026-07-08
 
-
 ### Fixed
 
 - 連続記録を ON にした直後、既にクリップボードにあるテキストが二重に記録される不具合を修正。ON 以降にコピーした内容のみキューへ積む
 
 ## [0.12.2] - 2026-07-08
-
 
 ### Added
 
@@ -381,7 +387,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...develop
+[0.12.5]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...v0.12.5
 [0.12.4]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...v0.12.4
 [0.12.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...v0.12.3
 [0.12.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...v0.12.2

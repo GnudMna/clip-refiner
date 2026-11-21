@@ -1,3 +1,7 @@
+#[cfg(test)]
+use std::cell::Cell;
+use std::cell::RefCell;
+
 use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
     embed_clip_selector_assets,
@@ -7,8 +11,8 @@ use crate::tray::state::AppEvent;
 
 use crate::consts;
 
-use tao::event_loop::EventLoopProxy;
-use tao::window::Window;
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowId};
 
 // ======================================================================
 // 登録クリップセレクタ IPC
@@ -66,28 +70,48 @@ pub(crate) fn clip_selector_refresh_script(clips_json: &str) -> String {
 // 登録クリップセレクタウィンドウ構造体
 // ======================================================================
 /// 登録クリップ選択用のコマンドパレット風 UI を管理する構造体
+///
+/// `WebView` は初回表示時に生成し、非表示時に破棄してアイドル RSS を抑える
 pub struct ClipSelectorWindow {
-    inner: WebSelectorWindow,
+    /// イベント送信用プロキシ
+    proxy: EventLoopProxy<AppEvent>,
+    /// 遅延生成された `WebView` (非表示時は `None`)
+    inner: RefCell<Option<WebSelectorWindow>>,
+    /// テスト用の擬似表示フラグ (`WebView` なしで相互排他を検証する)
+    #[cfg(test)]
+    force_visible: Cell<bool>,
 }
 
 // ======================================================================
 // 初期化
 // ======================================================================
 impl ClipSelectorWindow {
-    /// 登録クリップセレクタウィンドウと `WebView` を初期化して生成する
+    /// `WebView` 未生成の空シェルを生成する
     ///
     /// # Arguments
-    /// * `window` - ベースとなる `tao` ウィンドウ
-    /// * `proxy` - UI スレッド (イベントループ) へメッセージを送信するプロキシ
+    /// * `proxy` - UI スレッドへメッセージを送信するプロキシ
     ///
     /// # Returns
-    /// * `anyhow::Result<Self>` - 成功時は `ClipSelectorWindow`、失敗時はエラー
-    pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
+    /// * `Self` - 遅延生成用の空シェル
+    pub fn new_shell(proxy: EventLoopProxy<AppEvent>) -> Self {
+        Self {
+            proxy,
+            inner: RefCell::new(None),
+            #[cfg(test)]
+            force_visible: Cell::new(false),
+        }
+    }
+
+    /// `WebView` を構築する
+    fn build_webview(
+        window: Window,
+        proxy: &EventLoopProxy<AppEvent>,
+    ) -> anyhow::Result<WebSelectorWindow> {
         let html = assemble_clip_selector_html();
         let proxy_clone = proxy.clone();
         let data_dir = format!("{}-ClipSelector-WebView2", consts::APP_NAME);
 
-        let inner = WebSelectorWindow::build(
+        WebSelectorWindow::build(
             window,
             &data_dir,
             &html,
@@ -110,9 +134,23 @@ impl ClipSelectorWindow {
                 }
             },
             WebViewWindowOptions::default(),
-        )?;
+        )
+    }
 
-        Ok(Self { inner })
+    /// 未生成なら `WebView` を生成する
+    fn ensure_created(&self, event_loop: &EventLoopWindowTarget<AppEvent>) -> anyhow::Result<()> {
+        if self.inner.borrow().is_some() {
+            return Ok(());
+        }
+        let window = build_hidden_selector_window(
+            event_loop,
+            &format!("{} Clip Selector", consts::APP_NAME),
+            520.0,
+            600.0,
+        )?;
+        let webview = Self::build_webview(window, &self.proxy)?;
+        *self.inner.borrow_mut() = Some(webview);
+        Ok(())
     }
 }
 
@@ -122,28 +160,46 @@ impl ClipSelectorWindow {
 impl ClipSelectorWindow {
     /// 登録クリップセレクタを表示し、登録クリップ一覧を反映する
     ///
+    /// 未生成なら `WebView` を遅延生成する
+    ///
     /// # Arguments
+    /// * `event_loop` - 遅延生成用のイベントループ
     /// * `clips_json` - 登録クリップ一覧 JSON
-    pub fn show(&self, clips_json: &str) {
+    pub fn show(&self, event_loop: &EventLoopWindowTarget<AppEvent>, clips_json: &str) {
+        if let Err(err) = self.ensure_created(event_loop) {
+            crate::log_warn!("登録クリップセレクターの初期化に失敗: {err:#}");
+            crate::platform::show_notification("登録クリップ", "ウィンドウの初期化に失敗しました");
+            return;
+        }
         let script = clip_selector_focus_script(clips_json);
-        self.inner.show_with_script(&script);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.show_with_script(&script);
+        }
     }
 
     /// 登録クリップ一覧を再描画する (ウィンドウ表示中の更新用)
     ///
+    /// `WebView` 未生成時は何もしない
+    ///
     /// # Arguments
     /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn refresh_items(&self, clips_json: &str) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
         let script = clip_selector_refresh_script(clips_json);
-        self.inner.evaluate_script(&script);
+        inner.evaluate_script(&script);
     }
 
-    /// 登録クリップセレクタを非表示にする
+    /// 登録クリップセレクタを非表示にし、`WebView` を破棄する
     ///
     /// # Arguments
     /// * `self` - この `ClipSelectorWindow`
     pub fn hide(&self) {
-        self.inner.hide();
+        #[cfg(test)]
+        self.force_visible.set(false);
+        *self.inner.borrow_mut() = None;
     }
 
     /// 登録クリップセレクタが現在表示されているかどうかを確認する
@@ -154,7 +210,23 @@ impl ClipSelectorWindow {
     /// # Returns
     /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
-        self.inner.is_visible()
+        #[cfg(test)]
+        if self.force_visible.get() {
+            return true;
+        }
+        self.inner
+            .borrow()
+            .as_ref()
+            .is_some_and(WebSelectorWindow::is_visible)
+    }
+
+    /// テスト用に表示中として扱う (実 `WebView` は作らない)
+    ///
+    /// # Arguments
+    /// * `visible` - 擬似表示するか
+    #[cfg(test)]
+    pub(crate) fn force_visible_for_test(&self, visible: bool) {
+        self.force_visible.set(visible);
     }
 
     /// 登録クリップセレクタウィンドウの内部 ID を取得する
@@ -163,34 +235,24 @@ impl ClipSelectorWindow {
     /// * `self` - この `ClipSelectorWindow`
     ///
     /// # Returns
-    /// * `tao::window::WindowId` - ウィンドウ ID
-    pub fn id(&self) -> tao::window::WindowId {
-        self.inner.id()
+    /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
+    pub fn id(&self) -> Option<WindowId> {
+        self.inner.borrow().as_ref().map(WebSelectorWindow::id)
     }
 }
 
 // ======================================================================
 // ウィンドウ初期化
 // ======================================================================
-/// 登録クリップセレクタウィンドウを初期化して、非表示状態のインスタンスを作成する
+/// 登録クリップセレクタの空シェルを生成する (`WebView` は初回表示まで作らない)
 ///
 /// # Arguments
-/// * `event_loop` - ウィンドウ作成用のイベントループ
 /// * `proxy` - イベント送信用プロキシ
 ///
 /// # Returns
-/// * `anyhow::Result<ClipSelectorWindow>` - 成功時は `ClipSelectorWindow`、失敗時はエラー
-pub fn init_clip_selector(
-    event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
-    proxy: &EventLoopProxy<AppEvent>,
-) -> anyhow::Result<ClipSelectorWindow> {
-    let window = build_hidden_selector_window(
-        event_loop,
-        &format!("{} Clip Selector", consts::APP_NAME),
-        520.0,
-        600.0,
-    )?;
-    ClipSelectorWindow::new(window, proxy)
+/// * `ClipSelectorWindow` - 遅延生成用シェル
+pub fn init_clip_selector(proxy: &EventLoopProxy<AppEvent>) -> ClipSelectorWindow {
+    ClipSelectorWindow::new_shell(proxy.clone())
 }
 
 // ======================================================================
@@ -199,6 +261,22 @@ pub fn init_clip_selector(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::tray::state::test_app_state;
+
+    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` が no-op であること
+    #[test]
+    fn empty_shell_lifecycle_is_safe() {
+        let state = test_app_state();
+        let clip = ClipSelectorWindow::new_shell(state.proxy.clone());
+
+        assert!(!clip.is_visible());
+        assert!(clip.id().is_none());
+        clip.refresh_items("[]");
+        clip.hide();
+        assert!(!clip.is_visible());
+        assert!(clip.id().is_none());
+    }
 
     /// `select:` プレフィックス付きメッセージからインデックスを復元できるようにすること
     #[test]

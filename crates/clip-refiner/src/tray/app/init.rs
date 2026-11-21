@@ -12,7 +12,7 @@ use super::App;
 use crate::tray::selector::SelectorUi;
 
 use anyhow::Result;
-use tao::event_loop::{EventLoop, EventLoopProxy};
+use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // 初期化
@@ -21,15 +21,14 @@ impl App {
     /// 必要なコンポーネントをすべて生成し、ホットキーやクリップボードの監視を開始する
     ///
     /// # Arguments
-    /// * `event_loop` - ウィンドウを作成するためのイベントループ
     /// * `proxy` - UI スレッドへイベントを送信するためのプロキシ
     ///
     /// # Returns
     /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合は `Err`
     ///
     /// # Errors
-    /// 状態・メニュー・ホットキー・セレクター UI のいずれかの初期化に失敗した場合
-    pub fn new(event_loop: &EventLoop<AppEvent>, proxy: &EventLoopProxy<AppEvent>) -> Result<Self> {
+    /// 状態・メニュー・ホットキーのいずれかの初期化に失敗した場合
+    pub fn new(proxy: &EventLoopProxy<AppEvent>) -> Result<Self> {
         let (state, config_fallback) = AppState::new(proxy.clone())?;
         let state = Arc::new(state);
         if let Some(ref fallback) = config_fallback {
@@ -42,8 +41,8 @@ impl App {
         let (hotkey_handler, hotkey_failures) = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         notify_registration_failures(&hotkey_failures);
         let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
-        let selectors = SelectorUi::new(event_loop, proxy, Arc::clone(&clipboard_worker))?;
-        let settings = init_settings_window(event_loop, proxy, &state)?;
+        let selectors = SelectorUi::new(proxy, Arc::clone(&clipboard_worker));
+        let settings = init_settings_window(proxy, &state);
         let paste_watcher = PasteWatcher::start(Arc::clone(&state));
         let hotkey_listener = HotkeyHandler::start_event_listener(proxy.clone());
         menu.refresh_history(&state)?;

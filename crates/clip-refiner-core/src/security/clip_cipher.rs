@@ -52,11 +52,13 @@ pub fn zeroize_cipher_key(key: &mut [u8; CIPHER_KEY_LEN]) {
 /// # Errors
 /// ノンス生成または暗号化に失敗した場合
 pub fn encrypt_bytes(key: &[u8; CIPHER_KEY_LEN], plaintext: &[u8]) -> Result<Vec<u8>> {
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let key = key_array(key)?;
+    let cipher = ChaCha20Poly1305::new(&key);
     let mut nonce = [0u8; NONCE_LEN];
     getrandom::fill(&mut nonce).context("暗号化ノンスの生成に失敗")?;
+    let nonce_arr = nonce_array(&nonce)?;
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .encrypt(&nonce_arr, plaintext)
         .map_err(|e| anyhow::anyhow!("暗号化に失敗: {e:?}"))?;
 
     let mut out = Vec::with_capacity(NONCE_LEN + ciphertext.len());
@@ -82,10 +84,43 @@ pub fn decrypt_bytes(key: &[u8; CIPHER_KEY_LEN], blob: &[u8]) -> Result<Vec<u8>>
     }
 
     let (nonce, ciphertext) = blob.split_at(NONCE_LEN);
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+    let key = key_array(key)?;
+    let cipher = ChaCha20Poly1305::new(&key);
+    let nonce = nonce_array(nonce)?;
     cipher
-        .decrypt(Nonce::from_slice(nonce), ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|e| anyhow::anyhow!("復号に失敗: {e:?}"))
+}
+
+// ======================================================================
+// プライベート関数
+// ======================================================================
+/// バイト列を `Key` に変換する
+///
+/// # Arguments
+/// * `key` - 暗号化鍵
+///
+/// # Returns
+/// * `Result<Key>` - ChaCha20-Poly1305 用の鍵
+///
+/// # Errors
+/// 鍵長が一致しない場合 (呼び出し側の型で保証されるため通常は起きない)
+fn key_array(key: &[u8; CIPHER_KEY_LEN]) -> Result<Key> {
+    Key::try_from(key.as_slice()).map_err(|_| anyhow::anyhow!("不正な鍵長"))
+}
+
+/// バイト列を `Nonce` に変換する
+///
+/// # Arguments
+/// * `nonce` - ノンス (12 バイト)
+///
+/// # Returns
+/// * `Result<Nonce>` - ChaCha20-Poly1305 用のノンス
+///
+/// # Errors
+/// ノンス長が 12 バイトでない場合
+fn nonce_array(nonce: &[u8]) -> Result<Nonce> {
+    Nonce::try_from(nonce).map_err(|_| anyhow::anyhow!("不正なノンス長"))
 }
 
 // ======================================================================

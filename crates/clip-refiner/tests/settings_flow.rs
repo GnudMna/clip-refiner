@@ -68,6 +68,24 @@ fn apply_ipc_updates_config_and_tray_menu() {
     assert!(ctx.menu().history.enabled_item.is_checked());
 }
 
+/// プリセット外の監視周期を数値入力相当のパッチで反映すること
+#[test]
+fn apply_ipc_accepts_custom_interval_ms() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"intervalMs":750}}"#));
+
+    assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
+    assert!(ctx.menu().interval.custom_item.is_checked());
+    assert!(
+        ctx.menu()
+            .interval
+            .items
+            .iter()
+            .all(|(item, _)| !item.is_checked())
+    );
+}
+
 /// 履歴件数パッチが `normalize` で上限へクランプされるようにすること
 #[test]
 fn apply_ipc_clamps_history_limit() {

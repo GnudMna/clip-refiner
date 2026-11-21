@@ -24,6 +24,10 @@ pub struct SettingsLimits {
     pub continuous_record_min: usize,
     /// 連続記録の最大保持件数
     pub continuous_record_max: usize,
+    /// ポーリング間隔の最小値 (ミリ秒)
+    pub interval_min_ms: u64,
+    /// ポーリング間隔の最大値 (ミリ秒)
+    pub interval_max_ms: u64,
     /// 加工パイプラインの最大段数
     pub max_pipeline_length: usize,
     /// お気に入り変換モードの最大件数
@@ -45,6 +49,8 @@ impl SettingsLimits {
             history_max: consts::MAX_HISTORY_LIMIT,
             continuous_record_min: consts::MIN_CONTINUOUS_RECORD_LIMIT,
             continuous_record_max: consts::MAX_CONTINUOUS_RECORD_LIMIT,
+            interval_min_ms: consts::MIN_INTERVAL_MS,
+            interval_max_ms: consts::MAX_INTERVAL_MS,
             max_pipeline_length: consts::MAX_PIPELINE_LENGTH,
             max_favorite_modes: consts::MAX_FAVORITE_MODES,
             max_registered_clips: consts::MAX_REGISTERED_CLIPS,
@@ -193,6 +199,8 @@ mod tests {
         assert_eq!(json["notificationSettings"]["notifyRegisteredClip"], true);
         assert_eq!(json["regex"]["caseInsensitive"], true);
         assert_eq!(json["limits"]["historyMax"], consts::MAX_HISTORY_LIMIT);
+        assert_eq!(json["limits"]["intervalMinMs"], consts::MIN_INTERVAL_MS);
+        assert_eq!(json["limits"]["intervalMaxMs"], consts::MAX_INTERVAL_MS);
         assert_eq!(json["regexPreviewSample"], REGEX_PREVIEW_SAMPLE);
         assert_eq!(json["hotkeys"]["quickSelector"], "Alt+Shift+S");
         assert!(json["hotkeys"]["favoriteModeSlots"].is_array());

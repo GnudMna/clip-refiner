@@ -20,19 +20,19 @@ pub(crate) fn handle_loop_event(event: Event<AppEvent>, ctx: &mut AppEventContex
         Event::UserEvent(app_event) => handle_user_event(ctx, app_event),
         Event::WindowEvent {
             window_id, event, ..
-        } if window_id == ctx.selectors.quick.id() => {
+        } if ctx.selectors.quick.id() == Some(window_id) => {
             handle_window_event(&event, &ctx.selectors.quick, ctx.last_quick_selector_show);
         }
         Event::WindowEvent {
             window_id, event, ..
-        } if window_id == ctx.selectors.clip.id() => {
+        } if ctx.selectors.clip.id() == Some(window_id) => {
             handle_window_event(&event, &ctx.selectors.clip, ctx.last_clip_selector_show);
         }
         Event::WindowEvent {
             window_id, event, ..
-        } if window_id == ctx.settings.id() => {
+        } if ctx.settings.id() == Some(window_id) => {
             if let WindowEvent::CloseRequested = event {
-                ctx.settings.hide();
+                ctx.settings.request_close_from_os();
             }
         }
         _ => {

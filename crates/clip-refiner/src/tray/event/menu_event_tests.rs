@@ -319,6 +319,30 @@ fn handle_menu_event_interval_change() {
 
     assert_eq!(state.with_config(|c| c.interval_ms), 500);
     assert!(item.is_checked());
+    assert!(!menu.interval.custom_item.is_checked());
+}
+
+/// カスタム周期項目は設定ウィンドウを開き、周期値は変えないこと
+#[test]
+fn handle_menu_event_custom_interval_opens_settings() {
+    let state = Arc::new(test_app_state());
+    state.with_config_mut(|c| c.interval_ms = 750);
+    let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+    assert!(menu.interval.custom_item.is_checked());
+    let (worker, _) = with_test_worker(&state);
+    let mut control_flow = ControlFlow::Wait;
+
+    handle_menu_event(
+        &menu_event(menu.interval.custom_item.id()),
+        &menu,
+        &state,
+        &worker,
+        None,
+        &mut control_flow,
+    );
+
+    assert_eq!(state.with_config(|c| c.interval_ms), 750);
+    assert!(menu.interval.custom_item.is_checked());
 }
 
 /// 監視方式メニューで Event モードへ切り替わようにすること

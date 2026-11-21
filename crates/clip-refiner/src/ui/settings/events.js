@@ -102,11 +102,14 @@ function bindMonitorEvents() {
         });
     });
 
-    const intervalSelect = document.getElementById('interval-ms');
-    if (intervalSelect) {
-        intervalSelect.addEventListener('change', () => {
-            scheduleApply({ intervalMs: Number(intervalSelect.value) });
-        });
+    const intervalInput = document.getElementById('interval-ms');
+    if (intervalInput) {
+        const bounds = intervalMsBounds();
+        /** ポーリング間隔入力をコミットする */
+        const commitIntervalMs = () =>
+            commitLimitInput(intervalInput, 'intervalMs', 'intervalMs', bounds);
+        intervalInput.addEventListener('change', commitIntervalMs);
+        intervalInput.addEventListener('blur', commitIntervalMs);
     }
 
     const defaultMode = document.getElementById('default-mode');

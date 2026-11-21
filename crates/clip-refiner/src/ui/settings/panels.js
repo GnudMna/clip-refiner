@@ -72,6 +72,7 @@ function ensureSidebar() {
 /** @returns {string} 監視タブのパネル HTML */
 function renderMonitorPanel() {
     const intervalDisabled = state.monitorMode === 'Event' ? ' disabled' : '';
+    const intervalBounds = intervalMsBounds();
     const pipelineMax = maxPipelineLength();
     const processingDisabled = state.continuousRecordEnabled ? ' is-disabled' : '';
 
@@ -110,22 +111,19 @@ function renderMonitorPanel() {
                 '<div class="field' +
                 intervalDisabled +
                 '" id="interval-section">' +
-                '<label for="interval-ms">ポーリング間隔</label>' +
-                '<select id="interval-ms">' +
-                INTERVAL_OPTIONS.map((option) => {
-                    const selected = option.value === state.intervalMs ? ' selected' : '';
-                    return (
-                        '<option value="' +
-                        option.value +
-                        '"' +
-                        selected +
-                        '>' +
-                        escapeHtml(option.label) +
-                        '</option>'
-                    );
-                }).join('') +
-                '</select>' +
-                '<p class="hint">イベント監視時は使用されない</p></div>'
+                '<label for="interval-ms">ポーリング間隔 (ミリ秒)</label>' +
+                '<input type="number" id="interval-ms" min="' +
+                intervalBounds.min +
+                '" max="' +
+                intervalBounds.max +
+                '" step="1" value="' +
+                state.intervalMs +
+                '">' +
+                '<p class="field-hint">有効範囲: ' +
+                intervalBounds.min +
+                '〜' +
+                intervalBounds.max +
+                ' ms。イベント監視時は使用されない</p></div>'
         ) +
         '<div id="monitor-processing-section"' +
         processingDisabled +

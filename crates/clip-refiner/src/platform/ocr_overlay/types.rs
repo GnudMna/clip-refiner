@@ -25,8 +25,8 @@ pub(crate) struct DragSelection {
     pub cursor: Option<(i32, i32)>,
 }
 
-/// 選択確定時に呼ばれるコールバック
-pub(crate) type OverlayCompleteFn = Box<dyn Fn(ScreenRect)>;
+/// 選択確定またはキャンセル時に呼ばれるコールバック (`None` はキャンセル)
+pub(crate) type OverlayCompleteFn = Box<dyn Fn(Option<ScreenRect>)>;
 
 // ======================================================================
 // 定数

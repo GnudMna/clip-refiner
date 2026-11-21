@@ -15,7 +15,7 @@ use super::state::{AppEvent, AppState};
 use super::worker::ClipboardWorkerHandle;
 
 use tao::event::Event;
-use tao::event_loop::ControlFlow;
+use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
 // ======================================================================
 // アプリケーション構造体
@@ -44,8 +44,14 @@ impl App {
     ///
     /// # Arguments
     /// * `event` - 受信したイベント
+    /// * `event_loop` - 遅延ウィンドウ生成用のイベントループ
     /// * `control_flow` - イベントループの制御フロー
-    pub fn handle_event(&mut self, event: Event<AppEvent>, control_flow: &mut ControlFlow) {
+    pub fn handle_event(
+        &mut self,
+        event: Event<AppEvent>,
+        event_loop: &EventLoopWindowTarget<AppEvent>,
+        control_flow: &mut ControlFlow,
+    ) {
         let mut ctx = event::AppEventContext {
             state: &self.state,
             menu: &self.menu,
@@ -53,6 +59,7 @@ impl App {
             settings: &self.settings,
             hotkey_handler: &mut self.hotkey_handler,
             clipboard_worker: &self.clipboard_worker,
+            event_loop,
             control_flow,
             last_quick_selector_show: &mut self.last_quick_selector_show,
             last_clip_selector_show: &mut self.last_clip_selector_show,

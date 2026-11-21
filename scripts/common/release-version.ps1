@@ -258,7 +258,7 @@ function Update-ChangelogForRelease {
         throw 'エラー: CHANGELOG.md に ## [Unreleased] 節が見つかりません'
     }
 
-    $unreleasedBody = $Matches['body'].TrimEnd()
+    $unreleasedBody = $Matches['body'].Trim()
     if ($unreleasedBody -notmatch '(?m)^-\s') {
         throw 'エラー: CHANGELOG.md の [Unreleased] 節に変更項目がありません (- で始まる行が必要)'
     }

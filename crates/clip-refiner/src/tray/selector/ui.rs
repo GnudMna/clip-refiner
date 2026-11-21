@@ -8,8 +8,7 @@ use crate::tray::ocr::{OcrCaptureWindow, init_ocr_capture};
 use crate::tray::state::AppEvent;
 use crate::tray::worker::ClipboardWorkerHandle;
 
-use anyhow::Result;
-use tao::event_loop::{EventLoop, EventLoopProxy};
+use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
 // セレクター UI
@@ -25,23 +24,21 @@ pub struct SelectorUi {
 }
 
 impl SelectorUi {
-    /// イベントループ上にセレクター系ウィンドウを生成する
+    /// セレクター系 UI の空シェルを生成する (`WebView` / オーバーレイは初回表示まで作らない)
     ///
     /// # Arguments
-    /// * `event_loop` - ウィンドウ作成用のイベントループ
     /// * `proxy` - イベント送信用プロキシ
     /// * `clipboard_worker` - クリップボード操作ワーカー
     ///
     /// # Returns
-    /// * `Result<Self>` - 成功時は `SelectorUi`、いずれかのウィンドウ初期化に失敗した場合はエラー
+    /// * `Self` - 遅延生成用の `SelectorUi`
     pub fn new(
-        event_loop: &EventLoop<AppEvent>,
         proxy: &EventLoopProxy<AppEvent>,
         clipboard_worker: Arc<ClipboardWorkerHandle>,
-    ) -> Result<Self> {
-        let quick = init_quick_selector(event_loop, proxy)?;
-        let clip = init_clip_selector(event_loop, proxy)?;
-        let ocr = init_ocr_capture(event_loop, proxy, clipboard_worker)?;
-        Ok(Self { quick, clip, ocr })
+    ) -> Self {
+        let quick = init_quick_selector(proxy);
+        let clip = init_clip_selector(proxy);
+        let ocr = init_ocr_capture(proxy, clipboard_worker);
+        Self { quick, clip, ocr }
     }
 }

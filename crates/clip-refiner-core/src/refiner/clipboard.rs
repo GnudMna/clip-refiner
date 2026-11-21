@@ -96,7 +96,7 @@ impl From<ClipboardIoError> for ClipboardProcessError {
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn apply_refinement_to_text(
     text: &str,
     mode: RefineMode,
@@ -203,7 +203,7 @@ pub fn process_clipboard_pipeline(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn process_text_clipboard<C: TextClipboard>(
     clipboard: &mut C,
     mode: RefineMode,
@@ -213,7 +213,7 @@ pub(crate) fn process_text_clipboard<C: TextClipboard>(
 }
 
 /// テキストクリップボード実装に対して加工パイプラインを適用する
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn process_text_clipboard_pipeline<C: TextClipboard>(
     clipboard: &mut C,
     pipeline: &[RefineMode],
@@ -299,19 +299,6 @@ fn is_excel_tsv(text: &str) -> bool {
         .from_reader(text.as_bytes());
 
     reader.records().any(|r| r.is_ok())
-}
-
-/// テキスト・画像クリップボード実装に対して加工を適用する
-#[expect(
-    dead_code,
-    reason = "単一モード用ラッパー。テストおよび後方互換のため維持"
-)]
-pub(crate) fn process_clipboard_io<C: TextClipboard + ImageClipboard>(
-    clipboard: &mut C,
-    mode: RefineMode,
-    ctx: &RefineContext,
-) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    process_clipboard_pipeline_io(clipboard, &[mode], ctx)
 }
 
 /// テキスト・画像クリップボード実装に対して加工パイプラインを適用する

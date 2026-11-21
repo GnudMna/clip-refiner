@@ -46,9 +46,7 @@ impl TrayMenu {
         }
         super::super::clipboard_monitor::update_monitor_mode_impl(self, config.monitor_mode);
 
-        for (item, ms) in &self.interval.items {
-            item.set_checked(*ms == config.interval_ms);
-        }
+        self.sync_interval_menu(config.interval_ms);
 
         self.history
             .enabled_item

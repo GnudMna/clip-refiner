@@ -54,13 +54,20 @@ pub(crate) fn handle_monitor_event(
         return true;
     }
 
+    if id == menu.interval.custom_item.id() {
+        // カスタム間隔は設定ウィンドウで数値入力する
+        let _ = state
+            .proxy
+            .send_event(crate::tray::state::AppEvent::ShowSettingsWindow);
+        // クリックでチェックが反転しないよう、現在値へ再同期する
+        menu.sync_interval_menu(state.with_config(|c| c.interval_ms));
+        return true;
+    }
+
     for (item, ms) in &menu.interval.items {
         if item.id() == id {
             state.with_config_mut(|c| c.interval_ms = *ms);
-            for (it, _) in &menu.interval.items {
-                it.set_checked(false);
-            }
-            item.set_checked(true);
+            menu.sync_interval_menu(*ms);
             state.save_config();
             return true;
         }

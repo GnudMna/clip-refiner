@@ -1,3 +1,7 @@
+#[cfg(test)]
+use std::cell::Cell;
+use std::cell::RefCell;
+
 use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
     embed_quick_selector_assets,
@@ -9,8 +13,8 @@ use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::refiner::RefineMode;
 
-use tao::event_loop::EventLoopProxy;
-use tao::window::Window;
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowId};
 
 // ======================================================================
 // クイックセレクター IPC
@@ -79,30 +83,55 @@ pub(crate) fn quick_selector_refresh_script(current_mode: RefineMode, modes_json
 // ======================================================================
 /// 加工モード選択用クイックセレクター (コマンドパレット風 UI) を管理する構造体
 ///
-/// `wry` を使用して HTML/JS ベースの UI を透明なウィンドウ上に描画する
+/// `WebView` は初回表示時に生成し、非表示時に破棄してアイドル RSS を抑える
 pub struct QuickSelectorWindow {
-    inner: WebSelectorWindow,
+    /// イベント送信用プロキシ
+    proxy: EventLoopProxy<AppEvent>,
+    /// 遅延生成された `WebView` (非表示時は `None`)
+    inner: RefCell<Option<WebSelectorWindow>>,
+    /// テスト用の擬似表示フラグ (`WebView` なしで相互排他を検証する)
+    #[cfg(test)]
+    force_visible: Cell<bool>,
 }
 
 // ======================================================================
 // 初期化
 // ======================================================================
 impl QuickSelectorWindow {
-    /// クイックセレクターウィンドウと `WebView` を初期化して生成する
+    /// `WebView` 未生成の空シェルを生成する
     ///
     /// # Arguments
-    /// * `window` - ベースとなる `tao` ウィンドウ
     /// * `proxy` - UI スレッド (イベントループ) へメッセージを送信するプロキシ
     ///
     /// # Returns
-    /// * `anyhow::Result<Self>` - 成功時は `QuickSelectorWindow`、失敗時はエラー
-    pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
+    /// * `Self` - 遅延生成用の空シェル
+    pub fn new_shell(proxy: EventLoopProxy<AppEvent>) -> Self {
+        Self {
+            proxy,
+            inner: RefCell::new(None),
+            #[cfg(test)]
+            force_visible: Cell::new(false),
+        }
+    }
+
+    /// `WebView` を構築する
+    ///
+    /// # Arguments
+    /// * `window` - ホストとなる `tao` ウィンドウ
+    /// * `proxy` - UI スレッドへメッセージを送信するプロキシ
+    ///
+    /// # Returns
+    /// * `anyhow::Result<WebSelectorWindow>` - 成功時は構築済み `WebView`
+    fn build_webview(
+        window: Window,
+        proxy: &EventLoopProxy<AppEvent>,
+    ) -> anyhow::Result<WebSelectorWindow> {
         let modes_json = RefineMode::to_json_list(&[]);
         let html = assemble_quick_selector_html(&modes_json);
         let proxy_clone = proxy.clone();
         let data_dir = format!("{}-QuickSelector-WebView2", consts::APP_NAME);
 
-        let inner = WebSelectorWindow::build(
+        WebSelectorWindow::build(
             window,
             &data_dir,
             &html,
@@ -131,9 +160,29 @@ impl QuickSelectorWindow {
                 }
             },
             WebViewWindowOptions::default(),
-        )?;
+        )
+    }
 
-        Ok(Self { inner })
+    /// 未生成なら `WebView` を生成する
+    ///
+    /// # Arguments
+    /// * `event_loop` - ウィンドウ作成用のイベントループ
+    ///
+    /// # Returns
+    /// * `anyhow::Result<()>` - 生成または既存利用に成功した場合は `Ok(())`
+    fn ensure_created(&self, event_loop: &EventLoopWindowTarget<AppEvent>) -> anyhow::Result<()> {
+        if self.inner.borrow().is_some() {
+            return Ok(());
+        }
+        let window = build_hidden_selector_window(
+            event_loop,
+            &format!("{} Quick Selector", consts::APP_NAME),
+            520.0,
+            600.0,
+        )?;
+        let webview = Self::build_webview(window, &self.proxy)?;
+        *self.inner.borrow_mut() = Some(webview);
+        Ok(())
     }
 }
 
@@ -143,32 +192,56 @@ impl QuickSelectorWindow {
 impl QuickSelectorWindow {
     /// クイックセレクターを表示し、現在の加工モードを反映させる
     ///
-    /// 表示時に UI 側の検索フォームにフォーカスを合わせ、現在のモードをハイライトする
+    /// 未生成なら `WebView` を遅延生成する。表示時に検索フォームへフォーカスし、現在モードをハイライトする
     ///
     /// # Arguments
+    /// * `event_loop` - 遅延生成用のイベントループ
     /// * `current_mode` - 現在アプリケーションで選択されている加工モード
     /// * `modes_json` - モード一覧 JSON
-    pub fn show(&self, current_mode: RefineMode, modes_json: &str) {
+    pub fn show(
+        &self,
+        event_loop: &EventLoopWindowTarget<AppEvent>,
+        current_mode: RefineMode,
+        modes_json: &str,
+    ) {
+        if let Err(err) = self.ensure_created(event_loop) {
+            crate::log_warn!("クイックセレクターの初期化に失敗: {err:#}");
+            crate::platform::show_notification(
+                "クイックセレクター",
+                "ウィンドウの初期化に失敗しました",
+            );
+            return;
+        }
         let script = quick_selector_focus_script(current_mode, modes_json);
-        self.inner.show_with_script(&script);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.show_with_script(&script);
+        }
     }
 
     /// モード一覧を再描画する
+    ///
+    /// `WebView` 未生成時は何もしない
     ///
     /// # Arguments
     /// * `modes_json` - モード一覧 JSON
     /// * `current_mode` - 現在選択されている加工モード
     pub fn refresh_modes(&self, modes_json: &str, current_mode: RefineMode) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
         let script = quick_selector_refresh_script(current_mode, modes_json);
-        self.inner.evaluate_script(&script);
+        inner.evaluate_script(&script);
     }
 
-    /// クイックセレクターを非表示にする
+    /// クイックセレクターを非表示にし、`WebView` を破棄する
     ///
     /// # Arguments
     /// * `self` - この `QuickSelectorWindow`
     pub fn hide(&self) {
-        self.inner.hide();
+        #[cfg(test)]
+        self.force_visible.set(false);
+        *self.inner.borrow_mut() = None;
     }
 
     /// クイックセレクターが現在表示されているかどうかを確認する
@@ -179,7 +252,23 @@ impl QuickSelectorWindow {
     /// # Returns
     /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
-        self.inner.is_visible()
+        #[cfg(test)]
+        if self.force_visible.get() {
+            return true;
+        }
+        self.inner
+            .borrow()
+            .as_ref()
+            .is_some_and(WebSelectorWindow::is_visible)
+    }
+
+    /// テスト用に表示中として扱う (実 `WebView` は作らない)
+    ///
+    /// # Arguments
+    /// * `visible` - 擬似表示するか
+    #[cfg(test)]
+    pub(crate) fn force_visible_for_test(&self, visible: bool) {
+        self.force_visible.set(visible);
     }
 
     /// クイックセレクターウィンドウの内部 ID を取得する
@@ -188,36 +277,24 @@ impl QuickSelectorWindow {
     /// * `self` - この `QuickSelectorWindow`
     ///
     /// # Returns
-    /// * `tao::window::WindowId` - ウィンドウ ID
-    pub fn id(&self) -> tao::window::WindowId {
-        self.inner.id()
+    /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
+    pub fn id(&self) -> Option<WindowId> {
+        self.inner.borrow().as_ref().map(WebSelectorWindow::id)
     }
 }
 
 // ======================================================================
 // ウィンドウ初期化
 // ======================================================================
-/// クイックセレクターウィンドウを初期化して、非表示状態のインスタンスを作成する
-///
-/// ウィンドウの各種属性 (透明度、フレームなしなど) を設定し、画面中央に配置する
+/// クイックセレクターの空シェルを生成する (`WebView` は初回表示まで作らない)
 ///
 /// # Arguments
-/// * `event_loop` - ウィンドウ作成用のイベントループ
 /// * `proxy` - イベント送信用プロキシ
 ///
 /// # Returns
-/// * `anyhow::Result<QuickSelectorWindow>` - 成功時は `QuickSelectorWindow`、失敗時はエラー
-pub fn init_quick_selector(
-    event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
-    proxy: &EventLoopProxy<AppEvent>,
-) -> anyhow::Result<QuickSelectorWindow> {
-    let window = build_hidden_selector_window(
-        event_loop,
-        &format!("{} Quick Selector", consts::APP_NAME),
-        520.0,
-        600.0,
-    )?;
-    QuickSelectorWindow::new(window, proxy)
+/// * `QuickSelectorWindow` - 遅延生成用シェル
+pub fn init_quick_selector(proxy: &EventLoopProxy<AppEvent>) -> QuickSelectorWindow {
+    QuickSelectorWindow::new_shell(proxy.clone())
 }
 
 // ======================================================================
@@ -226,6 +303,22 @@ pub fn init_quick_selector(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::tray::state::test_app_state;
+
+    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` が no-op であること
+    #[test]
+    fn empty_shell_lifecycle_is_safe() {
+        let state = test_app_state();
+        let quick = QuickSelectorWindow::new_shell(state.proxy.clone());
+
+        assert!(!quick.is_visible());
+        assert!(quick.id().is_none());
+        quick.refresh_modes("[]", RefineMode::Trim);
+        quick.hide();
+        assert!(!quick.is_visible());
+        assert!(quick.id().is_none());
+    }
 
     /// `select:` プレフィックス付きメッセージからモードを復元できるようにすること
     #[test]

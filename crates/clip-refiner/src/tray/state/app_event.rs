@@ -57,6 +57,8 @@ pub enum AppEvent {
     SettingsRegexPreview,
     /// 設定ウィンドウの表示内容を最新化する
     RefreshSettingsWindow,
+    /// OCR オーバーレイを破棄してアイドル RSS を回収する
+    DisposeOcrOverlay,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }

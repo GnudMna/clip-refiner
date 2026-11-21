@@ -19,10 +19,10 @@ pub fn run_loop() -> Result<()> {
     let event_loop = create_event_loop();
     let proxy = event_loop.create_proxy();
 
-    let mut app = App::new(&event_loop, &proxy)?;
+    let mut app = App::new(&proxy)?;
 
-    event_loop.run(move |event, _, control_flow| {
-        app.handle_event(event, control_flow);
+    event_loop.run(move |event, event_loop, control_flow| {
+        app.handle_event(event, event_loop, control_flow);
     })
 }
 

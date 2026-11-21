@@ -32,7 +32,7 @@ impl OverlayWindow {
     /// 仮想デスクトップ全体を覆うオーバーレイウィンドウを生成する
     ///
     /// # Arguments
-    /// * `on_complete` - 範囲選択完了時に呼ばれるコールバック
+    /// * `on_complete` - 範囲選択完了時 (`Some`) またはキャンセル時 (`None`) のコールバック
     ///
     /// # Returns
     /// * `Result<Self>` - 生成した `OverlayWindow`。ウィンドウ生成やレイヤー初期化失敗時は `Err`

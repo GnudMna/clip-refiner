@@ -4,11 +4,11 @@ use std::time::Instant;
 use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
 use super::super::settings::SettingsWindow;
-use super::super::state::AppState;
+use super::super::state::{AppEvent, AppState};
 use super::super::worker::ClipboardWorkerHandle;
 use crate::tray::selector::SelectorUi;
 
-use tao::event_loop::ControlFlow;
+use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
 // ======================================================================
 // イベント処理コンテキスト
@@ -31,6 +31,8 @@ pub(crate) struct AppEventContext<'a> {
     pub hotkey_handler: &'a mut HotkeyHandler,
     /// クリップボードワーカー
     pub clipboard_worker: &'a Arc<ClipboardWorkerHandle>,
+    /// 遅延ウィンドウ生成用のイベントループ
+    pub event_loop: &'a EventLoopWindowTarget<AppEvent>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
 }

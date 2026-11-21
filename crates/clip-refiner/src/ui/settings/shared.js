@@ -46,14 +46,6 @@ const TABS = [
     },
 ];
 
-/** @type {Array<{ value: number, label: string }>} */
-const INTERVAL_OPTIONS = [
-    { value: 500, label: '0.5秒' },
-    { value: 1000, label: '1秒' },
-    { value: 2000, label: '2秒' },
-    { value: 5000, label: '5秒' },
-];
-
 /** @type {Record<string, unknown>|null} Rust から受信した設定スナップショット */
 let state = null;
 /** @type {string} 現在表示中のタブ ID */
@@ -124,6 +116,19 @@ function recordLimitBounds() {
     return {
         min: l.continuousRecordMin ?? 1,
         max: l.continuousRecordMax ?? 100,
+    };
+}
+
+/**
+ * ポーリング間隔 (ミリ秒) の min/max
+ *
+ * @returns {{ min: number, max: number }}
+ */
+function intervalMsBounds() {
+    const l = limits();
+    return {
+        min: l.intervalMinMs ?? 100,
+        max: l.intervalMaxMs ?? 60_000,
     };
 }
 

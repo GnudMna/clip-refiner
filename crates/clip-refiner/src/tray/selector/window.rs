@@ -247,14 +247,6 @@ impl WebSelectorWindow {
         webview_script::evaluate_script(&self.webview, "WebView", script);
     }
 
-    /// ウィンドウを非表示にする
-    ///
-    /// # Arguments
-    /// * `self` - この `WebSelectorWindow`
-    pub fn hide(&self) {
-        self.window.set_visible(false);
-    }
-
     /// ウィンドウが表示中かどうか
     ///
     /// # Arguments

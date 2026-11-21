@@ -380,6 +380,16 @@ impl HotkeyHandler {
     pub(crate) fn ocr_hotkey_id(&self) -> u32 {
         self.ocr_hotkey.id()
     }
+
+    /// テスト用: クイックセレクターホットキーの ID を返す
+    pub(crate) fn quick_selector_hotkey_id(&self) -> u32 {
+        self.quick_selector_hotkey.id()
+    }
+
+    /// テスト用: 登録クリップセレクターホットキーの ID を返す
+    pub(crate) fn clip_selector_hotkey_id(&self) -> u32 {
+        self.clip_selector_hotkey.id()
+    }
 }
 
 #[cfg(test)]

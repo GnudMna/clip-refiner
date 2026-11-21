@@ -3,7 +3,10 @@ use crate::tray::menu::{IntervalMenu, MonitorMenu, TrayMenu};
 use crate::config::MonitorMode;
 
 use anyhow::{Context, Result};
-use tray_icon::menu::{CheckMenuItem, Submenu};
+use tray_icon::menu::{CheckMenuItem, PredefinedMenuItem, Submenu};
+
+/// トレイメニューの監視周期プリセット (ミリ秒)
+pub(crate) const INTERVAL_PRESETS_MS: &[u64] = &[500, 1000, 2000, 5000];
 
 // ======================================================================
 // 監視方式メニュー
@@ -66,29 +69,34 @@ impl TrayMenu {
         current_interval: u64,
         monitor_mode: MonitorMode,
     ) -> Result<IntervalMenu> {
-        let interval_items = vec![
-            (
-                CheckMenuItem::new("0.5秒", true, current_interval == 500, None),
-                500u64,
-            ),
-            (
-                CheckMenuItem::new("1秒", true, current_interval == 1000, None),
-                1000u64,
-            ),
-            (
-                CheckMenuItem::new("2秒", true, current_interval == 2000, None),
-                2000u64,
-            ),
-            (
-                CheckMenuItem::new("5秒", true, current_interval == 5000, None),
-                5000u64,
-            ),
-        ];
+        let preset_labels = ["0.5秒", "1秒", "2秒", "5秒"];
+        let interval_items: Vec<(CheckMenuItem, u64)> = INTERVAL_PRESETS_MS
+            .iter()
+            .zip(preset_labels)
+            .map(|(&ms, label)| {
+                (
+                    CheckMenuItem::new(label, true, current_interval == ms, None),
+                    ms,
+                )
+            })
+            .collect();
+
+        let is_custom = !is_interval_preset(current_interval);
+        let custom_item = CheckMenuItem::new(
+            custom_interval_label(current_interval),
+            true,
+            is_custom,
+            None,
+        );
 
         let mut interval_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = Vec::new();
         for (item, _) in &interval_items {
             interval_menu_items.push(item);
         }
+        let separator = PredefinedMenuItem::separator();
+        interval_menu_items.push(&separator);
+        interval_menu_items.push(&custom_item);
+
         let main_submenu = Submenu::with_items("監視周期", true, &interval_menu_items)
             .context("監視周期メニューの作成に失敗しました")?;
 
@@ -100,7 +108,49 @@ impl TrayMenu {
         Ok(IntervalMenu {
             main_submenu,
             items: interval_items,
+            custom_item,
         })
+    }
+
+    /// プリセットとカスタム項目のチェック状態・ラベルを同期する
+    ///
+    /// # Arguments
+    /// * `interval_ms` - 現在のポーリング間隔 (ミリ秒)
+    pub(crate) fn sync_interval_menu(&self, interval_ms: u64) {
+        let is_custom = !is_interval_preset(interval_ms);
+        for (item, ms) in &self.interval.items {
+            item.set_checked(*ms == interval_ms);
+        }
+        self.interval.custom_item.set_checked(is_custom);
+        self.interval
+            .custom_item
+            .set_text(custom_interval_label(interval_ms));
+    }
+}
+
+/// トレイのプリセット間隔かどうか
+///
+/// # Arguments
+/// * `interval_ms` - 判定する間隔 (ミリ秒)
+///
+/// # Returns
+/// * `bool` - プリセットに含まれる場合は `true`
+pub(crate) fn is_interval_preset(interval_ms: u64) -> bool {
+    INTERVAL_PRESETS_MS.contains(&interval_ms)
+}
+
+/// カスタム周期メニュー項目の表示文言を返す
+///
+/// # Arguments
+/// * `interval_ms` - 現在のポーリング間隔 (ミリ秒)
+///
+/// # Returns
+/// * `String` - プリセット時は `カスタム…`、それ以外は実値付き
+fn custom_interval_label(interval_ms: u64) -> String {
+    if is_interval_preset(interval_ms) {
+        "カスタム…".to_string()
+    } else {
+        format!("カスタム ({interval_ms} ms)")
     }
 }
 

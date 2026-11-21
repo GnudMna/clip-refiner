@@ -126,6 +126,7 @@ unsafe extern "system" fn overlay_wnd_proc(
             WM_KEYDOWN => {
                 if wparam.0 == usize::from(VK_ESCAPE.0) {
                     hide_overlay(hwnd, state);
+                    ((*state).on_complete)(None);
                 }
                 return LRESULT(0);
             }
@@ -163,17 +164,19 @@ unsafe fn finish_selection(hwnd: HWND, state: *mut OverlayState) {
         let selection = &(*state).selection;
         let (Some(start), Some(end)) = (selection.start, selection.cursor) else {
             hide_overlay(hwnd, state);
+            ((*state).on_complete)(None);
             return;
         };
         let rect = normalize_rect(start, end);
         if rect.width < MIN_SELECTION_SIZE || rect.height < MIN_SELECTION_SIZE {
             hide_overlay(hwnd, state);
+            ((*state).on_complete)(None);
             return;
         }
 
         let screen_rect = map_client_rect_to_screen((*state).virt_x, (*state).virt_y, rect);
         hide_overlay(hwnd, state);
-        ((*state).on_complete)(screen_rect);
+        ((*state).on_complete)(Some(screen_rect));
     }
 }
 

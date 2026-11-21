@@ -64,6 +64,7 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         AppEvent::ReloadFavoriteHotkeys => reload_favorite_hotkeys(ctx),
         AppEvent::ReloadHotkeys => reload_hotkeys(ctx),
         AppEvent::RefreshSettingsWindow => refresh_settings_window(ctx.state, ctx.settings),
+        AppEvent::DisposeOcrOverlay => ctx.selectors.ocr.hide(),
         AppEvent::ShowSettingsWindow
         | AppEvent::HideSettingsWindow
         | AppEvent::SettingsApplyPatch
@@ -127,6 +128,7 @@ fn refresh_continuous_record_menu(ctx: &mut AppEventContext<'_>) {
 fn handle_settings_window_event(ctx: &mut AppEventContext<'_>, event: AppEvent) {
     ctx.settings.handle_event(
         event,
+        ctx.event_loop,
         ctx.state,
         ctx.menu,
         Some(&ctx.selectors.quick),
@@ -145,6 +147,7 @@ fn handle_hotkey_event(
         selectors,
         hotkey_handler,
         clipboard_worker,
+        event_loop,
         control_flow,
         last_quick_selector_show,
         last_clip_selector_show,
@@ -156,6 +159,7 @@ fn handle_hotkey_event(
         quick_selector: Some(&selectors.quick),
         clip_selector: Some(&selectors.clip),
         ocr_capture: Some(&selectors.ocr),
+        event_loop: Some(event_loop),
         control_flow,
         last_quick_selector_show,
         last_clip_selector_show,
@@ -219,4 +223,88 @@ fn reload_hotkeys(ctx: &mut AppEventContext<'_>) {
         }
     }
     refresh_settings_favorites_and_shortcuts(ctx.state, ctx.settings);
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    use super::super::context::AppEventContext;
+    use super::handle_user_event;
+
+    use crate::config::HotkeySettings;
+    use crate::tray::hotkey::HotkeyHandler;
+    use crate::tray::menu::TrayMenu;
+    use crate::tray::selector::SelectorUi;
+    use crate::tray::settings::SettingsWindow;
+    use crate::tray::state::{AppEvent, test_app_state};
+    use crate::tray::worker::ClipboardWorkerHandle;
+
+    use tao::event_loop::{ControlFlow, EventLoopBuilder};
+    use tao::platform::windows::EventLoopBuilderExtWindows;
+
+    /// セレクター / OCR の非表示系 `AppEvent` を検証すること
+    ///
+    /// ホットキー登録は OS グローバルのため、衝突回避で 1 テストにまとめる
+    #[test]
+    fn hide_and_dispose_overlay_events() {
+        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let (tx, _) = mpsc::channel();
+        let clipboard_worker = Arc::new(ClipboardWorkerHandle::for_test(Arc::clone(&state), tx));
+        let selectors = SelectorUi::new(&state.proxy, Arc::clone(&clipboard_worker));
+        let settings = SettingsWindow::new_shell(state.proxy.clone(), Arc::clone(&state));
+
+        // 他テスト (Alt+Shift / Alt+Ctrl / Alt+Ctrl+Shift+F*) と衝突しないキー
+        let hotkeys = HotkeySettings {
+            quick_selector: "Ctrl+Alt+Shift+1".to_string(),
+            notification: "Ctrl+Alt+Shift+2".to_string(),
+            pause: "Ctrl+Alt+Shift+3".to_string(),
+            quit: "Ctrl+Alt+Shift+4".to_string(),
+            undo: "Ctrl+Alt+Shift+5".to_string(),
+            clip_selector: "Ctrl+Alt+Shift+6".to_string(),
+            ocr: "Ctrl+Alt+Shift+7".to_string(),
+            continuous_record: "Ctrl+Alt+Shift+8".to_string(),
+            favorite_mode_slots: Vec::new(),
+        };
+        let mut hotkey_handler = HotkeyHandler::new(&hotkeys, &[])
+            .expect("テスト用ホットキーの登録に失敗")
+            .0;
+        let mut last_quick_selector_show = Instant::now();
+        let mut last_clip_selector_show = Instant::now();
+        let mut control_flow = ControlFlow::Wait;
+
+        let mut ctx = AppEventContext {
+            state: &state,
+            menu: &menu,
+            selectors: &selectors,
+            settings: &settings,
+            last_quick_selector_show: &mut last_quick_selector_show,
+            last_clip_selector_show: &mut last_clip_selector_show,
+            hotkey_handler: &mut hotkey_handler,
+            clipboard_worker: &clipboard_worker,
+            event_loop: &event_loop,
+            control_flow: &mut control_flow,
+        };
+
+        selectors.ocr.force_visible_for_test(true);
+        assert!(selectors.ocr.is_visible());
+        handle_user_event(&mut ctx, AppEvent::DisposeOcrOverlay);
+        assert!(!selectors.ocr.is_visible());
+
+        selectors.quick.force_visible_for_test(true);
+        selectors.clip.force_visible_for_test(true);
+        handle_user_event(&mut ctx, AppEvent::HideQuickSelector);
+        handle_user_event(&mut ctx, AppEvent::HideClipSelector);
+        assert!(!selectors.quick.is_visible());
+        assert!(!selectors.clip.is_visible());
+    }
 }
