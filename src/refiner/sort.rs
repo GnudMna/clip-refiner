@@ -1,6 +1,12 @@
 use csv::{ReaderBuilder, WriterBuilder};
 
 /// 行またはCSVレコード単位でテキストを並び替える
+///
+/// # Arguments
+/// * `text` - 並び替える対象のテキスト。
+///
+/// # Returns
+/// * `String` - 並び替え後ののテキスト。
 pub fn sort_lines(text: &str) -> String {
     if text.is_empty() {
         return String::new();
@@ -16,11 +22,23 @@ pub fn sort_lines(text: &str) -> String {
 }
 
 /// 改行コードを判定する
+///
+/// # Arguments
+/// * `text` - 判定対象のテキスト。
+///
+/// # Returns
+/// * `&str` - 検出された改行コード（"\r\n" または "\n"）。
 fn detect_line_ending(text: &str) -> &str {
     if text.contains("\r\n") { "\r\n" } else { "\n" }
 }
 
 /// CSVである可能性が高いか判定する
+///
+/// # Arguments
+/// * `text` - 判定対象のテキスト。
+///
+/// # Returns
+/// * `bool` - CSVとみなせる場合は `true`、そうでない場合は `false`。
 fn is_likely_csv(text: &str) -> bool {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
@@ -41,6 +59,13 @@ fn is_likely_csv(text: &str) -> bool {
 }
 
 /// CSVレコードとして並び替える
+///
+/// # Arguments
+/// * `text` - 並び替える対象のCSVテキスト。
+/// * `line_ending` - 使用する改行コード。
+///
+/// # Returns
+/// * `String` - レコード単位で並び替えられたCSVテキスト。
 fn sort_csv_records(text: &str, line_ending: &str) -> String {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
@@ -76,6 +101,13 @@ fn sort_csv_records(text: &str, line_ending: &str) -> String {
 }
 
 /// 単純な行として並び替える
+///
+/// # Arguments
+/// * `text` - 並び替える対象のテキスト。
+/// * `line_ending` - 使用する改行コード。
+///
+/// # Returns
+/// * `String` - 行単位で並び替えられたテキスト。
 fn sort_plain_lines(text: &str, line_ending: &str) -> String {
     let mut lines: Vec<&str> = text.lines().collect();
     lines.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));

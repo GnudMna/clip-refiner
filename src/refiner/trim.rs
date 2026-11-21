@@ -1,9 +1,21 @@
 /// 文字列の前後空白を削除する
+///
+/// # Arguments
+/// * `input` - トリムする文字列。
+///
+/// # Returns
+/// * `String` - 前後の空白が削除された文字列。
 pub fn trim_text(input: &str) -> String {
     input.trim().to_string()
 }
 
 /// 文字列の各行の前後空白を削除する
+///
+/// # Arguments
+/// * `input` - 各行をトリムする文字列。
+///
+/// # Returns
+/// * `String` - 各行の前後の空白が削除された文字列。
 pub fn trim_lines(input: &str) -> String {
     input
         .split_inclusive(|c| c == '\n' || c == '\r')
@@ -14,7 +26,6 @@ pub fn trim_lines(input: &str) -> String {
             format!("{}{}", trimmed.trim(), newline)
         })
         .collect()
-
 }
 
 #[cfg(test)]
@@ -33,5 +44,4 @@ mod tests {
         let expected = "hello\nworld\r\nrust";
         assert_eq!(trim_lines(input), expected);
     }
-
 }
