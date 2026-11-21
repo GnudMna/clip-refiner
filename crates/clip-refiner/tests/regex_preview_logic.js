@@ -11,21 +11,35 @@ const RegexPreview = require(path.join(__dirname, '../src/ui/settings/regex_prev
 const MAX_PATTERN_BYTES = 8 * 1024;
 const SAMPLE = 'Hello world 123';
 
-/** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
-const validSettings = {
-    pattern: '\\d+',
-    replacement: '',
-    caseInsensitive: false,
-    multiline: false,
-};
+/**
+ * @param {string} pattern
+ * @returns {import('../src/ui/settings/regex_preview').RegexSettings}
+ */
+function settingsWithPattern(pattern) {
+    return {
+        activePresetId: 'default',
+        presets: [
+            {
+                id: 'default',
+                name: 'デフォルト',
+                steps: [
+                    {
+                        pattern,
+                        replacement: '',
+                        caseInsensitive: false,
+                        multiline: false,
+                    },
+                ],
+            },
+        ],
+    };
+}
 
 /** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
-const invalidSettings = {
-    pattern: '[\\d+',
-    replacement: '',
-    caseInsensitive: false,
-    multiline: false,
-};
+const validSettings = settingsWithPattern('\\d+');
+
+/** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
+const invalidSettings = settingsWithPattern('[\\d+');
 
 /**
  * プレビュー IPC 応答のテスト用ペイロードを組み立てる
@@ -151,7 +165,7 @@ function test_validate_uses_cache_after_apply() {
 function test_build_preview_ui_empty_pattern() {
     const ui = RegexPreview.buildPreviewUi(
         previewPayload(1, true, 'パターンが空です (マッチしません)', 'sample'),
-        { pattern: '', replacement: '', caseInsensitive: false, multiline: false }
+        settingsWithPattern('')
     );
     assert.equal(ui.statusClass, 'regex-status regex-status--empty');
     assert.equal(ui.fieldInvalid, false);
@@ -161,7 +175,7 @@ function test_build_preview_ui_empty_pattern() {
 function test_build_preview_ui_timeout_message() {
     const ui = RegexPreview.buildPreviewUi(
         previewPayload(1, false, '正規表現の実行がタイムアウトしました', null),
-        { pattern: '.+', replacement: '', caseInsensitive: false, multiline: false }
+        settingsWithPattern('.+')
     );
     assert.equal(ui.statusClass, 'regex-status regex-status--error');
     assert.equal(ui.fieldInvalid, true);
@@ -173,10 +187,7 @@ function test_build_preview_ui_timeout_message() {
 /** regexSettingsEqual の基本動作 */
 function test_regex_settings_equal() {
     assert.equal(RegexPreview.regexSettingsEqual(validSettings, validSettings), true);
-    assert.equal(
-        RegexPreview.regexSettingsEqual(validSettings, { ...validSettings, pattern: 'x' }),
-        false
-    );
+    assert.equal(RegexPreview.regexSettingsEqual(validSettings, settingsWithPattern('x')), false);
 }
 
 const tests = [

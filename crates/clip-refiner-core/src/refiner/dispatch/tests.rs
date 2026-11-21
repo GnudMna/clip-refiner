@@ -7,11 +7,7 @@ use strum::IntoEnumIterator;
 
 fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
     let mut ctx = RefineContext::default();
-    ctx.regex = RegexSettings {
-        pattern: pattern.to_string(),
-        replacement: replacement.to_string(),
-        ..RegexSettings::default()
-    };
+    ctx.regex = RegexSettings::single(pattern, replacement);
     ctx
 }
 

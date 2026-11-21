@@ -78,7 +78,8 @@ test.describe('設定 WebView', () => {
 
   test('正規表現タブでプレビュー領域が表示される', async ({ page }) => {
     await page.locator('#sidebar .nav-btn[data-tab="regex"]').click();
-    await expect(page.locator('#regex-pattern')).toBeVisible();
+    await expect(page.locator('#regex-preset-name')).toBeVisible();
+    await expect(page.locator('#regex-step-pattern-0')).toBeVisible();
     await expect(page.locator('#regex-preview-result')).toBeVisible();
   });
 

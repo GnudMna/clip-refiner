@@ -81,7 +81,7 @@ pub(crate) fn apply_settings_patch_without_ui(
         &mut outcome,
         &mut config_dirty,
     );
-    let regex_feedback = apply_regex_patch(patch, state, &mut config_dirty);
+    let regex_feedback = apply_regex_patch(patch, state, menu, &mut config_dirty);
     let hotkeys_outcome = apply_hotkeys_patch(patch, state, &mut config_dirty);
     apply_refine_patch(
         patch,
@@ -176,10 +176,7 @@ mod tests {
     fn invalid_regex_feedback_targets_desktop_fallback_after_hide() {
         let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
-            regex: Some(crate::config::RegexSettings {
-                pattern: "[unclosed".to_string(),
-                ..crate::config::RegexSettings::default()
-            }),
+            regex: Some(crate::config::RegexSettings::single("[unclosed", "")),
             ..SettingsPatch::default()
         };
 

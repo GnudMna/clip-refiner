@@ -110,6 +110,16 @@ pub struct ClipsMenu {
     pub register_item: MenuItem,
 }
 
+/// 正規表現プリセット選択メニューの構成
+pub struct RegexPresetMenu {
+    /// 「正規表現プリセット」サブメニュー
+    pub main_submenu: Submenu,
+    /// プリセット項目 (`CheckMenuItem` とプリセット ID)
+    pub records: Mutex<Vec<(CheckMenuItem, String)>>,
+    /// 未登録時に表示するプレースホルダ項目
+    pub empty_hint_item: MenuItem,
+}
+
 /// 通知設定に関連するメニューの構成
 pub struct NotificationMenu {
     /// 「通知」サブメニュー
@@ -154,6 +164,8 @@ pub struct TrayMenu {
     pub continuous_record: ContinuousRecordMenu,
     /// 登録クリップメニュー
     pub clips: ClipsMenu,
+    /// 正規表現プリセット選択メニュー
+    pub regex_presets: RegexPresetMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
     /// 更新を確認する項目

@@ -398,6 +398,7 @@ fn handle_menu_event_continuous_record_enabled() {
     assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
     assert!(ctx.menu().continuous_record.enabled_item.is_checked());
     assert!(!ctx.menu().refine.main_submenu.is_enabled());
+    assert!(!ctx.menu().regex_presets.main_submenu.is_enabled());
     assert_eq!(
         ctx.menu().continuous_record.main_submenu.text(),
         "連続記録 (自動加工停止)"
@@ -476,4 +477,67 @@ fn handle_menu_event_retry_clipboard_worker_is_handled() {
     );
 
     assert!(matches!(control_flow, ControlFlow::Wait));
+}
+
+/// 正規表現プリセットメニューで有効プリセットを切り替えられるようにすること
+#[test]
+fn handle_menu_event_regex_preset_switches_active() {
+    use crate::config::{RegexPreset, RegexSettings, RegexStep};
+
+    let ctx = TrayTestContext::with_config(|config| {
+        config.regex = RegexSettings {
+            active_preset_id: "a".to_string(),
+            presets: vec![
+                RegexPreset {
+                    id: "a".to_string(),
+                    name: "A".to_string(),
+                    steps: vec![RegexStep::default()],
+                },
+                RegexPreset {
+                    id: "b".to_string(),
+                    name: "B".to_string(),
+                    steps: vec![RegexStep::default()],
+                },
+            ],
+        };
+    });
+    ctx.menu()
+        .refresh_regex_presets(ctx.state())
+        .expect("正規表現プリセットメニューの更新に失敗");
+    let mut control_flow = ControlFlow::Wait;
+
+    let target_id = {
+        let records = ctx.menu().regex_presets.records.lock_ignore_poison();
+        records
+            .iter()
+            .find(|(_, id)| id == "b")
+            .map(|(item, _)| item.id().clone())
+            .expect("プリセット B のメニュー項目があること")
+    };
+
+    handle_menu_event(
+        &menu_event(&target_id),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert_eq!(
+        ctx.state()
+            .with_config(|c| c.regex.active_preset_id.clone()),
+        "b"
+    );
+    let records = ctx.menu().regex_presets.records.lock_ignore_poison();
+    assert!(
+        records
+            .iter()
+            .any(|(item, id)| id == "b" && item.is_checked())
+    );
+    assert!(
+        records
+            .iter()
+            .any(|(item, id)| id == "a" && !item.is_checked())
+    );
 }

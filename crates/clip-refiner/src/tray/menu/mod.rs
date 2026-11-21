@@ -1,6 +1,6 @@
 //! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
 //!
-//! 変換モード、監視設定、登録クリップ、履歴、通知などのサブメニューを組み立てる
+//! 変換モード、正規表現プリセット、監視設定、登録クリップ、履歴、通知などのサブメニューを組み立てる
 
 mod build;
 pub(crate) mod icon;
@@ -12,7 +12,7 @@ pub use icon::create_window_icon;
 pub(crate) use rebuild::{DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, rebuild_toggle_records_submenu};
 pub use types::{
     CategoryGroup, ClipsMenu, ContinuousRecordMenu, HistoryMenu, IntervalMenu, MonitorMenu,
-    NotificationMenu, RefineMenu, TrayMenu,
+    NotificationMenu, RefineMenu, RegexPresetMenu, TrayMenu,
 };
 
 // ======================================================================
@@ -83,6 +83,11 @@ mod tests {
                 records: Mutex::new(Vec::new()),
                 empty_hint_item: MenuItem::new("(未登録)", false, None),
                 register_item: MenuItem::new("クリップボードを登録", true, None),
+            },
+            regex_presets: RegexPresetMenu {
+                main_submenu: Submenu::new("正規表現プリセット", true),
+                records: Mutex::new(Vec::new()),
+                empty_hint_item: MenuItem::new("(未登録)", false, None),
             },
             notification: TrayMenu::build_notification_menu(&NotificationSettings::default())
                 .expect("通知メニューの構築に失敗"),
@@ -157,7 +162,7 @@ mod tests {
         assert!(!notification.notify_pause_item.is_checked());
     }
 
-    /// 連続記録有効時は変換モードメニューが無効になるようにすること
+    /// 連続記録有効時は変換モード・正規表現プリセットメニューが無効になるようにすること
     #[test]
     fn sync_auto_processing_state_disables_refine_when_continuous_record_enabled() {
         let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
@@ -165,13 +170,14 @@ mod tests {
         });
 
         assert!(!ctx.menu().refine.main_submenu.is_enabled());
+        assert!(!ctx.menu().regex_presets.main_submenu.is_enabled());
         assert_eq!(
             ctx.menu().continuous_record.main_submenu.text(),
             "連続記録 (自動加工停止)"
         );
     }
 
-    /// 連続記録無効時は変換モードメニューが有効になるようにすること
+    /// 連続記録無効時は変換モード・正規表現プリセットメニューが有効になるようにすること
     #[test]
     fn sync_auto_processing_state_enables_refine_when_continuous_record_disabled() {
         let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
@@ -179,6 +185,7 @@ mod tests {
         });
 
         assert!(ctx.menu().refine.main_submenu.is_enabled());
+        assert!(ctx.menu().regex_presets.main_submenu.is_enabled());
         assert_eq!(ctx.menu().continuous_record.main_submenu.text(), "連続記録");
     }
 }

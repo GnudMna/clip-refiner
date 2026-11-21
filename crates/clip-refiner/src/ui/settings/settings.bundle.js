@@ -284,36 +284,70 @@
   // crates/clip-refiner/src/ui/settings/regex_preview.js
   var require_regex_preview = __commonJS({
     "crates/clip-refiner/src/ui/settings/regex_preview.js"(exports, module) {
-      var RegexPreview2 = (function() {
+      var RegexPreview3 = (function() {
         "use strict";
         function regexSettingsEqual(a, b) {
           if (!a || !b) {
             return false;
           }
-          return a.pattern === b.pattern && a.replacement === b.replacement && a.caseInsensitive === b.caseInsensitive && a.multiline === b.multiline;
+          return JSON.stringify(a) === JSON.stringify(b);
+        }
+        function copyStep(step) {
+          return {
+            pattern: step.pattern ?? "",
+            replacement: step.replacement ?? "",
+            caseInsensitive: !!step.caseInsensitive,
+            multiline: !!step.multiline
+          };
         }
         function copyRegexSettings(settings) {
           return {
-            pattern: settings.pattern,
-            replacement: settings.replacement,
-            caseInsensitive: settings.caseInsensitive,
-            multiline: settings.multiline
+            activePresetId: settings.activePresetId ?? "",
+            presets: (settings.presets || []).map(function(preset) {
+              return {
+                id: preset.id ?? "",
+                name: preset.name ?? "",
+                steps: (preset.steps || []).map(copyStep)
+              };
+            })
           };
         }
+        function activeSteps(settings) {
+          const presets = settings.presets || [];
+          if (presets.length === 0) {
+            return [];
+          }
+          const active = presets.find(function(preset) {
+            return preset.id === settings.activePresetId;
+          }) || presets[0];
+          return active.steps || [];
+        }
         function validateRegexSettings2(settings, lastRegexPreview, maxPatternBytes) {
-          const pattern = settings.pattern ?? "";
-          if (pattern.length === 0) {
+          const encoder = new TextEncoder();
+          const presets = settings.presets || [];
+          for (let p = 0; p < presets.length; p += 1) {
+            const preset = presets[p];
+            const steps2 = preset.steps || [];
+            for (let s = 0; s < steps2.length; s += 1) {
+              const pattern = steps2[s].pattern ?? "";
+              if (encoder.encode(pattern).length > maxPatternBytes) {
+                return {
+                  valid: false,
+                  status: "error",
+                  message: "プリセット「" + (preset.name || "") + "」のステップ " + (s + 1) + " : パターンが長すぎます (最大 " + maxPatternBytes + " バイト)"
+                };
+              }
+            }
+          }
+          const steps = activeSteps(settings);
+          const allEmpty = steps.every(function(step) {
+            return !(step.pattern ?? "");
+          });
+          if (allEmpty) {
             return {
               valid: true,
               status: "empty",
               message: "パターンが空です (マッチしません)"
-            };
-          }
-          if (new TextEncoder().encode(pattern).length > maxPatternBytes) {
-            return {
-              valid: false,
-              status: "error",
-              message: "パターンが長すぎます (最大 " + maxPatternBytes + " バイト)"
             };
           }
           if (regexSettingsEqual(settings, lastRegexPreview.settings)) {
@@ -330,11 +364,14 @@
           };
         }
         function buildPreviewUi(payload, domSettings) {
-          const pattern = domSettings.pattern ?? "";
+          const steps = activeSteps(domSettings);
+          const allEmpty = steps.every(function(step) {
+            return !(step.pattern ?? "");
+          });
           let status = "ok";
           if (!payload.valid) {
             status = "error";
-          } else if (!pattern) {
+          } else if (allEmpty) {
             status = "empty";
           }
           return {
@@ -342,7 +379,7 @@
             statusClass: "regex-status regex-status--" + status,
             fieldInvalid: status === "error",
             previewText: payload.result ?? "—",
-            previewError: !payload.valid && pattern.length > 0
+            previewError: !payload.valid && !allEmpty
           };
         }
         function resolveRegexPreviewResponse({
@@ -375,13 +412,15 @@
         return {
           regexSettingsEqual,
           copyRegexSettings,
+          copyStep,
+          activeSteps,
           validateRegexSettings: validateRegexSettings2,
           buildPreviewUi,
           resolveRegexPreviewResponse
         };
       })();
       if (typeof module !== "undefined" && module.exports) {
-        module.exports = RegexPreview2;
+        module.exports = RegexPreview3;
       }
     }
   });
@@ -537,6 +576,9 @@
             }
             return { type: "pipeline", action, index };
           }
+          if (button.classList.contains("regex-preset-up") || button.classList.contains("regex-preset-down") || button.classList.contains("regex-preset-remove") || button.classList.contains("regex-preset-select") || button.classList.contains("regex-step-up") || button.classList.contains("regex-step-down") || button.classList.contains("regex-step-remove")) {
+            return { type: "regex-action", button };
+          }
           if (button.classList.contains("favorite-remove")) {
             return { type: "favorite-toggle", mode: button.dataset.mode };
           }
@@ -656,7 +698,7 @@
     /** @type {boolean} */
     contentDelegationBound: false,
     /** @type {boolean} */
-    updateBusy: false,
+    selectedRegexPresetId: null,
     /**
      * 直近の更新確認 / 適用結果
      *
@@ -922,6 +964,12 @@
   function maxRegexPatternBytes() {
     return limits().maxRegexPatternBytes ?? 8 * 1024;
   }
+  function maxRegexPresets() {
+    return limits().maxRegexPresets ?? 20;
+  }
+  function maxRegexStepsPerPreset() {
+    return limits().maxRegexStepsPerPreset ?? 10;
+  }
   function isContentEditing() {
     const el = document.activeElement;
     const content = document.getElementById("content");
@@ -1058,21 +1106,120 @@
     btn.classList.toggle("is-loading", ctx.clipRegisterPending);
   }
 
-  // crates/clip-refiner/src/ui/settings/regex_feedback.js
+  // crates/clip-refiner/src/ui/settings/regex_ui.js
   var import_regex_preview = __toESM(require_regex_preview());
-  function readRegexFromDom() {
+  function normalizeRegexState(regex) {
+    const copy = import_regex_preview.default.copyRegexSettings(
+      regex && typeof regex === "object" ? regex : { activePresetId: "default", presets: [] }
+    );
+    if (!copy.presets.length) {
+      copy.presets = [
+        {
+          id: "default",
+          name: "デフォルト",
+          steps: [emptyStep()]
+        }
+      ];
+      copy.activePresetId = "default";
+    }
+    if (!copy.presets.some((preset) => preset.id === copy.activePresetId)) {
+      copy.activePresetId = copy.presets[0].id;
+    }
+    return copy;
+  }
+  function emptyStep() {
     return {
-      pattern: document.getElementById("regex-pattern")?.value ?? ctx.state.regex.pattern,
-      replacement: document.getElementById("regex-replacement")?.value ?? ctx.state.regex.replacement,
-      caseInsensitive: document.getElementById("regex-ci")?.checked ?? ctx.state.regex.caseInsensitive,
-      multiline: document.getElementById("regex-ml")?.checked ?? ctx.state.regex.multiline
+      pattern: "",
+      replacement: "",
+      caseInsensitive: false,
+      multiline: false
     };
   }
+  function selectedRegexPresetId() {
+    const regex = normalizeRegexState(ctx.state?.regex);
+    if (ctx.selectedRegexPresetId && regex.presets.some((preset) => preset.id === ctx.selectedRegexPresetId)) {
+      return ctx.selectedRegexPresetId;
+    }
+    return regex.activePresetId;
+  }
+  function readRegexFromDom() {
+    const regex = normalizeRegexState(ctx.state?.regex);
+    const selectedId = selectedRegexPresetId();
+    const presetIndex = regex.presets.findIndex((preset) => preset.id === selectedId);
+    if (presetIndex < 0) {
+      return regex;
+    }
+    const nameInput = document.getElementById("regex-preset-name");
+    if (nameInput) {
+      regex.presets[presetIndex].name = nameInput.value;
+    }
+    const stepCount = regex.presets[presetIndex].steps.length;
+    const steps = [];
+    for (let i = 0; i < stepCount; i += 1) {
+      steps.push({
+        pattern: document.getElementById("regex-step-pattern-" + i)?.value ?? "",
+        replacement: document.getElementById("regex-step-replacement-" + i)?.value ?? "",
+        caseInsensitive: !!document.getElementById("regex-step-ci-" + i)?.checked,
+        multiline: !!document.getElementById("regex-step-ml-" + i)?.checked
+      });
+    }
+    if (steps.length === 0) {
+      steps.push(emptyStep());
+    }
+    regex.presets[presetIndex].steps = steps;
+    regex.activePresetId = selectedId;
+    return regex;
+  }
+  function readRegexForApply() {
+    const activeId = normalizeRegexState(ctx.state?.regex).activePresetId;
+    const settings = readRegexFromDom();
+    if (settings.presets.some((preset) => preset.id === activeId)) {
+      settings.activePresetId = activeId;
+    }
+    return settings;
+  }
+  function buildRegexEditorHtml() {
+    const regex = normalizeRegexState(ctx.state?.regex);
+    const selectedId = selectedRegexPresetId();
+    const selected = regex.presets.find((preset) => preset.id === selectedId) || regex.presets[0];
+    const presetRows = regex.presets.map((preset, index) => {
+      const isActive = preset.id === regex.activePresetId;
+      const isSelected = preset.id === selectedId;
+      return '<tr class="' + (isSelected ? "regex-preset-row--selected" : "") + '"><td class="regex-preset-active"><input type="radio" name="regex-active-preset" class="regex-active-radio" data-id="' + escapeHtml(preset.id) + '"' + (isActive ? " checked" : "") + ' title="有効にする" aria-label="有効にする"></td><td><button type="button" class="regex-preset-select" data-id="' + escapeHtml(preset.id) + '">' + escapeHtml(preset.name || "(無題)") + '</button></td><td class="list-actions"><button type="button" class="icon-btn regex-preset-up" data-index="' + index + '" title="上へ">↑</button><button type="button" class="icon-btn regex-preset-down" data-index="' + index + '" title="下へ">↓</button><button type="button" class="icon-btn regex-preset-remove" data-index="' + index + '" title="削除">×</button></td></tr>';
+    }).join("");
+    const stepRows = (selected.steps || []).map((step, index) => {
+      return '<div class="regex-step" data-index="' + index + '"><div class="regex-step-header"><span class="regex-step-index">' + (index + 1) + '</span><span class="regex-step-label">ステップ ' + (index + 1) + '</span><span class="list-actions"><button type="button" class="icon-btn regex-step-up" data-index="' + index + '" title="上へ">↑</button><button type="button" class="icon-btn regex-step-down" data-index="' + index + '" title="下へ">↓</button><button type="button" class="icon-btn regex-step-remove" data-index="' + index + '" title="削除">×</button></span></div><div class="field"><label for="regex-step-pattern-' + index + '">パターン</label><textarea id="regex-step-pattern-' + index + '" class="regex-step-pattern">' + escapeHtml(step.pattern || "") + '</textarea></div><div class="field"><label for="regex-step-replacement-' + index + '">置換文字列</label><textarea id="regex-step-replacement-' + index + '" class="regex-step-replacement">' + escapeHtml(step.replacement || "") + '</textarea></div><div class="option-list">' + optionCheckbox(
+        "regex-step-ci-" + index,
+        !!step.caseInsensitive,
+        "大文字小文字を無視"
+      ) + optionCheckbox("regex-step-ml-" + index, !!step.multiline, "複数行モード") + "</div></div>";
+    }).join("");
+    return '<div class="regex-presets">' + wrappedTable(
+      '<table class="list-table"><thead><tr><th>有効</th><th>名前</th><th></th></tr></thead><tbody>' + presetRows + "</tbody></table>"
+    ) + '<div class="card-actions toolbar"><button type="button" class="ghost-btn" id="regex-preset-add-btn">プリセットを追加</button><span class="hint">最大 ' + maxRegexPresets() + ' 件</span></div></div><div class="field"><label for="regex-preset-name">プリセット名</label><input type="text" id="regex-preset-name" value="' + escapeHtml(selected.name || "") + '"></div><div class="regex-steps">' + (stepRows || '<div class="empty-hint">ステップがありません</div>') + '</div><div class="card-actions toolbar"><button type="button" class="ghost-btn" id="regex-step-add-btn">ステップを追加</button><span class="hint">最大 ' + maxRegexStepsPerPreset() + ' ステップ</span></div><p id="regex-status" class="regex-status" role="status" aria-live="polite"></p>';
+  }
+  function newPresetId() {
+    return "preset-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+  function moveListItem(list, index, direction) {
+    const next = list.slice();
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= next.length) {
+      return next;
+    }
+    const tmp = next[index];
+    next[index] = next[target];
+    next[target] = tmp;
+    return next;
+  }
+
+  // crates/clip-refiner/src/ui/settings/regex_feedback.js
+  var import_regex_preview2 = __toESM(require_regex_preview());
   function readRegexSampleFromDom() {
     return document.getElementById("regex-preview-sample")?.value ?? ctx.state.regexPreviewSample ?? "";
   }
   function validateRegexSettings(settings) {
-    return import_regex_preview.default.validateRegexSettings(
+    return import_regex_preview2.default.validateRegexSettings(
       settings,
       ctx.lastRegexPreview,
       maxRegexPatternBytes()
@@ -1083,18 +1230,13 @@
     ctx.latestRegexPreviewId = requestId;
     ctx.pendingRegexPreviewRequest = {
       requestId,
-      settings: import_regex_preview.default.copyRegexSettings(settings),
+      settings: import_regex_preview2.default.copyRegexSettings(settings),
       sample
     };
     postIpcEnvelope({
       type: "regex-preview",
       requestId,
-      settings: {
-        pattern: settings.pattern,
-        replacement: settings.replacement,
-        caseInsensitive: settings.caseInsensitive,
-        multiline: settings.multiline
-      },
+      settings: import_regex_preview2.default.copyRegexSettings(settings),
       sample
     });
     const previewEl = document.getElementById("regex-preview-result");
@@ -1106,11 +1248,10 @@
   function handleRegexPreview(payload) {
     const statusEl = document.getElementById("regex-status");
     const previewEl = document.getElementById("regex-preview-result");
-    const patternField = document.getElementById("regex-pattern")?.closest(".field");
     if (!statusEl || !previewEl) {
       return;
     }
-    const result = import_regex_preview.default.resolveRegexPreviewResponse({
+    const result = import_regex_preview2.default.resolveRegexPreviewResponse({
       payload,
       latestRequestId: ctx.latestRegexPreviewId,
       pendingRequest: ctx.pendingRegexPreviewRequest,
@@ -1128,9 +1269,9 @@
     const ui = result.ui;
     statusEl.textContent = ui.statusMessage;
     statusEl.className = ui.statusClass;
-    if (patternField) {
-      patternField.classList.toggle("field-invalid", ui.fieldInvalid);
-    }
+    document.querySelectorAll(".regex-step .field").forEach((field) => {
+      field.classList.toggle("field-invalid", ui.fieldInvalid);
+    });
     previewEl.textContent = ui.previewText;
     previewEl.classList.toggle("regex-preview-result--error", ui.previewError);
   }
@@ -1255,6 +1396,10 @@
     }
     if (resolved.type === "pipeline") {
       handlePipelineAction(button);
+      return;
+    }
+    if (resolved.type === "regex-action") {
+      handleRegexAction(button);
       return;
     }
     if (resolved.type === "favorite-toggle") {
@@ -1396,27 +1541,126 @@
   }
   function bindRegexEvents() {
     function applyRegex() {
-      const settings = readRegexFromDom();
+      const settings = readRegexForApply();
       const validation = validateRegexSettings(settings);
       updateRegexFeedback();
       if (!validation.valid) {
         return;
       }
+      ctx.state.regex = settings;
       scheduleApply({ regex: settings });
     }
-    ["regex-pattern", "regex-replacement"].forEach((id) => {
-      const el = document.getElementById(id);
-      el?.addEventListener("input", scheduleRegexFeedback);
-      el?.addEventListener("blur", applyRegex);
+    document.getElementById("regex-preset-name")?.addEventListener("input", () => {
+      scheduleRegexFeedback();
     });
-    document.getElementById("regex-preview-sample")?.addEventListener("input", scheduleRegexFeedback);
-    ["regex-ci", "regex-ml"].forEach((id) => {
-      document.getElementById(id)?.addEventListener("change", () => {
+    document.getElementById("regex-preset-name")?.addEventListener("blur", applyRegex);
+    document.querySelectorAll(".regex-step-pattern, .regex-step-replacement").forEach((el) => {
+      el.addEventListener("input", scheduleRegexFeedback);
+      el.addEventListener("blur", applyRegex);
+    });
+    document.querySelectorAll('[id^="regex-step-ci-"], [id^="regex-step-ml-"]').forEach((el) => {
+      el.addEventListener("change", () => {
         scheduleRegexFeedback();
         applyRegex();
       });
     });
+    document.getElementById("regex-preview-sample")?.addEventListener("input", scheduleRegexFeedback);
+    document.querySelectorAll(".regex-active-radio").forEach((el) => {
+      el.addEventListener("change", () => {
+        const settings = readRegexForApply();
+        settings.activePresetId = el.dataset.id;
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        updateRegexFeedback();
+      });
+    });
+    document.getElementById("regex-preset-add-btn")?.addEventListener("click", () => {
+      const settings = readRegexForApply();
+      if (settings.presets.length >= maxRegexPresets()) {
+        return;
+      }
+      const id = newPresetId();
+      settings.presets.push({
+        id,
+        name: "プリセット " + (settings.presets.length + 1),
+        steps: [emptyStep()]
+      });
+      ctx.selectedRegexPresetId = id;
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+    });
+    document.getElementById("regex-step-add-btn")?.addEventListener("click", () => {
+      const settings = readRegexForApply();
+      const selectedId = selectedRegexPresetId();
+      const preset = settings.presets.find((item) => item.id === selectedId);
+      if (!preset || preset.steps.length >= maxRegexStepsPerPreset()) {
+        return;
+      }
+      preset.steps.push(emptyStep());
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+    });
     updateRegexFeedback();
+  }
+  function handleRegexAction(button) {
+    if (button.classList.contains("regex-preset-select")) {
+      ctx.selectedRegexPresetId = button.dataset.id;
+      refreshActivePanel();
+      return;
+    }
+    const settings = readRegexForApply();
+    const selectedId = selectedRegexPresetId();
+    if (button.classList.contains("regex-preset-up") || button.classList.contains("regex-preset-down")) {
+      const index = Number(button.dataset.index);
+      const direction = button.classList.contains("regex-preset-up") ? "up" : "down";
+      settings.presets = moveListItem(settings.presets, index, direction);
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+      return;
+    }
+    if (button.classList.contains("regex-preset-remove")) {
+      const index = Number(button.dataset.index);
+      if (settings.presets.length <= 1 || Number.isNaN(index)) {
+        return;
+      }
+      const removed = settings.presets.splice(index, 1)[0];
+      if (settings.activePresetId === removed.id) {
+        settings.activePresetId = settings.presets[0].id;
+      }
+      if (ctx.selectedRegexPresetId === removed.id) {
+        ctx.selectedRegexPresetId = settings.activePresetId;
+      }
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+      return;
+    }
+    const preset = settings.presets.find((item) => item.id === selectedId);
+    if (!preset) {
+      return;
+    }
+    if (button.classList.contains("regex-step-up") || button.classList.contains("regex-step-down")) {
+      const index = Number(button.dataset.index);
+      const direction = button.classList.contains("regex-step-up") ? "up" : "down";
+      preset.steps = moveListItem(preset.steps, index, direction);
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+      return;
+    }
+    if (button.classList.contains("regex-step-remove")) {
+      const index = Number(button.dataset.index);
+      if (preset.steps.length <= 1 || Number.isNaN(index)) {
+        return;
+      }
+      preset.steps.splice(index, 1);
+      ctx.state.regex = settings;
+      scheduleApply({ regex: settings });
+      refreshActivePanel();
+    }
   }
   function bindShortcutsEvents() {
     document.getElementById("shortcuts-open-config-btn")?.addEventListener("click", openConfigFile);
@@ -1768,13 +2012,9 @@
     return panelWrap("history", '<div class="card-grid">' + historyCard + recordCard + "</div>");
   }
   function renderRegexPanel() {
-    const regex = ctx.state.regex;
-    const body = card(
-      "正規表現の置換",
-      '<div class="field"><label for="regex-pattern">パターン</label><textarea id="regex-pattern">' + escapeHtml(regex.pattern) + '</textarea></div><div class="field"><label for="regex-replacement">置換文字列</label><textarea id="regex-replacement">' + escapeHtml(regex.replacement) + '</textarea></div><div class="option-list">' + optionCheckbox("regex-ci", regex.caseInsensitive, "大文字小文字を無視") + optionCheckbox("regex-ml", regex.multiline, "複数行モード") + '</div><p id="regex-status" class="regex-status" role="status" aria-live="polite"></p>'
-    ) + card(
+    const body = card("正規表現プリセット", buildRegexEditorHtml()) + card(
       "プレビュー",
-      '<div class="field"><label for="regex-preview-sample">サンプル</label><textarea id="regex-preview-sample" rows="3">' + escapeHtml(ctx.state.regexPreviewSample) + '</textarea></div><div class="regex-preview"><div class="regex-preview-row"><span class="regex-preview-label">結果</span><code class="regex-preview-result" id="regex-preview-result">—</code></div></div><p class="hint">プレビューは ClipRefiner 実行時と同じ Rust 正規表現エンジンで表示</p>'
+      '<div class="field"><label for="regex-preview-sample">サンプル</label><textarea id="regex-preview-sample" rows="3">' + escapeHtml(ctx.state.regexPreviewSample) + '</textarea></div><div class="regex-preview"><div class="regex-preview-row"><span class="regex-preview-label">結果</span><code class="regex-preview-result" id="regex-preview-result">—</code></div></div><p class="hint">選択中プリセットのステップを上から順に regex-replace で適用。本番と同じ Rust 正規表現エンジン</p>'
     );
     return panelWrap("regex", body);
   }
@@ -1910,7 +2150,7 @@
     const editingTab = wasEditing ? ctx.activeTab : null;
     if (editingTab === "regex" && !opts.externalSync) {
       snapshot = Object.assign({}, snapshot, {
-        regex: readRegexFromDom(),
+        regex: readRegexForApply(),
         regexPreviewSample: readRegexSampleFromDom()
       });
     }

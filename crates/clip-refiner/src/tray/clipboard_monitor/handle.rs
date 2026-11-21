@@ -9,7 +9,7 @@ use crate::refiner::{
 use crate::security::is_within_clipboard_limit;
 use crate::tray::notify;
 use crate::tray::state::{AppState, MonitorSnapshot};
-use crate::user_error::UserNotification;
+use crate::user_error::{UserNotification, continuous_record_text_too_large};
 
 // ======================================================================
 // 定数
@@ -123,6 +123,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
         if !is_within_clipboard_limit(&text) {
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
             state.clipboard_session().record_clipboard_observed(&text);
+            UserNotification::from(ClipboardProcessError::TextTooLarge).notify_skip();
             return ClipboardObserveResult::Observed;
         }
     }
@@ -150,8 +151,8 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
             // Excel 描画ビットマップの到着待ち。次回のクリップボード更新で再試行する
             crate::log_debug!("Excel 描画画像を待機中");
         }
-        Err(ClipboardProcessError::TextTooLarge) => {
-            crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
+        Err(e) if e.is_skip() => {
+            UserNotification::from(e).notify_skip();
         }
         Err(e) => {
             UserNotification::from(e).notify_with_debug(e);
@@ -190,6 +191,7 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
     if !is_within_clipboard_limit(&text) {
         crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
         state.clipboard_session().record_clipboard_observed(&text);
+        continuous_record_text_too_large().notify_skip();
         return ClipboardObserveResult::Observed;
     }
 
@@ -246,7 +248,12 @@ pub(crate) fn record_clipboard_outcome(
             }
             false
         }
-        Err(ClipboardProcessError::NoText | ClipboardProcessError::TextTooLarge) => {
+        Err(
+            ClipboardProcessError::NoText
+            | ClipboardProcessError::TextTooLarge
+            | ClipboardProcessError::RegexTimedOut
+            | ClipboardProcessError::ParserInputTooLarge,
+        ) => {
             state
                 .clipboard_session()
                 .record_clipboard_observed(observed_text);
@@ -397,6 +404,25 @@ mod tests {
             .clipboard_session()
             .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen(""));
+        assert_eq!(state.clipboard_session().history_len(), 0);
+    }
+
+    /// スキップ系エラー時は観測のみ記録し履歴に追加しないようにすること
+    #[test]
+    fn record_outcome_skip_errors_observe_only() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::JsonFormat], true, false);
+
+        for outcome in [
+            Err(ClipboardProcessError::TextTooLarge),
+            Err(ClipboardProcessError::RegexTimedOut),
+            Err(ClipboardProcessError::ParserInputTooLarge),
+        ] {
+            assert!(!record_clipboard_outcome(
+                &state, &snap, &outcome, "skipped"
+            ));
+        }
+
         assert_eq!(state.clipboard_session().history_len(), 0);
     }
 

@@ -15,8 +15,10 @@ use clip_refiner_core::RefineMode;
 fn monitor_applies_regex_replace_from_config() {
     let mut harness = ClipboardHarness::with_text("2024-01-15").with_mode(RefineMode::RegexReplace);
     harness.with_config_mut(|c| {
-        c.regex.pattern = r"(\d{4})-(\d{2})-(\d{2})".to_string();
-        c.regex.replacement = "$1/$2/$3".to_string();
+        c.regex = clip_refiner_core::config::RegexSettings::single(
+            r"(\d{4})-(\d{2})-(\d{2})",
+            "$1/$2/$3",
+        );
     });
 
     assert!(harness.run_configured_monitor_update());
@@ -28,8 +30,10 @@ fn monitor_applies_regex_replace_from_config() {
 fn monitor_reuses_regex_cache_across_updates() {
     let mut harness = ClipboardHarness::with_text("2024-01-15").with_mode(RefineMode::RegexReplace);
     harness.with_config_mut(|c| {
-        c.regex.pattern = r"(\d{4})-(\d{2})-(\d{2})".to_string();
-        c.regex.replacement = "$1/$2/$3".to_string();
+        c.regex = clip_refiner_core::config::RegexSettings::single(
+            r"(\d{4})-(\d{2})-(\d{2})",
+            "$1/$2/$3",
+        );
     });
 
     assert!(harness.run_configured_monitor_update());
@@ -46,7 +50,8 @@ fn event_mode_applies_regex_replace() {
     let mut harness = ClipboardHarness::with_text("a1b2")
         .with_mode(RefineMode::RegexDelete)
         .with_monitor_mode(MonitorMode::Event);
-    harness.with_config_mut(|c| c.regex.pattern = r"\d".to_string());
+    harness
+        .with_config_mut(|c| c.regex = clip_refiner_core::config::RegexSettings::single(r"\d", ""));
 
     assert!(harness.run_configured_monitor_update());
     assert_eq!(harness.clipboard_text(), "ab");

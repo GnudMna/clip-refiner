@@ -134,6 +134,7 @@ impl AppConfig {
         migration.config.normalize_clips();
         migration.config.normalize_favorite_modes();
         migration.config.normalize_pipeline();
+        migration.config.regex.normalize();
         migration
             .config
             .notification_settings
@@ -151,6 +152,7 @@ impl AppConfig {
         self.normalize_clips();
         self.normalize_favorite_modes();
         self.normalize_pipeline();
+        self.regex.normalize();
         self.notification_settings.migrate_legacy_fields();
         self.version = consts::CONFIG_VERSION;
     }

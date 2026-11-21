@@ -51,6 +51,7 @@ pub fn migrate_config(config: AppConfig) -> ConfigMigration {
         config = match from {
             0 => migrate_v0_to_v1(config),
             1 => migrate_v1_to_v2(config),
+            2 => migrate_v2_to_v3(config),
             v => {
                 tracing::warn!("未対応の設定 version={v}。デフォルト設定を使用する");
                 return ConfigMigration {
@@ -88,6 +89,16 @@ fn migrate_v0_to_v1(mut config: AppConfig) -> AppConfig {
 /// v2 で変更: `[[texts]]` → 登録クリップ (`registered-clips.dat`)、`hotkeys.text_selector` → `hotkeys.clip_selector`
 fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
     config.version = 2;
+    config
+}
+
+/// v2 から v3 へ移行
+///
+/// v3 で変更: フラット `[regex]` を名前付きプリセット + ステップ列へ包む
+/// デシリアライズ時点で既にプリセット形式へ変換済みの場合は正規化のみ行う
+fn migrate_v2_to_v3(mut config: AppConfig) -> AppConfig {
+    config.regex.normalize();
+    config.version = 3;
     config
 }
 
@@ -208,5 +219,55 @@ mod tests {
         assert_eq!(result.config.interval_ms, 777);
         assert!(result.config.history_enabled);
         assert!(result.config.favorite_modes.is_empty());
+    }
+
+    /// v2 設定は v3 へ移行し、正規表現プリセットを保持すること
+    #[test]
+    fn migrate_v2_to_v3_preserves_regex_presets() {
+        use crate::config::{RegexPreset, RegexSettings, RegexStep};
+
+        let config = AppConfig {
+            version: 2,
+            regex: RegexSettings {
+                active_preset_id: "p1".to_string(),
+                presets: vec![RegexPreset {
+                    id: "p1".to_string(),
+                    name: "日付".to_string(),
+                    steps: vec![RegexStep {
+                        pattern: r"\d+".to_string(),
+                        replacement: "N".to_string(),
+                        ..RegexStep::default()
+                    }],
+                }],
+            },
+            ..Default::default()
+        };
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert_eq!(result.config.regex.active_preset_id, "p1");
+        assert_eq!(result.config.regex.active_steps()[0].pattern, r"\d+");
+    }
+
+    /// 旧フラット regex を含む v2 TOML 相当はプリセットへ包まれること
+    #[test]
+    fn migrate_v2_legacy_flat_regex_via_deserialize() {
+        let toml = r#"
+version = 2
+mode = "RegexReplace"
+interval_ms = 1000
+[regex]
+pattern = "foo"
+replacement = "bar"
+case_insensitive = true
+"#;
+        let config: AppConfig = toml::from_str(toml).expect("parse");
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert_eq!(result.config.regex.presets.len(), 1);
+        assert_eq!(result.config.regex.active_steps()[0].pattern, "foo");
+        assert_eq!(result.config.regex.active_steps()[0].replacement, "bar");
+        assert!(result.config.regex.active_steps()[0].case_insensitive);
     }
 }

@@ -4,7 +4,7 @@ use std::time::Instant;
 use super::features::{
     handle_app_control, handle_clips_event, handle_continuous_record_event, handle_favorites_event,
     handle_history_event, handle_monitor_event, handle_notification_event,
-    handle_refine_mode_event,
+    handle_refine_mode_event, handle_regex_preset_event,
 };
 use super::menu::TrayMenu;
 use super::selector::{
@@ -115,6 +115,9 @@ pub fn handle_menu_event(
         return;
     }
     if handle_refine_mode_event(&event.id, menu, state, clipboard_worker, quick_selector) {
+        return;
+    }
+    if handle_regex_preset_event(&event.id, menu, state) {
         return;
     }
     handle_monitor_event(&event.id, menu, state);

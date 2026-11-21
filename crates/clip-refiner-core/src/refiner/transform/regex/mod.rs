@@ -10,4 +10,6 @@ mod preview;
 
 pub(crate) use cache::RegexPatternCache;
 pub(crate) use ops::{regex_delete, regex_extract, regex_replace, regex_split};
-pub use preview::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace};
+pub use preview::{
+    REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace, validate_regex_settings,
+};

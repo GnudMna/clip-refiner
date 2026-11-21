@@ -12,16 +12,20 @@ import {
     syncMonitorPauseBanner,
 } from './monitor_ui.js';
 import {
-    readRegexFromDom,
+    readRegexForApply,
     scheduleRegexFeedback,
     updateRegexFeedback,
     validateRegexSettings,
 } from './regex_feedback.js';
+import { emptyStep, moveListItem, newPresetId, selectedRegexPresetId } from './regex_ui.js';
+import { refreshActivePanel } from './main.js';
 import {
     commitLimitInput,
     historyLimitBounds,
     intervalMsBounds,
     maxPipelineLength,
+    maxRegexPresets,
+    maxRegexStepsPerPreset,
     recordLimitBounds,
     selectorWebviewIdleMinutesBounds,
     setClipRegisterPending,
@@ -70,6 +74,11 @@ function handleContentClick(event) {
 
     if (resolved.type === 'pipeline') {
         handlePipelineAction(button);
+        return;
+    }
+
+    if (resolved.type === 'regex-action') {
+        handleRegexAction(button);
         return;
     }
 
@@ -242,31 +251,152 @@ export function bindHistoryEvents() {
 export function bindRegexEvents() {
     /** DOM の正規表現設定を検証し、有効ならパッチをスケジュールする */
     function applyRegex() {
-        const settings = readRegexFromDom();
+        const settings = readRegexForApply();
         const validation = validateRegexSettings(settings);
         updateRegexFeedback();
         if (!validation.valid) {
             return;
         }
+        ctx.state.regex = settings;
         scheduleApply({ regex: settings });
     }
 
-    ['regex-pattern', 'regex-replacement'].forEach((id) => {
-        const el = document.getElementById(id);
-        el?.addEventListener('input', scheduleRegexFeedback);
-        el?.addEventListener('blur', applyRegex);
+    document.getElementById('regex-preset-name')?.addEventListener('input', () => {
+        scheduleRegexFeedback();
     });
-    document
-        .getElementById('regex-preview-sample')
-        ?.addEventListener('input', scheduleRegexFeedback);
-    ['regex-ci', 'regex-ml'].forEach((id) => {
-        document.getElementById(id)?.addEventListener('change', () => {
+    document.getElementById('regex-preset-name')?.addEventListener('blur', applyRegex);
+
+    document.querySelectorAll('.regex-step-pattern, .regex-step-replacement').forEach((el) => {
+        el.addEventListener('input', scheduleRegexFeedback);
+        el.addEventListener('blur', applyRegex);
+    });
+    document.querySelectorAll('[id^="regex-step-ci-"], [id^="regex-step-ml-"]').forEach((el) => {
+        el.addEventListener('change', () => {
             scheduleRegexFeedback();
             applyRegex();
         });
     });
+    document
+        .getElementById('regex-preview-sample')
+        ?.addEventListener('input', scheduleRegexFeedback);
+
+    document.querySelectorAll('.regex-active-radio').forEach((el) => {
+        el.addEventListener('change', () => {
+            const settings = readRegexForApply();
+            settings.activePresetId = el.dataset.id;
+            ctx.state.regex = settings;
+            scheduleApply({ regex: settings });
+            updateRegexFeedback();
+        });
+    });
+
+    document.getElementById('regex-preset-add-btn')?.addEventListener('click', () => {
+        const settings = readRegexForApply();
+        if (settings.presets.length >= maxRegexPresets()) {
+            return;
+        }
+        const id = newPresetId();
+        settings.presets.push({
+            id,
+            name: 'プリセット ' + (settings.presets.length + 1),
+            steps: [emptyStep()],
+        });
+        ctx.selectedRegexPresetId = id;
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+    });
+
+    document.getElementById('regex-step-add-btn')?.addEventListener('click', () => {
+        const settings = readRegexForApply();
+        const selectedId = selectedRegexPresetId();
+        const preset = settings.presets.find((item) => item.id === selectedId);
+        if (!preset || preset.steps.length >= maxRegexStepsPerPreset()) {
+            return;
+        }
+        preset.steps.push(emptyStep());
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+    });
 
     updateRegexFeedback();
+}
+
+/**
+ * 正規表現プリセット / ステップの一覧操作を処理する
+ *
+ * @param {HTMLButtonElement} button
+ */
+function handleRegexAction(button) {
+    if (button.classList.contains('regex-preset-select')) {
+        ctx.selectedRegexPresetId = button.dataset.id;
+        refreshActivePanel();
+        return;
+    }
+
+    const settings = readRegexForApply();
+    const selectedId = selectedRegexPresetId();
+
+    if (
+        button.classList.contains('regex-preset-up') ||
+        button.classList.contains('regex-preset-down')
+    ) {
+        const index = Number(button.dataset.index);
+        const direction = button.classList.contains('regex-preset-up') ? 'up' : 'down';
+        settings.presets = moveListItem(settings.presets, index, direction);
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+        return;
+    }
+
+    if (button.classList.contains('regex-preset-remove')) {
+        const index = Number(button.dataset.index);
+        if (settings.presets.length <= 1 || Number.isNaN(index)) {
+            return;
+        }
+        const removed = settings.presets.splice(index, 1)[0];
+        if (settings.activePresetId === removed.id) {
+            settings.activePresetId = settings.presets[0].id;
+        }
+        if (ctx.selectedRegexPresetId === removed.id) {
+            ctx.selectedRegexPresetId = settings.activePresetId;
+        }
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+        return;
+    }
+
+    const preset = settings.presets.find((item) => item.id === selectedId);
+    if (!preset) {
+        return;
+    }
+
+    if (
+        button.classList.contains('regex-step-up') ||
+        button.classList.contains('regex-step-down')
+    ) {
+        const index = Number(button.dataset.index);
+        const direction = button.classList.contains('regex-step-up') ? 'up' : 'down';
+        preset.steps = moveListItem(preset.steps, index, direction);
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+        return;
+    }
+
+    if (button.classList.contains('regex-step-remove')) {
+        const index = Number(button.dataset.index);
+        if (preset.steps.length <= 1 || Number.isNaN(index)) {
+            return;
+        }
+        preset.steps.splice(index, 1);
+        ctx.state.regex = settings;
+        scheduleApply({ regex: settings });
+        refreshActivePanel();
+    }
 }
 
 /** ショートカットタブのイベントをバインドする */

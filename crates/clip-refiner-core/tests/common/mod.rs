@@ -126,11 +126,7 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
 /// # Returns
 /// * `RefineContext` - 正規表現設定を含む加工コンテキスト
 pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
-    RefineContext::with_regex(RegexSettings {
-        pattern: pattern.to_string(),
-        replacement: replacement.to_string(),
-        ..RegexSettings::default()
-    })
+    RefineContext::with_regex(RegexSettings::single(pattern, replacement))
 }
 
 // ======================================================================

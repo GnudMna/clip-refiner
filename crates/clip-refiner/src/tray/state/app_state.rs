@@ -173,6 +173,13 @@ impl AppState {
             continuous_record_enabled: config.continuous_record_enabled,
             notification_settings: config.notification_settings.clone(),
             is_paused: config.is_paused,
+            regex_active_preset_id: config.regex.active_preset_id.clone(),
+            regex_presets: config
+                .regex
+                .presets
+                .iter()
+                .map(|preset| (preset.id.clone(), preset.name.clone()))
+                .collect(),
         })
     }
 

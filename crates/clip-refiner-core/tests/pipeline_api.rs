@@ -38,6 +38,20 @@ fn apply_pipeline_rejects_oversized_text() {
     );
 }
 
+/// パーサー上限超過は `ParserInputTooLarge` になるようにすること
+#[test]
+fn apply_pipeline_rejects_parser_oversized_text() {
+    use clip_refiner_core::consts::MAX_PARSER_INPUT_BYTES;
+
+    let oversized = "a".repeat(MAX_PARSER_INPUT_BYTES + 1);
+    assert!(is_within_clipboard_limit(&oversized));
+    assert!(!is_within_parser_limit(&oversized));
+    assert_eq!(
+        apply_pipeline_to_text(&oversized, &[RefineMode::JsonFormat], &default_ctx()),
+        Err(ClipboardProcessError::ParserInputTooLarge)
+    );
+}
+
 /// 上限ちょうどの入力は処理できるようにすること
 #[test]
 fn apply_pipeline_accepts_text_at_limit() {
@@ -87,8 +101,7 @@ fn apply_text_pipeline_empty_modes_returns_none() {
 #[test]
 fn config_regex_applies_through_pipeline() {
     let mut config = AppConfig::default();
-    config.regex.pattern = r"\s+".to_string();
-    config.regex.replacement = "-".to_string();
+    config.regex = clip_refiner_core::config::RegexSettings::single(r"\s+", "-");
     let ctx = RefineContext::from_config(&config);
 
     assert_eq!(

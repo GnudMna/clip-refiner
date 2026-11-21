@@ -74,8 +74,11 @@ const HOTKEY_KEYS: &[&str] = &[
     "favoriteModeSlots",
 ];
 
-/// `[regex]` の既知キー (serde alias を含む)
+/// `[regex]` の既知キー (旧フラット形式と serde alias を含む)
 const REGEX_KEYS: &[&str] = &[
+    "active_preset_id",
+    "activePresetId",
+    "presets",
     "pattern",
     "replacement",
     "case_insensitive",

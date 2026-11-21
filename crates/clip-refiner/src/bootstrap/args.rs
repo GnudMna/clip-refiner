@@ -35,10 +35,10 @@ pub(super) struct Args {
     /// ワンショットで順に適用する変換モード列 (`--mode` より優先)
     #[arg(long = "pipeline", value_parser = parse_refine_mode, num_args = 1..)]
     pub(super) pipeline: Vec<RefineMode>,
-    /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
+    /// 正規表現パターン (`config.toml` の有効プリセットの代わりに 1 ステップとして上書き)
     #[arg(long = "regex-pattern")]
     pub(super) regex_pattern: Option<String>,
-    /// 正規表現の置換文字列 (`config.toml` の `regex.replacement` を上書き)
+    /// 正規表現の置換文字列 (ワンショットの 1 ステップ上書き)
     #[arg(long = "regex-replacement")]
     pub(super) regex_replacement: Option<String>,
     /// 正規表現で大文字小文字を無視する
@@ -47,6 +47,9 @@ pub(super) struct Args {
     /// 正規表現で複数行モードを有効にする
     #[arg(long = "regex-multiline")]
     pub(super) regex_multiline: bool,
+    /// 正規表現プリセット名 (`config.toml` の `regex.presets[].name` で先頭一致)
+    #[arg(long = "regex-preset")]
+    pub(super) regex_preset: Option<String>,
     /// E2E 用: 指定 `WebView` を自動表示して常駐する (Playwright + CDP)
     #[arg(
         long = "e2e-window",
@@ -92,6 +95,7 @@ pub(super) fn sample_args_for_test() -> Args {
         regex_replacement: None,
         regex_case_insensitive: false,
         regex_multiline: false,
+        regex_preset: None,
         e2e_window: None,
         apply_portable_update: false,
         wait_pid: None,

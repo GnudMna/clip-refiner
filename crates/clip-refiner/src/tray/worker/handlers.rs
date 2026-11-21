@@ -139,6 +139,9 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
                 "テキストに変更はありませんでした",
             );
         }
+        Err(e) if e.is_skip() => {
+            UserNotification::from(&e).notify_skip();
+        }
         Err(e) => {
             UserNotification::from(&e).notify_with_debug(&e);
         }

@@ -39,6 +39,10 @@ pub struct SettingsLimits {
     pub max_registered_clips: usize,
     /// 正規表現パターンの最大バイト数
     pub max_regex_pattern_bytes: usize,
+    /// 正規表現プリセットの最大件数
+    pub max_regex_presets: usize,
+    /// 正規表現プリセットあたりの最大ステップ数
+    pub max_regex_steps_per_preset: usize,
 }
 
 impl SettingsLimits {
@@ -60,6 +64,8 @@ impl SettingsLimits {
             max_favorite_modes: consts::MAX_FAVORITE_MODES,
             max_registered_clips: consts::MAX_REGISTERED_CLIPS,
             max_regex_pattern_bytes: consts::MAX_REGEX_PATTERN_BYTES,
+            max_regex_presets: consts::MAX_REGEX_PRESETS,
+            max_regex_steps_per_preset: consts::MAX_REGEX_STEPS_PER_PRESET,
         }
     }
 }
@@ -187,12 +193,12 @@ mod tests {
         notification_settings.notify_continuous_record = true;
         let config = AppConfig {
             notification_settings,
-            regex: RegexSettings {
+            regex: RegexSettings::from_step(crate::config::RegexStep {
                 pattern: "a".to_string(),
                 replacement: "b".to_string(),
                 case_insensitive: true,
                 multiline: false,
-            },
+            }),
             ..AppConfig::default()
         };
 
@@ -207,7 +213,11 @@ mod tests {
         assert_eq!(json["notificationSettings"]["notifyHistoryRestore"], true);
         assert_eq!(json["notificationSettings"]["notifyOcr"], false);
         assert_eq!(json["notificationSettings"]["notifyRegisteredClip"], true);
-        assert_eq!(json["regex"]["caseInsensitive"], true);
+        assert_eq!(json["regex"]["activePresetId"], "default");
+        assert_eq!(
+            json["regex"]["presets"][0]["steps"][0]["caseInsensitive"],
+            true
+        );
         assert_eq!(json["limits"]["historyMax"], consts::MAX_HISTORY_LIMIT);
         assert_eq!(json["limits"]["intervalMinMs"], consts::MIN_INTERVAL_MS);
         assert_eq!(json["limits"]["intervalMaxMs"], consts::MAX_INTERVAL_MS);

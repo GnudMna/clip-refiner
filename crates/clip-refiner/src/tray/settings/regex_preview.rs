@@ -48,11 +48,7 @@ mod tests {
     fn preview_response_contains_replace_result() {
         let response = RegexPreviewResponse::from_request(&RegexPreviewRequest {
             request_id: 7,
-            settings: RegexSettings {
-                pattern: r"\d+".to_string(),
-                replacement: "#".to_string(),
-                ..RegexSettings::default()
-            },
+            settings: RegexSettings::single(r"\d+", "#"),
             sample: REGEX_PREVIEW_SAMPLE.to_string(),
         });
         assert!(response.valid);
@@ -65,11 +61,7 @@ mod tests {
     fn preview_response_uses_request_sample() {
         let response = RegexPreviewResponse::from_request(&RegexPreviewRequest {
             request_id: 8,
-            settings: RegexSettings {
-                pattern: r"foo".to_string(),
-                replacement: "bar".to_string(),
-                ..RegexSettings::default()
-            },
+            settings: RegexSettings::single(r"foo", "bar"),
             sample: "foo baz".to_string(),
         });
         assert!(response.valid);

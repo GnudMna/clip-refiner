@@ -1,16 +1,13 @@
 use std::fmt::Write;
 
 use super::super::docs::TABLE_INDENT;
-use super::super::docs::{
-    DOC_REGEX_CASE_INSENSITIVE, DOC_REGEX_MULTILINE, DOC_REGEX_PATTERN, DOC_REGEX_REPLACEMENT,
-    SECTION_REGEX,
-};
+use super::super::docs::{DOC_REGEX_ACTIVE_PRESET_ID, DOC_REGEX_PRESETS, SECTION_REGEX};
 use super::super::document::{ensure_table, set_table_value};
-use super::super::format::{write_field, write_table_section};
-use crate::config::types::AppConfig;
+use super::super::format::{field_comment_prefix, write_field, write_table_section};
+use crate::config::types::{AppConfig, RegexPreset, RegexStep};
 
 use anyhow::{Context, Result};
-use toml_edit::DocumentMut;
+use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
 // ======================================================================
 // ドキュメント更新
@@ -21,39 +18,65 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
     let regex = doc["regex"]
         .as_table_mut()
         .context("regex テーブルが存在しない")?;
+
+    // 旧フラットキーを除去する
+    for key in [
+        "pattern",
+        "replacement",
+        "case_insensitive",
+        "caseInsensitive",
+        "multiline",
+    ] {
+        regex.remove(key);
+    }
+
     write_regex_table(regex, config)
 }
 
 fn write_regex_table(regex: &mut toml_edit::Table, config: &AppConfig) -> Result<()> {
     set_table_value(
         regex,
-        "pattern",
-        DOC_REGEX_PATTERN,
+        "active_preset_id",
+        DOC_REGEX_ACTIVE_PRESET_ID,
         TABLE_INDENT,
-        &config.regex.pattern,
+        &config.regex.active_preset_id,
     )?;
-    set_table_value(
-        regex,
-        "replacement",
-        DOC_REGEX_REPLACEMENT,
-        TABLE_INDENT,
-        &config.regex.replacement,
-    )?;
-    set_table_value(
-        regex,
-        "case_insensitive",
-        DOC_REGEX_CASE_INSENSITIVE,
-        TABLE_INDENT,
-        &config.regex.case_insensitive,
-    )?;
-    set_table_value(
-        regex,
-        "multiline",
-        DOC_REGEX_MULTILINE,
-        TABLE_INDENT,
-        &config.regex.multiline,
-    )?;
+    regex.insert(
+        "presets",
+        Item::Value(presets_to_toml_value(&config.regex.presets)),
+    );
+    if let Some(mut key_mut) = regex.key_mut("presets") {
+        key_mut
+            .leaf_decor_mut()
+            .set_prefix(field_comment_prefix(TABLE_INDENT, DOC_REGEX_PRESETS));
+    }
     Ok(())
+}
+
+/// プリセット配列を `snake_case` のインラインテーブル配列へ変換する
+fn presets_to_toml_value(presets: &[RegexPreset]) -> Value {
+    let mut arr = Array::new();
+    for preset in presets {
+        let mut table = InlineTable::new();
+        table.insert("id", preset.id.as_str().into());
+        table.insert("name", preset.name.as_str().into());
+        table.insert("steps", steps_to_toml_value(&preset.steps));
+        arr.push(Value::InlineTable(table));
+    }
+    Value::Array(arr)
+}
+
+fn steps_to_toml_value(steps: &[RegexStep]) -> Value {
+    let mut arr = Array::new();
+    for step in steps {
+        let mut table = InlineTable::new();
+        table.insert("pattern", step.pattern.as_str().into());
+        table.insert("replacement", step.replacement.as_str().into());
+        table.insert("case_insensitive", step.case_insensitive.into());
+        table.insert("multiline", step.multiline.into());
+        arr.push(Value::InlineTable(table));
+    }
+    Value::Array(arr)
 }
 
 // ======================================================================
@@ -65,30 +88,20 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         TABLE_INDENT,
-        DOC_REGEX_PATTERN,
-        "pattern",
-        &config.regex.pattern,
+        DOC_REGEX_ACTIVE_PRESET_ID,
+        "active_preset_id",
+        &config.regex.active_preset_id,
     )?;
-    write_field(
+    writeln!(out, "{TABLE_INDENT}# {DOC_REGEX_PRESETS}")?;
+    writeln!(
         out,
-        TABLE_INDENT,
-        DOC_REGEX_REPLACEMENT,
-        "replacement",
-        &config.regex.replacement,
+        "{TABLE_INDENT}presets = {}",
+        presets_to_toml_string(&config.regex.presets)
     )?;
-    write_field(
-        out,
-        TABLE_INDENT,
-        DOC_REGEX_CASE_INSENSITIVE,
-        "case_insensitive",
-        &config.regex.case_insensitive,
-    )?;
-    write_field(
-        out,
-        TABLE_INDENT,
-        DOC_REGEX_MULTILINE,
-        "multiline",
-        &config.regex.multiline,
-    )?;
+    writeln!(out)?;
     Ok(())
+}
+
+fn presets_to_toml_string(presets: &[RegexPreset]) -> String {
+    presets_to_toml_value(presets).to_string()
 }

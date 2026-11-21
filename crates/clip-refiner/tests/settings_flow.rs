@@ -169,10 +169,11 @@ fn apply_ipc_updates_regex_settings() {
     ));
 
     let regex = ctx.state().with_config(|c| c.regex.clone());
-    assert_eq!(regex.pattern, r"\d+");
-    assert_eq!(regex.replacement, "N");
-    assert!(regex.case_insensitive);
-    assert!(!regex.multiline);
+    let step = &regex.active_steps()[0];
+    assert_eq!(step.pattern, r"\d+");
+    assert_eq!(step.replacement, "N");
+    assert!(step.case_insensitive);
+    assert!(!step.multiline);
 }
 
 /// ホットキーパッチが設定へ反映され不正値が正規化されるようにすること
@@ -201,8 +202,7 @@ fn apply_ipc_rejects_invalid_regex() {
     ));
 
     let after = ctx.state().with_config(|c| c.regex.clone());
-    assert_eq!(after.pattern, before.pattern);
-    assert_eq!(after.replacement, before.replacement);
+    assert_eq!(after, before);
 }
 
 /// 連続記録の有効化が設定とトレイメニューへ反映されるようにすること

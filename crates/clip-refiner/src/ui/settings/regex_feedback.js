@@ -5,24 +5,11 @@
 import { ctx } from './ctx.js';
 import { postIpcEnvelope } from './ipc_apply.js';
 import { maxRegexPatternBytes } from './shared.js';
+import { readRegexFromDom } from './regex_ui.js';
 
 import RegexPreview from './regex_preview.js';
 
-/**
- * 正規表現タブの DOM から現在の設定を読み取る
- *
- * @returns {import('./regex_preview').RegexSettings}
- */
-export function readRegexFromDom() {
-    return {
-        pattern: document.getElementById('regex-pattern')?.value ?? ctx.state.regex.pattern,
-        replacement:
-            document.getElementById('regex-replacement')?.value ?? ctx.state.regex.replacement,
-        caseInsensitive:
-            document.getElementById('regex-ci')?.checked ?? ctx.state.regex.caseInsensitive,
-        multiline: document.getElementById('regex-ml')?.checked ?? ctx.state.regex.multiline,
-    };
-}
+export { readRegexFromDom, readRegexForApply } from './regex_ui.js';
 
 /**
  * 正規表現プレビュー用サンプル文字列を DOM から読み取る
@@ -66,12 +53,7 @@ export function requestRegexPreview(settings, sample) {
     postIpcEnvelope({
         type: 'regex-preview',
         requestId,
-        settings: {
-            pattern: settings.pattern,
-            replacement: settings.replacement,
-            caseInsensitive: settings.caseInsensitive,
-            multiline: settings.multiline,
-        },
+        settings: RegexPreview.copyRegexSettings(settings),
         sample,
     });
 
@@ -90,7 +72,6 @@ export function requestRegexPreview(settings, sample) {
 export function handleRegexPreview(payload) {
     const statusEl = document.getElementById('regex-status');
     const previewEl = document.getElementById('regex-preview-result');
-    const patternField = document.getElementById('regex-pattern')?.closest('.field');
     if (!statusEl || !previewEl) {
         return;
     }
@@ -116,9 +97,9 @@ export function handleRegexPreview(payload) {
     statusEl.textContent = ui.statusMessage;
     statusEl.className = ui.statusClass;
 
-    if (patternField) {
-        patternField.classList.toggle('field-invalid', ui.fieldInvalid);
-    }
+    document.querySelectorAll('.regex-step .field').forEach((field) => {
+        field.classList.toggle('field-invalid', ui.fieldInvalid);
+    });
 
     previewEl.textContent = ui.previewText;
     previewEl.classList.toggle('regex-preview-result--error', ui.previewError);

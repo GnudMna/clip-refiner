@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-08-09
+
+### Breaking changes
+
+- 設定スキーマ `version` を 3 へ更新。`[regex]` はフラットな `pattern` / `replacement` から、名前付きプリセット (`presets`) と有効 ID (`active_preset_id`) へ変更した。旧形式は読み込み時にデフォルトプリセット 1 件へ自動移行する
+
+### Added
+
+- 正規表現: 名前付きプリセットに複数ステップを登録し、有効プリセットのステップを上から順に適用できるようにした (設定 UI・`config.toml`・`--regex-preset`)
+- トレイメニュー「正規表現プリセット」から有効プリセットを切り替えられるようにした (変換モードの直後。連続記録中は無効)
+
+### Improved
+
+- 加工スキップ時のフィードバック: 本文上限超過・パーサー上限超過・正規表現タイムアウトを、監視・手動加工・ワンショットでデスクトップ通知 (タイトル「加工をスキップ」) または標準エラー出力へ案内する。連続記録の本文上限超過も同様に通知する
+
 ## [0.15.0] - 2026-08-01
 
 ### Breaking changes
@@ -551,7 +566,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.1...develop
+[0.15.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...v0.15.1
 [0.15.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...v0.15.0
 [0.14.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...v0.14.3
 [0.14.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...v0.14.2

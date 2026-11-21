@@ -118,11 +118,11 @@ interval_ms = 1000
             "version の説明コメントがない: {content}"
         );
         assert!(
-            content.contains("# 正規表現パターン"),
-            "regex.pattern の説明コメントがない: {content}"
+            content.contains("# 有効な正規表現プリセットの ID"),
+            "regex.active_preset_id の説明コメントがない: {content}"
         );
         assert!(
-            content.contains("# 正規表現変換モード用のパターンと置換文字列"),
+            content.contains("# 正規表現プリセット (パターン・置換文字列の名前付きセット)"),
             "regex セクション見出しがない: {content}"
         );
         assert!(content.contains("[regex]"));
@@ -143,7 +143,8 @@ interval_ms = 1000
         assert!(content.contains("[notification_settings]"));
         assert!(content.contains("  enabled = "));
         assert!(content.contains("[regex]"));
-        assert!(content.contains("  pattern = "));
+        assert!(content.contains("  active_preset_id = "));
+        assert!(content.contains("  presets = "));
     }
 
     /// コメント付き TOML を読み戻しても設定値が一致すること
@@ -151,8 +152,8 @@ interval_ms = 1000
     fn test_commented_toml_roundtrip() {
         let mut config = AppConfig::default();
         config.notification_settings.enabled = true;
-        config.regex.pattern = r"\d+".to_string();
-        config.regex.case_insensitive = true;
+        config.regex = crate::config::RegexSettings::single(r"\d+", "X");
+        config.regex.presets[0].steps[0].case_insensitive = true;
 
         let content = config_to_toml(&config, None).expect("コメント付き TOML の生成に失敗");
         let decoded: AppConfig = toml::from_str(&content).expect("コメント付き TOML の解析に失敗");

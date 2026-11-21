@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::context::RefineContext;
+use super::context::{RefineContext, RefineSkipReason};
 use super::mode::RefineMode;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
 use super::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
@@ -39,8 +39,14 @@ pub enum ClipboardProcessError {
     #[error("クリップボードにテキストがありません")]
     NoText,
     /// クリップボード本文が処理上限を超えている
-    #[error("クリップボードのテキストが大きすぎます")]
+    #[error("クリップボードのテキストが処理上限を超えています")]
     TextTooLarge,
+    /// 正規表現マッチが制限時間を超過した
+    #[error("正規表現の実行が制限時間を超えました")]
+    RegexTimedOut,
+    /// JSON / YAML / Markdown パーサー入力が上限を超えている
+    #[error("テキストがパーサー上限を超えています")]
+    ParserInputTooLarge,
     /// クリップボードの読み取りに失敗
     #[error("クリップボードの読み取りに失敗しました")]
     ReadFailed(String),
@@ -64,11 +70,32 @@ impl ClipboardProcessError {
     pub fn user_message(&self) -> &str {
         match self {
             Self::NoText => "クリップボードにテキストがありません",
-            Self::TextTooLarge => "クリップボードのテキストが大きすぎます",
+            Self::TextTooLarge => "テキストが処理上限 (2 MiB) を超えているため加工しませんでした",
+            Self::RegexTimedOut => {
+                "正規表現の実行が制限時間 (2 秒) を超えたため、元のテキストを維持しました"
+            }
+            Self::ParserInputTooLarge => {
+                "テキストがパーサー上限 (1 MiB) を超えているため加工しませんでした"
+            }
             Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
             Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
             Self::NoImage => "クリップボードに Excel の描画画像がありません",
         }
+    }
+
+    /// 上限超過・タイムアウトなど、加工を意図的に打ち切ったスキップか判定する
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipboardProcessError`
+    ///
+    /// # Returns
+    /// * `bool` - スキップ理由なら `true`
+    #[must_use]
+    pub fn is_skip(&self) -> bool {
+        matches!(
+            self,
+            Self::TextTooLarge | Self::RegexTimedOut | Self::ParserInputTooLarge
+        )
     }
 }
 
@@ -137,9 +164,20 @@ pub fn apply_pipeline_to_text(
         return Ok(ClipboardProcessOutcome::Unchanged);
     }
 
+    ctx.clear_skip_reason();
     match apply_text_pipeline(text, &text_modes, ctx) {
-        Some(result) => Ok(ClipboardProcessOutcome::Processed(result)),
-        None => Ok(ClipboardProcessOutcome::Unchanged),
+        Some(result) => {
+            // 前段で変更済みなら後段のスキップは部分成功として扱う
+            let _ = ctx.take_skip_reason();
+            Ok(ClipboardProcessOutcome::Processed(result))
+        }
+        None => match ctx.take_skip_reason() {
+            Some(RefineSkipReason::RegexTimedOut) => Err(ClipboardProcessError::RegexTimedOut),
+            Some(RefineSkipReason::ParserInputTooLarge) => {
+                Err(ClipboardProcessError::ParserInputTooLarge)
+            }
+            None => Ok(ClipboardProcessOutcome::Unchanged),
+        },
     }
 }
 
@@ -377,7 +415,15 @@ mod tests {
         );
         assert_eq!(
             ClipboardProcessError::TextTooLarge.user_message(),
-            "クリップボードのテキストが大きすぎます"
+            "テキストが処理上限 (2 MiB) を超えているため加工しませんでした"
+        );
+        assert_eq!(
+            ClipboardProcessError::RegexTimedOut.user_message(),
+            "正規表現の実行が制限時間 (2 秒) を超えたため、元のテキストを維持しました"
+        );
+        assert_eq!(
+            ClipboardProcessError::ParserInputTooLarge.user_message(),
+            "テキストがパーサー上限 (1 MiB) を超えているため加工しませんでした"
         );
         assert_eq!(
             ClipboardProcessError::ReadFailed("detail".to_string()).user_message(),
@@ -390,6 +436,20 @@ mod tests {
         assert_eq!(
             ClipboardProcessError::NoImage.user_message(),
             "クリップボードに Excel の描画画像がありません"
+        );
+        assert!(ClipboardProcessError::TextTooLarge.is_skip());
+        assert!(ClipboardProcessError::RegexTimedOut.is_skip());
+        assert!(ClipboardProcessError::ParserInputTooLarge.is_skip());
+        assert!(!ClipboardProcessError::NoText.is_skip());
+    }
+
+    /// パーサー上限超過は `ParserInputTooLarge` になるようにすること
+    #[test]
+    fn apply_pipeline_to_text_reports_parser_input_too_large() {
+        let oversized = "a".repeat(crate::consts::MAX_PARSER_INPUT_BYTES + 1);
+        assert_eq!(
+            apply_pipeline_to_text(&oversized, &[RefineMode::JsonFormat], &empty_ctx()),
+            Err(ClipboardProcessError::ParserInputTooLarge)
         );
     }
 

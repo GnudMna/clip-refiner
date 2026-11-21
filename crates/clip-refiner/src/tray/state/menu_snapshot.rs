@@ -31,4 +31,8 @@ pub struct MenuSnapshot {
     pub notification_settings: NotificationSettings,
     /// 一時停止中かどうか
     pub is_paused: bool,
+    /// 有効な正規表現プリセット ID
+    pub regex_active_preset_id: String,
+    /// 正規表現プリセット一覧 (`id`, `name`)
+    pub regex_presets: Vec<(String, String)>,
 }

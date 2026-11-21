@@ -39,11 +39,9 @@ pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_PASTE: &str =
     "連続記録キュー先頭をクリップボードへ載せて貼り付け";
 pub(crate) const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 pub(crate) const DOC_HOTKEY_FAVORITE_SLOTS: &str = "お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / Alt+Shift+F1〜F11。空文字で無効)";
-pub(crate) const DOC_REGEX_PATTERN: &str = "正規表現パターン";
-pub(crate) const DOC_REGEX_REPLACEMENT: &str =
-    "置換文字列 (RegexReplace で使用。キャプチャグループは $1 形式)";
-pub(crate) const DOC_REGEX_CASE_INSENSITIVE: &str = "大文字小文字を無視する ((?i) 相当)";
-pub(crate) const DOC_REGEX_MULTILINE: &str = "複数行モード ((?m) 相当)";
+pub(crate) const DOC_REGEX_ACTIVE_PRESET_ID: &str = "有効な正規表現プリセットの ID";
+pub(crate) const DOC_REGEX_PRESETS: &str =
+    "名前付き正規表現プリセット (steps を上から順に適用。最大 20 件 / 各最大 10 ステップ)";
 
 pub(crate) const SECTION_BASIC: &str = "基本";
 pub(crate) const SECTION_MONITOR: &str = "監視";
@@ -53,7 +51,7 @@ pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_HOTKEYS: &str =
     "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は数秒以内に自動反映)";
-pub(crate) const SECTION_REGEX: &str = "正規表現変換モード用のパターンと置換文字列";
+pub(crate) const SECTION_REGEX: &str = "正規表現プリセット (パターン・置換文字列の名前付きセット)";
 
 pub(crate) const SECTION_RULE: &str =
     "# -----------------------------------------------------------------------------";

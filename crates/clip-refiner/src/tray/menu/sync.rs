@@ -78,6 +78,7 @@ impl TrayMenu {
         self.pause_item.set_checked(snap.is_paused);
 
         self.refresh_clips(state)?;
+        self.refresh_regex_presets_logged(state);
         self.refresh_history(state)?;
         self.refresh_continuous_record(state)?;
         self.sync_auto_processing_state(state);
@@ -87,8 +88,8 @@ impl TrayMenu {
 
     /// 連続記録の有効状態に応じて自動加工関連のメニュー表示を同期する
     ///
-    /// 連続記録中は変換モードメニューを無効化し、連続記録サブメニュー名とトレイツールチップで
-    /// 自動加工が停止していることを示す
+    /// 連続記録中は変換モード・正規表現プリセットメニューを無効化し、連続記録サブメニュー名と
+    /// トレイツールチップで自動加工が停止していることを示す
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
@@ -96,6 +97,9 @@ impl TrayMenu {
         let continuous_record_enabled = state.with_config(|c| c.continuous_record_enabled);
 
         self.refine
+            .main_submenu
+            .set_enabled(!continuous_record_enabled);
+        self.regex_presets
             .main_submenu
             .set_enabled(!continuous_record_enabled);
 

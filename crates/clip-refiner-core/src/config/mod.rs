@@ -1,6 +1,7 @@
 //! `ClipRefiner` の設定型と永続化 API
 //!
 //! [`AppConfig`] は `config.toml` の内容に対応する。正規表現設定 ([`RegexSettings`]) は
+//! 名前付きプリセットとステップ列を保持し、有効プリセットが加工に使われる。
 //! [`RefineContext::from_config`](crate::RefineContext::from_config) 経由で加工 API に渡せる
 
 mod atomic_io;
@@ -28,8 +29,8 @@ pub use persistence::{
 };
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
-    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
-    SelectorWebviewRetention, format_hotkey_fixes_message,
+    HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegexPreset, RegexSettings,
+    RegexStep, ResolvedClip, SelectorWebviewRetention, format_hotkey_fixes_message,
 };
 pub use unknown_keys::format_unknown_config_keys_message;
 

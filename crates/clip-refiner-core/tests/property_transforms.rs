@@ -35,8 +35,7 @@ proptest! {
     #[test]
     fn regex_replace_digits_are_stable(input in "[0-9]{0,32}") {
         let mut config = AppConfig::default();
-        config.regex.pattern = r"\d".to_string();
-        config.regex.replacement = "X".to_string();
+        config.regex = clip_refiner_core::config::RegexSettings::single(r"\d", "X");
         let ctx = RefineContext::from_config(&config);
         let once = RefineMode::RegexReplace.refine(&input, &ctx);
         let twice = RefineMode::RegexReplace.refine(&once, &ctx);

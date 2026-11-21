@@ -75,9 +75,10 @@ mod tests {
             panic!("Apply アクションとして解釈されること");
         };
         let regex = patch.regex.expect("regex が含まれること");
-        assert_eq!(regex.pattern, "a");
-        assert_eq!(regex.replacement, "b");
-        assert!(regex.case_insensitive);
+        let step = &regex.active_steps()[0];
+        assert_eq!(step.pattern, "a");
+        assert_eq!(step.replacement, "b");
+        assert!(step.case_insensitive);
     }
 
     /// `SettingsPatch::merge_from` で複数フィールドを統合できるようにすること
@@ -334,10 +335,11 @@ mod tests {
             panic!("RegexPreview アクションとして解釈されること");
         };
         assert_eq!(request_id, 3);
-        assert_eq!(settings.pattern, "[0-9]+");
-        assert_eq!(settings.replacement, "X");
-        assert!(!settings.case_insensitive);
-        assert!(settings.multiline);
+        let step = &settings.active_steps()[0];
+        assert_eq!(step.pattern, "[0-9]+");
+        assert_eq!(step.replacement, "X");
+        assert!(!step.case_insensitive);
+        assert!(step.multiline);
         assert_eq!(sample, "abc 42");
     }
 

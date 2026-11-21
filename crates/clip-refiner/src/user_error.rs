@@ -92,6 +92,15 @@ impl UserNotification {
         crate::log_error!("{}: {} ({source:?})", self.title, self.body);
         platform::show_notification(self.title, &self.body);
     }
+
+    /// 加工スキップを警告ログ付きで通知する
+    ///
+    /// # Arguments
+    /// * `self` - この `UserNotification`
+    pub fn notify_skip(&self) {
+        crate::log_warn!("{}: {}", self.title, self.body);
+        platform::show_notification(self.title, &self.body);
+    }
 }
 
 // ======================================================================
@@ -151,7 +160,12 @@ impl ClipboardWriteContext {
 // ======================================================================
 impl From<&ClipboardProcessError> for UserNotification {
     fn from(err: &ClipboardProcessError) -> Self {
-        Self::new(titles::PROCESS, err.user_message())
+        let title = if err.is_skip() {
+            titles::PROCESS_SKIP
+        } else {
+            titles::PROCESS
+        };
+        Self::new(title, err.user_message())
     }
 }
 
@@ -191,6 +205,18 @@ pub fn registered_clip_register_failure(err: AddRegisteredClipError) -> UserNoti
         AddRegisteredClipError::EncryptFailed => "登録クリップの暗号化に失敗しました",
     };
     UserNotification::static_message(titles::REGISTERED_CLIP, body)
+}
+
+/// 連続記録で本文が上限超過のときの通知を返す
+///
+/// # Returns
+/// * `UserNotification` - 記録スキップの案内
+#[must_use]
+pub fn continuous_record_text_too_large() -> UserNotification {
+    UserNotification::static_message(
+        titles::CONTINUOUS_RECORD,
+        "テキストが処理上限 (2 MiB) を超えているため記録しませんでした",
+    )
 }
 
 /// 設定ファイルの保存失敗をユーザー通知へ変換する
@@ -321,8 +347,10 @@ const NOTIFICATION_BODY_MAX_CHARS: usize = 240;
 /// 通知タイトル定数
 pub mod titles {
     pub const CLIPBOARD: &str = "クリップボードエラー";
+    pub const CONTINUOUS_RECORD: &str = "連続記録";
     pub const OCR: &str = "OCR エラー";
     pub const PROCESS: &str = "加工エラー";
+    pub const PROCESS_SKIP: &str = "加工をスキップ";
     pub const REGISTERED_CLIP: &str = "登録クリップ";
     pub const SETTINGS: &str = "設定エラー";
     pub const STARTUP: &str = "起動エラー";
@@ -353,6 +381,22 @@ mod tests {
         let notification = UserNotification::from(ClipboardProcessError::NoText);
         assert_eq!(notification.title(), titles::PROCESS);
         assert_eq!(notification.body(), "クリップボードにテキストがありません");
+    }
+
+    /// 加工スキップは専用タイトルになるようにすること
+    #[test]
+    fn clipboard_process_skip_uses_skip_title() {
+        let notification = UserNotification::from(ClipboardProcessError::TextTooLarge);
+        assert_eq!(notification.title(), titles::PROCESS_SKIP);
+        assert!(notification.body().contains("2 MiB"));
+    }
+
+    /// 連続記録の上限超過通知が固定文言を返すようにすること
+    #[test]
+    fn continuous_record_text_too_large_message() {
+        let notification = continuous_record_text_too_large();
+        assert_eq!(notification.title(), titles::CONTINUOUS_RECORD);
+        assert!(notification.body().contains("記録しませんでした"));
     }
 
     /// 更新エラーは `UPDATE` タイトルと `Display` 本文になるようにすること

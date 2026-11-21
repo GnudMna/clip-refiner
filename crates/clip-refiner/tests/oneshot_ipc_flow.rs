@@ -71,17 +71,23 @@ fn oneshot_ipc_pipe_forwards_regex_override() {
         let (worker, rx) = stub_worker(&state);
         let _responder = spawn_oneshot_stub_responder(rx, |pipeline, ctx| {
             assert_eq!(pipeline, vec![RefineMode::RegexReplace]);
-            assert_eq!(ctx.regex.pattern, "(world)");
-            assert_eq!(ctx.regex.replacement, "ClipRefiner");
-            assert!(ctx.regex.case_insensitive);
+            let step = &ctx.regex.active_steps()[0];
+            assert_eq!(step.pattern, "(world)");
+            assert_eq!(step.replacement, "ClipRefiner");
+            assert!(step.case_insensitive);
             OneshotProcessResult::Processed
         });
         let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
 
         let mut ctx = RefineContext::default();
-        ctx.regex.pattern = "(world)".into();
-        ctx.regex.replacement = "ClipRefiner".into();
-        ctx.regex.case_insensitive = true;
+        ctx.regex = clip_refiner_core::config::RegexSettings::from_step(
+            clip_refiner_core::config::RegexStep {
+                pattern: "(world)".into(),
+                replacement: "ClipRefiner".into(),
+                case_insensitive: true,
+                ..Default::default()
+            },
+        );
 
         let response = process_oneshot_via_pipe(&pipe_name, &[RefineMode::RegexReplace], &ctx)
             .expect("IPC 往復");

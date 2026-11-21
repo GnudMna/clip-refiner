@@ -79,7 +79,7 @@ function prepareConfigDir(options: HarnessOptions = {}): string {
   const favoriteModes = options.favoriteModes ?? ['Trim', 'UrlDecode'];
   const favoriteModesToml = favoriteModes.map((mode) => `"${mode}"`).join(', ');
   const configToml = `# ClipRefiner E2E fixture
-version = 2
+version = 3
 interval_ms = 1000
 mode = "UrlDecode"
 is_paused = false
@@ -91,10 +91,12 @@ continuous_record_limit = 10
 favorite_modes = [${favoriteModesToml}]
 
 [regex]
-pattern = "foo"
-replacement = "bar"
-case_insensitive = false
-multiline = false
+active_preset_id = "default"
+presets = [
+  { id = "default", name = "デフォルト", steps = [
+    { pattern = "foo", replacement = "bar", case_insensitive = false, multiline = false },
+  ]},
+]
 
 [hotkeys]
 quick_selector = "Alt+Shift+S"

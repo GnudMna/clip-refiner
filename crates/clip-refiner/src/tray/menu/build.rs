@@ -36,6 +36,8 @@ impl TrayMenu {
         let history = Self::build_history_menu(snap.history_enabled)?;
         let continuous_record = Self::build_continuous_record_menu(snap.continuous_record_enabled)?;
         let clips = Self::build_clips_menu(state)?;
+        let regex_presets =
+            Self::build_regex_preset_menu(&snap.regex_active_preset_id, &snap.regex_presets)?;
         let notification = Self::build_notification_menu(&snap.notification_settings)?;
 
         // その他のメニュー
@@ -47,14 +49,15 @@ impl TrayMenu {
         let quit_item = MenuItem::new("終了", true, None);
 
         // メインメニューの組み立て
-        // クリップボード加工: 変換モード / 監視 / 登録クリップ
-        // 補助機能: 履歴 / 連続記録 / 通知
+        // クリップボード加工: 変換モード / 正規表現プリセット / 連続記録 / 登録クリップ
+        // 補助機能: 履歴 / 通知
         // 設定: 更新確認 / 設定ウィンドウ
         // 操作: 監視再開 / 一時停止 / 終了
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
                 &refine.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &regex_presets.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &clips.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
@@ -92,6 +95,7 @@ impl TrayMenu {
             history,
             continuous_record,
             clips,
+            regex_presets,
             notification,
             check_update_item,
             open_settings_window_item,

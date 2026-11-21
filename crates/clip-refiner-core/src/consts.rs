@@ -44,7 +44,7 @@ pub const PORTABLE_DATA_DIR_NAME: &str = "data";
 /// 設定ファイルのスキーマバージョン
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
@@ -75,6 +75,21 @@ pub const MAX_CLIPBOARD_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
 /// 正規表現パターンの最大バイト数 (8 KiB)
 pub const MAX_REGEX_PATTERN_BYTES: usize = 8 * 1024;
+
+/// 正規表現プリセットの最大件数
+pub const MAX_REGEX_PRESETS: usize = 20;
+
+/// 正規表現プリセットあたりの最大ステップ数
+pub const MAX_REGEX_STEPS_PER_PRESET: usize = 10;
+
+/// 正規表現コンパイルキャッシュの最大エントリ数
+pub const REGEX_PATTERN_CACHE_CAPACITY: usize = 8;
+
+/// 既定の正規表現プリセット ID
+pub const DEFAULT_REGEX_PRESET_ID: &str = "default";
+
+/// 既定の正規表現プリセット表示名
+pub const DEFAULT_REGEX_PRESET_NAME: &str = "デフォルト";
 
 /// 正規表現マッチの最大実行時間 (ミリ秒)
 ///

@@ -104,6 +104,16 @@ export function maxRegexPatternBytes() {
     return limits().maxRegexPatternBytes ?? 8 * 1024;
 }
 
+/** @returns {number} 正規表現プリセットの最大件数 */
+export function maxRegexPresets() {
+    return limits().maxRegexPresets ?? 20;
+}
+
+/** @returns {number} 正規表現プリセットあたりの最大ステップ数 */
+export function maxRegexStepsPerPreset() {
+    return limits().maxRegexStepsPerPreset ?? 10;
+}
+
 /**
  * コンテンツ領域でフォーム要素が編集中かどうか
  *

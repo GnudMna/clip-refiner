@@ -45,7 +45,7 @@ export const ctx = {
     /** @type {boolean} */
     contentDelegationBound: false,
     /** @type {boolean} */
-    updateBusy: false,
+    selectedRegexPresetId: null,
     /**
      * 直近の更新確認 / 適用結果
      *

@@ -66,8 +66,7 @@ fn oneshot_pipeline_returns_unchanged_when_no_diff() {
 #[test]
 fn oneshot_context_uses_config_regex_settings() {
     let mut config = AppConfig::default();
-    config.regex.pattern = "(world)".to_string();
-    config.regex.replacement = "ClipRefiner".to_string();
+    config.regex = clip_refiner_core::config::RegexSettings::single("(world)", "ClipRefiner");
     let ctx = RefineContext::from_config(&config);
     let mut clipboard = InMemoryTextClipboard::with_text("hello world");
     let pipeline = vec![RefineMode::RegexReplace];

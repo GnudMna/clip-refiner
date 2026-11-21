@@ -9,11 +9,24 @@
  */
 
 /**
- * @typedef {Object} RegexSettings
+ * @typedef {Object} RegexStep
  * @property {string} pattern - 正規表現パターン
  * @property {string} replacement - 置換文字列
  * @property {boolean} caseInsensitive - 大文字小文字を無視するか
  * @property {boolean} multiline - 複数行モードか
+ */
+
+/**
+ * @typedef {Object} RegexPreset
+ * @property {string} id - プリセット ID
+ * @property {string} name - 表示名
+ * @property {RegexStep[]} steps - ステップ列
+ */
+
+/**
+ * @typedef {Object} RegexSettings
+ * @property {string} activePresetId - 有効プリセット ID
+ * @property {RegexPreset[]} presets - プリセット一覧
  */
 
 /**
@@ -75,27 +88,59 @@ var RegexPreview = (function () {
         if (!a || !b) {
             return false;
         }
-        return (
-            a.pattern === b.pattern &&
-            a.replacement === b.replacement &&
-            a.caseInsensitive === b.caseInsensitive &&
-            a.multiline === b.multiline
-        );
+        return JSON.stringify(a) === JSON.stringify(b);
     }
 
     /**
-     * 設定オブジェクトの浅いコピー
+     * ステップの浅いコピー
+     *
+     * @param {RegexStep} step
+     * @returns {RegexStep}
+     */
+    function copyStep(step) {
+        return {
+            pattern: step.pattern ?? '',
+            replacement: step.replacement ?? '',
+            caseInsensitive: !!step.caseInsensitive,
+            multiline: !!step.multiline,
+        };
+    }
+
+    /**
+     * 設定オブジェクトのコピー
      *
      * @param {RegexSettings} settings
      * @returns {RegexSettings}
      */
     function copyRegexSettings(settings) {
         return {
-            pattern: settings.pattern,
-            replacement: settings.replacement,
-            caseInsensitive: settings.caseInsensitive,
-            multiline: settings.multiline,
+            activePresetId: settings.activePresetId ?? '',
+            presets: (settings.presets || []).map(function (preset) {
+                return {
+                    id: preset.id ?? '',
+                    name: preset.name ?? '',
+                    steps: (preset.steps || []).map(copyStep),
+                };
+            }),
         };
+    }
+
+    /**
+     * 有効 (または先頭) プリセットのステップを返す
+     *
+     * @param {RegexSettings} settings
+     * @returns {RegexStep[]}
+     */
+    function activeSteps(settings) {
+        const presets = settings.presets || [];
+        if (presets.length === 0) {
+            return [];
+        }
+        const active =
+            presets.find(function (preset) {
+                return preset.id === settings.activePresetId;
+            }) || presets[0];
+        return active.steps || [];
     }
 
     /**
@@ -109,21 +154,42 @@ var RegexPreview = (function () {
      * @returns {RegexValidationResult}
      */
     function validateRegexSettings(settings, lastRegexPreview, maxPatternBytes) {
-        const pattern = settings.pattern ?? '';
-        if (pattern.length === 0) {
+        const encoder = new TextEncoder();
+        const presets = settings.presets || [];
+        for (let p = 0; p < presets.length; p += 1) {
+            const preset = presets[p];
+            const steps = preset.steps || [];
+            for (let s = 0; s < steps.length; s += 1) {
+                const pattern = steps[s].pattern ?? '';
+                if (encoder.encode(pattern).length > maxPatternBytes) {
+                    return {
+                        valid: false,
+                        status: 'error',
+                        message:
+                            'プリセット「' +
+                            (preset.name || '') +
+                            '」のステップ ' +
+                            (s + 1) +
+                            ' : パターンが長すぎます (最大 ' +
+                            maxPatternBytes +
+                            ' バイト)',
+                    };
+                }
+            }
+        }
+
+        const steps = activeSteps(settings);
+        const allEmpty = steps.every(function (step) {
+            return !(step.pattern ?? '');
+        });
+        if (allEmpty) {
             return {
                 valid: true,
                 status: 'empty',
                 message: 'パターンが空です (マッチしません)',
             };
         }
-        if (new TextEncoder().encode(pattern).length > maxPatternBytes) {
-            return {
-                valid: false,
-                status: 'error',
-                message: 'パターンが長すぎます (最大 ' + maxPatternBytes + ' バイト)',
-            };
-        }
+
         if (regexSettingsEqual(settings, lastRegexPreview.settings)) {
             return {
                 valid: lastRegexPreview.valid,
@@ -146,11 +212,14 @@ var RegexPreview = (function () {
      * @returns {RegexPreviewUi}
      */
     function buildPreviewUi(payload, domSettings) {
-        const pattern = domSettings.pattern ?? '';
+        const steps = activeSteps(domSettings);
+        const allEmpty = steps.every(function (step) {
+            return !(step.pattern ?? '');
+        });
         let status = 'ok';
         if (!payload.valid) {
             status = 'error';
-        } else if (!pattern) {
+        } else if (allEmpty) {
             status = 'empty';
         }
         return {
@@ -158,7 +227,7 @@ var RegexPreview = (function () {
             statusClass: 'regex-status regex-status--' + status,
             fieldInvalid: status === 'error',
             previewText: payload.result ?? '—',
-            previewError: !payload.valid && pattern.length > 0,
+            previewError: !payload.valid && !allEmpty,
         };
     }
 
@@ -210,6 +279,8 @@ var RegexPreview = (function () {
     return {
         regexSettingsEqual,
         copyRegexSettings,
+        copyStep,
+        activeSteps,
         validateRegexSettings,
         buildPreviewUi,
         resolveRegexPreviewResponse,

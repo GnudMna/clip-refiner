@@ -11,6 +11,7 @@ pub mod monitor;
 pub mod notification;
 pub mod record;
 pub mod refine;
+pub mod regex;
 pub mod update;
 
 pub(crate) use app_control::handle_app_control;
@@ -26,6 +27,7 @@ pub(crate) use record::{
 pub(crate) use refine::{
     handle_favorites_event, handle_refine_mode_event, move_favorite_mode, toggle_favorite_mode,
 };
+pub(crate) use regex::handle_regex_preset_event;
 pub(crate) use update::{
     handle_update_apply_finished, handle_update_check_finished, start_update_apply,
     start_update_check,

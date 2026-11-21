@@ -7,7 +7,7 @@ import { ctx } from './ctx.js';
 import { bindActivePanelEvents, bindContentDelegation } from './events.js';
 import { closeWindow, flushPendingApply, openConfigFile, showApplyFeedback } from './ipc_apply.js';
 import { PANEL_RENDERERS, ensureSidebar } from './panels.js';
-import { handleRegexPreview, readRegexFromDom, readRegexSampleFromDom } from './regex_feedback.js';
+import { handleRegexPreview, readRegexForApply, readRegexSampleFromDom } from './regex_feedback.js';
 import {
     invalidateAllPanels,
     invalidatePanel,
@@ -62,7 +62,7 @@ function renderActivePanel(force = false) {
 }
 
 /** アクティブタブのパネルを破棄して再描画する */
-function refreshActivePanel() {
+export function refreshActivePanel() {
     invalidatePanel(ctx.activeTab);
     renderActivePanel(true);
 }
@@ -90,7 +90,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
 
     if (editingTab === 'regex' && !opts.externalSync) {
         snapshot = Object.assign({}, snapshot, {
-            regex: readRegexFromDom(),
+            regex: readRegexForApply(),
             regexPreviewSample: readRegexSampleFromDom(),
         });
     }

@@ -135,6 +135,13 @@ pub enum OneshotIpcRequest {
 /// ワンショット要求の正規表現上書き
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OneshotRegexOverride {
+    /// 有効化するプリセット名 (名前の先頭一致)
+    #[serde(
+        default,
+        rename = "presetName",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub preset_name: Option<String>,
     /// 正規表現パターン
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
@@ -160,17 +167,21 @@ impl OneshotRegexOverride {
     /// * `self` - 上書き内容
     /// * `ctx` - 適用先コンテキスト
     pub fn apply_to(&self, ctx: &mut RefineContext) {
-        if let Some(pattern) = &self.pattern {
-            ctx.regex.pattern.clone_from(pattern);
+        if let Some(name) = &self.preset_name {
+            let _ = ctx.regex.select_preset_by_name(name);
         }
-        if let Some(replacement) = &self.replacement {
-            ctx.regex.replacement.clone_from(replacement);
-        }
-        if let Some(case_insensitive) = self.case_insensitive {
-            ctx.regex.case_insensitive = case_insensitive;
-        }
-        if let Some(multiline) = self.multiline {
-            ctx.regex.multiline = multiline;
+
+        let has_step_override = self.pattern.is_some()
+            || self.replacement.is_some()
+            || self.case_insensitive.is_some()
+            || self.multiline.is_some();
+        if has_step_override {
+            ctx.regex.apply_oneshot_step_override(
+                self.pattern.clone(),
+                self.replacement.clone(),
+                self.case_insensitive,
+                self.multiline,
+            );
         }
     }
 
@@ -182,11 +193,18 @@ impl OneshotRegexOverride {
     /// # Returns
     /// * `Self` - 正規表現フィールドをすべて埋めた上書き
     pub fn from_context(ctx: &RefineContext) -> Self {
+        let step = ctx
+            .regex
+            .active_steps()
+            .first()
+            .cloned()
+            .unwrap_or_default();
         Self {
-            pattern: Some(ctx.regex.pattern.clone()),
-            replacement: Some(ctx.regex.replacement.clone()),
-            case_insensitive: Some(ctx.regex.case_insensitive),
-            multiline: Some(ctx.regex.multiline),
+            preset_name: ctx.regex.active_preset().map(|preset| preset.name.clone()),
+            pattern: Some(step.pattern),
+            replacement: Some(step.replacement),
+            case_insensitive: Some(step.case_insensitive),
+            multiline: Some(step.multiline),
         }
     }
 }
@@ -338,12 +356,14 @@ mod tests {
     /// 要求 JSON を往復できるようにすること
     #[test]
     fn request_json_roundtrip() {
-        let ctx = RefineContext::with_regex(crate::config::RegexSettings {
-            pattern: "a".into(),
-            replacement: "b".into(),
-            case_insensitive: true,
-            multiline: false,
-        });
+        let ctx = RefineContext::with_regex(crate::config::RegexSettings::from_step(
+            crate::config::RegexStep {
+                pattern: "a".into(),
+                replacement: "b".into(),
+                case_insensitive: true,
+                multiline: false,
+            },
+        ));
         let request = build_request(&[RefineMode::Trim, RefineMode::UrlDecode], &ctx, "req-1");
         let json = serde_json::to_string(&request).expect("serialize");
         let parsed = parse_request(&json).expect("parse");
@@ -364,6 +384,7 @@ mod tests {
     #[test]
     fn regex_override_applies_to_context() {
         let override_settings = OneshotRegexOverride {
+            preset_name: None,
             pattern: Some("foo".into()),
             replacement: Some("bar".into()),
             case_insensitive: Some(true),
@@ -371,9 +392,10 @@ mod tests {
         };
         let mut ctx = RefineContext::default();
         override_settings.apply_to(&mut ctx);
-        assert_eq!(ctx.regex.pattern, "foo");
-        assert_eq!(ctx.regex.replacement, "bar");
-        assert!(ctx.regex.case_insensitive);
-        assert!(ctx.regex.multiline);
+        let step = &ctx.regex.active_steps()[0];
+        assert_eq!(step.pattern, "foo");
+        assert_eq!(step.replacement, "bar");
+        assert!(step.case_insensitive);
+        assert!(step.multiline);
     }
 }

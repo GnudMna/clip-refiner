@@ -281,6 +281,18 @@ var SettingsPanelsLogic = (function () {
             return { type: 'pipeline', action, index };
         }
 
+        if (
+            button.classList.contains('regex-preset-up') ||
+            button.classList.contains('regex-preset-down') ||
+            button.classList.contains('regex-preset-remove') ||
+            button.classList.contains('regex-preset-select') ||
+            button.classList.contains('regex-step-up') ||
+            button.classList.contains('regex-step-down') ||
+            button.classList.contains('regex-step-remove')
+        ) {
+            return { type: 'regex-action', button };
+        }
+
         if (button.classList.contains('favorite-remove')) {
             return { type: 'favorite-toggle', mode: button.dataset.mode };
         }

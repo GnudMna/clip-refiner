@@ -15,6 +15,7 @@ import {
 } from './html_builders.js';
 import { render } from './main.js';
 import { buildPipelineInnerHtml } from './monitor_ui.js';
+import { buildRegexEditorHtml } from './regex_ui.js';
 import {
     historyLimitBounds,
     intervalMsBounds,
@@ -348,25 +349,8 @@ function renderHistoryPanel() {
 
 /** @returns {string} 正規表現タブのパネル HTML */
 function renderRegexPanel() {
-    const regex = ctx.state.regex;
     const body =
-        card(
-            '正規表現の置換',
-            '' +
-                '<div class="field"><label for="regex-pattern">パターン</label>' +
-                '<textarea id="regex-pattern">' +
-                escapeHtml(regex.pattern) +
-                '</textarea></div>' +
-                '<div class="field"><label for="regex-replacement">置換文字列</label>' +
-                '<textarea id="regex-replacement">' +
-                escapeHtml(regex.replacement) +
-                '</textarea></div>' +
-                '<div class="option-list">' +
-                optionCheckbox('regex-ci', regex.caseInsensitive, '大文字小文字を無視') +
-                optionCheckbox('regex-ml', regex.multiline, '複数行モード') +
-                '</div>' +
-                '<p id="regex-status" class="regex-status" role="status" aria-live="polite"></p>'
-        ) +
+        card('正規表現プリセット', buildRegexEditorHtml()) +
         card(
             'プレビュー',
             '' +
@@ -378,7 +362,7 @@ function renderRegexPanel() {
                 '<div class="regex-preview-row"><span class="regex-preview-label">結果</span>' +
                 '<code class="regex-preview-result" id="regex-preview-result">—</code></div>' +
                 '</div>' +
-                '<p class="hint">プレビューは ClipRefiner 実行時と同じ Rust 正規表現エンジンで表示</p>'
+                '<p class="hint">選択中プリセットのステップを上から順に regex-replace で適用。本番と同じ Rust 正規表現エンジン</p>'
         );
 
     return panelWrap('regex', body);

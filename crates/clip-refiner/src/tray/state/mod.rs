@@ -146,6 +146,8 @@ mod tests {
         assert!(snap.notification_settings.enabled);
         assert!(snap.notification_settings.notify_result);
         assert!(snap.is_paused);
+        assert_eq!(snap.regex_active_preset_id, "default");
+        assert!(!snap.regex_presets.is_empty());
     }
 
     /// `auto_processing_enabled` が連続記録と一時停止の状態を反映すること

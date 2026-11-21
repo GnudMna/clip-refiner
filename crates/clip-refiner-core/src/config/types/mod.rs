@@ -14,6 +14,6 @@ pub use favorites::{FavoriteMoveDirection, FavoriteToggleResult};
 pub use hotkeys::{HotkeyFix, HotkeyFixKind, HotkeySettings, format_hotkey_fixes_message};
 pub use monitor::MonitorMode;
 pub use notification::NotificationSettings;
-pub use regex::RegexSettings;
+pub use regex::{RegexPreset, RegexSettings, RegexStep};
 pub use registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
 pub use selector_webview::SelectorWebviewRetention;

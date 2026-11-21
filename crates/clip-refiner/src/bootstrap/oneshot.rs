@@ -96,6 +96,11 @@ fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
             eprintln!("テキストに変更はありませんでした");
             Ok(())
         }
+        Err(e) if e.is_skip() => {
+            log_warn!("ワンショット処理をスキップ: {} ({:?})", e.user_message(), e);
+            eprintln!("スキップ: {}", e.user_message());
+            Err(anyhow::anyhow!(e.user_message().to_string()))
+        }
         Err(e) => {
             log_error!("ワンショット処理に失敗: {} ({:?})", e.user_message(), e);
             eprintln!("エラー: {}", e.user_message());
@@ -113,17 +118,21 @@ fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
 fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
     let mut ctx = RefineContext::from_config(config);
 
-    if let Some(pattern) = &args.regex_pattern {
-        ctx.regex.pattern.clone_from(pattern);
+    if let Some(name) = &args.regex_preset {
+        let _ = ctx.regex.select_preset_by_name(name);
     }
-    if let Some(replacement) = &args.regex_replacement {
-        ctx.regex.replacement.clone_from(replacement);
-    }
-    if args.regex_case_insensitive {
-        ctx.regex.case_insensitive = true;
-    }
-    if args.regex_multiline {
-        ctx.regex.multiline = true;
+
+    let has_step_override = args.regex_pattern.is_some()
+        || args.regex_replacement.is_some()
+        || args.regex_case_insensitive
+        || args.regex_multiline;
+    if has_step_override {
+        ctx.regex.apply_oneshot_step_override(
+            args.regex_pattern.clone(),
+            args.regex_replacement.clone(),
+            args.regex_case_insensitive.then_some(true),
+            args.regex_multiline.then_some(true),
+        );
     }
 
     ctx
@@ -196,10 +205,50 @@ mod tests {
 
         let ctx = build_refinement_context(&config, &args);
 
-        assert_eq!(ctx.regex.pattern, "foo");
-        assert_eq!(ctx.regex.replacement, "bar");
-        assert!(ctx.regex.case_insensitive);
-        assert!(ctx.regex.multiline);
+        let step = &ctx.regex.active_steps()[0];
+        assert_eq!(step.pattern, "foo");
+        assert_eq!(step.replacement, "bar");
+        assert!(step.case_insensitive);
+        assert!(step.multiline);
+    }
+
+    /// `--regex-preset` でプリセット名を選択できること
+    #[test]
+    fn build_refinement_context_selects_regex_preset_by_name() {
+        use crate::config::{RegexPreset, RegexSettings, RegexStep};
+
+        let config = AppConfig {
+            regex: RegexSettings {
+                active_preset_id: "a".to_string(),
+                presets: vec![
+                    RegexPreset {
+                        id: "a".to_string(),
+                        name: "A".to_string(),
+                        steps: vec![RegexStep {
+                            pattern: "1".to_string(),
+                            ..RegexStep::default()
+                        }],
+                    },
+                    RegexPreset {
+                        id: "b".to_string(),
+                        name: "日付".to_string(),
+                        steps: vec![RegexStep {
+                            pattern: "2".to_string(),
+                            ..RegexStep::default()
+                        }],
+                    },
+                ],
+            },
+            ..AppConfig::default()
+        };
+        let args = Args {
+            regex_preset: Some("日付".to_string()),
+            ..sample_args_for_test()
+        };
+
+        let ctx = build_refinement_context(&config, &args);
+        assert_eq!(ctx.regex.active_preset_id, "b");
+        assert_eq!(ctx.regex.active_steps()[0].pattern, "2");
     }
 
     /// 加工成功の IPC 応答を `Ok` として扱うようにすること

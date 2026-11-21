@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn send_request_rejects_oversized_body_before_connect() {
         let mut ctx = RefineContext::default();
-        ctx.regex.pattern = "x".repeat(MAX_IPC_MESSAGE_BYTES);
+        ctx.regex = crate::config::RegexSettings::single("x".repeat(MAX_IPC_MESSAGE_BYTES), "");
         let request = build_request(&[RefineMode::RegexReplace], &ctx, "req-huge");
         let body = serde_json::to_string(&request).expect("serialize");
         assert!(body.len() > MAX_IPC_MESSAGE_BYTES);
