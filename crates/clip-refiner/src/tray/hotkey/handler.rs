@@ -1,15 +1,16 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::super::clip_selector::ClipSelectorWindow;
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
 use super::super::event::toggle_continuous_record as apply_continuous_record_toggle;
 use super::super::event::update_refine;
 use super::super::menu::TrayMenu;
-use super::super::notify;
+use super::super::notify::{
+    NotificationCategory, show_category_notification, show_pause_notification,
+};
 use super::super::ocr::OcrCaptureWindow;
-use super::super::quick_selector::QuickSelectorWindow;
+use super::super::selector::{ClipSelectorWindow, QuickSelectorWindow};
 use super::super::state::AppState;
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::register::HotkeyHandler;
@@ -210,7 +211,7 @@ impl HotkeyHandler {
         });
         ctx.menu.pause_item.set_checked(new_paused);
         ctx.state.save_config();
-        notify::show_pause_notification(ctx.state, new_paused, "ショートカット");
+        show_pause_notification(ctx.state, new_paused, "ショートカット");
         bump_monitor_generation(ctx.state);
     }
 
@@ -218,7 +219,9 @@ impl HotkeyHandler {
     pub(super) fn toggle_continuous_record(ctx: &mut HotkeyEventContext<'_>) {
         apply_continuous_record_toggle(ctx.menu, ctx.state, ctx.clipboard_worker);
         let enabled = ctx.state.with_config(|c| c.continuous_record_enabled);
-        platform::show_notification(
+        show_category_notification(
+            ctx.state,
+            NotificationCategory::ContinuousRecord,
             "ショートカット",
             if enabled {
                 "連続記録を有効にしました"

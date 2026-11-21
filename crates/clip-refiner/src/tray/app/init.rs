@@ -6,11 +6,11 @@ use super::super::dispatch;
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::paste_watcher::PasteWatcher;
-use super::super::selector_ui::SelectorUi;
 use super::super::settings::init_settings_window;
 use super::super::state::{AppEvent, AppState};
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::App;
+use crate::tray::selector::SelectorUi;
 
 use anyhow::Result;
 use tao::event_loop::{EventLoop, EventLoopProxy};

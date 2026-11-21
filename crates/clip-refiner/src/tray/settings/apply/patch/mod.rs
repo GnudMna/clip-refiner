@@ -23,7 +23,7 @@ use system::apply_system_patch;
 
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
-use crate::tray::quick_selector::QuickSelectorWindow;
+use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::SettingsWindow;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;

@@ -1,34 +1,31 @@
 # ========================================================================
 # Script Name : format.ps1
-# Description : Windows用のコード整形スクリプト
+# Description : Windows 用のコード整形 (rustfmt / Prettier)
 # Usage       : ./format.ps1
-# Requires    : PowerShell 7.0+
+# Requires    : PowerShell 7.0+, Node.js (npm)
 # ========================================================================
 
 #requires -Version 7.0
 
-# シェルオプションを設定(エラー時に即終了)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ダブルクリック実行時の Enter 待ちヘルパーを読み込み
 . (Join-Path $PSScriptRoot '..\common\wait-if-double-clicked.ps1')
 
 Invoke-ScriptMain {
-    # プロジェクトルートへ移動
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
+    . (Join-Path $PSScriptRoot '..\common\cargo.ps1')
+    . (Join-Path $PSScriptRoot '..\common\npm.ps1')
 
-    # rustfmt を実行
     Write-Host 'rustfmt によるコード整形を実行しています...'
     Write-Host ''
-
-    Write-Host 'コード整形を実行中...'
-    cargo fmt
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "エラー: cargo fmt が終了コード $LASTEXITCODE で失敗しました"
-    }
-
+    Invoke-CargoFmt
     Write-Host ''
+
+    Write-Host 'Prettier による JavaScript 整形を実行しています...'
+    Write-Host ''
+    Invoke-JavaScriptFormat
+    Write-Host ''
+
     Write-Host 'コード整形が完了しました'
 }

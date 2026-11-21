@@ -97,8 +97,40 @@ required-features = ["app"]
 name = "library_api"
 path = "tests/library_api.rs"
 
+[[test]]
+name = "worker_recovery_flow"
+path = "tests/worker_recovery_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "oneshot_flow"
+path = "tests/oneshot_flow.rs"
+
+[[test]]
+name = "settings_ui_logic"
+path = "tests/settings_ui_logic.rs"
+
+[[test]]
+name = "regex_preview_logic"
+path = "tests/regex_preview_logic.rs"
+
+[[test]]
+name = "notification_flow"
+path = "tests/notification_flow.rs"
+required-features = ["app"]
+
+[[test]]
+name = "settings_shared_logic"
+path = "tests/settings_shared_logic.rs"
+required-features = ["app"]
+
+[[test]]
+name = "platform_flow"
+path = "tests/platform_flow.rs"
+required-features = ["app"]
+
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.1" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.2" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }
@@ -140,6 +172,9 @@ windows = { version = "0.62.2", optional = true, features = [
 ] }
 windows-future = { version = "0.3.2", optional = true, features = ["std"] }
 winreg = { version = "0.56.0", optional = true }
+
+[dev-dependencies]
+toml = "1.1.2"
 
 [build-dependencies]
 winres = "0.1"

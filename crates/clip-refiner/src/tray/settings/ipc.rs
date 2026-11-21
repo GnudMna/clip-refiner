@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn parse_ipc_apply_patch() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyMode":false,"notifyResult":true,"notifyPause":true}}}"#,
+            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":true,"notifyPause":true,"notifyOcr":false}}}"#,
         );
         let Some(SettingsIpcAction::Apply(patch)) = action else {
             panic!("Apply アクションとして解釈されること");
@@ -259,16 +259,17 @@ mod tests {
             .notification_settings
             .expect("notification_settings が含まれること");
         assert!(notification.enabled);
-        assert!(!notification.notify_mode);
+        assert!(!notification.notify_process);
         assert!(notification.notify_result);
         assert!(notification.notify_pause);
+        assert!(!notification.notify_ocr);
     }
 
     /// `snake_case` 別名でも IPC パッチを解釈できるようにすること
     #[test]
     fn parse_ipc_apply_patch_nested_snake_case_alias() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notify_mode":false,"notify_result":true,"notify_pause":true}}}"#,
+            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notify_process":false,"notify_result":true,"notify_pause":true,"notify_ocr":false}}}"#,
         );
         let Some(SettingsIpcAction::Apply(patch)) = action else {
             panic!("Apply アクションとして解釈されること");
@@ -277,9 +278,10 @@ mod tests {
             .notification_settings
             .expect("notification_settings が含まれること");
         assert!(notification.enabled);
-        assert!(!notification.notify_mode);
+        assert!(!notification.notify_process);
         assert!(notification.notify_result);
         assert!(notification.notify_pause);
+        assert!(!notification.notify_ocr);
     }
 
     /// ネスト項目の camelCase でも解釈できるようにすること
@@ -315,46 +317,50 @@ mod tests {
     /// `merge_from` でネスト項目を深くマージできるようにすること
     #[test]
     fn merge_settings_patch_deep_merges_nested_fields() {
+        let mut base_settings = NotificationSettings::default();
+        base_settings.enabled = true;
+        base_settings.notify_process = false;
+        base_settings.notify_result = false;
+        base_settings.notify_pause = true;
+        base_settings.notify_ocr = true;
+        let mut merged_settings = NotificationSettings::default();
+        merged_settings.enabled = false;
+        merged_settings.notify_process = true;
+        merged_settings.notify_result = true;
+        merged_settings.notify_pause = false;
+        merged_settings.notify_ocr = false;
         let mut base = SettingsPatch {
-            notification_settings: Some(NotificationSettings {
-                enabled: true,
-                notify_mode: false,
-                notify_result: false,
-                notify_pause: true,
-            }),
+            notification_settings: Some(base_settings),
             ..SettingsPatch::default()
         };
         base.merge_from(&SettingsPatch {
-            notification_settings: Some(NotificationSettings {
-                enabled: false,
-                notify_mode: true,
-                notify_result: true,
-                notify_pause: false,
-            }),
+            notification_settings: Some(merged_settings),
             ..SettingsPatch::default()
         });
         let notification = base
             .notification_settings
             .expect("notification_settings が保持されること");
         assert!(!notification.enabled);
-        assert!(notification.notify_mode);
+        assert!(notification.notify_process);
         assert!(notification.notify_result);
         assert!(!notification.notify_pause);
+        assert!(!notification.notify_ocr);
     }
 
     /// JSON 文字列マージでネスト項目の一部だけを更新できるようにすること
     #[test]
     fn merge_settings_patch_json_strings_preserves_sibling_nested_fields() {
-        let existing = r#"{"notificationSettings":{"enabled":true,"notifyMode":false,"notifyResult":false,"notifyPause":true}}"#;
+        let existing = r#"{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyPause":true,"notifyOcr":true}}"#;
         let incoming = r#"{"notificationSettings":{"notifyResult":true}}"#;
         let merged = merge_settings_patch_json_strings(existing, incoming)
             .expect("マージ後 JSON が生成されること");
         let value: serde_json::Value =
             serde_json::from_str(&merged).expect("マージ後 JSON のパース");
         assert_eq!(value["notificationSettings"]["enabled"], true);
-        assert_eq!(value["notificationSettings"]["notifyMode"], false);
+        assert_eq!(value["notificationSettings"]["notifyProcess"], false);
         assert_eq!(value["notificationSettings"]["notifyResult"], true);
         assert_eq!(value["notificationSettings"]["notifyPause"], true);
+        assert_eq!(value["notificationSettings"]["notifyOcr"], true);
     }
 
     /// `favorite-move` メッセージを解釈できるようにすること
@@ -386,15 +392,15 @@ mod tests {
     fn enqueue_settings_patch_json_deep_merges_nested_fields() {
         let state = Arc::new(crate::tray::state::test_app_state());
 
+        let mut notification_settings = NotificationSettings::default();
+        notification_settings.enabled = true;
+        notification_settings.notify_process = false;
+        notification_settings.notify_result = false;
+        notification_settings.notify_pause = true;
         enqueue_settings_patch(
             &state,
             &SettingsPatch {
-                notification_settings: Some(NotificationSettings {
-                    enabled: true,
-                    notify_mode: false,
-                    notify_result: false,
-                    notify_pause: true,
-                }),
+                notification_settings: Some(notification_settings),
                 ..SettingsPatch::default()
             },
         );

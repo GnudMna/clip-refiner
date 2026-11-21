@@ -1,0 +1,19 @@
+#!/bin/sh
+# ClipRefiner pre-commit: cargo fmt --check
+
+if [ "$CLIP_REFINER_SKIP_HOOK" = "1" ]; then
+    exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)" || exit 1
+
+if command -v pwsh >/dev/null 2>&1; then
+    shell=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+    shell=powershell
+else
+    echo "pre-commit: PowerShell が見つかりません (pwsh または powershell が必要です)" >&2
+    exit 1
+fi
+
+exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/windows/check-pre-commit.ps1"

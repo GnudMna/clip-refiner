@@ -2,6 +2,8 @@
 #
 # 生成: scripts/common/generate-third-party-notices.ps1
 # deny.toml の許可ライセンスに合わせる (Windows のみ)
+# ワークスペース内の非公開クレート (publish = false) はライセンス検査対象外
+# (deny.toml の [licenses.private] と同方針)
 
 accepted = [
     "MIT",
@@ -22,6 +24,8 @@ accepted = [
 targets = [
     "x86_64-pc-windows-msvc",
 ]
+
+private = { ignore = true }
 
 ignore-build-dependencies = true
 ignore-dev-dependencies = true

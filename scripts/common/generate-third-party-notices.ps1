@@ -10,6 +10,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'assert.ps1')
+
 if (-not (Get-Command cargo-about -ErrorAction SilentlyContinue)) {
     throw @(
         'エラー: cargo-about が見つかりません',
@@ -37,8 +39,6 @@ cargo about generate $Template `
     --all-features `
     --locked
 
-if ($LASTEXITCODE -ne 0) {
-    throw "エラー: cargo about generate が終了コード $LASTEXITCODE で失敗しました"
-}
+Assert-LastExitCode -CommandLabel 'cargo about generate'
 
 Write-Host "生成しました: $OutputFile"

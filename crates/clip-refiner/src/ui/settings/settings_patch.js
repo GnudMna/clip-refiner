@@ -22,9 +22,10 @@ var SettingsPatch = (function () {
     function mergePatch(target, patch) {
         for (const [key, value] of Object.entries(patch)) {
             if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-                const nested = target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
-                    ? target[key]
-                    : {};
+                const nested =
+                    target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
+                        ? target[key]
+                        : {};
                 target[key] = mergePatch(nested, value);
             } else {
                 target[key] = value;

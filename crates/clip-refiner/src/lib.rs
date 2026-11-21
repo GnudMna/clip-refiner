@@ -10,14 +10,14 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner = { version = "0.11.0", default-features = false }
+//! clip-refiner = { version = "0.12.2", default-features = false }
 //! ```
 //!
 //! または [`clip-refiner-core`] を直接依存に追加する
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "0.11.0" }
+//! clip-refiner-core = { version = "0.12.2" }
 //! ```
 //!
 //! # 単一モードの加工

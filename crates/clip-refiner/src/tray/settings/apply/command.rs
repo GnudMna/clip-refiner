@@ -6,7 +6,7 @@ use super::refresh::refresh_settings_window;
 
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
-use crate::tray::quick_selector::QuickSelectorWindow;
+use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::SettingsWindow;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;

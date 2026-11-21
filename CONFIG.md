@@ -10,6 +10,7 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 - [加工モード一覧](#加工モード一覧)
 - [加工モードの使用例](#加工モードの使用例)
 - [ホットキー形式](#ホットキー形式)
+- [通知 (`notification_settings`)](#通知-notification_settings)
 - [UI 操作](#ui-操作)
 - [設定ウィンドウ](#設定ウィンドウ)
 - [画面 OCR](#画面-ocr)
@@ -70,14 +71,19 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 | `continuous_record_enabled` | bool | `false` | 連続記録モード (監視時は加工せず元テキストを記録) |
 | `continuous_record_limit` | number | `10` | 連続記録の最大保持件数 (1〜100) |
 | `history_limit` | number | `10` | 履歴の最大保持件数 (1〜100) |
-| `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 |
-| `notification_settings.notify_mode` | bool | `true` | モード変更時の通知 |
-| `notification_settings.notify_result` | bool | `false` | 通知にクリップボードの内容を表示するかどうか |
+| `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 (エラー通知は常に表示) |
+| `notification_settings.notify_process` | bool | `true` | 加工完了時の通知 |
 | `notification_settings.notify_pause` | bool | `true` | 一時停止切替時の通知 |
+| `notification_settings.notify_history_restore` | bool | `true` | 履歴復元時の通知 |
+| `notification_settings.notify_ocr` | bool | `true` | OCR 完了時の通知 |
+| `notification_settings.notify_registered_clip` | bool | `true` | 登録クリップ操作時の通知 |
+| `notification_settings.notify_favorites` | bool | `true` | お気に入り操作時の通知 |
+| `notification_settings.notify_continuous_record` | bool | `true` | 連続記録操作時の通知 |
+| `notification_settings.notify_result` | bool | `false` | 通知にクリップボードの内容を表示するかどうか |
 | `hotkeys.quick_selector` | string | `"Alt+Shift+S"` | クイックセレクター表示 |
 | `hotkeys.clip_selector` | string | `"Alt+Shift+T"` | 登録クリップセレクター表示 |
 | `hotkeys.ocr` | string | `"Alt+Shift+O"` | 画面範囲選択 OCR の開始 |
-| `hotkeys.notification` | string | `"Alt+Shift+N"` | デスクトップ通知の ON/OFF |
+| `hotkeys.notification` | string | `"Alt+Shift+N"` | デスクトップ通知のマスター ON/OFF (エラー通知は常に表示) |
 | `hotkeys.pause` | string | `"Alt+Shift+P"` | 監視の一時停止・再開 |
 | `hotkeys.continuous_record` | string | `"Alt+Shift+C"` | 連続記録の有効・無効切替 |
 | `hotkeys.undo` | string | `"Alt+Shift+Z"` | 直近の加工を取り消し |
@@ -236,6 +242,55 @@ multiline = false
 
 ---
 
+## 通知 (`notification_settings`)
+
+デスクトップ通知は **マスター** (`notification_settings.enabled`) と **種類別トグル** で制御する。起動失敗・設定読み込み失敗・クリップボード初期化失敗などの **エラー通知はマスター OFF でも常に表示** する。
+
+| 操作 | 動作 |
+| :--- | :--- |
+| トレイ「通知」サブメニュー | マスター ON/OFF と種類別トグルの切替 |
+| 設定ウィンドウ「通知」タブ | マスターと個別項目を GUI で編集 (マスター OFF 時も個別設定は変更可能) |
+| `Alt+Shift+N` | マスター ON/OFF のみ切替 (`hotkeys.notification`) |
+
+種類別トグルと対象操作:
+
+| キー | 既定 | 対象 |
+| :--- | :--- | :--- |
+| `notify_process` | `true` | 監視モードでの加工完了 |
+| `notify_pause` | `true` | 一時停止・再開 |
+| `notify_history_restore` | `true` | 履歴からの復元 |
+| `notify_ocr` | `true` | 画面 OCR 完了 |
+| `notify_registered_clip` | `true` | 登録クリップのコピー・登録 |
+| `notify_favorites` | `true` | お気に入り変換の切替 |
+| `notify_continuous_record` | `true` | 連続記録の有効化・取り出しなど |
+| `notify_result` | `false` | 上記通知本文にクリップボード内容を含めるか (マスターとは独立) |
+
+`notify_result` が `true` のときも、機密らしい内容は `[機密情報のため非表示]` にマスクする。加工パイプライン適用時の加工完了通知は、連鎖したモード名を連結して表示する ([加工パイプライン](#加工パイプライン-pipeline) 参照)。
+
+**設定例:**
+
+```toml
+[notification_settings]
+enabled = true
+notify_process = true
+notify_pause = false
+notify_history_restore = true
+notify_ocr = true
+notify_registered_clip = true
+notify_favorites = true
+notify_continuous_record = true
+notify_result = false
+```
+
+**旧設定からの移行:** v0.12.1 以前の `notify_mode` / `notify_actions` は読み込み時に新項目へ自動移行し、次回保存時に TOML から除去される。
+
+| 旧キー | 移行先 |
+| :----- | :----- |
+| `notify_mode = false` かつ `notify_result` 未指定 | `notify_process = false` |
+| `notify_actions = false` | `notify_history_restore` / `notify_ocr` / `notify_registered_clip` / `notify_favorites` / `notify_continuous_record` を `false` |
+
+---
+
 ## UI 操作
 
 ### システムトレイメニュー
@@ -248,7 +303,7 @@ multiline = false
 | **履歴** | 有効化・クリア、過去の加工結果の呼び出し |
 | **連続記録** | 有効化・クリア、記録済みテキストの取り出し (FIFO) |
 | **登録クリップ** | 登録済み文字列の呼び出し、クリップボードからの新規登録 |
-| **通知** | デスクトップ通知の有効化と内容 (モード変更・クリップボードの内容・一時停止) の個別設定 |
+| **通知** | マスター ON/OFF、種類別トグル、クリップボード内容表示。詳細は [通知 (`notification_settings`)](#通知-notification_settings) |
 | **設定を開く** | [設定ウィンドウ](#設定ウィンドウ) を表示 |
 | **クリップボード監視を再開** | ワーカー初期化失敗などで監視が停止したときに手動復旧 (通常は無効) |
 | **一時停止 / 終了** | 監視の一時停止・再開、アプリ終了 |
@@ -310,7 +365,7 @@ favorite_mode_slots = ["", "Alt+Ctrl+J"]  # 2 件目のみカスタム、1 件�
 | **履歴・連続記録** | 有効化・保持件数・クリア。連続記録 ON 時はバナーで自動加工停止を表示 |
 | **登録クリップ** | 一覧表示・コピー・削除・クリップボードからの新規登録 |
 | **監視** | 一時停止、監視方式・周期 (0.5 / 1 / 2 / 5 秒)、デフォルトモード、加工パイプラインの追加・並び替え・削除。連続記録 ON 時は加工設定セクションを無効表示 |
-| **通知** | デスクトップ通知のマスターと個別項目 |
+| **通知** | マスター ON/OFF、加工完了・一時停止・履歴復元・OCR・登録クリップ・お気に入り・連続記録の個別トグル、クリップボード内容表示 (`notify_result`) |
 | **ショートカット** | 現在のグローバルホットキー一覧 (読み取り専用) |
 
 **正規表現タブ:** パターン入力中はクライアント側でバイト長を検証し、構文チェックと `regex-replace` の置換プレビューはバックエンド (本番と同じ Rust エンジン、固定サンプル `Hello world 123`) で実行する。コンパイルできないパターンは保存されない。履歴・連続記録・登録クリップの削除は確認ダイアログを表示する。

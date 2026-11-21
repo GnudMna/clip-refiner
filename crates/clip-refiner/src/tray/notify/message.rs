@@ -8,6 +8,67 @@ use crate::refiner::RefineMode;
 use crate::security::format_public_snippet;
 
 // ======================================================================
+// 通知カテゴリ
+// ======================================================================
+/// 個別に ON/OFF できる通知の種類
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationCategory {
+    /// 加工完了
+    Process,
+    /// 一時停止切替
+    Pause,
+    /// 履歴復元
+    HistoryRestore,
+    /// OCR 完了
+    Ocr,
+    /// 登録クリップ操作
+    RegisteredClip,
+    /// お気に入り操作
+    Favorites,
+    /// 連続記録操作
+    ContinuousRecord,
+}
+
+/// 指定カテゴリの通知を表示すべきか判定する
+pub(crate) fn category_enabled(
+    settings: &NotificationSettings,
+    category: NotificationCategory,
+) -> bool {
+    if !settings.enabled {
+        return false;
+    }
+
+    match category {
+        NotificationCategory::Process => settings.notify_process,
+        NotificationCategory::Pause => settings.notify_pause,
+        NotificationCategory::HistoryRestore => settings.notify_history_restore,
+        NotificationCategory::Ocr => settings.notify_ocr,
+        NotificationCategory::RegisteredClip => settings.notify_registered_clip,
+        NotificationCategory::Favorites => settings.notify_favorites,
+        NotificationCategory::ContinuousRecord => settings.notify_continuous_record,
+    }
+}
+
+/// カテゴリ設定が有効な場合のみデスクトップ通知を表示する
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態 (通知設定の参照用)
+/// * `category` - 通知カテゴリ
+/// * `summary` - 通知タイトル
+/// * `body` - 通知本文
+pub fn show_category_notification(
+    state: &Arc<AppState>,
+    category: NotificationCategory,
+    summary: &str,
+    body: &str,
+) {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if category_enabled(&settings, category) {
+        platform::show_notification(summary, body);
+    }
+}
+
+// ======================================================================
 // 加工完了通知
 // ======================================================================
 /// 通知本文に含める加工結果スニペットの最大文字数
@@ -15,7 +76,7 @@ const NOTIFICATION_SNIPPET_MAX_CHARS: usize = 50;
 
 /// 加工完了通知の本文を組み立てる
 ///
-/// 通知が無効、または表示する行がない場合は `None` を返す
+/// 通知が無効な場合は `None` を返す
 ///
 /// # Arguments
 /// * `settings` - 通知設定
@@ -29,23 +90,16 @@ pub(crate) fn format_process_notification_body(
     pipeline: &[RefineMode],
     processed: &str,
 ) -> Option<String> {
-    if !settings.enabled {
+    if !category_enabled(settings, NotificationCategory::Process) {
         return None;
     }
 
-    let mut lines = Vec::new();
-    if settings.notify_mode {
-        lines.push(format!("モード: {}", RefineMode::pipeline_label(pipeline)));
-    }
+    let mut lines = vec![format!("モード: {}", RefineMode::pipeline_label(pipeline))];
     if settings.notify_result {
         lines.push(format!(
             "内容: {}",
             format_public_snippet(processed, NOTIFICATION_SNIPPET_MAX_CHARS)
         ));
-    }
-
-    if lines.is_empty() {
-        return None;
     }
 
     Some(lines.join("\n"))
@@ -83,20 +137,13 @@ pub fn show_image_process_notification(
     height: u32,
 ) {
     let settings = state.with_config(|c| c.notification_settings.clone());
-    if !settings.enabled {
+    if !category_enabled(&settings, NotificationCategory::Process) {
         return;
     }
 
-    let mut lines = Vec::new();
-    if settings.notify_mode {
-        lines.push(format!("モード: {}", mode.label()));
-    }
+    let mut lines = vec![format!("モード: {}", mode.label())];
     if settings.notify_result {
         lines.push(format!("内容: 画像 ({width}x{height})"));
-    }
-
-    if lines.is_empty() {
-        return;
     }
 
     platform::show_notification("変換完了", &lines.join("\n"));
@@ -107,7 +154,7 @@ pub fn show_image_process_notification(
 // ======================================================================
 /// 一時停止通知を表示すべきか判定する
 pub(crate) fn should_show_pause_notification(settings: &NotificationSettings) -> bool {
-    settings.enabled && settings.notify_pause
+    category_enabled(settings, NotificationCategory::Pause)
 }
 
 /// 一時停止状態に応じた通知本文を返す
@@ -132,18 +179,6 @@ pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str
     }
 }
 
-/// 成功通知が有効な場合のみデスクトップ通知を表示する
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態 (通知設定の参照用)
-/// * `summary` - 通知タイトル
-/// * `body` - 通知本文
-pub fn show_when_enabled(state: &Arc<AppState>, summary: &str, body: &str) {
-    if state.with_config(|c| c.notification_settings.enabled) {
-        platform::show_notification(summary, body);
-    }
-}
-
 // ======================================================================
 // テスト
 // ======================================================================
@@ -155,12 +190,10 @@ mod tests {
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
 
     fn enabled_settings() -> NotificationSettings {
-        NotificationSettings {
-            enabled: true,
-            notify_mode: true,
-            notify_result: true,
-            notify_pause: true,
-        }
+        let mut settings = NotificationSettings::default();
+        settings.enabled = true;
+        settings.notify_result = true;
+        settings
     }
 
     /// パイプライン時はモード名を連結して表示すること
@@ -183,6 +216,14 @@ mod tests {
         assert!(format_process_notification_body(&settings, &[RefineMode::Trim], "abc").is_none());
     }
 
+    /// 加工完了 OFF 時は本文を生成しないであるようにすること
+    #[test]
+    fn format_body_returns_none_when_process_disabled() {
+        let mut settings = enabled_settings();
+        settings.notify_process = false;
+        assert!(format_process_notification_body(&settings, &[RefineMode::Trim], "abc").is_none());
+    }
+
     /// モード名と加工結果の両方を含むとすること
     #[test]
     fn format_body_includes_mode_and_result() {
@@ -197,32 +238,16 @@ mod tests {
         assert!(body.contains("内容: hello"));
     }
 
-    /// `notify_mode` のみ ON の場合はモード行だけ含むとすること
+    /// `notify_result` OFF の場合はモード行だけ含むとすること
     #[test]
-    fn format_body_mode_only() {
-        let settings = NotificationSettings {
-            notify_result: false,
-            ..enabled_settings()
-        };
+    fn format_body_mode_only_when_result_off() {
+        let mut settings = enabled_settings();
+        settings.notify_result = false;
         let body = format_process_notification_body(&settings, &[RefineMode::Trim], "secret")
             .expect("通知本文が生成される");
 
         assert!(body.contains("モード:"));
         assert!(!body.contains("内容:"));
-    }
-
-    /// `notify_result` のみ ON の場合は内容行だけ含むとすること
-    #[test]
-    fn format_body_result_only() {
-        let settings = NotificationSettings {
-            notify_mode: false,
-            ..enabled_settings()
-        };
-        let body = format_process_notification_body(&settings, &[RefineMode::Trim], "hello")
-            .expect("通知本文が生成される");
-
-        assert!(!body.contains("モード:"));
-        assert!(body.contains("内容: hello"));
     }
 
     /// 50 文字超のマルチバイト文字列を切り詰めるようにすること
@@ -268,11 +293,20 @@ mod tests {
     /// `notify_pause` のみ OFF の場合は一時停止通知を表示しないであるようにすること
     #[test]
     fn pause_notification_disabled_when_notify_pause_off() {
-        let settings = NotificationSettings {
-            notify_pause: false,
-            ..enabled_settings()
-        };
+        let mut settings = enabled_settings();
+        settings.notify_pause = false;
         assert!(!should_show_pause_notification(&settings));
+    }
+
+    /// 履歴復元カテゴリ OFF 時は通知しないであるようにすること
+    #[test]
+    fn history_restore_category_disabled() {
+        let mut settings = enabled_settings();
+        settings.notify_history_restore = false;
+        assert!(!category_enabled(
+            &settings,
+            NotificationCategory::HistoryRestore
+        ));
     }
 
     /// 一時停止時の通知本文できるようにすること

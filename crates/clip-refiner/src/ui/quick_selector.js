@@ -6,7 +6,7 @@ const {
     highlightText,
     escapeHtml,
     postIpc,
-    close,
+    close: closeSelector,
     createSelection,
     handleArrowKeys,
     handleHomeEndKeys,
@@ -184,6 +184,24 @@ function createFavoriteButton(mode) {
 }
 
 /**
+ * モード行の内部 HTML を組み立てる (highlightText 経由でエスケープ済み)
+ *
+ * @param {QuickSelectorMode} mode
+ * @param {string} query
+ * @param {boolean} isCurrent
+ * @returns {string}
+ */
+function buildItemInnerHtml(mode, query, isCurrent) {
+    return `
+        <div class="mode-info">
+            <span class="label">${highlightText(mode.label, query)}</span>
+            ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
+        </div>
+        ${query && mode.value ? `<span class="value-hint">${highlightText(mode.value, query)}</span>` : ''}
+    `;
+}
+
+/**
  * モード 1 行分の DOM 要素を生成する
  *
  * @param {QuickSelectorMode} mode
@@ -194,17 +212,10 @@ function createFavoriteButton(mode) {
 function createItem(mode, index, query) {
     const isCurrent = mode.id === currentModeId;
     const div = document.createElement('div');
-    div.className = 'item' +
-        (index === selection.index ? ' selected' : '') +
-        (isCurrent ? ' current' : '');
+    div.className =
+        'item' + (index === selection.index ? ' selected' : '') + (isCurrent ? ' current' : '');
 
-    div.innerHTML = `
-        <div class="mode-info">
-            <span class="label">${highlightText(mode.label, query)}</span>
-            ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
-        </div>
-        ${query && mode.value ? `<span class="value-hint">${highlightText(mode.value, query)}</span>` : ''}
-    `;
+    div.innerHTML = buildItemInnerHtml(mode, query, isCurrent);
 
     const reorderButtons = createReorderButtons(mode, query);
     if (reorderButtons) {
@@ -274,7 +285,9 @@ function renderList(scrollToSelection) {
                     header.className = 'category-header';
                     header.innerHTML =
                         '<span class="category-accent" aria-hidden="true"></span>' +
-                        '<span class="category-label">' + escapeHtml(category) + '</span>';
+                        '<span class="category-label">' +
+                        escapeHtml(category) +
+                        '</span>';
                     currentSection.appendChild(header);
                     results.appendChild(currentSection);
                     lastCategory = category;
@@ -306,9 +319,7 @@ function filter() {
 
     filtered = buildDisplayList(query);
 
-    const nextIndex = previousId
-        ? filtered.findIndex((mode) => mode.id === previousId)
-        : -1;
+    const nextIndex = previousId ? filtered.findIndex((mode) => mode.id === previousId) : -1;
     selection.index = nextIndex !== -1 ? nextIndex : 0;
     renderList(true);
 }
@@ -403,7 +414,7 @@ window.onkeydown = (e) => {
         }
         return;
     }
-    if (handleEscapeKey(e, input, filter, close)) {
+    if (handleEscapeKey(e, input, filter, closeSelector)) {
         return;
     }
     if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
@@ -448,9 +459,7 @@ window.refreshModes = (modeId, modesJson) => {
     }
     currentModeId = modeId;
     filtered = buildDisplayList(normalizeQuery(input.value));
-    const nextIndex = previousId
-        ? filtered.findIndex((mode) => mode.id === previousId)
-        : -1;
+    const nextIndex = previousId ? filtered.findIndex((mode) => mode.id === previousId) : -1;
     selection.index = nextIndex !== -1 ? nextIndex : 0;
     renderList(true);
 };

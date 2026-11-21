@@ -3,23 +3,20 @@
 //! アプリケーションの常駐実行に関連する UI と背後のイベントループ制御を担当する
 
 pub mod app;
-pub mod clip_selector;
 pub(crate) mod clipboard_monitor;
 mod dispatch;
 pub mod event;
-pub mod history;
+mod features;
+pub mod history_store;
 pub mod hotkey;
 pub mod menu;
 mod notify;
 mod ocr;
 mod paste_watcher;
-pub mod quick_selector;
 mod runner;
-mod selector_ui;
-mod selector_window;
+pub mod selector;
 pub mod settings;
 pub mod state;
-mod webview_script;
 pub mod worker;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]

@@ -6,6 +6,34 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-08
+
+
+### Added
+
+- 通知設定を種類別に再構成: マスター ON/OFF (エラーは常に表示)、加工完了・一時停止・履歴復元・OCR・登録クリップ・お気に入り・連続記録の個別トグル、クリップボード内容表示を別枠に分離
+- Git フック (`scripts/git/hooks/`) と有効化スクリプト `install-hooks.ps1` / `uninstall-hooks.ps1` (pre-commit: `cargo fmt --check`、pre-push: `check.ps1`)
+- リリース手順一括スクリプト `scripts/windows/release.ps1` (バージョン更新・CHANGELOG・品質チェック・Git コミット・MSI 作成、`release/v{version}` ブランチ必須)
+- MSI パッケージ自動検証 `verify-msi.ps1` (`build-msi.ps1` 完了後にメタデータ・同梱ファイル・展開内容を検証)
+- ESLint / Prettier による UI JavaScript の静的解析とフォーマット (`package.json`, `eslint.config.js`; `check.ps1` / `format.ps1` に組み込み)
+- 未登録だった統合テスト 4 件 (`worker_recovery_flow` / `oneshot_flow` / `settings_ui_logic` / `regex_preview_logic`) を `Cargo.toml` に登録
+- 通知設定の統合テスト `notification_flow.rs`、OS 連携テスト `platform_flow.rs`、設定 UI 共有ロジックテスト `settings_shared_logic.rs`
+- 加工変換のプロパティベーステスト `property_transforms.rs` (`proptest`)
+- 設定 UI 純粋ロジック `shared_logic.js` (件数クランプ・パイプライン正規化・通知パッチ組み立て)
+- JavaScript ロジックテスト用 `run_js_test_script` ヘルパー (`check.ps1` では `CLIP_REFINER_REQUIRE_NODE=1` で必須化)
+
+### Changed
+
+- 旧設定 `notify_mode` / `notify_actions` は読み込み時に新項目へ自動移行
+- PowerShell スクリプトの共通処理を `scripts/common/` ヘルパー (`cargo.ps1`, `npm.ps1`, `wix.ps1`, `assert.ps1`) へ集約
+- トレイ実装を `features/` (ドメイン別メニュー・イベント) と `selector/` (クイック/登録クリップセレクタ) へ再構成。暗号化履歴データ層を `history_store` へ改名
+- `hotkey` / `dispatch` のユニットテストを本番モジュールから分割 (`too_many_lines` 抑制を除去)
+- `cargo-about` 生成時の自クレート警告を `about.toml` の `private.ignore` で解消
+
+### Fixed
+
+- 設定ウィンドウでデスクトップ通知マスター OFF 時に個別通知設定を変更できない問題
+
 ## [0.12.1] - 2026-07-07
 
 ### Added
@@ -327,7 +355,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...develop
+[0.12.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...v0.12.2
 [0.12.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...v0.12.1
 [0.12.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...v0.12.0
 [0.11.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...v0.11.0

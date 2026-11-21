@@ -68,10 +68,12 @@ var RegexPreview = (function () {
         if (!a || !b) {
             return false;
         }
-        return a.pattern === b.pattern
-            && a.replacement === b.replacement
-            && a.caseInsensitive === b.caseInsensitive
-            && a.multiline === b.multiline;
+        return (
+            a.pattern === b.pattern &&
+            a.replacement === b.replacement &&
+            a.caseInsensitive === b.caseInsensitive &&
+            a.multiline === b.multiline
+        );
     }
 
     /**

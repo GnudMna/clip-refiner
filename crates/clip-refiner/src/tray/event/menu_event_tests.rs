@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use std::sync::mpsc;
 
-use super::monitor;
-use super::{handle_menu_event, should_hide_selector_on_focus_loss, update_refine};
+use super::{
+    handle_menu_event, should_hide_selector_on_focus_loss, update_monitor_mode, update_refine,
+};
 
 use crate::config::MonitorMode;
 use crate::refiner::RefineMode;
@@ -70,7 +71,7 @@ fn update_monitor_mode_switches_to_event_and_disables_interval() {
     let state = Arc::new(test_app_state());
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
 
-    monitor::update_monitor_mode(&state, &menu, MonitorMode::Event);
+    update_monitor_mode(&state, &menu, MonitorMode::Event);
 
     assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Event);
     assert!(
@@ -89,7 +90,7 @@ fn update_monitor_mode_noop_when_unchanged() {
     let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
     state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
 
-    monitor::update_monitor_mode(&state, &menu, MonitorMode::Polling);
+    update_monitor_mode(&state, &menu, MonitorMode::Polling);
 
     assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
     assert!(menu.interval.main_submenu.is_enabled());

@@ -158,13 +158,18 @@ mod tests {
     /// トップレベルとネスト設定は camelCase で JS と整合すること
     #[test]
     fn snapshot_json_matches_js_field_names() {
+        let mut notification_settings = NotificationSettings::default();
+        notification_settings.enabled = true;
+        notification_settings.notify_process = false;
+        notification_settings.notify_result = true;
+        notification_settings.notify_pause = false;
+        notification_settings.notify_history_restore = true;
+        notification_settings.notify_ocr = false;
+        notification_settings.notify_registered_clip = true;
+        notification_settings.notify_favorites = false;
+        notification_settings.notify_continuous_record = true;
         let config = AppConfig {
-            notification_settings: NotificationSettings {
-                enabled: true,
-                notify_mode: false,
-                notify_result: true,
-                notify_pause: false,
-            },
+            notification_settings,
             regex: RegexSettings {
                 pattern: "a".to_string(),
                 replacement: "b".to_string(),
@@ -180,8 +185,11 @@ mod tests {
 
         assert_eq!(json["monitorMode"], "Polling");
         assert_eq!(json["notificationSettings"]["enabled"], true);
-        assert_eq!(json["notificationSettings"]["notifyMode"], false);
+        assert_eq!(json["notificationSettings"]["notifyProcess"], false);
         assert_eq!(json["notificationSettings"]["notifyResult"], true);
+        assert_eq!(json["notificationSettings"]["notifyHistoryRestore"], true);
+        assert_eq!(json["notificationSettings"]["notifyOcr"], false);
+        assert_eq!(json["notificationSettings"]["notifyRegisteredClip"], true);
         assert_eq!(json["regex"]["caseInsensitive"], true);
         assert_eq!(json["limits"]["historyMax"], consts::MAX_HISTORY_LIMIT);
         assert_eq!(json["regexPreviewSample"], REGEX_PREVIEW_SAMPLE);

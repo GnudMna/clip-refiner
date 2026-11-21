@@ -3,10 +3,10 @@ use std::time::Instant;
 
 use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
-use super::super::selector_ui::SelectorUi;
 use super::super::settings::SettingsWindow;
 use super::super::state::AppState;
 use super::super::worker::ClipboardWorkerHandle;
+use crate::tray::selector::SelectorUi;
 
 use tao::event_loop::ControlFlow;
 

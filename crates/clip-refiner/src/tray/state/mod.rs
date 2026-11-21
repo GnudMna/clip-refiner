@@ -79,9 +79,9 @@ mod tests {
         state.with_config_mut(|c| c.notification_settings.enabled = true);
         assert!(state.with_config(|c| c.notification_settings.enabled));
 
-        assert!(state.with_config(|c| c.notification_settings.notify_mode));
-        state.with_config_mut(|c| c.notification_settings.notify_mode = false);
-        assert!(!state.with_config(|c| c.notification_settings.notify_mode));
+        assert!(state.with_config(|c| c.notification_settings.notify_process));
+        state.with_config_mut(|c| c.notification_settings.notify_process = false);
+        assert!(!state.with_config(|c| c.notification_settings.notify_process));
 
         assert!(!state.with_config(|c| c.notification_settings.notify_result));
         state.with_config_mut(|c| c.notification_settings.notify_result = true);

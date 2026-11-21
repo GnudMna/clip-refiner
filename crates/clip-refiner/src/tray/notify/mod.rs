@@ -3,6 +3,6 @@
 mod message;
 
 pub use message::{
-    show_image_process_notification, show_pause_notification, show_process_notification,
-    show_when_enabled,
+    NotificationCategory, show_category_notification, show_image_process_notification,
+    show_pause_notification, show_process_notification,
 };

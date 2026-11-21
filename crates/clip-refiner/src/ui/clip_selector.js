@@ -5,7 +5,7 @@ const {
     normalizeQuery,
     highlightText,
     postIpc,
-    close,
+    close: closeSelectorWindow,
     createSelection,
     handleArrowKeys,
     handleHomeEndKeys,
@@ -145,7 +145,8 @@ function totalRows() {
 function createItem(item, index, query) {
     const div = document.createElement('div');
     const isImage = item.kind === 'image';
-    div.className = 'item' + (isImage ? ' item--image' : '') + (index === selection.index ? ' selected' : '');
+    div.className =
+        'item' + (isImage ? ' item--image' : '') + (index === selection.index ? ' selected' : '');
 
     const content = document.createElement('div');
     content.className = 'item-content';
@@ -249,9 +250,8 @@ function renderList(scrollToSelection) {
     if (filtered.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty';
-        empty.textContent = items.length === 0
-            ? '登録クリップがありません'
-            : '該当する登録クリップがありません';
+        empty.textContent =
+            items.length === 0 ? '登録クリップがありません' : '該当する登録クリップがありません';
         results.appendChild(empty);
     } else {
         filtered.forEach((item, index) => {
@@ -319,7 +319,7 @@ function deleteSelected() {
 /** セレクターを閉じる */
 function closeSelector() {
     hideImageHoverPreview();
-    close();
+    closeSelectorWindow();
 }
 
 /** Enter キー相当の選択確定処理 */

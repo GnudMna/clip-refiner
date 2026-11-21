@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use super::super::dispatch;
-use super::super::notify;
+use super::super::notify::{
+    NotificationCategory, show_category_notification, show_image_process_notification,
+    show_process_notification,
+};
 use super::super::state::{AppEvent, AppState};
 use super::command::ClipboardCommand;
 
 use crate::config::{AddRegisteredClipError, ResolvedClip};
-use crate::platform;
 use crate::refiner::{
-    ClipboardProcessOutcome, ImageClipboard, RefineContext, TextClipboard,
+    ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode, TextClipboard,
     process_clipboard_pipeline_io,
 };
 use crate::security::{SecretString, is_within_clipboard_limit};
@@ -42,9 +44,12 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                     .notify_with_debug(&e);
             } else {
                 state.record_clipboard_set(&text);
-                if state.with_config(|c| c.notification_settings.enabled) {
-                    platform::show_notification("履歴から復元", "クリップボードにコピーしました");
-                }
+                show_category_notification(
+                    state,
+                    NotificationCategory::HistoryRestore,
+                    "履歴から復元",
+                    "クリップボードにコピーしました",
+                );
             }
         }
         ClipboardCommand::CopyRegisteredClip(index) => {
@@ -57,9 +62,12 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                     .notify_with_debug(&e);
             } else {
                 state.record_clipboard_set(&text);
-                if state.with_config(|c| c.notification_settings.enabled) {
-                    platform::show_notification("OCR", "クリップボードにコピーしました");
-                }
+                show_category_notification(
+                    state,
+                    NotificationCategory::Ocr,
+                    "OCR",
+                    "クリップボードにコピーしました",
+                );
             }
         }
         ClipboardCommand::DischargeContinuousRecordAt(index) => {
@@ -71,58 +79,81 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
             catch_up_continuous_record(clipboard, state);
         }
         ClipboardCommand::ProcessMode(mode) => {
-            let pre_text = clipboard.get_text().ok();
-            refine_ctx.regex = state.with_config(|c| c.regex.clone());
-            let pipeline = [mode];
-            match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
-                Ok(ClipboardProcessOutcome::Processed(processed)) => {
-                    if let Some(ref pre) = pre_text {
-                        state.record_undo_source(pre);
-                    }
-                    state.record_processing_success(&processed);
-                    notify::show_process_notification(state, &pipeline, &processed);
-                }
-                Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
-                    if let Some(ref pre) = pre_text {
-                        state.record_undo_source(pre);
-                        state.record_image_processing_success(pre);
-                    }
-                    notify::show_image_process_notification(state, mode, width, height);
-                }
-                Ok(ClipboardProcessOutcome::Unchanged) => {
-                    if state.with_config(|c| c.notification_settings.enabled) {
-                        platform::show_notification("加工結果", "テキストに変更はありませんでした");
-                    }
-                }
-                Err(e) => {
-                    UserNotification::from(&e).notify_with_debug(&e);
-                }
-            }
+            handle_process_mode_command(clipboard, state, refine_ctx, mode);
         }
         ClipboardCommand::Undo => {
-            if let Some(text) = state.take_undo_source() {
-                if let Err(e) = clipboard.set_text(text.to_string()) {
-                    ClipboardWriteContext::Undo
-                        .notification()
-                        .notify_with_debug(&e);
-                    state.record_undo_source(&text);
-                } else {
-                    state.record_processing_success(&text);
-                    if state.with_config(|c| c.notification_settings.enabled) {
-                        platform::show_notification(
-                            "加工の取り消し",
-                            "クリップボードを加工前の内容に戻しました",
-                        );
-                    }
-                }
-            } else if state.with_config(|c| c.notification_settings.enabled) {
-                platform::show_notification("加工の取り消し", "取り消せる加工がありません");
-            }
+            handle_undo_command(clipboard, state);
         }
         ClipboardCommand::RegisterClipFromClipboard => {
             register_clip_from_clipboard(clipboard, state);
         }
         ClipboardCommand::Shutdown => {}
+    }
+}
+
+/// 手動加工コマンドを処理する
+fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    refine_ctx: &mut RefineContext,
+    mode: RefineMode,
+) {
+    let pre_text = clipboard.get_text().ok();
+    refine_ctx.regex = state.with_config(|c| c.regex.clone());
+    let pipeline = [mode];
+    match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            if let Some(ref pre) = pre_text {
+                state.record_undo_source(pre);
+            }
+            state.record_processing_success(&processed);
+            show_process_notification(state, &pipeline, &processed);
+        }
+        Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+            if let Some(ref pre) = pre_text {
+                state.record_undo_source(pre);
+                state.record_image_processing_success(pre);
+            }
+            show_image_process_notification(state, mode, width, height);
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => {
+            show_category_notification(
+                state,
+                NotificationCategory::Process,
+                "加工結果",
+                "テキストに変更はありませんでした",
+            );
+        }
+        Err(e) => {
+            UserNotification::from(&e).notify_with_debug(&e);
+        }
+    }
+}
+
+/// 加工の取り消しコマンドを処理する
+fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
+    if let Some(text) = state.take_undo_source() {
+        if let Err(e) = clipboard.set_text(text.to_string()) {
+            ClipboardWriteContext::Undo
+                .notification()
+                .notify_with_debug(&e);
+            state.record_undo_source(&text);
+        } else {
+            state.record_processing_success(&text);
+            show_category_notification(
+                state,
+                NotificationCategory::Process,
+                "加工の取り消し",
+                "クリップボードを加工前の内容に戻しました",
+            );
+        }
+    } else {
+        show_category_notification(
+            state,
+            NotificationCategory::Process,
+            "加工の取り消し",
+            "取り消せる加工がありません",
+        );
     }
 }
 
@@ -164,9 +195,12 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
     take: impl FnOnce() -> Option<SecretString>,
 ) {
     let Some(text) = take() else {
-        if state.with_config(|c| c.notification_settings.enabled) {
-            platform::show_notification("連続記録", "取り出せる記録がありません");
-        }
+        show_category_notification(
+            state,
+            NotificationCategory::ContinuousRecord,
+            "連続記録",
+            "取り出せる記録がありません",
+        );
         return;
     };
 
@@ -176,9 +210,12 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
             .notify_with_debug(&e);
     } else {
         state.record_clipboard_set(&text);
-        if state.with_config(|c| c.notification_settings.enabled) {
-            platform::show_notification("連続記録", "クリップボードに取り出しました");
-        }
+        show_category_notification(
+            state,
+            NotificationCategory::ContinuousRecord,
+            "連続記録",
+            "クリップボードに取り出しました",
+        );
     }
 }
 
@@ -200,9 +237,12 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
                     .notify_with_debug(&e);
             } else {
                 state.record_clipboard_set(&text);
-                if state.with_config(|c| c.notification_settings.enabled) {
-                    platform::show_notification("登録クリップ", "クリップボードにコピーしました");
-                }
+                show_category_notification(
+                    state,
+                    NotificationCategory::RegisteredClip,
+                    "登録クリップ",
+                    "クリップボードにコピーしました",
+                );
             }
         }
         Some(ResolvedClip::Image {
@@ -214,8 +254,13 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
                 ClipboardWriteContext::RegisteredClip
                     .notification()
                     .notify_with_debug(&e);
-            } else if state.with_config(|c| c.notification_settings.enabled) {
-                platform::show_notification("登録クリップ", "クリップボードにコピーしました");
+            } else {
+                show_category_notification(
+                    state,
+                    NotificationCategory::RegisteredClip,
+                    "登録クリップ",
+                    "クリップボードにコピーしました",
+                );
             }
         }
         None => {}
@@ -238,15 +283,21 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
             Ok(()) => {
                 state.save_config();
                 dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
-                notify::show_when_enabled(
+                show_category_notification(
                     state,
+                    NotificationCategory::RegisteredClip,
                     "登録クリップ",
                     "クリップボードの画像を登録しました",
                 );
             }
             Err(err) => {
                 let notification = registered_clip_register_failure(err);
-                notify::show_when_enabled(state, notification.title(), notification.body());
+                show_category_notification(
+                    state,
+                    NotificationCategory::RegisteredClip,
+                    notification.title(),
+                    notification.body(),
+                );
                 refresh_settings_after_register(state);
             }
         }
@@ -271,7 +322,12 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
         Ok(()) => {
             state.save_config();
             dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
-            notify::show_when_enabled(state, "登録クリップ", "クリップボードの内容を登録しました");
+            show_category_notification(
+                state,
+                NotificationCategory::RegisteredClip,
+                "登録クリップ",
+                "クリップボードの内容を登録しました",
+            );
         }
         Err(
             err @ (AddRegisteredClipError::Empty
@@ -279,7 +335,12 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
             | AddRegisteredClipError::LimitReached),
         ) => {
             let notification = registered_clip_register_failure(err);
-            notify::show_when_enabled(state, notification.title(), notification.body());
+            show_category_notification(
+                state,
+                NotificationCategory::RegisteredClip,
+                notification.title(),
+                notification.body(),
+            );
             refresh_settings_after_register(state);
         }
         Err(AddRegisteredClipError::ImageTooLarge | AddRegisteredClipError::ImageInvalid) => {

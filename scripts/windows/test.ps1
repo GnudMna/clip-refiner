@@ -1,34 +1,31 @@
 # ========================================================================
 # Script Name : test.ps1
-# Description : Windows用のテスト実行スクリプト
+# Description : Windows 用のテスト実行
 # Usage       : ./test.ps1
-# Requires    : PowerShell 7.0+
+# Requires    : PowerShell 7.0+, Node.js (npm)
 # ========================================================================
 
 #requires -Version 7.0
 
-# シェルオプションを設定(エラー時に即終了)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ダブルクリック実行時の Enter 待ちヘルパーを読み込み
 . (Join-Path $PSScriptRoot '..\common\wait-if-double-clicked.ps1')
 
 Invoke-ScriptMain {
-    # プロジェクトルートへ移動
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
+    . (Join-Path $PSScriptRoot '..\common\cargo.ps1')
+    . (Join-Path $PSScriptRoot '..\common\npm.ps1')
 
-    # テストを実行
     Write-Host 'テストを実行しています...'
     Write-Host ''
 
-    Write-Host 'テストを実行中...'
-    cargo test --all-targets --features test-helpers
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "エラー: cargo test が終了コード $LASTEXITCODE で失敗しました"
-    }
-
+    Assert-NodeInstalled
+    $env:CLIP_REFINER_REQUIRE_NODE = '1'
     Write-Host ''
+
+    Invoke-CargoTest -IncludeDocTests
+    Write-Host ''
+
     Write-Host 'すべてのテストが完了しました'
 }

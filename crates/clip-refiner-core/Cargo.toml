@@ -48,5 +48,8 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Threading",
 ] }
 
+[dev-dependencies]
+proptest = "1.9.0"
+
 [lints]
 workspace = true

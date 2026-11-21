@@ -14,10 +14,11 @@ use super::snapshot::SettingsSnapshot;
 
 use crate::consts;
 use crate::tray::menu::{TrayMenu, create_window_icon, icon::app_icon_png_data_url};
-use crate::tray::quick_selector::QuickSelectorWindow;
-use crate::tray::selector_window::{WebSelectorWindow, WebViewWindowOptions};
+use crate::tray::selector::{
+    QuickSelectorWindow, WebSelectorWindow, WebViewWindowOptions, json_parse_call_script,
+    settings_load_script,
+};
 use crate::tray::state::{AppEvent, AppState};
-use crate::tray::webview_script;
 use crate::tray::worker::ClipboardWorkerHandle;
 use crate::user_error::titles;
 
@@ -50,6 +51,7 @@ fn assemble_settings_js() -> String {
     const FRAGMENTS: &[&str] = &[
         include_str!("../../ui/settings/regex_preview.js"),
         include_str!("../../ui/settings/settings_patch.js"),
+        include_str!("../../ui/settings/shared_logic.js"),
         include_str!("../../ui/settings/shared.js"),
         include_str!("../../ui/settings/panels.js"),
         include_str!("../../ui/settings/events.js"),
@@ -160,19 +162,19 @@ impl SettingsWindow {
         force: bool,
         external_sync: bool,
     ) {
-        let script = webview_script::settings_load_script(snapshot_json, force, external_sync);
+        let script = settings_load_script(snapshot_json, force, external_sync);
         self.inner.evaluate_script(&script);
     }
 
     /// 登録クリップ一覧のみ JavaScript へ反映する
     pub(crate) fn update_clips(&self, clips_json: &str) {
-        let script = webview_script::json_parse_call_script("updateClips", clips_json);
+        let script = json_parse_call_script("updateClips", clips_json);
         self.inner.evaluate_script(&script);
     }
 
     /// お気に入りとショートカット一覧のみ JavaScript へ反映する
     pub(crate) fn update_favorites_and_shortcuts(&self, json: &str) {
-        let script = webview_script::json_parse_call_script("updateFavoritesAndShortcuts", json);
+        let script = json_parse_call_script("updateFavoritesAndShortcuts", json);
         self.inner.evaluate_script(&script);
     }
 
@@ -192,7 +194,7 @@ impl SettingsWindow {
             let Ok(json) = serde_json::to_string(feedback) else {
                 return;
             };
-            let script = webview_script::json_parse_call_script("onApplyFeedback", &json);
+            let script = json_parse_call_script("onApplyFeedback", &json);
             self.inner.evaluate_script(&script);
             return;
         }
@@ -210,7 +212,7 @@ impl SettingsWindow {
         let Ok(json) = serde_json::to_string(response) else {
             return;
         };
-        let script = webview_script::json_parse_call_script("onRegexPreview", &json);
+        let script = json_parse_call_script("onRegexPreview", &json);
         self.inner.evaluate_script(&script);
     }
 
@@ -382,5 +384,14 @@ mod tests {
         assert!(js.contains("resolveRegexPreviewResponse"));
         assert!(js.contains("pendingRegexPreviewRequest"));
         assert!(js.contains("action: 'stale'"));
+    }
+
+    /// 設定 UI JavaScript に共有純粋ロジックが含まれるようにすること
+    #[test]
+    fn assembled_settings_js_includes_shared_logic() {
+        let js = assemble_settings_js();
+        assert!(js.contains("SettingsSharedLogic"));
+        assert!(js.contains("buildNotificationSettingsPatch"));
+        assert!(js.contains("normalizePipeline"));
     }
 }

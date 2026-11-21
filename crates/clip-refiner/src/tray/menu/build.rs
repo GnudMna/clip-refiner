@@ -40,12 +40,7 @@ impl TrayMenu {
         let continuous_record =
             Self::build_continuous_record_menu(config.continuous_record_enabled)?;
         let clips = Self::build_clips_menu(state)?;
-        let notification = Self::build_notification_menu(
-            config.notification_settings.enabled,
-            config.notification_settings.notify_mode,
-            config.notification_settings.notify_result,
-            config.notification_settings.notify_pause,
-        )?;
+        let notification = Self::build_notification_menu(&config.notification_settings)?;
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);

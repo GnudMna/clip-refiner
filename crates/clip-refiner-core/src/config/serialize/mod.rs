@@ -77,12 +77,11 @@ mode = "UrlEncode"
 [notification_settings]
 enabled = false
 "#;
+        let mut notification_settings = NotificationSettings::default();
+        notification_settings.enabled = true;
         let config = AppConfig {
             mode: crate::refiner::RefineMode::JsonFormat,
-            notification_settings: NotificationSettings {
-                enabled: true,
-                ..NotificationSettings::default()
-            },
+            notification_settings,
             ..AppConfig::default()
         };
 

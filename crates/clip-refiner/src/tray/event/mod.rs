@@ -1,9 +1,13 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::clip_selector::ClipSelectorWindow;
+use super::features::{
+    handle_app_control, handle_clips_event, handle_continuous_record_event, handle_favorites_event,
+    handle_history_event, handle_monitor_event, handle_notification_event,
+    handle_refine_mode_event,
+};
 use super::menu::TrayMenu;
-use super::quick_selector::QuickSelectorWindow;
+use super::selector::{ClipSelectorWindow, QuickSelectorWindow};
 use super::state::AppState;
 use super::worker::ClipboardWorkerHandle;
 
@@ -11,35 +15,26 @@ use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
-mod app_control;
-mod clips;
 mod config_reload;
 mod context;
-mod favorites;
-mod history;
 mod loop_event;
-mod monitor;
-mod notification;
 mod ocr;
-mod record;
-mod refine;
 mod user_event;
 
-pub(crate) use record::toggle_continuous_record;
+pub(crate) use super::features::{
+    copy_registered_clip, delete_registered_clip, move_favorite_mode, refresh_clips_views,
+    toggle_continuous_record, toggle_favorite_mode, update_monitor_mode, update_refine,
+};
+pub(crate) use config_reload::reload_config_with_notification;
+pub(crate) use context::AppEventContext;
+pub(crate) use loop_event::handle_loop_event;
+pub(crate) use ocr::run_ocr_on_image;
 
 // ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod menu_event_tests;
-
-pub(crate) use config_reload::reload_config_with_notification;
-pub(crate) use context::AppEventContext;
-pub(crate) use favorites::{move_favorite_mode, toggle_favorite_mode};
-pub(crate) use loop_event::handle_loop_event;
-pub(crate) use monitor::update_monitor_mode;
-pub(crate) use ocr::run_ocr_on_image;
-pub use refine::update_refine;
 
 /// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する
 ///
@@ -97,56 +92,28 @@ pub fn handle_menu_event(
     quick_selector: Option<&QuickSelectorWindow>,
     control_flow: &mut ControlFlow,
 ) {
-    if app_control::handle_app_control(&event.id, menu, state, control_flow) {
+    if handle_app_control(&event.id, menu, state, control_flow) {
         return;
     }
-    if history::handle_history_event(&event.id, menu, state, clipboard_worker) {
+    if handle_history_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
-    if record::handle_continuous_record_event(&event.id, menu, state, clipboard_worker) {
+    if handle_continuous_record_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
-    if clips::handle_clips_event(&event.id, menu, state, clipboard_worker) {
+    if handle_clips_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
-    if notification::handle_notification_event(&event.id, menu, state) {
+    if handle_notification_event(&event.id, menu, state) {
         return;
     }
-    if favorites::handle_favorites_event(&event.id, menu, state, quick_selector) {
+    if handle_favorites_event(&event.id, menu, state, quick_selector) {
         return;
     }
-    if refine::handle_refine_mode_event(&event.id, menu, state, clipboard_worker, quick_selector) {
+    if handle_refine_mode_event(&event.id, menu, state, clipboard_worker, quick_selector) {
         return;
     }
-    monitor::handle_monitor_event(&event.id, menu, state);
-}
-
-/// 登録クリップをクリップボードへコピーする
-pub(crate) fn copy_registered_clip(
-    state: &Arc<AppState>,
-    clipboard_worker: &ClipboardWorkerHandle,
-    index: usize,
-) {
-    clips::copy_registered_clip(state, clipboard_worker, index);
-}
-
-/// 登録クリップを削除し、メニューとセレクターを更新する
-pub(crate) fn delete_registered_clip(
-    state: &Arc<AppState>,
-    menu: &TrayMenu,
-    clip_selector: &ClipSelectorWindow,
-    index: usize,
-) {
-    clips::delete_registered_clip(state, menu, clip_selector, index);
-}
-
-/// 登録クリップメニューとセレクター表示を設定内容に合わせて更新する
-pub(crate) fn refresh_clips_views(
-    state: &Arc<AppState>,
-    menu: &TrayMenu,
-    clip_selector: &ClipSelectorWindow,
-) {
-    clips::refresh_clips_views(state, menu, clip_selector);
+    handle_monitor_event(&event.id, menu, state);
 }
 
 /// UIウィンドウ (クイックセレクター / 登録クリップセレクター) に関連するイベントを処理する

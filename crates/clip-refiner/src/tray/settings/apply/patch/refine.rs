@@ -5,7 +5,7 @@ use super::outcome::PatchApplyOutcome;
 
 use crate::tray::event::update_refine;
 use crate::tray::menu::TrayMenu;
-use crate::tray::quick_selector::QuickSelectorWindow;
+use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;
 use crate::tray::worker::ClipboardWorkerHandle;

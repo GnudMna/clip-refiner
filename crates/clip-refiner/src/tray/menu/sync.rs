@@ -60,14 +60,29 @@ impl TrayMenu {
             .enabled_item
             .set_checked(config.notification_settings.enabled);
         self.notification
-            .notify_mode_item
-            .set_checked(config.notification_settings.notify_mode);
-        self.notification
-            .notify_result_item
-            .set_checked(config.notification_settings.notify_result);
+            .notify_process_item
+            .set_checked(config.notification_settings.notify_process);
         self.notification
             .notify_pause_item
             .set_checked(config.notification_settings.notify_pause);
+        self.notification
+            .notify_history_restore_item
+            .set_checked(config.notification_settings.notify_history_restore);
+        self.notification
+            .notify_ocr_item
+            .set_checked(config.notification_settings.notify_ocr);
+        self.notification
+            .notify_registered_clip_item
+            .set_checked(config.notification_settings.notify_registered_clip);
+        self.notification
+            .notify_favorites_item
+            .set_checked(config.notification_settings.notify_favorites);
+        self.notification
+            .notify_continuous_record_item
+            .set_checked(config.notification_settings.notify_continuous_record);
+        self.notification
+            .notify_result_item
+            .set_checked(config.notification_settings.notify_result);
         self.pause_item.set_checked(config.is_paused);
 
         self.refresh_clips(state)?;

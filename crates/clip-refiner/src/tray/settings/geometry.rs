@@ -115,16 +115,16 @@ pub(crate) fn apply_geometry_to_builder(
 /// 生成済みウィンドウへ保存済み位置を適用する
 pub(crate) fn apply_saved_position(window: &Window, geometry: SettingsWindowGeometry) {
     let Some(x) = geometry.x else {
-        crate::tray::selector_window::position_window_on_monitor(
+        crate::tray::selector::position_window_on_monitor(
             window,
-            crate::tray::selector_window::WindowVerticalAlign::Center,
+            crate::tray::selector::WindowVerticalAlign::Center,
         );
         return;
     };
     let Some(y) = geometry.y else {
-        crate::tray::selector_window::position_window_on_monitor(
+        crate::tray::selector::position_window_on_monitor(
             window,
-            crate::tray::selector_window::WindowVerticalAlign::Center,
+            crate::tray::selector::WindowVerticalAlign::Center,
         );
         return;
     };

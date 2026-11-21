@@ -10,9 +10,21 @@ mod harness;
 mod settings;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+mod js_runner;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+mod platform;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 mod worker;
 
 pub use harness::ClipboardHarness;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub use js_runner::run_js_test_script;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub use platform::{assert_test_hotkeys_register, query_autostart_enabled};
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use settings::SettingsTestContext;

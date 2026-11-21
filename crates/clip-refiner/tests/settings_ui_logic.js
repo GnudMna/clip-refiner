@@ -6,10 +6,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const SettingsPatch = require(path.join(
-    __dirname,
-    '../src/ui/settings/settings_patch.js'
-));
+const SettingsPatch = require(path.join(__dirname, '../src/ui/settings/settings_patch.js'));
 
 /** トップレベルキーをマージできること */
 function test_merge_top_level_keys() {

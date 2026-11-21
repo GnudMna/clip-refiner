@@ -5,8 +5,8 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime};
 
 use super::super::dispatch;
-use super::super::history::EncryptedHistoryStore;
-use super::super::history::EncryptedRecordStore;
+use super::super::history_store::EncryptedHistoryStore;
+use super::super::history_store::EncryptedRecordStore;
 use super::app_event::AppEvent;
 use super::lock_ext::{LockExt, RwLockExt};
 use super::monitor_snapshot::{MonitorSnapshot, ProcessedState};

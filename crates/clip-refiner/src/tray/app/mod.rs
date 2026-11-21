@@ -9,7 +9,7 @@ use super::event;
 use super::hotkey::{HotkeyHandler, HotkeyListenerStop};
 use super::menu::TrayMenu;
 use super::paste_watcher::PasteWatcher;
-use super::selector_ui::SelectorUi;
+use super::selector::SelectorUi;
 use super::settings::SettingsWindow;
 use super::state::{AppEvent, AppState};
 use super::worker::ClipboardWorkerHandle;

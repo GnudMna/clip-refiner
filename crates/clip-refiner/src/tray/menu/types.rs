@@ -110,14 +110,24 @@ pub struct ClipsMenu {
 pub struct NotificationMenu {
     /// 「通知」サブメニュー
     pub main_submenu: Submenu,
-    /// 成功通知の有効/無効を切り替える項目
+    /// デスクトップ通知の有効/無効を切り替える項目
     pub enabled_item: CheckMenuItem,
-    /// モード変更を通知するかどうかの項目
-    pub notify_mode_item: CheckMenuItem,
-    /// クリップボードの内容を通知に含めるかどうかの項目
-    pub notify_result_item: CheckMenuItem,
+    /// 加工完了を通知するかどうかの項目
+    pub notify_process_item: CheckMenuItem,
     /// 一時停止の切替を通知するかどうかの項目
     pub notify_pause_item: CheckMenuItem,
+    /// 履歴復元を通知するかどうかの項目
+    pub notify_history_restore_item: CheckMenuItem,
+    /// OCR を通知するかどうかの項目
+    pub notify_ocr_item: CheckMenuItem,
+    /// 登録クリップを通知するかどうかの項目
+    pub notify_registered_clip_item: CheckMenuItem,
+    /// お気に入りを通知するかどうかの項目
+    pub notify_favorites_item: CheckMenuItem,
+    /// 連続記録を通知するかどうかの項目
+    pub notify_continuous_record_item: CheckMenuItem,
+    /// クリップボードの内容を通知に含めるかどうかの項目
+    pub notify_result_item: CheckMenuItem,
 }
 
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体

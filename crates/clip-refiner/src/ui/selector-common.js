@@ -52,7 +52,9 @@
         const end = index + query.length;
         return (
             escapeHtml(text.slice(0, index)) +
-            '<mark>' + escapeHtml(text.slice(index, end)) + '</mark>' +
+            '<mark>' +
+            escapeHtml(text.slice(index, end)) +
+            '</mark>' +
             escapeHtml(text.slice(end))
         );
     }

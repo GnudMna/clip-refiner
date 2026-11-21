@@ -22,6 +22,7 @@
 
 - [Rust / Cargo](https://www.rust-lang.org/tools/install) (edition 2024、Rust 1.96 以上。`rust-toolchain.toml` でピン留め)
 - [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) (サプライチェーン監査。`cargo install cargo-deny --locked`)
+- [Node.js](https://nodejs.org/) (設定 UI の JavaScript ロジックテスト・ESLint / Prettier。`check.ps1` 実行時は必須。通常の `cargo test` では未インストール時に JS テストをスキップする)
 
 対応 OS は **Windows** のみ。
 
@@ -33,6 +34,12 @@
 git clone <repository_url>
 cd clip-refiner
 cargo build --release
+```
+
+品質チェックをコミット・プッシュ時に自動実行する場合は [Git フック](#git-フック) を有効化する:
+
+```powershell
+./scripts/windows/install-hooks.ps1
 ```
 
 バイナリは `target/release/ClipRefiner.exe` に生成される。ビルドスクリプト `scripts/windows/build.ps1` も利用できる。
@@ -52,6 +59,24 @@ cargo build --release
 ```
 
 出力先: `target/wix/clip-refiner-{version}-{arch}.msi` (per-user インストール、日本語 UI)
+
+`build-msi.ps1` は MSI 作成後に内容検証を自動実行する。既存 MSI のみ検証する場合:
+
+```powershell
+./scripts/windows/verify-msi.ps1
+./scripts/windows/verify-msi.ps1 -MsiPath target\wix\clip-refiner-0.12.1-x86_64-pc-windows-msvc.msi
+```
+
+**検証内容:**
+
+| 区分 | 項目 |
+| :--- | :--- |
+| メタデータ | `Cargo.toml` の `upgrade-guid` と `wix/main.wxs` の `UpgradeCode` の一致 |
+| MSI Property | `ProductName`, `ProductVersion`, `UpgradeCode`, `Manufacturer`, per-user (`ALLUSERS`) |
+| MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`)、Feature (`Binaries`, `Environment`, `Autostart`) |
+| 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致を確認 |
+
+`-SkipExtract` でデータベース検証のみに省略できる。`build-msi.ps1 -SkipVerify` でビルド後検証をスキップできる。
 
 ---
 
@@ -94,10 +119,17 @@ assert_eq!(output, "hello world");
 | `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
 | `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・パイプラインとデフォルトモード |
-| `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行。未インストール時はスキップ) |
-| `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行。未インストール時はスキップ) |
+| `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
+| `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
+| `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
+| `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
+| `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工と正規表現 CLI オプション |
 | `library_api.rs` | クレートルート re-export と core 連携 |
+
+`clip-refiner-core/tests/property_transforms.rs` では `proptest` による URL・エスケープ・正規表現置換のプロパティテストを実行する。
+
+UI ロジックテストは Node.js 未インストール時にスキップする (`note:` を出力)。`check.ps1` は Node.js を検証し `CLIP_REFINER_REQUIRE_NODE=1` で必須化する。意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する。
 
 ### テスト用ヘルパー (`test_helpers`)
 
@@ -195,17 +227,120 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 
 ## 品質チェック
 
-Windows の `check` スクリプト (`scripts/windows/check.ps1`) で、整形・Clippy・サプライチェーン監査・テストを一括実行できる。
+Windows の `check` スクリプト (`scripts/windows/check.ps1`) で、整形・Clippy・サプライチェーン監査・テストを一括実行できる。コード整形のみ行う場合は `format` スクリプト (`scripts/windows/format.ps1`) で rustfmt と Prettier を適用できる。
+
+```powershell
+./scripts/windows/check.ps1
+./scripts/windows/format.ps1
+```
+
+### Git フック
+
+コミット・プッシュ時に品質チェックを自動実行する Git フックをリポジトリ同梱している。クローン後に一度だけ有効化する:
+
+```powershell
+./scripts/windows/install-hooks.ps1
+```
+
+| フック | 実行内容 | 所要時間の目安 |
+| :----- | :------- | :------------- |
+| `pre-commit` | `cargo fmt --check` (`check-pre-commit.ps1`) | 数秒 |
+| `pre-push` | `check.ps1` 一式 (fmt / clippy / deny / eslint / test) | 数分 |
+
+無効化:
+
+```powershell
+./scripts/windows/uninstall-hooks.ps1
+```
+
+一時的なスキップ:
+
+| 方法 | 用途 |
+| :--- | :--- |
+| `git commit --no-verify` | pre-commit のみスキップ |
+| `git push --no-verify` | pre-push のみスキップ |
+| `CLIP_REFINER_SKIP_HOOK=1` | 両フックをスキップ |
+
+`core.hooksPath` はローカル Git 設定 (`git config core.hooksPath`) に保存される。フック本体は `scripts/git/hooks/` に置き、バージョン管理する。
+
+手動でフックを試す場合:
+
+```powershell
+git hook run pre-commit
+git hook run pre-push
+```
 
 個別コマンド:
 
 ```bash
+cargo fmt
+./scripts/windows/format.ps1
 cargo fmt --check
 cargo clippy --all-targets --features test-helpers -- -D warnings
 cargo deny check
+npm ci
+npm run lint
+npm run format:check
 cargo test --all-targets --features test-helpers
 cargo test --doc --features test-helpers
 ```
+
+### JavaScript リンター (ESLint / Prettier)
+
+UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refiner/tests/`) は ESLint と Prettier で検証する。`check.ps1` / `format.ps1` は `scripts/common/npm.ps1` 経由で実行する。
+
+| ツール | 役割 |
+| :----- | :--- |
+| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出) |
+| [Prettier](https://prettier.io/) | JavaScript の整形 (タブ幅 4、シングルクォート) |
+
+初回または `package.json` 更新後:
+
+```powershell
+npm ci
+```
+
+個別実行:
+
+```powershell
+npm run lint          # ESLint
+npm run lint:fix      # ESLint (自動修正)
+npm run format:check  # Prettier 整形チェック
+npm run format        # Prettier 整形適用
+```
+
+設定ファイル: [`package.json`](package.json), [`eslint.config.js`](eslint.config.js), [`.prettierrc.json`](.prettierrc.json)
+
+設定画面の JavaScript は Rust 側で 1 つの IIFE に連結する (`tray/settings/window.rs`)。連結後の共有バインディングは ESLint 単体では解決できないため、`shared.js` / `panels.js` / `events.js` / `main.js` では `no-undef` 等を無効化している。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
+
+### スクリプト構成
+
+`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のドットソース用ヘルパーに集約する。
+
+| `scripts/common/` | 役割 |
+| :---------------- | :--- |
+| `assert.ps1` | 外部コマンドの終了コード検証 (`Assert-LastExitCode`) |
+| `cargo.ps1` | `cargo fmt` / `clippy` / `test` のラッパー |
+| `npm.ps1` | `npm ci` / ESLint / Prettier のラッパー |
+| `cargo-deny-check.ps1` | `cargo deny check` |
+| `wix.ps1` | `cargo-wix` / WiX Toolset v3 の存在確認 |
+| `verify-msi.ps1` | MSI メタデータ・展開内容の検証ロジック |
+| `generate-third-party-notices.ps1` | `THIRD_PARTY_NOTICES` 生成 |
+| `release-version.ps1` | リリース時のバージョン更新ヘルパー |
+| `cd-project-root.ps1` | リポジトリルートへ移動 |
+| `wait-if-double-clicked.ps1` | エクスプローラー起動時の Enter 待ち (`Invoke-ScriptMain`) |
+
+| `scripts/windows/` | 役割 |
+| :----------------- | :--- |
+| `check.ps1` | 品質チェック一式 |
+| `format.ps1` | rustfmt + Prettier 整形 |
+| `test.ps1` / `clippy.ps1` | 個別の Cargo コマンド |
+| `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
+| `build.ps1` / `build-msi.ps1` | ビルド・MSI 作成 |
+| `verify-msi.ps1` | MSI 検証の CLI ラッパー |
+| `release.ps1` | リリース手順一括実行 |
+| `install-hooks.ps1` / `uninstall-hooks.ps1` | Git フック管理 |
+| `generate-wix-assets.ps1` | WiX ブランド画像生成 |
 
 ### サプライチェーン監査 (`cargo-deny`)
 
@@ -230,6 +365,7 @@ cargo test --doc --features test-helpers
 | :--- | :--- |
 | 生成ツール | [cargo-about](https://github.com/EmbarkStudios/cargo-about) (`cargo install cargo-about --locked --features cli`) |
 | 設定 | [`about.toml`](about.toml)、テンプレート [`scripts/templates/third-party-notices.hbs`](scripts/templates/third-party-notices.hbs) |
+| 自クレート除外 | `about.toml` の `private.ignore` でワークスペース内クレート (`clip-refiner`, `clip-refiner-core`) を除外 (`deny.toml` と同方針) |
 | 手動生成 | `scripts/common/generate-third-party-notices.ps1` |
 | 出力 | リポジトリルートの `THIRD_PARTY_NOTICES` (`.gitignore` 対象。パッケージ作成時に自動生成) |
 
@@ -279,7 +415,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 加工 | `REGEX_PREVIEW_SAMPLE`, `RegexPreviewResult`, `preview_regex_replace` | 正規表現置換のプレビュー (設定 UI と同一エンジン) |
 | クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
-| 設定 | `AppConfig`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
+| 設定 | `AppConfig`, `NotificationSettings`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
 | 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` | 設定ファイル I/O |
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
@@ -333,12 +469,18 @@ let _ = apply_text_pipeline("  hello  ", &pipeline, &ctx);
 ```
 clip-refiner/
 ├── Cargo.toml           # workspace ルート (virtual manifest)
+├── package.json         # UI JavaScript の ESLint / Prettier (本番バイナリには同梱しない)
+├── eslint.config.js
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
 │   │   ├── src/
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
+│   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event)
+│   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期
+│   │   │   │   ├── event/       # イベントループ制御・ルーティング
+│   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView
 │   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc, apply/, snapshot など)
 │   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ
 │   │   │   │   └── ...
@@ -354,17 +496,52 @@ clip-refiner/
 │           └── test_helpers/ # コア単体テスト用
 ├── assets/
 ├── scripts/
-│   ├── common/          # 共通ヘルパー (cargo-deny、THIRD_PARTY_NOTICES 生成など)
-│   └── windows/         # ビルド・品質チェック (check.ps1 など)
+│   ├── common/          # ドットソース用ヘルパー (cargo / npm / wix / MSI 検証など)
+│   ├── git/hooks/       # Git フック (pre-commit / pre-push)
+│   └── windows/         # 開発者向けエントリポイント (check.ps1, format.ps1 など)
 ├── CONFIG.md
 └── wix/
 ```
 
 `clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
 
-セレクター UI (`src/ui/`) は WebView 上で動作する。`selector-common.js` に共通ロジックを集約し、クイックセレクタ・登録クリップセレクタはそれぞれ `quick_selector.js`・`clip_selector.js` に UI ロジックを分割している。Rust 側 (`tray/selector_window.rs`) で CSS / JS をインライン展開して `WebView` に渡す。
+セレクター UI (`src/ui/`) は WebView 上で動作する。`selector-common.js` に共通ロジックを集約し、クイックセレクタ・登録クリップセレクタはそれぞれ `quick_selector.js`・`clip_selector.js` に UI ロジックを分割している。Rust 側 (`tray/selector/`) で CSS / JS をインライン展開して `WebView` に渡す。
 
-設定ウィンドウ (`src/ui/settings/`) は `main.js` (エントリ)、`panels.js` (タブ描画)、`events.js` (入力イベント)、`shared.js` (状態同期・debounce)、`settings_patch.js` (パッチ組み立て)、`regex_preview.js` (プレビュー表示) に分割している。Rust 側 (`tray/settings/window.rs`) で順序通りにインライン結合する。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム) に分割されている。
+### `tray/` の責務分担
+
+トレイ常駐 UI は **インフラ層** (`menu/`, `event/`, `worker/` など) と **機能ドメイン層** (`features/`, `settings/apply/patch/`) に分ける。新機能を追加するときは、まず `features/` にメニュー構築とクリック処理をまとめ、設定ウィンドウ連携が必要なら `settings/apply/patch/` にパッチ適用を追加する。
+
+| モジュール (`tray/`) | 責務 |
+| :------------------- | :--- |
+| `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う |
+| `menu/` | `TrayMenu` 型定義、`build.rs` (全体組み立て)、`sync.rs` (設定同期)、`icon.rs` |
+| `event/` | tao イベントループへの委譲 (`loop_event`, `user_event`)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング |
+| `selector/` | クイックセレクター・登録クリップセレクター・OCR オーバーレイの WebView 束 (`SelectorUi`) |
+| `settings/` | 設定ウィンドウ (下表参照) |
+| `worker/` | クリップボード I/O 集約・監視ループ |
+| `state/` | `AppState`, `AppEvent` (UI とワーカー共有) |
+| `hotkey/` | グローバルホットキー登録・イベント変換 |
+| `clipboard_monitor/` | 監視ループの判断・世代管理 |
+| `notify/` | デスクトップ通知本文の組み立て (`NotificationSettings` 連動) |
+| `history_store/` | 暗号化クリップボード履歴・連続記録のメモリストア (`EncryptedHistoryStore`) |
+| `paste_watcher/` | 連続記録 ON 時の `Ctrl+V` フック |
+| `ocr/` | 画面 OCR キャプチャ連携 |
+| `app/` | `App` 構造体と起動時初期化 |
+| `dispatch.rs` | ワーカー・イベントループへの送信ヘルパー |
+
+`features/` のドメイン一覧:
+
+| サブモジュール | 対応するトレイメニュー / 操作 |
+| :------------- | :---------------------------- |
+| `refine` | 変換モード・お気に入り (`favorites.rs`) |
+| `monitor` | 監視方式・監視周期 |
+| `clips` | 登録クリップ |
+| `history` | 履歴メニュー (有効化・クリア・過去項目の選択) |
+| `record` | 連続記録 |
+| `notification` | 通知設定 |
+| `app_control` | 終了・一時停止・設定ウィンドウ・監視再開 |
+
+設定ウィンドウ (`src/ui/settings/`) は `main.js` (エントリ)、`panels.js` (タブ描画)、`events.js` (入力イベント)、`shared.js` (状態同期・debounce)、`shared_logic.js` (件数クランプ・パイプライン正規化・通知パッチ組み立てなどの純粋ロジック)、`settings_patch.js` (パッチ組み立て)、`regex_preview.js` (プレビュー表示) に分割している。`shared_logic.js` は Node.js 上の `settings_shared_logic.rs` でも検証する。Rust 側 (`tray/settings/window.rs`) で順序通りにインライン結合する。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム) に分割されている。
 
 | モジュール (`tray/settings/`) | 責務 |
 | :---------------------------- | :--- |
@@ -445,10 +622,13 @@ flowchart TB
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
+| **features** | `tray/features/notification/` | トレイメニュー「通知」の構築・クリック処理 |
 
-- エラー表示・履歴復元・ホットキー案内など固定メッセージは、呼び出し元から `platform::show_notification` を直接使う
+- エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使う (`NotificationSettings.enabled` を経由しない)
 - 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
 - 起動時は `bootstrap.rs` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
+
+`NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [CONFIG.md の通知節](CONFIG.md#通知-notification_settings) を参照。
 
 ---
 
@@ -469,13 +649,60 @@ flowchart TB
 
 バージョンごとの利用者向け変更内容は [CHANGELOG.md](CHANGELOG.md) に記載する ([Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式)。
 
-リリース作業の目安:
+### リリーススクリプト (`release.ps1`)
 
-1. `Cargo.toml` の `version` を更新し、Git タグ `v{version}` を付与する
-2. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を新バージョン見出し (`## [x.y.z] - YYYY-MM-DD`) へ移し、空の `[Unreleased]` を用意する
-3. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
-4. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
-5. パッケージ作成スクリプト (`build-msi.ps1`) は `THIRD_PARTY_NOTICES` を自動生成して同梱する
+`scripts/windows/release.ps1` で、バージョン更新から MSI 作成までを一括実行できる。
+
+```powershell
+# リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
+git checkout -b release/v0.12.2
+
+# 明示的なバージョン指定
+./scripts/windows/release.ps1 -Version 0.12.2
+
+# パッチリリース (0.12.1 -> 0.12.2)。事前に release/v0.12.2 ブランチへ checkout すること
+./scripts/windows/release.ps1 -Bump Patch
+
+# 変更内容の確認のみ (ファイル・Git・MSI は触らない)
+./scripts/windows/release.ps1 -Version 0.12.2 -DryRun
+```
+
+**自動で行うこと:**
+
+1. 現在のブランチが `release/v{version}` であることを検証 (不一致なら失敗)
+2. `Cargo.toml` の `version` と `crates/clip-refiner/Cargo.toml` の path 依存 `version` を更新
+3. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
+4. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
+5. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test)
+6. `Release: v{version}` で Git コミット
+7. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
+
+**主なオプション:**
+
+| オプション | 説明 |
+| :--------- | :--- |
+| `-Bump Patch\|Minor\|Major` | 現在のバージョンから SemVer インクリメント |
+| `-Version x.y.z` | 新バージョンを明示指定 (`-Bump` と排他) |
+| `-Date yyyy-MM-dd` | リリース日 (既定: 本日) |
+| `-DryRun` | 更新予定を表示するのみ |
+| `-SkipCheck` | 品質チェックをスキップ |
+| `-SkipMsi` | MSI 作成をスキップ |
+| `-NoCommit` | Git コミットをスキップ |
+| `-AllowDirty` | 未コミット変更があっても続行 |
+
+**前提:**
+
+- `release/v{version}` ブランチ上で実行すること (例: `release/v0.12.2` で `-Version 0.12.2`)
+- リリース前に [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
+- 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
+- MSI 作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (cargo-wix, WiX Toolset v3)
+
+**手動で残る作業:**
+
+1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
+2. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
+3. `git push -u origin release/v{version}` でリモートへ反映する
+4. Gitea 上で `v{version}` タグを付与する
 
 ---
 

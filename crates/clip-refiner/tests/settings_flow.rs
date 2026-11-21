@@ -35,7 +35,7 @@ fn partial_notification_ipc_merge_preserves_sibling_fields() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.enqueue_apply_ipc(
-        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyMode":false,"notifyResult":false,"notifyPause":true}}}"#,
+        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyPause":true,"notifyOcr":true}}}"#,
     ));
     assert!(ctx.enqueue_patch_json(r#"{"notificationSettings":{"notifyResult":true}}"#,));
 
@@ -46,9 +46,10 @@ fn partial_notification_ipc_merge_preserves_sibling_fields() {
         serde_json::from_str(&json).expect("マージ済みパッチ JSON のパース");
     let notification = &patch["notificationSettings"];
     assert_eq!(notification["enabled"], true);
-    assert_eq!(notification["notifyMode"], false);
+    assert_eq!(notification["notifyProcess"], false);
     assert_eq!(notification["notifyResult"], true);
     assert_eq!(notification["notifyPause"], true);
+    assert_eq!(notification["notifyOcr"], true);
 }
 
 // ======================================================================

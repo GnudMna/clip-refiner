@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use super::super::clip_selector::ClipSelectorWindow;
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
+use crate::tray::selector::ClipSelectorWindow;
 
 use crate::config::{AppConfig, ConfigReloadError};
 use crate::platform;

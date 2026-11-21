@@ -65,9 +65,14 @@ mod tests {
     fn test_notification_settings_default() {
         let ns = NotificationSettings::default();
         assert!(!ns.enabled, "enabled のデフォルトは false");
-        assert!(ns.notify_mode);
+        assert!(ns.notify_process);
         assert!(!ns.notify_result, "notify_result のデフォルトは false");
         assert!(ns.notify_pause);
+        assert!(ns.notify_history_restore);
+        assert!(ns.notify_ocr);
+        assert!(ns.notify_registered_clip);
+        assert!(ns.notify_favorites);
+        assert!(ns.notify_continuous_record);
     }
 
     /// `notification_settings.enabled` が TOML に保存・復元されるようにすること
@@ -76,12 +81,47 @@ mod tests {
         let mut config = AppConfig::default();
         config.notification_settings.enabled = true;
         config.notification_settings.notify_result = false;
+        config.notification_settings.notify_ocr = false;
 
         let toml_str = toml::to_string(&config).expect("AppConfig のシリアライズに失敗");
         let decoded: AppConfig =
             toml::from_str(&toml_str).expect("AppConfig のデシリアライズに失敗");
         assert!(decoded.notification_settings.enabled);
         assert!(!decoded.notification_settings.notify_result);
+        assert!(!decoded.notification_settings.notify_ocr);
+        assert!(!toml_str.contains("notify_mode"));
+        assert!(!toml_str.contains("notify_actions"));
+    }
+
+    /// 旧 `notify_actions` OFF は個別カテゴリへ移行されるようにすること
+    #[test]
+    fn test_notification_settings_migrates_legacy_actions() {
+        let toml_str = r"
+enabled = true
+notify_actions = false
+";
+        let mut settings: NotificationSettings =
+            toml::from_str(toml_str).expect("NotificationSettings のデシリアライズに失敗");
+        settings.migrate_legacy_fields();
+        assert!(!settings.notify_history_restore);
+        assert!(!settings.notify_ocr);
+        assert!(!settings.notify_registered_clip);
+        assert!(!settings.notify_favorites);
+        assert!(!settings.notify_continuous_record);
+    }
+
+    /// 旧 `notify_mode` と `notify_result` が両方 OFF の場合は加工完了を無効化すること
+    #[test]
+    fn test_notification_settings_migrates_legacy_process() {
+        let toml_str = r"
+enabled = true
+notify_mode = false
+notify_result = false
+";
+        let mut settings: NotificationSettings =
+            toml::from_str(toml_str).expect("NotificationSettings のデシリアライズに失敗");
+        settings.migrate_legacy_fields();
+        assert!(!settings.notify_process);
     }
 
     /// normalize が範囲外の値をクランプし version を現行へ更新すること

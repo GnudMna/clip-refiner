@@ -3,13 +3,7 @@
 //! 変換モード、監視設定、登録クリップ、履歴、通知などのサブメニューを組み立てる
 
 mod build;
-mod clips;
-mod history;
 pub(crate) mod icon;
-mod monitor;
-mod notification;
-mod record;
-mod refine;
 mod sync;
 mod types;
 
@@ -29,7 +23,7 @@ mod tests {
     use super::icon::create_icon;
     use super::*;
 
-    use crate::config::{HotkeySettings, MonitorMode};
+    use crate::config::{HotkeySettings, MonitorMode, NotificationSettings};
     use crate::refiner::{RefineCategory, RefineMode};
 
     use tray_icon::{
@@ -89,7 +83,7 @@ mod tests {
                 empty_hint_item: MenuItem::new("(未登録)", false, None),
                 register_item: MenuItem::new("クリップボードを登録", true, None),
             },
-            notification: TrayMenu::build_notification_menu(false, true, true, true)
+            notification: TrayMenu::build_notification_menu(&NotificationSettings::default())
                 .expect("通知メニューの構築に失敗"),
             open_settings_window_item: MenuItem::new("設定ウィンドウ", true, None),
             retry_clipboard_worker_item: MenuItem::new("クリップボード監視を再開", true, None),
@@ -137,10 +131,15 @@ mod tests {
     /// 通知メニューの有効状態が初期値を反映すること
     #[test]
     fn build_notification_menu_reflects_settings() {
-        let notification = TrayMenu::build_notification_menu(true, false, true, false)
-            .expect("通知メニューの構築に失敗");
+        let mut settings = NotificationSettings::default();
+        settings.enabled = true;
+        settings.notify_process = false;
+        settings.notify_result = true;
+        settings.notify_pause = false;
+        let notification =
+            TrayMenu::build_notification_menu(&settings).expect("通知メニューの構築に失敗");
         assert!(notification.enabled_item.is_checked());
-        assert!(!notification.notify_mode_item.is_checked());
+        assert!(!notification.notify_process_item.is_checked());
         assert!(notification.notify_result_item.is_checked());
         assert!(!notification.notify_pause_item.is_checked());
     }
