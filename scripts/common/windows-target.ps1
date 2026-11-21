@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : windows-target.ps1
-# Description : Windows 配布ターゲット (x64 / ARM64) の解決と PE 検証
+# Description : Windows 配布ターゲット (x64) の解決と PE 検証
 # Usage       : . (Join-Path $PSScriptRoot 'windows-target.ps1')
 # Requires    : PowerShell 7.0+, Rust / Cargo
 # ========================================================================
@@ -10,7 +10,6 @@
 Set-StrictMode -Version Latest
 
 $script:WindowsX64Triple = 'x86_64-pc-windows-msvc'
-$script:WindowsArm64Triple = 'aarch64-pc-windows-msvc'
 $script:WindowsMsvcOriginalPath = $null
 
 # rustc の host triple を取得する
@@ -37,10 +36,10 @@ function Get-WindowsSupportedTargetTriples {
     [CmdletBinding()]
     param()
 
-    return @($script:WindowsX64Triple, $script:WindowsArm64Triple)
+    return @($script:WindowsX64Triple)
 }
 
-# ターゲット triple が x64 / ARM64 の配布対象か検証する
+# ターゲット triple が配布対象 (x64) か検証する
 function Assert-WindowsSupportedTargetTriple {
     [CmdletBinding()]
     param(
@@ -55,7 +54,7 @@ function Assert-WindowsSupportedTargetTriple {
     }
 }
 
-# エイリアスまたは triple を正規化する (All / Host はここでは扱わない)
+# エイリアスまたは triple を正規化する (Host はここでは扱わない)
 function Resolve-WindowsTargetTripleAlias {
     [CmdletBinding()]
     param(
@@ -65,11 +64,10 @@ function Resolve-WindowsTargetTripleAlias {
 
     switch -Regex ($Value.Trim()) {
         '^(?i)(x64|x86_64|amd64|x86_64-pc-windows-msvc)$' { return $script:WindowsX64Triple }
-        '^(?i)(arm64|aarch64|aarch64-pc-windows-msvc)$' { return $script:WindowsArm64Triple }
         default {
             throw @(
                 "エラー: 未知のターゲットです: $Value",
-                '指定できる値: Host, All, x64, arm64, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc'
+                '指定できる値: Host, x64, x86_64-pc-windows-msvc'
             ) -join [Environment]::NewLine
         }
     }
@@ -77,8 +75,7 @@ function Resolve-WindowsTargetTripleAlias {
 
 # -Target 指定を配布用 triple の配列へ展開する
 #
-# 省略 / Host: 実行中ホスト (x64 または ARM64)
-# All: x64 と ARM64 の両方
+# 省略 / Host: 実行中ホスト (x64 以外はエラー)
 function Resolve-WindowsPackageTargets {
     [CmdletBinding()]
     param(
@@ -89,10 +86,6 @@ function Resolve-WindowsPackageTargets {
         $hostTriple = Get-RustHostTriple
         Assert-WindowsSupportedTargetTriple -TargetTriple $hostTriple
         return @($hostTriple)
-    }
-
-    if ($Target -match '^(?i)(all|both)$') {
-        return @(Get-WindowsSupportedTargetTriples)
     }
 
     $triple = Resolve-WindowsTargetTripleAlias -Value $Target
@@ -144,61 +137,6 @@ function Get-VsWherePath {
     return $null
 }
 
-# OS のネイティブ CPU を返す (x64 プロセスが ARM64 上でエミュレーションされていても ARM64)
-function Get-WindowsNativeArchitecture {
-    [CmdletBinding()]
-    param()
-
-    switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
-        'X64' { return 'x64' }
-        'Arm64' { return 'arm64' }
-        'X86' { return 'x86' }
-        default {
-            throw "エラー: 未対応の OS アーキテクチャです: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
-        }
-    }
-}
-
-# ターゲット triple に対応する VS コンポーネント ID を返す
-function Get-MsvcVcToolsComponentId {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$TargetTriple
-    )
-
-    if ($TargetTriple.StartsWith('aarch64-')) {
-        return 'Microsoft.VisualStudio.Component.VC.Tools.ARM64'
-    }
-
-    return 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
-}
-
-# ホスト OS / ターゲットに対応する vcvarsall.bat のアーキテクチャ引数を返す
-#
-# rustc の host triple は使わない
-# ARM64 Windows 上の x64 rustc (エミュレーション) だと `amd64` (x64 ホストツール) になり、導入済みの ARM64 ホストツールと食い違う
-function Get-VcVarsAllArchitecture {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$TargetTriple,
-
-        [string]$HostArch
-    )
-
-    if ([string]::IsNullOrWhiteSpace($HostArch)) {
-        $HostArch = Get-WindowsNativeArchitecture
-    }
-
-    $targetArch = if ($TargetTriple.StartsWith('aarch64-')) { 'arm64' } else { 'x64' }
-    if ($HostArch -eq $targetArch) {
-        return $HostArch
-    }
-
-    return "${HostArch}_${targetArch}"
-}
-
 # vswhere から C++ ツール付きの VS インストール先を返す
 function Get-VisualStudioInstallPath {
     [CmdletBinding()]
@@ -213,7 +151,7 @@ function Get-VisualStudioInstallPath {
         throw "エラー: vswhere.exe が見つかりません (Visual Studio Installer)`n$hint"
     }
 
-    $componentId = Get-MsvcVcToolsComponentId -TargetTriple $TargetTriple
+    $componentId = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
     $raw = & $vswhere -latest -products * -requires $componentId -property installationPath
     $installPath = @(
         $raw | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ }
@@ -275,12 +213,12 @@ function Import-WindowsMsvcBuildEnvironment {
         throw "エラー: vcvarsall.bat が見つかりません: $vcvars`n$hint"
     }
 
-    $hostArch = Get-WindowsNativeArchitecture
-    $archArg = Get-VcVarsAllArchitecture -TargetTriple $TargetTriple -HostArch $hostArch
-    $targetArch = if ($TargetTriple.StartsWith('aarch64-')) { 'arm64' } else { 'x64' }
+    # 配布対象は x64 のみのため、ホスト・ターゲットとも x64 ツールを使う
+    $hostArch = 'x64'
+    $archArg = 'x64'
     if (
         $env:VSCMD_ARG_HOST_ARCH -eq $hostArch -and
-        $env:VSCMD_ARG_TGT_ARCH -eq $targetArch -and
+        $env:VSCMD_ARG_TGT_ARCH -eq $hostArch -and
         -not [string]::IsNullOrWhiteSpace($env:INCLUDE)
     ) {
         Write-Host "MSVC ビルド環境は既に読み込み済みです (host=$hostArch, $archArg)"
@@ -528,7 +466,6 @@ function Get-ExpectedPeMachineType {
 
     switch ($TargetTriple) {
         $script:WindowsX64Triple { return [uint16]0x8664 }
-        $script:WindowsArm64Triple { return [uint16]0xAA64 }
         default {
             throw "エラー: PE Machine を解決できません: $TargetTriple"
         }
@@ -591,7 +528,6 @@ function Assert-MsiPlatformTemplate {
 
     $expectedToken = switch ($TargetTriple) {
         $script:WindowsX64Triple { 'x64' }
-        $script:WindowsArm64Triple { 'Arm64' }
         default { throw "エラー: MSI Platform を解決できません: $TargetTriple" }
     }
 
@@ -613,9 +549,6 @@ function Resolve-WindowsTargetTripleFromMsiName {
     )
 
     $name = [System.IO.Path]::GetFileName($MsiFileName)
-    if ($name -match 'aarch64') {
-        return $script:WindowsArm64Triple
-    }
     if ($name -match 'x86_64') {
         return $script:WindowsX64Triple
     }
@@ -630,13 +563,6 @@ function Get-WindowsCrossCompileHint {
         [Parameter(Mandatory = $true)]
         [string]$TargetTriple
     )
-
-    if ($TargetTriple -eq $script:WindowsArm64Triple) {
-        return @(
-            'ARM64 向けには Visual Studio の C++ ARM64/ARM64EC ビルドツールが必要です。',
-            'Visual Studio Installer の Individual components から MSVC の ARM64 ビルドツールを追加してください。'
-        ) -join [Environment]::NewLine
-    }
 
     if ($TargetTriple -eq $script:WindowsX64Triple) {
         return @(

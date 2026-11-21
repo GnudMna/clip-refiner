@@ -23,7 +23,7 @@
 #   -SkipPortable              build-portable.ps1 をスキップ
 #   -NoCommit                  Git コミットを作成しない
 #   -AllowDirty                未コミット変更があっても続行する
-#   -Target Host|All|x64|arm64 配布アーキテクチャ (省略時はホスト。All で x64 と ARM64)
+#   -Target Host|x64           配布アーキテクチャ (省略時はホスト)
 # ========================================================================
 
 #requires -Version 7.0
@@ -44,7 +44,7 @@ param(
     [switch]$NoCommit,
     [switch]$AllowDirty,
 
-    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    # 配布ターゲット。省略時はホスト。Host / x64 / triple
     [string]$Target
 )
 
@@ -218,5 +218,4 @@ Invoke-ScriptMain {
     Write-Host '      MSI:      target\wix\clip-refiner-{version}-{target-triple}.msi (+ .msi.minisig)'
     Write-Host '      Portable: target\portable\clip-refiner-{version}-{target-triple}-portable.zip (+ .zip.minisig)'
     Write-Host '      (署名ファイルが無いとアプリは更新を適用しない)'
-    Write-Host '      (x64 と ARM64 の両方を出す場合は -Target All)'
 }

@@ -6,7 +6,6 @@ use std::os::windows::io::AsRawHandle;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use single_instance::SingleInstance;
 use thiserror::Error;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Pipes::PeekNamedPipe;
@@ -21,6 +20,7 @@ use super::protocol::{
 };
 use super::session::{is_server_in_current_session, resident_pipe_name};
 use crate::consts;
+use crate::platform::single_instance::SingleInstance;
 use crate::refiner::{RefineContext, RefineMode};
 
 // ======================================================================

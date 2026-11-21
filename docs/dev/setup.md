@@ -8,7 +8,7 @@
 
 | 用途 | 必要なもの |
 | :--- | :--- |
-| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード。ARM64 ネイティブまたはクロスコンパイルには **MSVC C++ ARM64/ARM64EC ビルドツール** と `rustup target add aarch64-pc-windows-msvc` も必要 (パッケージスクリプトが未導入なら追加する) |
+| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード |
 | `scripts/windows/*.ps1` | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
 | UI の静的解析・JS ロジックテスト | [Node.js](https://nodejs.org/) と npm |
 | WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
@@ -49,20 +49,19 @@ cargo install cargo-llvm-cov --locked
 [初回セットアップ](#初回セットアップ) のあと、リポジトリルートで実行する。ビルドだけなら Node.js は不要。
 
 ```powershell
-cargo build -p clip-refiner --release
+cargo build --locked -p clip-refiner --release
 ```
+
+`--locked` は `Cargo.lock` とずれた依存解決を許さないための指定。`build.ps1` / `build-msi.ps1` / `build-portable.ps1` のビルドも `--locked` で実行する (`cargo wix` は `--locked` を渡せないため、`build-msi.ps1` は先に `cargo build --locked` でビルドして `--no-build` で渡す)。
 
 PowerShell スクリプトでターゲットを明示する場合:
 
 ```powershell
 ./scripts/windows/build.ps1 -Release
-./scripts/windows/build.ps1 -Release -Target arm64
-./scripts/windows/build.ps1 -Release -Target All
+./scripts/windows/build.ps1 -Release -Target x64
 ```
 
-ホスト向けバイナリは `target/release/ClipRefiner.exe` に生成される。`-Target arm64` / `-Target x64` を明示した場合は `target/{triple}/release/ClipRefiner.exe` になる。
-
-x64 ホストから ARM64 をクロスコンパイルする場合は、Visual Studio に ARM64 C++ ビルドツールが入っていること。パッケージスクリプトは未導入なら `rustup target add aarch64-pc-windows-msvc` を実行し、OS ネイティブのホストアーキテクチャで `vcvarsall.bat` (例: x64 ホストなら `x64_arm64`) を呼んで MSVC 環境を読み込む。ARM64 Windows 上の x64 rustc (エミュレーション) でも、ホストは OS 側の ARM64 ツールを使う。
+ホスト向けバイナリは `target/release/ClipRefiner.exe` に生成される。`-Target x64` を明示した場合は `target/{triple}/release/ClipRefiner.exe` になり、`vcvarsall.bat x64` で MSVC 環境を読み込む。配布対象は x64 のみで、それ以外のホスト・ターゲットはエラーになる。
 
 ## Windows パッケージ作成
 
@@ -77,17 +76,14 @@ cargo install cargo-about --locked --features cli
 winget install WiXToolset.WiXToolset
 
 ./scripts/windows/build-msi.ps1
-./scripts/windows/build-msi.ps1 -Target arm64
-./scripts/windows/build-msi.ps1 -Target All
 ```
 
-出力先: `target/wix/clip-refiner-{version}-{target-triple}.msi` (per-user インストール、日本語 UI)。`-Target` を省略するとホスト CPU (x64 または ARM64) 向け。`All` で両方を作成する。
+出力先: `target/wix/clip-refiner-{version}-{target-triple}.msi` (per-user インストール、日本語 UI)。
 
 `build-msi.ps1` は MSI 作成後に内容検証を自動実行する。既存 MSI のみ検証する場合:
 
 ```powershell
 ./scripts/windows/verify-msi.ps1
-./scripts/windows/verify-msi.ps1 -Target arm64
 ./scripts/windows/verify-msi.ps1 -MsiPath target\wix\clip-refiner-{version}-{target-triple}.msi
 ```
 
@@ -98,7 +94,7 @@ winget install WiXToolset.WiXToolset
 | メタデータ | `Cargo.toml` の `upgrade-guid` と `wix/main.wxs` の `UpgradeCode` の一致 |
 | MSI Property | `ProductName`, `ProductVersion`, `UpgradeCode`, `Manufacturer`, per-user (`ALLUSERS`) |
 | MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`, `index.html`)、Feature (`Binaries`, `Environment`, `Autostart`) |
-| 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致・PE アーキテクチャ (x64 / ARM64)・利用者向けドキュメント (`docs\`) の各ページを確認 |
+| 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致・PE アーキテクチャ (x64)・利用者向けドキュメント (`docs\`) の各ページを確認 |
 
 `-SkipExtract` でデータベース検証のみに省略できる。`build-msi.ps1 -SkipVerify` でビルド後検証をスキップできる。
 
@@ -111,8 +107,6 @@ cargo install cargo-about --locked --features cli
 # mdBook は固定版が必要。未導入や版違いのときは、ビルドが導入コマンドを表示して止まる
 
 ./scripts/windows/build-portable.ps1
-./scripts/windows/build-portable.ps1 -Target arm64
-./scripts/windows/build-portable.ps1 -Target All
 ```
 
 出力先:
@@ -126,7 +120,7 @@ cargo install cargo-about --locked --features cli
 
 | オプション | 効果 |
 | :--- | :--- |
-| `-Target` | 配布 CPU。`Host` (既定) / `x64` / `arm64` / `All` / 完全な triple |
+| `-Target` | 配布 CPU。`Host` (既定) / `x64` / 完全な triple |
 | `-SkipBuild` | 既存の `target/release/ClipRefiner.exe` (または `target/{triple}/release`) を使う |
 | `-SkipZip` | フォルダのみ作成し ZIP を作らない |
 | `-SkipNotices` | `THIRD_PARTY_NOTICES` を再生成しない (既存があれば同梱) |

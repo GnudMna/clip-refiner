@@ -471,7 +471,7 @@ UI のファイル構成と `innerHTML` の扱いは [アーキテクチャ](arc
 | :--- | :--- |
 | **advisories** | RustSec 公表の脆弱性・yanked crate。`unmaintained` はワークスペース直接依存のみ失敗 |
 | **licenses** | 商用利用可能なパーミッシブライセンス (MIT / Apache-2.0 / BSD 等) のみ許可。GPL / LGPL / MPL 等のコピーレフトは拒否 |
-| **bans** | 同一 crate の多重バージョンなど |
+| **bans** | 同一 crate の多重バージョンなど。上流の版が揃うまで解消できないものだけ `skip` に理由付きで置く |
 | **sources** | crates.io 以外のレジストリ / git 依存の拒否 |
 
-`graph.all-features` と Windows ターゲット (`x86_64-pc-windows-msvc` / `aarch64-pc-windows-msvc`) を対象に、feature `app` 有効時の依存グラフを検査する。
+`graph.all-features` と Windows ターゲット (`x86_64-pc-windows-msvc`) を対象に、feature `app` 有効時の依存グラフを検査する。配布物に入らない dev-dependencies は `exclude-dev` で対象外にする。`skip` した版が解消されると `unmatched-skip` の警告が出るので、その項目を削除する。

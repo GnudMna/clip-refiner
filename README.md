@@ -73,9 +73,8 @@
 
 ## 動作要件とインストール
 
-- **対応 OS:** Windows (x64 / ARM64)
+- **対応 OS:** Windows (x64)
 - **WebView:** 設定ウィンドウとセレクターの表示に [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) が必要 (通常は Windows に導入済み)。未導入でも監視・ホットキー・ワンショットは動作する
-- **配布 CPU:** MSI / ポータブル ZIP はアーキテクチャ別。実行中の CPU と一致するパッケージを使う (x64 版を ARM64 へは適用しない)
 
 | 形態                 | 入手・配置                                                                                                                                                                              |
 | :--- | :--- |
@@ -151,5 +150,7 @@
 ## ライセンス
 
 [All Rights Reserved](LICENSE)
+
+使用 (インストール・実行を含む) には、著作者の事前の許可が必要。
 
 </div>

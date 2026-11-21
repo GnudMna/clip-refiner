@@ -2,9 +2,8 @@
 # Script Name : build.ps1
 # Description : Windows 用のビルド実行
 # Usage       : ./build.ps1 [--release|-r]
-#               ./build.ps1 -Release -Target arm64
+#               ./build.ps1 -Release -Target x64
 # Requires    : PowerShell 7.0+, Rust / Cargo
-#               ARM64 クロスコンパイル時は VS の ARM64 C++ ビルドツール
 # ========================================================================
 
 #requires -Version 7.0
@@ -12,7 +11,7 @@
 param(
     [switch]$Release,
 
-    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    # 配布ターゲット。省略時はホスト。Host / x64 / triple
     [string]$Target
 )
 
@@ -45,10 +44,10 @@ Invoke-ScriptMain {
 
         if ($Release) {
             Write-Host "リリースビルドを実行中 ($triple)..."
-            cargo build --release @targetArgs
+            cargo build --locked --release @targetArgs
         } else {
             Write-Host "デバッグビルドを実行中 ($triple)..."
-            cargo build @targetArgs
+            cargo build --locked @targetArgs
         }
 
         if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0) {

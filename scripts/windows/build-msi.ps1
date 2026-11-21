@@ -1,7 +1,7 @@
 # ========================================================================
 # Script Name : build-msi.ps1
 # Description : Windows 向け MSI インストーラー作成 (cargo-wix)
-# Usage       : ./build-msi.ps1 [-SkipBuild] [-SkipVerify] [-Target arm64]
+# Usage       : ./build-msi.ps1 [-SkipBuild] [-SkipVerify] [-Target x64]
 # Requires    : PowerShell 7.0+, cargo-wix, WiX Toolset v3.14.1+, mdBook
 #
 # 前提:
@@ -12,7 +12,6 @@
 #   - wix/main.wxs, wix/Banner.bmp, wix/Dialog.bmp, wix/Eula.rtf が存在すること
 #     (画像・Eula.rtf は scripts/windows/generate-wix-assets.ps1 で再生成可能)
 #   - Cargo.toml の culture = "ja-JP" でインストーラー UI を日本語化
-#   - ARM64 クロスコンパイル時は VS の ARM64 C++ ビルドツール
 #
 # 出力:
 #   target/wix/{パッケージ名}-{バージョン}-{target-triple}.msi
@@ -28,7 +27,7 @@ param(
     # MSI 作成後の内容検証 (verify-msi.ps1) をスキップする
     [switch]$SkipVerify,
 
-    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    # 配布ターゲット。省略時はホスト。Host / x64 / triple
     [string]$Target
 )
 
@@ -79,18 +78,24 @@ Invoke-ScriptMain {
         Write-Host "MSI インストーラーの作成を開始します ($triple)..."
         Write-Host ''
 
-        $wixArgs = @('-p', 'clip-refiner', '-I', 'wix/main.wxs', '-I', $userDocsWxsPath, '--nocapture')
-        if (-not $implicitHost) {
-            $wixArgs += @('-t', $triple)
-        }
-        if ($SkipBuild) {
-            $wixArgs += '--no-build'
-            if (-not $implicitHost) {
-                $binDir = Get-CargoReleaseBinDirectory `
-                    -ProjectRoot $ProjectRoot `
-                    -TargetTriple $triple
-                $wixArgs += @('--target-bin-dir', $binDir)
+        # cargo wix は --locked を渡せないため、ビルドは自前で行い cargo wix には --no-build を渡す
+        if (-not $SkipBuild) {
+            $targetArgs = Get-CargoTargetArguments -TargetTriple $triple -ImplicitHost:$implicitHost
+            cargo build --locked -p clip-refiner --bins --release @targetArgs
+            if ($LASTEXITCODE -ne 0) {
+                $hint = Get-WindowsCrossCompileHint -TargetTriple $triple
+                $hintBlock = if ($hint) { "`n$hint" } else { '' }
+                throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました ($triple)$hintBlock"
             }
+            Write-Host ''
+        }
+
+        $wixArgs = @('-p', 'clip-refiner', '-I', 'wix/main.wxs', '-I', $userDocsWxsPath, '--nocapture', '--no-build')
+        if (-not $implicitHost) {
+            $binDir = Get-CargoReleaseBinDirectory `
+                -ProjectRoot $ProjectRoot `
+                -TargetTriple $triple
+            $wixArgs += @('-t', $triple, '--target-bin-dir', $binDir)
         }
 
         cargo wix @wixArgs
@@ -101,11 +106,10 @@ Invoke-ScriptMain {
             throw @"
 エラー: cargo wix が終了コード $LASTEXITCODE で失敗しました ($triple)
 
-cargo の終了コード 101 はリリースビルド (cargo build --release) の失敗を示すことが多い。
-上記の rustc / linker のメッセージを確認するか、次を手動で実行してください:
+上記のメッセージを確認するか、リリースビルドを手動で実行して原因を調べてください:
 
   rustc --version
-  cargo build --release -p clip-refiner$(if (-not $implicitHost) { " --target $triple" })
+  cargo build --locked --release -p clip-refiner --bins$(if (-not $implicitHost) { " --target $triple" })
 
 Rust 1.96 以上 (rust-toolchain.toml) と Visual Studio Build Tools (C++ ワークロード) が必要です。$hintBlock
 "@

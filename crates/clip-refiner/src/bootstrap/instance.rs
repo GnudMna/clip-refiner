@@ -1,11 +1,11 @@
 //! トレイ常駐の多重起動防止
 
 use anyhow::{Context, Result};
-use single_instance::SingleInstance;
 
 use crate::consts;
 use crate::log_warn;
 use crate::platform;
+use crate::platform::single_instance::SingleInstance;
 
 // ======================================================================
 // 多重起動防止

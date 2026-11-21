@@ -126,8 +126,7 @@ function Resolve-BuiltMsiPath {
         Get-RustHostTriple
     }
 
-    # cargo-wix の既定名は `{name}-{version}-{arch}.msi` (例: x86_64 / aarch64)
-    # フル triple (`x86_64-pc-windows-msvc`) では -Target All 時に 0 件になり、複数 MSI で失敗する
+    # cargo-wix の既定名は `{name}-{version}-{arch}.msi` (例: x86_64)
     $preferred = @($candidates | Where-Object {
         (Resolve-WindowsTargetTripleFromMsiName -MsiFileName $_.Name) -eq $preferredTriple
     })

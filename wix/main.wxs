@@ -2,9 +2,7 @@
 <!--
   ClipRefiner MSI インストーラー定義 (cargo-wix / WiX Toolset v3)
 
-  CPU アーキテクチャは cargo-wix の -t (target) で決まる
-  (x86_64-pc-windows-msvc または aarch64-pc-windows-msvc)
-  ARM64 MSI は Windows Installer 5.0 (InstallerVersion 500) が必要なため、x64 も含めて 500 にする
+  CPU アーキテクチャは cargo-wix の -t (target) で決まる (x86_64-pc-windows-msvc)
 
   インストール先: %LOCALAPPDATA%\ClipRefiner
   ブランド画像: wix/Banner.bmp (493x58), wix/Dialog.bmp (493x312, 左装飾+右白)

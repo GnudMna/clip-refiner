@@ -31,7 +31,7 @@ git switch -c release/v1.1.0
 7. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test / e2e)
 8. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
 9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
-10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)。`-Target All` なら x64 と ARM64 の両方
+10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
 11. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
 
 **主なオプション:**
@@ -47,7 +47,7 @@ git switch -c release/v1.1.0
 | `-SkipPortable` | ポータブル ZIP 作成をスキップ |
 | `-NoCommit` | Git コミットをスキップ |
 | `-AllowDirty` | 未コミット変更があっても続行 |
-| `-Target Host\|All\|x64\|arm64` | 配布 CPU (省略時はホスト。`All` で x64 と ARM64 の MSI / ZIP を作成) |
+| `-Target Host\|x64` | 配布 CPU (省略時はホスト) |
 
 **前提:**
 

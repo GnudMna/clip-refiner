@@ -3,7 +3,7 @@
 # Description : ビルド済み MSI の内容・メタデータを検証する
 # Usage       : ./verify-msi.ps1
 #               ./verify-msi.ps1 -MsiPath target\wix\clip-refiner-0.12.1-x86_64-pc-windows-msvc.msi
-#               ./verify-msi.ps1 -Target arm64
+#               ./verify-msi.ps1 -Target x64
 #               ./verify-msi.ps1 -SkipExtract
 # Requires    : PowerShell 7.0+, Windows (Windows Installer COM)
 #
@@ -13,7 +13,7 @@
 #   - 必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES)
 #   - 必須 Feature (Binaries, Environment, Autostart)
 #   - per-user インストール (ALLUSERS)
-#   - MSI Platform テンプレートと ClipRefiner.exe の PE アーキテクチャ (x64 / ARM64)
+#   - MSI Platform テンプレートと ClipRefiner.exe の PE アーキテクチャ (x64)
 #   - 管理インストール展開後の実ファイル内容 (既定。SkipExtract で省略)
 # ========================================================================
 
@@ -49,12 +49,8 @@ Invoke-ScriptMain {
 
     $targetTriple = $null
     if (-not [string]::IsNullOrWhiteSpace($Target)) {
-        # 1 件だとスカラー (文字列) で返り、.Count や [0] が期待どおりに動かないため配列に包む
-        $resolved = @(Resolve-WindowsPackageTargets -Target $Target)
-        if ($resolved.Count -ne 1) {
-            throw 'エラー: verify-msi.ps1 の -Target に All は指定できません。triple または x64 / arm64 を指定してください'
-        }
-        $targetTriple = $resolved[0]
+        # 1 件だとスカラー (文字列) で返り、[0] が期待どおりに動かないため配列に包む
+        $targetTriple = @(Resolve-WindowsPackageTargets -Target $Target)[0]
     }
 
     Invoke-MsiPackageVerification `

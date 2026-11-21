@@ -2,10 +2,12 @@
 //!
 //! `ureq` は既定でタイムアウトを持たないため、接続や応答が止まると更新確認・ダウンロードの
 //! スレッドが戻らず UI が「確認中」のまま残る。呼び出し側は必ずここの Agent を使う
+//! TLS は OS 標準 (`SChannel`) を使う
 
 use std::time::Duration;
 
 use ureq::Agent;
+use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
 
 // ======================================================================
 // 定数
@@ -48,10 +50,21 @@ pub(super) fn download_agent() -> Agent {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// OS 標準の TLS (`SChannel`) と証明書ストアを使う設定を返す
+///
+/// 独自の TLS 実装や CA バンドルを同梱しないことで、バイナリサイズと依存を抑える
+fn tls_config() -> TlsConfig {
+    TlsConfig::builder()
+        .provider(TlsProvider::NativeTls)
+        .root_certs(RootCerts::PlatformVerifier)
+        .build()
+}
+
 /// リクエスト全体の上限を指定して更新確認用 Agent を組み立てる
 fn api_agent_with_global_timeout(global: Duration) -> Agent {
     Agent::new_with_config(
         Agent::config_builder()
+            .tls_config(tls_config())
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_global(Some(global))
             .build(),
@@ -62,6 +75,7 @@ fn api_agent_with_global_timeout(global: Duration) -> Agent {
 fn download_agent_with_timeouts(recv_response: Duration, recv_body: Duration) -> Agent {
     Agent::new_with_config(
         Agent::config_builder()
+            .tls_config(tls_config())
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_recv_response(Some(recv_response))
             .timeout_recv_body(Some(recv_body))

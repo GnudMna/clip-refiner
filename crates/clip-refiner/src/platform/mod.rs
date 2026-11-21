@@ -8,6 +8,7 @@ pub(crate) mod ocr;
 pub(crate) mod ocr_overlay;
 pub(crate) mod screen_capture;
 pub(crate) mod shell;
+pub(crate) mod single_instance;
 pub(crate) mod update;
 pub(crate) mod webview2;
 

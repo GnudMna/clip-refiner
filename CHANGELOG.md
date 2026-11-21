@@ -29,6 +29,19 @@
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-18
+
+### Changed
+
+- 本体の利用条件を、使用に著作者の事前の許可が必要な内容へ変更
+  - MSI のインストール時に表示する同意画面にも反映
+- アプリ更新の HTTPS 通信で、証明書の検証に Windows の証明書ストアを使うよう変更
+  - 通信を検査するプロキシなどの独自証明書を Windows が信頼していれば、更新を確認・適用できる
+
+### Removed
+
+- Windows ARM64 対応 (ARM64 向けの MSI / ポータブル ZIP の配布)
+
 ## [2.2.0] - 2026-10-18
 
 ### Changed
@@ -1002,7 +1015,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.2.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.0...develop
+[3.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.2.0...v3.0.0
 [2.2.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.1...v2.2.0
 [2.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...v2.1.1
 [2.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.0.0...v2.1.0

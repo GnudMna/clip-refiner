@@ -19,13 +19,12 @@ accepted = [
     "Unicode-3.0",
     "CC0-1.0",
     "BSL-1.0",
-    # webpki-roots (ureq / rustls 経由) の CA バンドル用データライセンス
+    # webpki-root-certs (ureq の native-tls feature 経由) の CA バンドル用データライセンス
     "CDLA-Permissive-2.0",
 ]
 
 targets = [
     "x86_64-pc-windows-msvc",
-    "aarch64-pc-windows-msvc",
 ]
 
 private = { ignore = true }

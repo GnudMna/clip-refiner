@@ -2,10 +2,9 @@
 # Script Name : build-portable.ps1
 # Description : Windows 向けポータブル配布物の作成
 # Usage       : ./build-portable.ps1 [-SkipBuild] [-SkipZip] [-SkipNotices]
-#               ./build-portable.ps1 -Target arm64
+#               ./build-portable.ps1 -Target x64
 # Requires    : PowerShell 7.0+, Rust / Cargo, mdBook (利用者向けドキュメントの生成)
 #               (既定では cargo-about も必要。-SkipNotices で省略可)
-#               ARM64 クロスコンパイル時は VS の ARM64 C++ ビルドツール
 #
 # 前提:
 #   - 実行ファイル隣の `portable` マーカーでポータブルモードになること
@@ -29,7 +28,7 @@ param(
     # THIRD_PARTY_NOTICES の再生成をスキップする (既存ファイルがあれば同梱)
     [switch]$SkipNotices,
 
-    # 配布ターゲット。省略時はホスト。Host / All / x64 / arm64 / triple
+    # 配布ターゲット。省略時はホスト。Host / x64 / triple
     [string]$Target
 )
 
@@ -160,13 +159,13 @@ $($_.Exception.Message)
 
         if (-not $SkipBuild) {
             Write-Host "リリースビルドを実行中 ($triple)..."
-            cargo build -p clip-refiner --bins --release @targetArgs
+            cargo build --locked -p clip-refiner --bins --release @targetArgs
             if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0) {
                 $hint = Get-WindowsCrossCompileHint -TargetTriple $triple
                 if ($hint) {
-                    throw "エラー: cargo build -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました`n$hint"
+                    throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました`n$hint"
                 }
-                throw "エラー: cargo build -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました"
+                throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました"
             }
             Write-Host ''
         } else {
@@ -209,7 +208,7 @@ ClipRefiner ポータブル版
 起動すると設定・ログ・登録クリップは同じフォルダ内の ``data\`` に保存されます。
 
 必要なもの:
-- Windows (x64 または ARM64。この ZIP の CPU アーキテクチャと一致させる)
+- Windows (x64)
 - Microsoft Edge WebView2 Runtime (設定ウィンドウ / セレクター用)
 
 使い方:

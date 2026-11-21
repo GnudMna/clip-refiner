@@ -61,7 +61,7 @@ fn main() {
 // ======================================================================
 /// アイコンとバージョン情報を実行ファイルへ埋め込む
 fn embed_windows_resources() {
-    let mut res = winres::WindowsResource::new();
+    let mut res = winresource::WindowsResource::new();
 
     res.set_icon(ICON_PATH);
     res.set("ProductName", APP_NAME);
