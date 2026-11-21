@@ -130,7 +130,7 @@ path = "tests/platform_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.2" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.3" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }

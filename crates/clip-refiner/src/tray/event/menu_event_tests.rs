@@ -369,7 +369,7 @@ fn handle_menu_event_history_enabled() {
     assert!(state.with_config(|c| c.history_enabled));
 }
 
-/// 連続記録有効化で設定が更新され、現在のクリップボードがキューへ積まれようにすること
+/// 連続記録有効化で設定が更新され、既存クリップボードはキューへ積まれないようにすること
 #[test]
 fn handle_menu_event_continuous_record_enabled() {
     let state = Arc::new(test_app_state());
@@ -394,10 +394,7 @@ fn handle_menu_event_continuous_record_enabled() {
         menu.continuous_record.main_submenu.text(),
         "連続記録 (自動加工停止)"
     );
-    match rx.try_recv().unwrap() {
-        ClipboardCommand::CatchUpContinuousRecord => {}
-        other => panic!("unexpected command: {other:?}"),
-    }
+    assert!(rx.try_recv().is_err());
 }
 
 /// お気に入り登録メニューで現在モードが登録されるようにすること

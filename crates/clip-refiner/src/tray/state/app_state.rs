@@ -1,68 +1,36 @@
-use std::sync::{
-    Mutex, RwLock,
-    atomic::{AtomicBool, AtomicU64, Ordering},
-};
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::{RwLock, atomic::AtomicU64};
 
 use super::super::dispatch;
-use super::super::history_store::EncryptedHistoryStore;
-use super::super::history_store::EncryptedRecordStore;
 use super::app_event::AppEvent;
-use super::lock_ext::{LockExt, RwLockExt};
+use super::clipboard_session::ClipboardSessionState;
+use super::config_sync::ConfigSyncState;
+use super::lock_ext::RwLockExt;
 use super::monitor_snapshot::{MonitorSnapshot, ProcessedState};
+use super::settings_pending::{RegexPreviewRequest, SettingsPendingState};
+use super::worker_state::WorkerState;
 
-use crate::config::{AppConfig, ConfigLoadFallback, RegexSettings};
-use crate::security::{SecretString, secret_from};
+use crate::config::{AppConfig, ConfigLoadFallback};
+use crate::security::SecretString;
 
 use tao::event_loop::EventLoopProxy;
-
-// ======================================================================
-// 正規表現プレビュー要求
-// ======================================================================
-/// 設定ウィンドウからの正規表現プレビュー要求
-#[derive(Debug, Clone)]
-pub(crate) struct RegexPreviewRequest {
-    /// クライアント側リクエスト ID (応答の突合に使用)
-    pub request_id: u64,
-    /// プレビュー対象の正規表現設定
-    pub settings: RegexSettings,
-}
 
 // ======================================================================
 // アプリケーション状態
 // ======================================================================
 /// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
-/// 設定、クリップボードの最終処理内容、暗号化履歴などを保持する
+/// 永続設定・ワーカー稼働・監視世代・セッション揮発データ・設定ウィンドウ適用待ちを保持する
 pub struct AppState {
-    /// クリップボードワーカーが稼働中かどうか
-    worker_alive: AtomicBool,
-    /// ワーカー再起動成功時にユーザーへ通知するかどうか
-    worker_recovery_pending: AtomicBool,
+    worker: WorkerState,
     /// 永続化設定データ
     pub config: RwLock<AppConfig>,
     /// クリップボード監視スレッドの世代管理カウンタ
     pub monitor_generation: AtomicU64,
-    /// 二重加工防止用の監視状態
-    processed_state: Mutex<ProcessedState>,
-    /// 直近の加工前テキスト (取り消し用、破棄時にゼロ化)
-    undo_text: Mutex<Option<SecretString>>,
-    /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
-    history_store: Mutex<EncryptedHistoryStore>,
-    /// 暗号化された連続記録 (セッション限定、メモリ内のみ)
-    continuous_record_store: Mutex<EncryptedRecordStore>,
+    clipboard_session: ClipboardSessionState,
+    config_sync: ConfigSyncState,
+    settings_pending: SettingsPendingState,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
-    /// 設定をディスクへ保存するかどうか
-    persist_config: bool,
-    /// ディスク上の設定ファイルと同期済みの最終更新時刻
-    config_disk_mtime: Mutex<Option<SystemTime>>,
-    /// 自身の保存直後に外部変更検知を抑制する期限
-    config_save_grace_until: Mutex<Option<Instant>>,
-    /// 設定ウィンドウから受信した部分更新 JSON (適用待ち)
-    pending_settings_patch: Mutex<Option<String>>,
-    /// 設定ウィンドウからの正規表現プレビュー要求 (処理待ち)
-    pending_regex_preview: Mutex<Option<RegexPreviewRequest>>,
 }
 
 // ======================================================================
@@ -81,23 +49,15 @@ impl AppState {
     ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>)> {
         let load_outcome = AppConfig::load();
         let config = load_outcome.config;
-        let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
         Ok((
             Self {
+                worker: WorkerState::new(),
                 config: RwLock::new(config),
-                worker_alive: AtomicBool::new(false),
-                worker_recovery_pending: AtomicBool::new(false),
                 monitor_generation: AtomicU64::new(0),
-                processed_state: Mutex::new(ProcessedState::default()),
-                undo_text: Mutex::new(None),
-                history_store: Mutex::new(EncryptedHistoryStore::new()?),
-                continuous_record_store: Mutex::new(EncryptedRecordStore::new()?),
+                clipboard_session: ClipboardSessionState::new()?,
+                config_sync: ConfigSyncState::new(),
+                settings_pending: SettingsPendingState::new(),
                 proxy,
-                persist_config: true,
-                config_disk_mtime: Mutex::new(disk_mtime),
-                config_save_grace_until: Mutex::new(None),
-                pending_settings_patch: Mutex::new(None),
-                pending_regex_preview: Mutex::new(None),
             },
             load_outcome.fallback,
         ))
@@ -105,84 +65,51 @@ impl AppState {
 
     /// 適用待ちの部分更新 JSON キューへ排他アクセスする
     pub(crate) fn pending_settings_patch_mut(&self) -> std::sync::MutexGuard<'_, Option<String>> {
-        self.pending_settings_patch.lock_ignore_poison()
+        self.settings_pending.patch_mut()
     }
 
     /// キュー済みの部分更新 JSON を取り出す
     pub(crate) fn take_pending_settings_patch(&self) -> Option<String> {
-        self.pending_settings_patch.lock_ignore_poison().take()
+        self.settings_pending.take_patch()
     }
 
     /// 正規表現プレビュー要求を格納する
     pub(crate) fn set_regex_preview_request(&self, request: RegexPreviewRequest) {
-        *self.pending_regex_preview.lock_ignore_poison() = Some(request);
+        self.settings_pending.set_regex_preview_request(request);
     }
 
     /// 処理待ちの正規表現プレビュー要求を取り出す
     pub(crate) fn take_regex_preview_request(&self) -> Option<RegexPreviewRequest> {
-        self.pending_regex_preview.lock_ignore_poison().take()
+        self.settings_pending.take_regex_preview_request()
     }
 
     /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
-    ///
-    /// # Arguments
-    /// * `self` - この `AppState`
     pub fn record_config_disk_sync(&self) {
-        if let Ok(mtime) = crate::config::disk_config_modified_time() {
-            *self.config_disk_mtime.lock_ignore_poison() = mtime;
-        }
+        self.config_sync.record_disk_sync();
     }
 
     /// 外部編集による設定ファイルの変更を検知する
     ///
     /// アプリ自身の保存直後は同期済み時刻と一致するため `false` を返す
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `bool` - ディスク上の設定が最終同期時刻より新しい場合は `true`
     pub fn has_external_config_change(&self) -> bool {
-        if self.is_config_save_grace_active() {
-            return false;
-        }
-        let Ok(Some(file_mtime)) = crate::config::disk_config_modified_time() else {
-            return false;
-        };
-        match *self.config_disk_mtime.lock_ignore_poison() {
-            Some(known) => file_mtime > known,
-            None => true,
-        }
-    }
-
-    /// 自身の保存直後のグレース期間中かどうか
-    fn is_config_save_grace_active(&self) -> bool {
-        self.config_save_grace_until
-            .lock_ignore_poison()
-            .is_some_and(|until| Instant::now() < until)
-    }
-
-    /// 自身の保存直後に外部変更検知を一時抑制する
-    fn begin_config_save_grace(&self) {
-        *self.config_save_grace_until.lock_ignore_poison() =
-            Some(Instant::now() + Duration::from_secs(2));
+        self.config_sync.has_external_change()
     }
 
     /// 現在の設定をファイルへ保存する
     ///
-    /// `persist_config` が `false` の場合はメモリ上の変更のみとし、ディスクへは書き込まない
-    ///
-    /// # Arguments
-    /// * `self` - この `AppState`
+    /// テスト用 `AppState` ではディスクへ書き込まない
     pub fn save_config(&self) {
-        if !self.persist_config {
+        if !self.config_sync.should_persist() {
             return;
         }
         if let Err(e) = self.with_config(crate::config::AppConfig::save) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
             return;
         }
-        self.begin_config_save_grace();
+        self.config_sync.begin_save_grace();
         self.record_config_disk_sync();
     }
 
@@ -210,13 +137,10 @@ impl AppState {
 
     /// クリップボードワーカーが稼働中かどうか
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `bool` - ワーカーが稼働中の場合は `true`
     pub fn is_worker_alive(&self) -> bool {
-        self.worker_alive.load(Ordering::SeqCst)
+        self.worker.is_alive()
     }
 
     /// クリップボードワーカーの稼働状態を更新する
@@ -224,7 +148,7 @@ impl AppState {
     /// # Arguments
     /// * `alive` - 稼働中にする場合は `true`
     pub fn set_worker_alive(&self, alive: bool) {
-        self.worker_alive.store(alive, Ordering::SeqCst);
+        self.worker.set_alive(alive);
     }
 
     /// ワーカー復旧成功時の通知が必要であることを記録する
@@ -232,25 +156,21 @@ impl AppState {
     /// # Arguments
     /// * `pending` - 通知が必要な場合は `true`
     pub fn set_worker_recovery_pending(&self, pending: bool) {
-        self.worker_recovery_pending
-            .store(pending, Ordering::SeqCst);
+        self.worker.set_recovery_pending(pending);
     }
 
     /// ワーカー復旧成功時の通知が必要かどうかを取得し、フラグをクリアする
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `bool` - 通知が必要だった場合は `true`
     pub fn take_worker_recovery_pending(&self) -> bool {
-        self.worker_recovery_pending.swap(false, Ordering::SeqCst)
+        self.worker.take_recovery_pending()
     }
 
     /// 設定のディスク保存が有効かどうかを返す
     #[cfg(test)]
     pub(crate) fn is_config_persistence_enabled(&self) -> bool {
-        self.persist_config
+        self.config_sync.is_persistence_enabled()
     }
 }
 
@@ -261,9 +181,6 @@ impl AppState {
     /// 監視ループ向けに設定フィールドをまとめて一括取得する
     ///
     /// `config` `RwLock` の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
-    ///
-    /// # Arguments
-    /// * `self` - この `AppState`
     ///
     /// # Returns
     /// * `MonitorSnapshot` - 監視ループ向け設定スナップショット
@@ -286,7 +203,7 @@ impl AppState {
     /// # Returns
     /// * `R` - クロージャ `f` の戻り値
     pub fn with_processed_state<R>(&self, f: impl FnOnce(&mut ProcessedState) -> R) -> R {
-        f(&mut self.processed_state.lock_ignore_poison())
+        self.clipboard_session.with_processed_state(f)
     }
 
     /// 加工成功後にクリップボードへ書き戻したことを記録する
@@ -294,25 +211,16 @@ impl AppState {
     /// # Arguments
     /// * `output` - 書き戻した加工後テキスト
     pub fn record_processing_success(&self, output: &str) {
-        self.with_processed_state(|ps| {
-            let fp = crate::security::ContentFingerprint::from_text(output);
-            ps.last_written = Some(fp);
-            ps.last_seen = fp;
-        });
+        self.clipboard_session.record_processing_success(output);
     }
 
     /// 画像加工成功後に元テキストの指紋を記録する
     ///
-    /// クリップボード上に TSV が残る場合の再加工ループを防ぐ
-    ///
     /// # Arguments
     /// * `source_text` - 加工前の元テキスト
     pub fn record_image_processing_success(&self, source_text: &str) {
-        self.with_processed_state(|ps| {
-            let fp = crate::security::ContentFingerprint::from_text(source_text);
-            ps.last_written = Some(fp);
-            ps.last_seen = fp;
-        });
+        self.clipboard_session
+            .record_image_processing_success(source_text);
     }
 
     /// 加工せずに観測したクリップボード本文を記録する
@@ -320,9 +228,7 @@ impl AppState {
     /// # Arguments
     /// * `text` - 観測したクリップボード本文
     pub fn record_clipboard_observed(&self, text: &str) {
-        self.with_processed_state(|ps| {
-            ps.last_seen = crate::security::ContentFingerprint::from_text(text);
-        });
+        self.clipboard_session.record_clipboard_observed(text);
     }
 
     /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
@@ -330,11 +236,7 @@ impl AppState {
     /// # Arguments
     /// * `text` - クリップボードへ設定した本文
     pub fn record_clipboard_set(&self, text: &str) {
-        self.with_processed_state(|ps| {
-            let fp = crate::security::ContentFingerprint::from_text(text);
-            ps.last_written = Some(fp);
-            ps.last_seen = fp;
-        });
+        self.clipboard_session.record_clipboard_set(text);
     }
 
     /// 加工成功時に取り消し用の元テキストを記録する
@@ -342,29 +244,23 @@ impl AppState {
     /// # Arguments
     /// * `text` - 取り消し用に保持する加工前テキスト
     pub fn record_undo_source(&self, text: &str) {
-        *self.undo_text.lock_ignore_poison() = Some(secret_from(text));
+        self.clipboard_session.record_undo_source(text);
     }
 
     /// 取り消し用の元テキストを取り出す
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `Option<SecretString>` - 取り消し可能な加工があれば `Some(元テキスト)`
     pub fn take_undo_source(&self) -> Option<SecretString> {
-        self.undo_text.lock_ignore_poison().take()
+        self.clipboard_session.take_undo_source()
     }
 
     /// 履歴の件数を返す
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `usize` - 保持している履歴件数
     pub fn history_len(&self) -> usize {
-        self.history_store.lock_ignore_poison().len()
+        self.clipboard_session.history_len()
     }
 
     /// 指定インデックスの履歴を復号して取得する
@@ -375,47 +271,33 @@ impl AppState {
     /// # Returns
     /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn get_history_entry(&self, index: usize) -> Option<SecretString> {
-        self.history_store.lock_ignore_poison().entry_at(index)
+        self.clipboard_session.get_history_entry(index)
     }
 
     /// 履歴をクリアする
-    ///
-    /// # Arguments
-    /// * `self` - この `AppState`
     pub fn clear_history(&self) {
-        self.history_store.lock_ignore_poison().clear();
+        self.clipboard_session.clear_history();
     }
 
     /// クリップボード履歴に新しいテキストを追加する
     ///
-    /// 空文字やトリム後に空になる文字列は無視される
-    /// 既にある文字列はリストの先頭に移動し、設定の `history_limit` を超えた分は削除される
-    /// 本文はメモリ上で暗号化して保持し、再起動時には破棄される
     /// 追加完了後、UI スレッドへ履歴更新イベントを通知する
     ///
     /// # Arguments
     /// * `text` - 履歴へ追加するクリップボード本文
     pub fn add_to_history(&self, text: impl AsRef<str>) {
-        let text = text.as_ref();
-        if text.trim().is_empty() {
-            return;
-        }
-
         let limit = self.with_config(|c| c.history_limit);
-        self.history_store.lock_ignore_poison().add(text, limit);
-
-        dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
+        if self.clipboard_session.add_to_history(text.as_ref(), limit) {
+            dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
+        }
     }
 
     /// 連続記録の件数を返す
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `usize` - 保持している連続記録件数
     pub fn continuous_record_len(&self) -> usize {
-        self.continuous_record_store.lock_ignore_poison().len()
+        self.clipboard_session.continuous_record_len()
     }
 
     /// 指定インデックスの連続記録を復号して取得する
@@ -426,53 +308,36 @@ impl AppState {
     /// # Returns
     /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn get_continuous_record_entry(&self, index: usize) -> Option<SecretString> {
-        self.continuous_record_store
-            .lock_ignore_poison()
-            .entry_at(index)
+        self.clipboard_session.get_continuous_record_entry(index)
     }
 
     /// 連続記録をクリアする
-    ///
-    /// # Arguments
-    /// * `self` - この `AppState`
     pub fn clear_continuous_record(&self) {
-        self.continuous_record_store.lock_ignore_poison().clear();
+        self.clipboard_session.clear_continuous_record();
     }
 
     /// 連続記録に新しいテキストをキューへ積む
     ///
-    /// 空文字やトリム後に空になる文字列は無視される
-    /// 同一内容でも末尾へ追加し、上限超過時は先頭から破棄する
     /// 追加完了後、UI スレッドへ連続記録更新イベントを通知する
     ///
     /// # Arguments
     /// * `text` - 連続記録へ追加するクリップボード本文
     pub fn enqueue_continuous_record(&self, text: impl AsRef<str>) {
-        let text = text.as_ref();
-        if text.trim().is_empty() {
-            return;
-        }
-
         let limit = self.with_config(|c| c.continuous_record_limit);
-        self.continuous_record_store
-            .lock_ignore_poison()
-            .enqueue(text, limit);
-
-        dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+        if self
+            .clipboard_session
+            .enqueue_continuous_record(text.as_ref(), limit)
+        {
+            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+        }
     }
 
     /// 連続記録キュー先頭を取り出す
     ///
-    /// # Arguments
-    /// * `self` - この `AppState`
-    ///
     /// # Returns
     /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
     pub fn discharge_continuous_record_front(&self) -> Option<SecretString> {
-        let discharged = self
-            .continuous_record_store
-            .lock_ignore_poison()
-            .discharge_front();
+        let discharged = self.clipboard_session.discharge_continuous_record_front();
         if discharged.is_some() {
             dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
         }
@@ -487,10 +352,7 @@ impl AppState {
     /// # Returns
     /// * `Option<SecretString>` - 排出した本文。範囲外の場合は `None`
     pub fn discharge_continuous_record_at(&self, index: usize) -> Option<SecretString> {
-        let discharged = self
-            .continuous_record_store
-            .lock_ignore_poison()
-            .discharge_at(index);
+        let discharged = self.clipboard_session.discharge_continuous_record_at(index);
         if discharged.is_some() {
             dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
         }
@@ -521,23 +383,13 @@ pub(crate) fn test_app_state() -> AppState {
     };
 
     AppState {
+        worker: WorkerState::new_for_test(),
         config: RwLock::new(config),
-        worker_alive: AtomicBool::new(true),
-        worker_recovery_pending: AtomicBool::new(false),
         monitor_generation: AtomicU64::new(0),
-        processed_state: Mutex::new(ProcessedState::default()),
-        undo_text: Mutex::new(None),
-        history_store: Mutex::new(
-            EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗"),
-        ),
-        continuous_record_store: Mutex::new(
-            EncryptedRecordStore::new().expect("テスト用連続記録ストアの生成に失敗"),
-        ),
+        clipboard_session: ClipboardSessionState::new()
+            .expect("テスト用クリップボードセッションの生成に失敗"),
+        config_sync: ConfigSyncState::new_for_test(),
+        settings_pending: SettingsPendingState::new(),
         proxy: event_loop.create_proxy(),
-        persist_config: false,
-        config_disk_mtime: Mutex::new(None),
-        config_save_grace_until: Mutex::new(None),
-        pending_settings_patch: Mutex::new(None),
-        pending_regex_preview: Mutex::new(None),
     }
 }

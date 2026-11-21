@@ -57,8 +57,16 @@ impl MonitorLoopState {
         let text = clipboard.get_text().unwrap_or_default();
         let new_token = clipboard_seq::token().unwrap_or(0);
         let token_changed = new_token != self.last_token;
+        let initial_sync = self.tracked_generation == 0;
+        let already_seen = state.with_processed_state(|ps| ps.matches_last_seen(&text));
         state.record_clipboard_observed(&text);
-        clipboard_monitor::recover_continuous_record_on_reset(state, &text, token_changed);
+        clipboard_monitor::recover_continuous_record_on_reset(
+            state,
+            &text,
+            token_changed,
+            already_seen,
+            initial_sync,
+        );
         self.last_token = new_token;
         self.last_poll_at = Instant::now();
         self.tracked_generation = state.monitor_generation.load(Ordering::SeqCst);

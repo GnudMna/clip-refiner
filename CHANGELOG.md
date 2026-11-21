@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-07-08
+
+
+### Fixed
+
+- 連続記録を ON にした直後、既にクリップボードにあるテキストが二重に記録される不具合を修正。ON 以降にコピーした内容のみキューへ積む
+
 ## [0.12.2] - 2026-07-08
 
 
@@ -355,7 +362,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...develop
+[0.12.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...v0.12.3
 [0.12.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...v0.12.2
 [0.12.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...v0.12.1
 [0.12.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...v0.12.0

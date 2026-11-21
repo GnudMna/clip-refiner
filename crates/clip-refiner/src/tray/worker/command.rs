@@ -22,8 +22,6 @@ pub enum ClipboardCommand {
     SetOcrText(SecretString),
     /// 連続記録キューから指定位置のエントリを取り出してクリップボードへセットする
     DischargeContinuousRecordAt(usize),
-    /// 有効化直後に現在のクリップボード内容をキューへ積む
-    CatchUpContinuousRecord,
     /// ワーカースレッドの終了要求
     Shutdown,
 }
@@ -43,7 +41,6 @@ impl std::fmt::Debug for ClipboardCommand {
                 .debug_tuple("DischargeContinuousRecordAt")
                 .field(index)
                 .finish(),
-            Self::CatchUpContinuousRecord => f.write_str("CatchUpContinuousRecord"),
             Self::Shutdown => f.write_str("Shutdown"),
         }
     }

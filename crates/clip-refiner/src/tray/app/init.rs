@@ -2,13 +2,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::super::clipboard_monitor::{bump_monitor_generation, bump_monitor_generation_unchecked};
-use super::super::dispatch;
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::paste_watcher::PasteWatcher;
 use super::super::settings::init_settings_window;
 use super::super::state::{AppEvent, AppState};
-use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
+use super::super::worker::ClipboardWorkerHandle;
 use super::App;
 use crate::tray::selector::SelectorUi;
 
@@ -59,12 +58,6 @@ impl App {
             }
         } else {
             bump_monitor_generation(&state);
-        }
-        if state.with_config(|c| c.continuous_record_enabled) {
-            dispatch::send_clipboard_command(
-                &clipboard_worker,
-                ClipboardCommand::CatchUpContinuousRecord,
-            );
         }
 
         Ok(Self {

@@ -193,7 +193,6 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 | `copy_registered_clip` | `CopyRegisteredClip` |
 | `discharge_continuous_record_on_paste` | `paste_watcher::try_paste_continuous_record_front` (`Ctrl+V` 検知経路と同じ) |
 | `discharge_continuous_record_at` | `DischargeContinuousRecordAt` |
-| `catch_up_continuous_record` | `CatchUpContinuousRecord` |
 
 **検証用アクセサ**
 
@@ -671,11 +670,12 @@ git checkout -b release/v0.12.2
 
 1. 現在のブランチが `release/v{version}` であることを検証 (不一致なら失敗)
 2. `Cargo.toml` の `version` と `crates/clip-refiner/Cargo.toml` の path 依存 `version` を更新
-3. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
-4. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
-5. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test)
-6. `Release: v{version}` で Git コミット
-7. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
+3. `Cargo.lock` の workspace パッケージ version を同期
+4. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
+5. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
+6. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test)
+7. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
+8. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES` 同梱)
 
 **主なオプション:**
 

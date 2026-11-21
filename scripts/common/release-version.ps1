@@ -200,6 +200,38 @@ function Set-LibRsDocVersions {
     Set-Content -LiteralPath $libRsPath -Value $updated -Encoding utf8NoBOM -NoNewline
 }
 
+# Cargo.lock の workspace パッケージ version を Cargo.toml と同期する
+function Sync-WorkspaceCargoLock {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot,
+
+        [switch]$DryRun
+    )
+
+    $lockPath = Join-Path $ProjectRoot 'Cargo.lock'
+
+    if ($DryRun) {
+        Write-Host '[DryRun] Cargo.lock -> workspace パッケージ version を同期'
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $lockPath)) {
+        throw 'エラー: Cargo.lock が見つかりません'
+    }
+
+    Push-Location -LiteralPath $ProjectRoot
+    try {
+        cargo check --workspace -q
+        if ($LASTEXITCODE -ne 0) {
+            throw "エラー: cargo check --workspace が終了コード $LASTEXITCODE で失敗しました"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 # CHANGELOG の [Unreleased] 節をリリース見出しへ移し、フッターリンクを更新する
 function Update-ChangelogForRelease {
     [CmdletBinding()]
@@ -284,6 +316,7 @@ function Get-ReleaseVersionFilePaths {
     return @(
         (Join-Path $ProjectRoot 'Cargo.toml'),
         (Join-Path $ProjectRoot 'crates\clip-refiner\Cargo.toml'),
+        (Join-Path $ProjectRoot 'Cargo.lock'),
         (Join-Path $ProjectRoot 'CHANGELOG.md'),
         (Join-Path $ProjectRoot 'crates\clip-refiner\src\lib.rs')
     )

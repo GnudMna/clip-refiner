@@ -99,6 +99,7 @@ Invoke-ScriptMain {
         -ReleaseDate $Date `
         -DryRun:$DryRun
     Set-LibRsDocVersions -ProjectRoot $ProjectRoot -NewVersion $newVersion -DryRun:$DryRun
+    Sync-WorkspaceCargoLock -ProjectRoot $ProjectRoot -DryRun:$DryRun
     Write-Host ''
 
     if ($DryRun) {
@@ -126,7 +127,7 @@ Invoke-ScriptMain {
         Write-Host ''
     } else {
         Write-Host 'Git コミットをスキップしました (-NoCommit)'
-        Write-Host '  手動でコミットする場合: git add Cargo.toml crates/clip-refiner/Cargo.toml CHANGELOG.md crates/clip-refiner/src/lib.rs'
+        Write-Host '  手動でコミットする場合: git add Cargo.toml crates/clip-refiner/Cargo.toml Cargo.lock CHANGELOG.md crates/clip-refiner/src/lib.rs'
         Write-Host "  推奨メッセージ: Release: v$newVersion"
         Write-Host ''
     }

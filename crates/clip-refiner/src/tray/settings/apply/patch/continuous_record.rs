@@ -7,7 +7,7 @@ use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;
-use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
+use crate::tray::worker::ClipboardWorkerHandle;
 
 // ======================================================================
 // 連続記録パッチ
@@ -17,7 +17,7 @@ pub(super) fn apply_continuous_record_patch(
     patch: &SettingsPatch,
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    clipboard_worker: &ClipboardWorkerHandle,
+    _clipboard_worker: &ClipboardWorkerHandle,
     _outcome: &mut PatchApplyOutcome,
     config_dirty: &mut bool,
 ) {
@@ -32,10 +32,6 @@ pub(super) fn apply_continuous_record_patch(
             bump_monitor_generation_unchecked(state);
             if continuous_record_enabled {
                 state.with_processed_state(|ps| ps.last_written = None);
-                dispatch::send_clipboard_command(
-                    clipboard_worker,
-                    ClipboardCommand::CatchUpContinuousRecord,
-                );
             }
             if let Err(err) = menu.refresh_continuous_record(state) {
                 dispatch::log_menu_operation_error("連続記録メニューの更新", err);

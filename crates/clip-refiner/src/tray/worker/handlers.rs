@@ -13,7 +13,7 @@ use crate::refiner::{
     ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode, TextClipboard,
     process_clipboard_pipeline_io,
 };
-use crate::security::{SecretString, is_within_clipboard_limit};
+use crate::security::SecretString;
 use crate::user_error::{
     ClipboardWriteContext, UserNotification, registered_clip_register_failure, titles,
 };
@@ -74,9 +74,6 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
             set_continuous_record_from_queue(clipboard, state, || {
                 state.discharge_continuous_record_at(index)
             });
-        }
-        ClipboardCommand::CatchUpContinuousRecord => {
-            catch_up_continuous_record(clipboard, state);
         }
         ClipboardCommand::ProcessMode(mode) => {
             handle_process_mode_command(clipboard, state, refine_ctx, mode);
@@ -160,34 +157,6 @@ fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState
 // ======================================================================
 // 連続記録
 // ======================================================================
-/// 有効化直後に現在のクリップボード内容を連続記録キューへ積む
-fn catch_up_continuous_record<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
-    if !state.with_config(|c| c.continuous_record_enabled) {
-        return;
-    }
-
-    let text = match clipboard.get_text() {
-        Ok(text) => text,
-        Err(e) => {
-            crate::log_error!("クリップボード読み取りエラー: {:?}", e);
-            return;
-        }
-    };
-
-    if text.trim().is_empty() {
-        return;
-    }
-
-    if !is_within_clipboard_limit(&text) {
-        crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
-        state.record_clipboard_observed(&text);
-        return;
-    }
-
-    state.record_clipboard_observed(&text);
-    state.enqueue_continuous_record(&text);
-}
-
 /// 連続記録キューから取り出したテキストをクリップボードへセットする
 fn set_continuous_record_from_queue<C: TextClipboard>(
     clipboard: &mut C,

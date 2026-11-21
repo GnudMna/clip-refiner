@@ -2,16 +2,20 @@
 
 mod app_event;
 mod app_state;
+mod clipboard_session;
+mod config_sync;
 mod lock_ext;
 mod monitor_snapshot;
+mod settings_pending;
+mod worker_state;
 
 pub use app_event::AppEvent;
 pub use app_state::AppState;
-pub(crate) use app_state::RegexPreviewRequest;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use app_state::test_app_state;
 pub use lock_ext::LockExt;
 pub use monitor_snapshot::{MonitorSnapshot, ProcessedState};
+pub(crate) use settings_pending::RegexPreviewRequest;
 
 // ======================================================================
 // テスト

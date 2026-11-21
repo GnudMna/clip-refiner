@@ -10,7 +10,7 @@ use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 pub(crate) fn toggle_continuous_record(
     menu: &TrayMenu,
     state: &Arc<AppState>,
-    clipboard_worker: &ClipboardWorkerHandle,
+    _clipboard_worker: &ClipboardWorkerHandle,
 ) {
     let was_enabled = state.with_config(|c| c.continuous_record_enabled);
     let enabled = !was_enabled;
@@ -22,12 +22,6 @@ pub(crate) fn toggle_continuous_record(
     }
     state.save_config();
     bump_monitor_generation_unchecked(state);
-    if enabled {
-        dispatch::send_clipboard_command(
-            clipboard_worker,
-            ClipboardCommand::CatchUpContinuousRecord,
-        );
-    }
     if let Err(err) = menu.refresh_continuous_record(state) {
         dispatch::log_menu_operation_error("連続記録メニューの更新", err);
     }

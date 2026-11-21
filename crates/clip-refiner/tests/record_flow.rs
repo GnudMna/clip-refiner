@@ -137,18 +137,22 @@ fn monitor_skips_continuous_record_when_disabled() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// 連続記録有効化直後に現在のクリップボードをキューへ積めようにすること
+/// 連続記録 ON 時は既にクリップボードにあるテキストを記録しないこと
 #[test]
-fn continuous_record_catch_up_enqueues_current_clipboard() {
+fn continuous_record_enable_skips_existing_clipboard() {
     let mut harness = ClipboardHarness::with_text("already-on-clipboard")
         .with_mode(RefineMode::Trim)
-        .with_continuous_record(true);
+        .with_continuous_record(false);
 
-    harness.catch_up_continuous_record();
-    assert_eq!(
-        harness.continuous_record_entries(),
-        vec!["already-on-clipboard"]
-    );
+    assert!(!harness.run_monitor_update(false));
+    assert_eq!(harness.continuous_record_len(), 0);
+
+    harness.with_config_mut(|c| c.continuous_record_enabled = true);
+    assert_eq!(harness.continuous_record_len(), 0);
+
+    harness.replace_clipboard("new-copy");
+    assert!(!harness.run_monitor_update(true));
+    assert_eq!(harness.continuous_record_entries(), vec!["new-copy"]);
 }
 
 /// 履歴と連続記録は独立して動作すること

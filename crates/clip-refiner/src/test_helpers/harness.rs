@@ -382,19 +382,6 @@ impl ClipboardHarness {
         );
     }
 
-    /// 有効化直後に現在のクリップボード内容をキューへ積む
-    ///
-    /// # Arguments
-    /// * `self` - この `ClipboardHarness`
-    pub fn catch_up_continuous_record(&mut self) {
-        handle_command(
-            &mut self.clipboard,
-            &self.state,
-            &mut self.refine_ctx,
-            ClipboardCommand::CatchUpContinuousRecord,
-        );
-    }
-
     /// ワーカーへ送られる `RegisterClipFromClipboard` コマンドを処理する
     ///
     /// # Arguments

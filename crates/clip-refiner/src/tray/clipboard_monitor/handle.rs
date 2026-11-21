@@ -38,18 +38,26 @@ pub(crate) enum ClipboardObserveResult {
 /// 監視世代の再同期後に取りこぼした連続記録を回復する
 ///
 /// 世代更新とコピーが同じタイミングで重なった場合、トークンだけ進んで
-/// キューへ積まれないことがあるため、トークン変化時は現在の本文を積む
+/// キューへ積まれないことがあるため、未観測の新規コピーのみ積む
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `text` - 再同期時に読み取ったクリップボード本文
 /// * `token_changed` - 前回トークンから変化した場合は `true`
+/// * `already_seen` - 再同期前に既に観測済みの本文だった場合は `true`
+/// * `initial_sync` - 監視開始直後の初回同期の場合は `true`
 pub(crate) fn recover_continuous_record_on_reset(
     state: &Arc<AppState>,
     text: &str,
     token_changed: bool,
+    already_seen: bool,
+    initial_sync: bool,
 ) {
-    if !token_changed || !state.with_config(|c| c.continuous_record_enabled) {
+    if initial_sync
+        || !token_changed
+        || already_seen
+        || !state.with_config(|c| c.continuous_record_enabled)
+    {
         return;
     }
 
@@ -392,5 +400,42 @@ mod tests {
             vec!["  raw  ".to_string()]
         );
         assert_eq!(collect_history(&state), Vec::<String>::new());
+    }
+
+    /// 監視再同期時は既観測テキストを連続記録キューへ積まないこと
+    #[test]
+    fn recover_continuous_record_skips_already_seen_text() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        state.record_clipboard_observed("existing");
+
+        recover_continuous_record_on_reset(&state, "existing", true, true, false);
+
+        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+    }
+
+    /// 監視開始直後の初回同期では既存クリップボードを記録しないこと
+    #[test]
+    fn recover_continuous_record_skips_initial_sync() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+
+        recover_continuous_record_on_reset(&state, "startup", true, false, true);
+
+        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+    }
+
+    /// 監視再同期と同時の未観測コピーは連続記録キューへ積むこと
+    #[test]
+    fn recover_continuous_record_enqueues_unseen_copy_on_reset() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+
+        recover_continuous_record_on_reset(&state, "fresh-copy", true, false, false);
+
+        assert_eq!(
+            collect_continuous_record(&state),
+            vec!["fresh-copy".to_string()]
+        );
     }
 }
