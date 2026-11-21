@@ -5,9 +5,13 @@ use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 use super::super::text_selector::TextSelectorWindow;
+
 use crate::config::{AppConfig, ConfigReloadError};
 use crate::platform;
 
+// ======================================================================
+// 設定再読み込み
+// ======================================================================
 /// 設定再読み込みの結果
 pub struct ConfigReloadOutcome {
     /// ユーザー向けメッセージ
@@ -34,9 +38,13 @@ pub fn apply_config_reload(
 
     let previous = state.with_config(std::clone::Clone::clone);
     let hotkeys_changed = previous.hotkeys != loaded.hotkeys;
+    let favorite_hotkeys_changed = previous.hotkeys.favorite_mode_slots
+        != loaded.hotkeys.favorite_mode_slots
+        || previous.favorite_modes != loaded.favorite_modes;
     let monitor_changed = previous.monitor_mode != loaded.monitor_mode
         || previous.interval_ms != loaded.interval_ms
-        || previous.is_paused != loaded.is_paused;
+        || previous.is_paused != loaded.is_paused
+        || previous.effective_pipeline() != loaded.effective_pipeline();
     let history_disabled = previous.history_enabled && !loaded.history_enabled;
 
     state.with_config_mut(|config| *config = loaded);
@@ -45,10 +53,11 @@ pub fn apply_config_reload(
     menu.sync_from_config(state)
         .map_err(|e| format!("メニュー同期に失敗: {e}"))?;
 
-    if hotkeys_changed {
+    if hotkeys_changed || favorite_hotkeys_changed {
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
+        let favorite_modes = state.with_config(|c| c.favorite_modes.clone());
         hotkey_handler
-            .reload(&hotkeys)
+            .reload(&hotkeys, &favorite_modes)
             .map_err(|e| format!("ホットキーの再登録に失敗: {e}"))?;
     }
 
@@ -67,11 +76,18 @@ pub fn apply_config_reload(
         text_selector.refresh_items(&texts_json);
     }
 
-    let message = build_reload_message(hotkeys_changed, monitor_changed, migrated);
+    let message = build_reload_message(
+        hotkeys_changed || favorite_hotkeys_changed,
+        monitor_changed,
+        migrated,
+    );
     crate::log_info!("設定を再読み込みしました: {}", message);
     Ok(ConfigReloadOutcome { message })
 }
 
+// ======================================================================
+// プライベート関数
+// ======================================================================
 /// 再読み込み成功時の通知メッセージを組み立てる
 fn build_reload_message(hotkeys_changed: bool, monitor_changed: bool, migrated: bool) -> String {
     let mut parts = vec!["設定を反映しました".to_string()];
@@ -113,6 +129,9 @@ pub fn reload_config_with_notification(
     }
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;

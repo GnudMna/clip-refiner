@@ -4,10 +4,14 @@ use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::menu::TrayMenu;
 use super::super::notify;
 use super::super::state::AppState;
+
 use crate::platform;
 
 use tao::event_loop::ControlFlow;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// アプリケーションの基本操作(終了、一時停止、設定ファイルの起動、ショートカット一覧表示)を処理する
 ///
 /// # Arguments
@@ -47,7 +51,7 @@ pub(super) fn handle_app_control(
             .send_event(crate::tray::state::AppEvent::ReloadConfig);
         true
     } else if id == menu.shortcut_list_item.id() {
-        let body = state.with_config(|c| c.hotkeys.shortcut_list_text());
+        let body = state.with_config(|c| c.hotkeys.shortcut_list_text(&c.favorite_modes));
         platform::show_notification("ショートカット一覧", &body);
         true
     } else if id == menu.launch_at_login_item.id() {

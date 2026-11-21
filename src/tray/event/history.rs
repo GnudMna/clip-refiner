@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::state::{AppState, LockExt};
 use super::super::worker::ClipboardCommand;
@@ -25,13 +26,17 @@ pub(super) fn handle_history_event(
         let enabled = menu.history.enabled_item.is_checked();
         state.with_config_mut(|c| c.history_enabled = enabled);
         state.save_config();
-        let _ = menu.refresh_history(state);
+        if let Err(err) = menu.refresh_history(state) {
+            dispatch::log_menu_operation_error("履歴メニューの更新", err);
+        }
         return true;
     }
     if id == menu.history.clear_item.id() {
         state.clear_history();
         state.save_config();
-        let _ = menu.refresh_history(state);
+        if let Err(err) = menu.refresh_history(state) {
+            dispatch::log_menu_operation_error("履歴メニューの更新", err);
+        }
         return true;
     }
 
@@ -39,7 +44,7 @@ pub(super) fn handle_history_event(
 
     if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
         if let Some(text) = state.get_history_entry(*index) {
-            let _ = clipboard_tx.send(ClipboardCommand::SetText(text));
+            dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::SetText(text));
         }
         return true;
     }

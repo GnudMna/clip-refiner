@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 // ======================================================================
-// 公開 API
+// パブリック関数
 // ======================================================================
 /// ログイン時の自動起動が有効かどうかを返す
 pub fn is_enabled() -> bool {
@@ -24,7 +24,7 @@ pub fn set_enabled(enabled: bool) -> Result<()> {
 }
 
 // ======================================================================
-// 共通ヘルパー
+// プライベート関数
 // ======================================================================
 /// 現在の実行ファイルパスを正規化して返す
 fn current_exe_path() -> Result<PathBuf> {
@@ -63,60 +63,6 @@ pub(crate) fn xml_escape(value: &str) -> String {
 }
 
 // ======================================================================
-// テスト
-// ======================================================================
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use super::*;
-
-    /// Windows ではパス比較が大文字小文字を区別しないこと
-    #[test]
-    fn paths_match_ignore_case_on_windows() {
-        #[cfg(windows)]
-        {
-            assert!(paths_match(
-                Path::new(r"C:\Apps\ClipRefiner.exe"),
-                Path::new(r"c:\apps\cliprefiner.exe")
-            ));
-        }
-        #[cfg(not(windows))]
-        {
-            assert!(!paths_match(
-                Path::new("/usr/bin/ClipRefiner"),
-                Path::new("/usr/bin/cliprefiner")
-            ));
-        }
-    }
-
-    /// 同一パスは一致すること
-    #[test]
-    fn paths_match_same_path() {
-        let path = Path::new("/usr/bin/clip-refiner");
-        assert!(paths_match(path, path));
-    }
-
-    /// 異なるパスは一致しないこと
-    #[test]
-    fn paths_match_different_paths() {
-        assert!(!paths_match(
-            Path::new("/usr/bin/clip-refiner"),
-            Path::new("/opt/clip-refiner/bin")
-        ));
-    }
-
-    /// XML 特殊文字をエスケープすること
-    #[test]
-    fn xml_escape_special_chars() {
-        assert_eq!(
-            xml_escape(r#"<exec path="C:\Apps\Clip&Refiner.exe">"#),
-            "&lt;exec path=&quot;C:\\Apps\\Clip&amp;Refiner.exe&quot;&gt;"
-        );
-    }
-}
-
-// ======================================================================
 // プラットフォーム実装
 // ======================================================================
 #[cfg(windows)]
@@ -124,6 +70,7 @@ mod platform {
     use std::path::PathBuf;
 
     use super::{current_exe_path, normalize_path, paths_match};
+
     use crate::consts;
 
     use anyhow::{Context, Result};
@@ -184,6 +131,7 @@ mod platform {
     use std::io::Write;
 
     use super::{current_exe_path, xml_escape};
+
     use crate::consts;
 
     use anyhow::{Context, Result};
@@ -253,6 +201,7 @@ mod platform {
     use std::io::Write;
 
     use super::current_exe_path;
+
     use crate::consts;
 
     use anyhow::{Context, Result};
@@ -317,5 +266,59 @@ mod platform {
     /// 未対応プラットフォームでは何もしない
     pub fn set_enabled(_enabled: bool) -> Result<()> {
         Ok(())
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// Windows ではパス比較が大文字小文字を区別しないこと
+    #[test]
+    fn paths_match_ignore_case_on_windows() {
+        #[cfg(windows)]
+        {
+            assert!(paths_match(
+                Path::new(r"C:\Apps\ClipRefiner.exe"),
+                Path::new(r"c:\apps\cliprefiner.exe")
+            ));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(!paths_match(
+                Path::new("/usr/bin/ClipRefiner"),
+                Path::new("/usr/bin/cliprefiner")
+            ));
+        }
+    }
+
+    /// 同一パスは一致すること
+    #[test]
+    fn paths_match_same_path() {
+        let path = Path::new("/usr/bin/clip-refiner");
+        assert!(paths_match(path, path));
+    }
+
+    /// 異なるパスは一致しないこと
+    #[test]
+    fn paths_match_different_paths() {
+        assert!(!paths_match(
+            Path::new("/usr/bin/clip-refiner"),
+            Path::new("/opt/clip-refiner/bin")
+        ));
+    }
+
+    /// XML 特殊文字をエスケープすること
+    #[test]
+    fn xml_escape_special_chars() {
+        assert_eq!(
+            xml_escape(r#"<exec path="C:\Apps\Clip&Refiner.exe">"#),
+            "&lt;exec path=&quot;C:\\Apps\\Clip&amp;Refiner.exe&quot;&gt;"
+        );
     }
 }

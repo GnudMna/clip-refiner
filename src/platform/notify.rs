@@ -12,9 +12,9 @@ pub(crate) fn format_notification_summary(summary: &str) -> String {
 mod platform_impl {
     use std::time::Duration;
 
-    use notify_rust::Notification;
-
     use super::format_notification_summary;
+
+    use notify_rust::Notification;
 
     /// システム通知を表示する
     ///

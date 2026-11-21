@@ -6,13 +6,16 @@ use std::time::{Duration, Instant};
 
 use super::clipboard_change::ChangeWatcher;
 use super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
+use super::dispatch;
 use super::notify;
 use super::state::{AppEvent, AppState};
+
 use crate::config::AddRegisteredTextError;
 use crate::config::MonitorMode;
 use crate::platform;
 use crate::refiner::{
-    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_text_clipboard,
+    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard,
+    process_clipboard_pipeline_io,
 };
 use crate::security::SecretString;
 
@@ -37,6 +40,8 @@ pub enum ClipboardCommand {
     Undo,
     /// クリップボードの内容を登録文字列として保存する
     RegisterFromClipboard,
+    /// OCR 結果をクリップボードへ書き込む
+    SetOcrText(SecretString),
 }
 
 impl std::fmt::Debug for ClipboardCommand {
@@ -49,6 +54,7 @@ impl std::fmt::Debug for ClipboardCommand {
             Self::ProcessMode(mode) => f.debug_tuple("ProcessMode").field(mode).finish(),
             Self::Undo => f.write_str("Undo"),
             Self::RegisterFromClipboard => f.write_str("RegisterFromClipboard"),
+            Self::SetOcrText(_) => f.debug_tuple("SetOcrText").field(&"...").finish(),
         }
     }
 }
@@ -266,7 +272,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
         if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
             last_config_poll = Instant::now();
             if state.has_external_config_change() {
-                let _ = state.proxy.send_event(AppEvent::ReloadConfig);
+                dispatch::send_app_event(&state.proxy, AppEvent::ReloadConfig);
             }
         }
 
@@ -339,7 +345,7 @@ fn sync_monitor_generation(
 /// * `state` - アプリケーションの共有状態
 /// * `refine_ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 /// * `cmd` - 受信したコマンド
-pub(crate) fn handle_command<C: TextClipboard>(
+pub(crate) fn handle_command<C: TextClipboard + crate::refiner::ImageClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     refine_ctx: &mut RefineContext,
@@ -374,16 +380,38 @@ pub(crate) fn handle_command<C: TextClipboard>(
                 }
             }
         }
+        ClipboardCommand::SetOcrText(text) => {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
+                crate::log_error!("クリップボード設定エラー: {:?}", e);
+                platform::show_notification(
+                    "OCR エラー",
+                    "クリップボードへの書き込みに失敗しました",
+                );
+            } else {
+                state.record_clipboard_set(&text);
+                if state.with_config(|c| c.notification_settings.enabled) {
+                    platform::show_notification("OCR", "クリップボードにコピーしました");
+                }
+            }
+        }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
             refine_ctx.regex = state.with_config(|c| c.regex.clone());
-            match process_text_clipboard(clipboard, mode, refine_ctx) {
+            let pipeline = [mode];
+            match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
                     }
                     state.record_processing_success(&processed);
-                    notify::show_process_notification(state, mode, &processed);
+                    notify::show_process_notification(state, &pipeline, &processed);
+                }
+                Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+                    if let Some(ref pre) = pre_text {
+                        state.record_undo_source(pre);
+                        state.record_image_processing_success(pre);
+                    }
+                    notify::show_image_process_notification(state, mode, width, height);
                 }
                 Ok(ClipboardProcessOutcome::Unchanged) => {
                     if state.with_config(|c| c.notification_settings.enabled) {
@@ -442,17 +470,21 @@ fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc
     match outcome {
         Ok(()) => {
             state.save_config();
-            let _ = state.proxy.send_event(AppEvent::RefreshTexts);
-            platform::show_notification("登録文字列", "クリップボードの内容を登録しました");
+            dispatch::send_app_event(&state.proxy, AppEvent::RefreshTexts);
+            notify::show_when_enabled(state, "登録文字列", "クリップボードの内容を登録しました");
         }
         Err(AddRegisteredTextError::Empty) => {
-            platform::show_notification("登録文字列", "クリップボードが空のため登録できません");
+            notify::show_when_enabled(
+                state,
+                "登録文字列",
+                "クリップボードが空のため登録できません",
+            );
         }
         Err(AddRegisteredTextError::TooLarge) => {
-            platform::show_notification("登録文字列", "テキストが長すぎるため登録できません");
+            notify::show_when_enabled(state, "登録文字列", "テキストが長すぎるため登録できません");
         }
         Err(AddRegisteredTextError::LimitReached) => {
-            platform::show_notification("登録文字列", "登録件数の上限に達しています");
+            notify::show_when_enabled(state, "登録文字列", "登録件数の上限に達しています");
         }
     }
 }

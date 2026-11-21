@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 
-use crate::config::{AppConfig, RegexSettings};
-
 use super::transform::regex::RegexPatternCache;
+
+use crate::config::{AppConfig, RegexSettings};
 
 // ======================================================================
 // 加工コンテキスト

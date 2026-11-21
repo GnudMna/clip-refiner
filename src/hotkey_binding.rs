@@ -87,6 +87,9 @@ fn parse_key_code(name: &str) -> Option<Code> {
     let upper = name.to_uppercase();
     if upper.len() == 1 {
         let ch = upper.chars().next()?;
+        if ch.is_ascii_digit() {
+            return digit_to_code(ch);
+        }
         return letter_to_code(ch);
     }
 
@@ -109,6 +112,23 @@ fn parse_key_code(name: &str) -> Option<Code> {
     }
 
     None
+}
+
+/// 数字をキーコードに変換する
+fn digit_to_code(ch: char) -> Option<Code> {
+    Some(match ch {
+        '0' => Code::Digit0,
+        '1' => Code::Digit1,
+        '2' => Code::Digit2,
+        '3' => Code::Digit3,
+        '4' => Code::Digit4,
+        '5' => Code::Digit5,
+        '6' => Code::Digit6,
+        '7' => Code::Digit7,
+        '8' => Code::Digit8,
+        '9' => Code::Digit9,
+        _ => return None,
+    })
 }
 
 /// 文字をキーコードに変換する
@@ -156,6 +176,7 @@ fn letter_to_code(ch: char) -> Option<Code> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::consts;
 
     /// デフォルトホットキー文字列が解析できること
@@ -167,6 +188,7 @@ mod tests {
             consts::DEFAULT_HOTKEY_PAUSE,
             consts::DEFAULT_HOTKEY_QUIT,
             consts::DEFAULT_HOTKEY_UNDO,
+            consts::DEFAULT_HOTKEY_OCR,
         ] {
             parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
         }
@@ -177,6 +199,13 @@ mod tests {
     fn test_parse_modifier_aliases() {
         assert!(parse_hotkey_binding("ctrl+alt+shift+f1").is_ok());
         assert!(parse_hotkey_binding("Control+Shift+A").is_ok());
+    }
+
+    /// 数字キーを解析できること
+    #[test]
+    fn test_parse_digit_keys() {
+        assert!(parse_hotkey_binding("Alt+Shift+1").is_ok());
+        assert!(parse_hotkey_binding("Alt+Shift+0").is_ok());
     }
 
     /// 不正なホットキーはエラーを返すこと

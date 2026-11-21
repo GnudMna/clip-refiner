@@ -3,8 +3,12 @@ use std::sync::Arc;
 use super::super::clipboard_monitor::{self, bump_monitor_generation};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
+
 use crate::config::MonitorMode;
 
+// ======================================================================
+// 監視設定更新
+// ======================================================================
 /// 監視モードを更新し、必要に応じて監視用スレッドのリセットを行う
 ///
 /// # Arguments
@@ -28,6 +32,9 @@ pub fn update_monitor_mode(state: &Arc<AppState>, menu: &TrayMenu, monitor_mode:
     bump_monitor_generation(state);
 }
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// 監視設定(監視モード、ポーリング間隔)に関連するメニューイベントを処理する
 ///
 /// # Arguments

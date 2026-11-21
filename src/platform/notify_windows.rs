@@ -3,6 +3,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
+use super::notify::format_notification_summary;
+
 use crate::consts;
 
 use anyhow::{Context, Result};
@@ -13,8 +15,6 @@ use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use winreg::RegKey;
 use winreg::RegValue;
 use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ};
-
-use super::notify::format_notification_summary;
 
 /// `AppUserModelID` を登録するレジストリキー (`HKCU\Software\Classes\AppUserModelId\<APP_ID>`)
 const AUMID_REGISTRY_KEY_PREFIX: &str = r"Software\Classes\AppUserModelId";

@@ -1,14 +1,19 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+use super::super::dispatch;
 use super::super::menu::TrayMenu;
+use super::super::notify;
 use super::super::state::{AppState, LockExt};
 use super::super::text_selector::TextSelectorWindow;
 use super::super::worker::ClipboardCommand;
+
 use crate::config::AppConfig;
-use crate::platform;
 use crate::security::secret_from;
 
+// ======================================================================
+// メニューイベント処理
+// ======================================================================
 /// 登録文字列メニューイベントを処理する
 pub(super) fn handle_texts_event(
     id: &tray_icon::menu::MenuId,
@@ -17,7 +22,7 @@ pub(super) fn handle_texts_event(
     clipboard_tx: &Sender<ClipboardCommand>,
 ) -> bool {
     if id == menu.texts.register_item.id() {
-        let _ = clipboard_tx.send(ClipboardCommand::RegisterFromClipboard);
+        dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::RegisterFromClipboard);
         return true;
     }
 
@@ -26,7 +31,10 @@ pub(super) fn handle_texts_event(
     if let Some((_, index)) = menu_records.iter().find(|(rec_id, _)| *rec_id == id) {
         let text = state.with_config(|config| config.registered_text_at(*index).map(secret_from));
         if let Some(text) = text {
-            let _ = clipboard_tx.send(ClipboardCommand::CopyRegisteredText(text));
+            dispatch::send_clipboard_command(
+                clipboard_tx,
+                ClipboardCommand::CopyRegisteredText(text),
+            );
         }
         return true;
     }
@@ -34,6 +42,9 @@ pub(super) fn handle_texts_event(
     false
 }
 
+// ======================================================================
+// 登録文字列操作
+// ======================================================================
 /// 登録文字列のクリップボードコピーを実行する
 pub(super) fn copy_registered_text(
     state: &Arc<AppState>,
@@ -45,7 +56,7 @@ pub(super) fn copy_registered_text(
         return;
     };
 
-    let _ = clipboard_tx.send(ClipboardCommand::CopyRegisteredText(text));
+    dispatch::send_clipboard_command(clipboard_tx, ClipboardCommand::CopyRegisteredText(text));
 }
 
 /// 登録文字列を削除し、メニューとセレクターを更新する
@@ -62,16 +73,21 @@ pub(super) fn delete_registered_text(
 
     state.save_config();
     refresh_texts_views(state, menu, text_selector);
-    platform::show_notification("登録文字列", "登録文字列を削除しました");
+    notify::show_when_enabled(state, "登録文字列", "登録文字列を削除しました");
 }
 
+// ======================================================================
+// UI 更新
+// ======================================================================
 /// 登録文字列メニューとセレクター表示を設定内容に合わせて更新する
 pub(crate) fn refresh_texts_views(
     state: &Arc<AppState>,
     menu: &TrayMenu,
     text_selector: &TextSelectorWindow,
 ) {
-    let _ = menu.refresh_texts(state);
+    if let Err(err) = menu.refresh_texts(state) {
+        dispatch::log_menu_operation_error("登録文字列メニューの更新", err);
+    }
     if text_selector.is_visible() {
         let texts_json = state.with_config(AppConfig::texts_to_json_list);
         text_selector.refresh_items(&texts_json);
