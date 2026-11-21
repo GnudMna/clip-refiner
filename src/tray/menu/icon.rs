@@ -39,3 +39,17 @@ pub fn create_icon() -> Result<Icon> {
 
     Icon::from_rgba(rgba, info.width, info.height).context("アイコンデータの作成に失敗しました")
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 埋め込み PNG からトレイアイコンを生成できること
+    #[test]
+    fn create_icon_from_embedded_png() {
+        let _icon = create_icon().expect("トレイアイコンの作成に失敗");
+    }
+}

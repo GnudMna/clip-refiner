@@ -1,3 +1,13 @@
+use crate::config::{self, AppConfig};
+use crate::consts;
+use crate::logger;
+use crate::platform;
+use crate::refiner::{
+    self, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
+};
+use crate::tray;
+use crate::{log_error, log_info, log_warn};
+
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use clap::Parser;
@@ -5,14 +15,6 @@ use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-use crate::config;
-use crate::consts;
-use crate::logger;
-use crate::notification;
-use crate::refiner::{self, ClipboardProcessError, ClipboardProcessOutcome, RefineMode};
-use crate::tray;
-use crate::{log_error, log_info, log_warn};
 
 // ======================================================================
 // エントリポイント
@@ -31,7 +33,7 @@ pub fn run() -> Result<()> {
     let _instance = ensure_single_instance()?;
 
     if let Some(mode) = args.mode {
-        run_once(mode)?;
+        run_once(mode, &args)?;
     } else {
         tray::run_loop()?;
     }
@@ -63,6 +65,18 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_enum)]
     mode: Option<RefineMode>,
+    /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
+    #[arg(long = "regex-pattern")]
+    regex_pattern: Option<String>,
+    /// 正規表現の置換文字列 (`config.toml` の `regex.replacement` を上書き)
+    #[arg(long = "regex-replacement")]
+    regex_replacement: Option<String>,
+    /// 正規表現で大文字小文字を無視する
+    #[arg(long = "regex-case-insensitive")]
+    regex_case_insensitive: bool,
+    /// 正規表現で複数行モードを有効にする
+    #[arg(long = "regex-multiline")]
+    regex_multiline: bool,
 }
 
 // ======================================================================
@@ -99,6 +113,13 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 
     if !log_dir.exists() {
         std::fs::create_dir_all(&log_dir).context("ログディレクトリの作成に失敗")?;
+    }
+
+    if let Err(e) = config::permissions::restrict_private_dir_permissions(&log_dir) {
+        log_warn!("ログディレクトリのパーミッション設定に失敗: {:?}", e);
+    }
+    if let Err(e) = config::permissions::restrict_private_files_in_dir(&log_dir) {
+        log_warn!("ログファイルのパーミッション設定に失敗: {:?}", e);
     }
 
     let file_appender = tracing_appender::rolling::daily(&log_dir, "clip-refiner.log");
@@ -144,7 +165,7 @@ fn ensure_single_instance() -> Result<SingleInstance> {
     if !instance.is_single() {
         let msg = format!("{}は既に実行されています。", consts::APP_NAME);
         log_warn!("{}", msg);
-        notification::show_notification("多重起動", &msg);
+        platform::show_notification("多重起動", &msg);
         // 多重起動時は即座に終了するため、ErrではなくOkの扱いにしつつメッセージを表示
         std::process::exit(0);
     }
@@ -165,11 +186,13 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 ///
 /// # Returns
 /// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
-fn run_once(mode: RefineMode) -> Result<()> {
+fn run_once(mode: RefineMode, args: &Args) -> Result<()> {
     log_info!("ワンショットモードで実行: {:?}", mode);
+    let config = AppConfig::load();
+    let ctx = build_refinement_context(&config, args);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
-    match refiner::process_clipboard(&mut clipboard, mode) {
+    match refiner::process_clipboard(&mut clipboard, mode, &ctx) {
         Ok(ClipboardProcessOutcome::Processed(_)) => {
             log_info!("ワンショット処理が完了しました");
             eprintln!("加工が完了しました");
@@ -191,4 +214,24 @@ fn run_once(mode: RefineMode) -> Result<()> {
             Err(anyhow::anyhow!(e.user_message().to_string()))
         }
     }
+}
+
+/// 設定と CLI 引数から加工コンテキストを組み立てる
+fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
+    let mut ctx = RefineContext::from_config(config);
+
+    if let Some(pattern) = &args.regex_pattern {
+        ctx.regex.pattern.clone_from(pattern);
+    }
+    if let Some(replacement) = &args.regex_replacement {
+        ctx.regex.replacement.clone_from(replacement);
+    }
+    if args.regex_case_insensitive {
+        ctx.regex.case_insensitive = true;
+    }
+    if args.regex_multiline {
+        ctx.regex.multiline = true;
+    }
+
+    ctx
 }

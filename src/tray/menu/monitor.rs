@@ -103,3 +103,30 @@ impl TrayMenu {
         })
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 現在の監視方式だけがチェックされること
+    #[test]
+    fn build_monitor_menu_checks_current_mode() {
+        let monitor =
+            TrayMenu::build_monitor_menu(MonitorMode::Event).expect("監視方式メニューの構築に失敗");
+        assert!(
+            monitor
+                .items
+                .iter()
+                .any(|(item, mode)| *mode == MonitorMode::Event && item.is_checked())
+        );
+        assert!(
+            monitor
+                .items
+                .iter()
+                .any(|(item, mode)| *mode == MonitorMode::Polling && !item.is_checked())
+        );
+    }
+}

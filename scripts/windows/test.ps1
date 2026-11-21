@@ -23,7 +23,7 @@ Invoke-ScriptMain {
     Write-Host ''
 
     Write-Host 'テストを実行中...'
-    cargo test --all-targets
+    cargo test --all-targets --features test-helpers
 
     if ($LASTEXITCODE -ne 0) {
         throw "エラー: cargo test が終了コード $LASTEXITCODE で失敗しました"

@@ -42,3 +42,17 @@ fn create_event_loop() -> EventLoop<AppEvent> {
     #[cfg(not(windows))]
     return EventLoopBuilder::<AppEvent>::with_user_event().build();
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// イベントループを生成できること
+    #[test]
+    fn create_event_loop_builds() {
+        let _ = create_event_loop();
+    }
+}

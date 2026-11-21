@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        @import url("selector.css");
+
+        .item.action {
+            border-top: 1px solid var(--border-subtle);
+            margin-top: 4px;
+            padding-top: 14px;
+        }
+
+        .item.action .label {
+            color: var(--accent-color);
+        }
+
+        .selector-heading {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+        }
+
+        .item-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .item-delete {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.1s, background 0.1s, color 0.1s;
+        }
+
+        .item:hover .item-delete,
+        .item.selected .item-delete {
+            opacity: 1;
+        }
+
+        .item-delete:hover {
+            background: rgba(220, 80, 80, 0.2);
+            color: #f08080;
+        }
+
+        .item-delete:active {
+            background: rgba(220, 80, 80, 0.35);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="search-box">
+            <div class="selector-heading">登録文字列セレクター</div>
+            <input type="text" id="input" placeholder="ラベル・本文で検索..." autocomplete="off" spellcheck="false">
+        </div>
+        <div id="results"></div>
+        <div id="footer">
+            <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> コピー, <kbd>Del</kbd> 削除, <kbd>Ctrl+Enter</kbd> 登録</span>
+            <span>閉じる: <kbd>Esc</kbd></span>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('input');
+        const results = document.getElementById('results');
+
+        let items = [];
+        let filtered = [];
+        let selectedIndex = 0;
+
+        function normalizeQuery(query) {
+            return query.toLowerCase().trim();
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function highlightText(text, query) {
+            const safe = escapeHtml(text);
+            if (!query) {
+                return safe;
+            }
+
+            const lowerText = text.toLowerCase();
+            const index = lowerText.indexOf(query);
+            if (index === -1) {
+                return safe;
+            }
+
+            const end = index + query.length;
+            return (
+                escapeHtml(text.slice(0, index)) +
+                '<mark>' + escapeHtml(text.slice(index, end)) + '</mark>' +
+                escapeHtml(text.slice(end))
+            );
+        }
+
+        function itemMatches(item, query) {
+            if (!query) {
+                return true;
+            }
+
+            const fields = [item.label, item.preview];
+            return fields.some((field) => field && field.toLowerCase().includes(query));
+        }
+
+        function isRegisterIndex(index) {
+            return index === filtered.length;
+        }
+
+        function totalRows() {
+            return filtered.length + 1;
+        }
+
+        function clampSelectedIndex() {
+            if (totalRows() === 0) {
+                selectedIndex = 0;
+                return;
+            }
+            if (selectedIndex >= totalRows()) {
+                selectedIndex = totalRows() - 1;
+            }
+            if (selectedIndex < 0) {
+                selectedIndex = 0;
+            }
+        }
+
+        function createItem(item, index, query) {
+            const div = document.createElement('div');
+            div.className = 'item' + (index === selectedIndex ? ' selected' : '');
+
+            div.innerHTML = `
+                <div class="item-content">
+                    <div class="mode-info">
+                        <span class="label">${highlightText(item.label, query)}</span>
+                    </div>
+                    ${item.preview ? `<span class="value-hint">${highlightText(item.preview, query)}</span>` : ''}
+                </div>
+                <button type="button" class="item-delete" title="削除" aria-label="削除">×</button>
+            `;
+
+            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onclick = () => select(item.id);
+
+            const deleteBtn = div.querySelector('.item-delete');
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteItem(item.id);
+            };
+
+            return div;
+        }
+
+        function createRegisterRow(index, query) {
+            const label = 'クリップボードを登録';
+            const preview = '現在のクリップボードを登録文字列に追加';
+            const div = document.createElement('div');
+            div.className = 'item action' + (index === selectedIndex ? ' selected' : '');
+
+            div.innerHTML = `
+                <div class="mode-info">
+                    <span class="label">${highlightText(label, query)}</span>
+                </div>
+                <span class="value-hint">${highlightText(preview, query)}</span>
+            `;
+
+            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onclick = () => register();
+            return div;
+        }
+
+        function updateSelectionHighlight() {
+            results.querySelectorAll('.item').forEach((element, index) => {
+                element.classList.toggle('selected', index === selectedIndex);
+            });
+        }
+
+        function scrollSelectedIntoView() {
+            const elements = results.querySelectorAll('.item');
+            elements[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+        }
+
+        function setSelectedIndex(index, scroll) {
+            if (totalRows() === 0) {
+                return;
+            }
+
+            const next = Math.max(0, Math.min(index, totalRows() - 1));
+            if (next === selectedIndex) {
+                if (scroll) {
+                    scrollSelectedIntoView();
+                }
+                return;
+            }
+
+            selectedIndex = next;
+            updateSelectionHighlight();
+            if (scroll) {
+                scrollSelectedIntoView();
+            }
+        }
+
+        function renderList(scrollToSelection) {
+            results.innerHTML = '';
+            const query = normalizeQuery(input.value);
+            clampSelectedIndex();
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = items.length === 0
+                    ? '登録文字列がありません'
+                    : '該当する登録文字列がありません';
+                results.appendChild(empty);
+            } else {
+                filtered.forEach((item, index) => {
+                    results.appendChild(createItem(item, index, query));
+                });
+            }
+
+            results.appendChild(createRegisterRow(filtered.length, query));
+
+            if (scrollToSelection) {
+                scrollSelectedIntoView();
+            }
+        }
+
+        function filter() {
+            const query = normalizeQuery(input.value);
+            const previousIndex = selectedIndex;
+
+            filtered = items.filter((item) => itemMatches(item, query));
+
+            if (isRegisterIndex(previousIndex)) {
+                selectedIndex = filtered.length;
+            } else if (previousIndex < filtered.length) {
+                selectedIndex = previousIndex;
+            } else {
+                selectedIndex = 0;
+            }
+
+            renderList(true);
+        }
+
+        function select(id) {
+            window.ipc.postMessage('select:' + id);
+        }
+
+        function register() {
+            window.ipc.postMessage('register');
+        }
+
+        function deleteItem(id) {
+            window.ipc.postMessage('delete:' + id);
+        }
+
+        function deleteSelected() {
+            const item = filtered[selectedIndex];
+            if (!item) {
+                return;
+            }
+            deleteItem(item.id);
+        }
+
+        function close() {
+            window.ipc.postMessage('close');
+        }
+
+        function moveSelection(delta) {
+            if (totalRows() === 0) {
+                return;
+            }
+            setSelectedIndex(selectedIndex + delta, true);
+        }
+
+        function activateSelection() {
+            if (isRegisterIndex(selectedIndex)) {
+                register();
+            } else if (filtered[selectedIndex]) {
+                select(filtered[selectedIndex].id);
+            }
+        }
+
+        input.oninput = filter;
+
+        window.onkeydown = (e) => {
+            if (e.key === 'ArrowDown') {
+                moveSelection(1);
+                e.preventDefault();
+            } else if (e.key === 'ArrowUp') {
+                moveSelection(-1);
+                e.preventDefault();
+            } else if (e.key === 'Home') {
+                if (totalRows() > 0) {
+                    setSelectedIndex(0, true);
+                    e.preventDefault();
+                }
+            } else if (e.key === 'End') {
+                if (totalRows() > 0) {
+                    setSelectedIndex(totalRows() - 1, true);
+                    e.preventDefault();
+                }
+            } else if (e.key === 'Enter' && e.ctrlKey) {
+                register();
+                e.preventDefault();
+            } else if (e.key === 'Enter') {
+                activateSelection();
+                e.preventDefault();
+            } else if (e.key === 'Delete' && !isRegisterIndex(selectedIndex) && filtered[selectedIndex]) {
+                deleteSelected();
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                if (input.value) {
+                    input.value = '';
+                    filter();
+                    e.preventDefault();
+                } else {
+                    close();
+                }
+            }
+        };
+
+        // UI 表示時にフォーカスを当てる
+        window.focusInput = (nextItems) => {
+            items = Array.isArray(nextItems) ? nextItems : [];
+            input.value = '';
+            selectedIndex = 0;
+            filter();
+            input.focus();
+            input.select();
+        };
+
+        // 登録後などに一覧だけ更新する
+        window.refreshItems = (nextItems) => {
+            items = Array.isArray(nextItems) ? nextItems : [];
+            filter();
+        };
+    </script>
+</body>
+
+</html>

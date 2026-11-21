@@ -12,7 +12,7 @@ impl TrayMenu {
     /// # Arguments
     /// * `enabled` - 成功通知を有効にするかどうか
     /// * `notify_mode` - 通知にモード変化を表示するかどうか
-    /// * `notify_result` - 通知に加工結果を表示するかどうか
+    /// * `notify_result` - 通知にクリップボードの内容を表示するかどうか
     /// * `notify_pause` - 一時停止切替を通知するかどうか
     ///
     /// # Returns
@@ -26,7 +26,8 @@ impl TrayMenu {
     ) -> Result<NotificationMenu> {
         let enabled_item = CheckMenuItem::new("成功通知を有効化", true, enabled, None);
         let notify_mode_item = CheckMenuItem::new("モード変更を通知", true, notify_mode, None);
-        let notify_result_item = CheckMenuItem::new("変換結果を通知", true, notify_result, None);
+        let notify_result_item =
+            CheckMenuItem::new("クリップボードの内容を表示", true, notify_result, None);
         let notify_pause_item = CheckMenuItem::new("一時停止を通知", true, notify_pause, None);
 
         let content_submenu = Submenu::with_items(
@@ -52,10 +53,28 @@ impl TrayMenu {
         Ok(NotificationMenu {
             main_submenu,
             enabled_item,
-            content_submenu,
             notify_mode_item,
             notify_result_item,
             notify_pause_item,
         })
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 成功通知 OFF 時も通知内容サブメニューは構築でき、各チェック状態が引数どおり反映されること
+    #[test]
+    fn build_notification_menu_creates_content_submenu() {
+        let notification = TrayMenu::build_notification_menu(false, true, true, true)
+            .expect("通知メニューの構築に失敗");
+        assert!(!notification.enabled_item.is_checked());
+        assert!(notification.notify_mode_item.is_checked());
+        assert!(notification.notify_result_item.is_checked());
+        assert!(notification.notify_pause_item.is_checked());
     }
 }

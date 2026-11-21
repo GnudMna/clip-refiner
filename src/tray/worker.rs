@@ -5,12 +5,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::clipboard_change::ChangeWatcher;
-use super::monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
-use super::notifier;
-use super::state::AppState;
+use super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
+use super::notify;
+use super::state::{AppEvent, AppState};
+use crate::config::AddRegisteredTextError;
 use crate::config::MonitorMode;
-use crate::notification;
-use crate::refiner::{ClipboardProcessOutcome, RefineMode, process_clipboard};
+use crate::platform;
+use crate::refiner::{
+    ClipboardProcessOutcome, RefineContext, RefineMode, TextClipboard, process_text_clipboard,
+};
+use crate::security::SecretString;
 
 use arboard::Clipboard;
 
@@ -21,19 +25,27 @@ use arboard::Clipboard;
 #[derive(Clone)]
 pub enum ClipboardCommand {
     /// 指定されたテキストをクリップボードにセットする(履歴からの復元用など)
-    SetText(String),
+    SetText(SecretString),
+    /// 登録文字列をクリップボードにコピーする
+    CopyRegisteredText(SecretString),
     /// 現在のクリップボード内容を指定されたモードで加工する
     ProcessMode(RefineMode),
     /// 直近の加工を取り消し、加工前のテキストをクリップボードへ復元する
     Undo,
+    /// クリップボードの内容を登録文字列として保存する
+    RegisterFromClipboard,
 }
 
 impl std::fmt::Debug for ClipboardCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SetText(_) => f.debug_tuple("SetText").field(&"...").finish(),
+            Self::CopyRegisteredText(_) => {
+                f.debug_tuple("CopyRegisteredText").field(&"...").finish()
+            }
             Self::ProcessMode(mode) => f.debug_tuple("ProcessMode").field(mode).finish(),
             Self::Undo => f.write_str("Undo"),
+            Self::RegisterFromClipboard => f.write_str("RegisterFromClipboard"),
         }
     }
 }
@@ -167,14 +179,14 @@ impl MonitorLoopState {
                     && token != self.last_token
                 {
                     self.last_token = token;
-                    if monitor::handle_clipboard_update(clipboard, state, &snap, true) {
+                    if clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, true) {
                         self.last_token = watcher.token().unwrap_or(self.last_token);
                     }
                 }
             }
             MonitorMode::Polling => {
                 if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
-                    monitor::handle_clipboard_update(clipboard, state, &snap, false);
+                    clipboard_monitor::handle_clipboard_update(clipboard, state, &snap, false);
                     self.last_poll_at = Instant::now();
                 }
             }
@@ -216,7 +228,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &Receiver<ClipboardCommand>) {
         Ok(cb) => cb,
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
-            notification::show_notification(
+            platform::show_notification(
                 "クリップボードエラー",
                 "クリップボードの初期化に失敗しました。監視処理は停止します。",
             );
@@ -298,70 +310,119 @@ fn sync_monitor_generation(
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
 /// * `cmd` - 受信したコマンド
-fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: ClipboardCommand) {
+pub(crate) fn handle_command<C: TextClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    cmd: ClipboardCommand,
+) {
     match cmd {
         ClipboardCommand::SetText(text) => {
-            if let Err(e) = clipboard.set_text(text.clone()) {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
                 crate::log_error!("クリップボード設定エラー: {:?}", e);
-                notification::show_notification(
+                platform::show_notification(
                     "クリップボードエラー",
                     "履歴からの復元処理に失敗しました。",
                 );
             } else {
                 state.record_clipboard_set(&text);
                 if state.with_config(|c| c.notification_settings.enabled) {
-                    notification::show_notification(
-                        "履歴から復元",
-                        "クリップボードにコピーしました",
-                    );
+                    platform::show_notification("履歴から復元", "クリップボードにコピーしました");
+                }
+            }
+        }
+        ClipboardCommand::CopyRegisteredText(text) => {
+            if let Err(e) = clipboard.set_text(text.to_string()) {
+                crate::log_error!("クリップボード設定エラー: {:?}", e);
+                platform::show_notification(
+                    "クリップボードエラー",
+                    "登録文字列のコピーに失敗しました。",
+                );
+            } else {
+                state.record_clipboard_set(&text);
+                if state.with_config(|c| c.notification_settings.enabled) {
+                    platform::show_notification("登録文字列", "クリップボードにコピーしました");
                 }
             }
         }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
-            match process_clipboard(clipboard, mode) {
+            let ctx = state.with_config(RefineContext::from_config);
+            match process_text_clipboard(clipboard, mode, &ctx) {
                 Ok(ClipboardProcessOutcome::Processed(processed)) => {
                     if let Some(ref pre) = pre_text {
                         state.record_undo_source(pre);
                     }
                     state.record_processing_success(&processed);
-                    notifier::show_process_notification(state, mode, &processed);
+                    notify::show_process_notification(state, mode, &processed);
                 }
                 Ok(ClipboardProcessOutcome::Unchanged) => {
                     if state.with_config(|c| c.notification_settings.enabled) {
-                        notification::show_notification(
-                            "加工結果",
-                            "テキストに変更はありませんでした",
-                        );
+                        platform::show_notification("加工結果", "テキストに変更はありませんでした");
                     }
                 }
                 Err(e) => {
                     crate::log_error!("加工エラー: {} ({:?})", e.user_message(), e);
-                    notification::show_notification("加工エラー", e.user_message());
+                    platform::show_notification("加工エラー", e.user_message());
                 }
             }
         }
         ClipboardCommand::Undo => {
             if let Some(text) = state.take_undo_source() {
-                if let Err(e) = clipboard.set_text(text.clone()) {
+                if let Err(e) = clipboard.set_text(text.to_string()) {
                     crate::log_error!("加工取り消しエラー: {:?}", e);
                     state.record_undo_source(&text);
-                    notification::show_notification(
+                    platform::show_notification(
                         "クリップボードエラー",
                         "加工の取り消しに失敗しました",
                     );
                 } else {
                     state.record_processing_success(&text);
                     if state.with_config(|c| c.notification_settings.enabled) {
-                        notification::show_notification(
+                        platform::show_notification(
                             "加工の取り消し",
                             "クリップボードを加工前の内容に戻しました",
                         );
                     }
                 }
             } else if state.with_config(|c| c.notification_settings.enabled) {
-                notification::show_notification("加工の取り消し", "取り消せる加工がありません");
+                platform::show_notification("加工の取り消し", "取り消せる加工がありません");
             }
+        }
+        ClipboardCommand::RegisterFromClipboard => {
+            register_text_from_clipboard(clipboard, state);
+        }
+    }
+}
+
+/// クリップボードの内容を登録文字列として保存する
+fn register_text_from_clipboard<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
+    let text = match clipboard.get_text() {
+        Ok(text) => text,
+        Err(e) => {
+            crate::log_error!("クリップボード読み取りエラー: {:?}", e);
+            platform::show_notification(
+                "クリップボードエラー",
+                "クリップボードの読み取りに失敗しました",
+            );
+            return;
+        }
+    };
+
+    let outcome = state.with_config_mut(|c| c.add_registered_text(text));
+    match outcome {
+        Ok(()) => {
+            state.save_config();
+            let _ = state.proxy.send_event(AppEvent::RefreshTexts);
+            platform::show_notification("登録文字列", "クリップボードの内容を登録しました");
+        }
+        Err(AddRegisteredTextError::Empty) => {
+            platform::show_notification("登録文字列", "クリップボードが空のため登録できません");
+        }
+        Err(AddRegisteredTextError::TooLarge) => {
+            platform::show_notification("登録文字列", "テキストが長すぎるため登録できません");
+        }
+        Err(AddRegisteredTextError::LimitReached) => {
+            platform::show_notification("登録文字列", "登録件数の上限に達しています");
         }
     }
 }
@@ -371,12 +432,14 @@ fn handle_command(clipboard: &mut Clipboard, state: &Arc<AppState>, cmd: Clipboa
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
     use super::*;
+
     use crate::config::MonitorMode;
     use crate::tray::clipboard_change::ChangeWatcher;
     use crate::tray::state::test_app_state;
-    use std::sync::Arc;
-    use std::sync::atomic::Ordering;
 
     fn active_monitor(generation: u64) -> MonitorLoopState {
         let mut monitor = MonitorLoopState::new();

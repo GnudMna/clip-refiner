@@ -4,14 +4,16 @@
 
 pub mod app;
 mod clipboard_change;
+pub(crate) mod clipboard_monitor;
 pub mod event;
+pub mod history;
 pub mod hotkey;
 pub mod menu;
-pub mod monitor;
-pub mod notifier;
+mod notify;
+pub mod quick_selector;
 mod runner;
-pub mod selector;
 pub mod state;
+pub mod text_selector;
 pub mod worker;
 
 pub use runner::run_loop;

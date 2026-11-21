@@ -1,8 +1,9 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
-use crate::config::AppConfig;
-use crate::history_store::EncryptedHistoryStore;
+use super::history::EncryptedHistoryStore;
+use crate::config::{AppConfig, RegexSettings};
 use crate::refiner::RefineMode;
+use crate::security::{ContentFingerprint, SecretString, secret_from};
 
 use tao::event_loop::EventLoopProxy;
 
@@ -14,10 +15,20 @@ use tao::event_loop::EventLoopProxy;
 pub enum AppEvent {
     /// クリップボード加工モードの変更要求
     RequestModeChange(RefineMode),
-    /// モード選択用セレクタウィンドウの非表示要求
-    HideSelector,
+    /// クイックセレクター (加工モード選択) の非表示要求
+    HideQuickSelector,
+    /// 登録文字列セレクターの非表示要求
+    HideTextSelector,
+    /// 登録文字列のクリップボードコピー要求
+    RequestTextCopy(usize),
+    /// クリップボードの内容を登録文字列として保存する要求
+    RequestTextRegister,
+    /// 登録文字列の削除要求
+    RequestTextDelete(usize),
     /// 履歴メニューの内容再構築要求
     RefreshHistory,
+    /// 登録文字列メニューの内容再構築要求
+    RefreshTexts,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
@@ -34,15 +45,31 @@ pub struct MonitorSnapshot {
     pub is_paused: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
+    /// 正規表現加工用の設定
+    pub regex_settings: RegexSettings,
 }
 
 /// 監視ループにおける二重加工防止用の状態
+///
+/// クリップボード本文は平文で保持せず、指紋のみを記録する
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ProcessedState {
-    /// ポーリングで前回観測したクリップボード本文
-    pub last_seen_text: String,
-    /// 直近の加工でクリップボードへ書き戻した本文(自身の変更イベントを1回無視)
-    pub last_written_text: Option<String>,
+    /// ポーリングで前回観測したクリップボード本文の指紋
+    pub last_seen: ContentFingerprint,
+    /// 直近の加工で書き戻した本文の指紋 (自身の変更イベントを1回無視)
+    pub last_written: Option<ContentFingerprint>,
+}
+
+impl ProcessedState {
+    /// 指定テキストが `last_seen` と一致するか判定する
+    pub fn matches_last_seen(&self, text: &str) -> bool {
+        self.last_seen.matches(text)
+    }
+
+    /// 指定テキストが `last_written` と一致するか判定する
+    pub fn matches_last_written(&self, text: &str) -> bool {
+        self.last_written.is_some_and(|fp| fp.matches(text))
+    }
 }
 
 // ======================================================================
@@ -94,12 +121,14 @@ pub struct AppState {
     pub monitor_generation: AtomicU64,
     /// 二重加工防止用の監視状態
     processed_state: Mutex<ProcessedState>,
-    /// 直近の加工前テキスト (取り消し用)
-    undo_text: Mutex<Option<String>>,
+    /// 直近の加工前テキスト (取り消し用、破棄時にゼロ化)
+    undo_text: Mutex<Option<SecretString>>,
     /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
     history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
+    /// 設定をディスクへ保存するかどうか
+    persist_config: bool,
 }
 
 // ======================================================================
@@ -119,11 +148,17 @@ impl AppState {
             undo_text: Mutex::new(None),
             history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
+            persist_config: true,
         }
     }
 
     /// 現在の設定をファイルへ保存する
+    ///
+    /// `persist_config` が `false` の場合はメモリ上の変更のみとし、ディスクへは書き込まない
     pub fn save_config(&self) {
+        if !self.persist_config {
+            return;
+        }
         if let Err(e) = self.with_config(super::super::config::AppConfig::save) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
         }
@@ -137,6 +172,12 @@ impl AppState {
     /// 設定を変更する
     pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
         f(&mut self.config.write_ignore_poison())
+    }
+
+    /// 設定のディスク保存が有効かどうかを返す
+    #[cfg(test)]
+    pub(crate) fn is_config_persistence_enabled(&self) -> bool {
+        self.persist_config
     }
 }
 
@@ -153,6 +194,7 @@ impl AppState {
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
+            regex_settings: config.regex.clone(),
         })
     }
 
@@ -164,47 +206,43 @@ impl AppState {
     /// 加工成功後にクリップボードへ書き戻したことを記録する
     pub fn record_processing_success(&self, output: &str) {
         self.with_processed_state(|ps| {
-            ps.last_written_text = Some(output.to_string());
-            ps.last_seen_text = output.to_string();
+            let fp = ContentFingerprint::from_text(output);
+            ps.last_written = Some(fp);
+            ps.last_seen = fp;
         });
     }
 
     /// 加工せずに観測したクリップボード本文を記録する
     pub fn record_clipboard_observed(&self, text: &str) {
         self.with_processed_state(|ps| {
-            ps.last_seen_text = text.to_string();
+            ps.last_seen = ContentFingerprint::from_text(text);
         });
     }
 
     /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
     pub fn record_clipboard_set(&self, text: &str) {
         self.with_processed_state(|ps| {
-            ps.last_written_text = None;
-            ps.last_seen_text = text.to_string();
+            ps.last_written = None;
+            ps.last_seen = ContentFingerprint::from_text(text);
         });
     }
 
     /// 加工成功時に取り消し用の元テキストを記録する
     pub fn record_undo_source(&self, text: &str) {
-        *self.undo_text.lock_ignore_poison() = Some(text.to_string());
+        *self.undo_text.lock_ignore_poison() = Some(secret_from(text));
     }
 
     /// 取り消し用の元テキストを取り出す
     ///
     /// # Returns
-    /// * `Option<String>` - 取り消し可能な加工があれば `Some(元テキスト)`
-    pub fn take_undo_source(&self) -> Option<String> {
+    /// * `Option<SecretString>` - 取り消し可能な加工があれば `Some(元テキスト)`
+    pub fn take_undo_source(&self) -> Option<SecretString> {
         self.undo_text.lock_ignore_poison().take()
     }
 
-    /// 履歴を復号してすべて取得する
-    ///
-    /// メニュー表示など、一時的に平文が必要な場合に使用する
-    ///
-    /// # Returns
-    /// * `Vec<String>` - 新しい順に並んだ復号済み履歴
-    pub fn get_history(&self) -> Vec<String> {
-        self.history_store.lock_ignore_poison().entries_decrypted()
+    /// 履歴の件数を返す
+    pub fn history_len(&self) -> usize {
+        self.history_store.lock_ignore_poison().len()
     }
 
     /// 指定インデックスの履歴を復号して取得する
@@ -213,8 +251,8 @@ impl AppState {
     /// * `index` - 履歴ストア内のインデックス (0 が最新)
     ///
     /// # Returns
-    /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
-    pub fn get_history_entry(&self, index: usize) -> Option<String> {
+    /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
+    pub fn get_history_entry(&self, index: usize) -> Option<SecretString> {
         self.history_store.lock_ignore_poison().entry_at(index)
     }
 
@@ -249,7 +287,7 @@ impl AppState {
 // テスト用ヘルパー
 // ======================================================================
 /// ユニットテスト用の `AppState` を生成する
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 pub(crate) fn test_app_state() -> AppState {
     use crate::config::AppConfig;
     use tao::event_loop::EventLoopBuilder;
@@ -275,6 +313,7 @@ pub(crate) fn test_app_state() -> AppState {
         undo_text: Mutex::new(None),
         history_store: Mutex::new(EncryptedHistoryStore::new()),
         proxy: event_loop.create_proxy(),
+        persist_config: false,
     }
 }
 
@@ -283,9 +322,11 @@ pub(crate) fn test_app_state() -> AppState {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
+
+    use super::*;
+
+    use crate::config::MonitorMode;
 
     /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作
     #[test]
@@ -297,14 +338,11 @@ mod tests {
         assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
 
         let ps = ProcessedState {
-            last_seen_text: "hello".to_string(),
+            last_seen: ContentFingerprint::from_text("hello"),
             ..Default::default()
         };
-        state.with_processed_state(|s| *s = ps.clone());
-        assert_eq!(
-            state.with_processed_state(|s| s.last_seen_text.clone()),
-            "hello"
-        );
+        state.with_processed_state(|s| *s = ps);
+        assert!(state.with_processed_state(|s| s.matches_last_seen("hello")));
 
         assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
 
@@ -347,9 +385,9 @@ mod tests {
         state.with_config_mut(|c| c.notification_settings.notify_mode = false);
         assert!(!state.with_config(|c| c.notification_settings.notify_mode));
 
-        assert!(state.with_config(|c| c.notification_settings.notify_result));
-        state.with_config_mut(|c| c.notification_settings.notify_result = false);
         assert!(!state.with_config(|c| c.notification_settings.notify_result));
+        state.with_config_mut(|c| c.notification_settings.notify_result = true);
+        assert!(state.with_config(|c| c.notification_settings.notify_result));
 
         assert!(state.with_config(|c| c.notification_settings.notify_pause));
         state.with_config_mut(|c| c.notification_settings.notify_pause = false);
@@ -374,6 +412,12 @@ mod tests {
         assert!(snap.history_enabled);
     }
 
+    fn collect_history(state: &AppState) -> Vec<String> {
+        (0..state.history_len())
+            .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
+            .collect()
+    }
+
     /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になる
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
@@ -382,13 +426,13 @@ mod tests {
 
         // 空白は無視
         state.add_to_history("   ");
-        assert!(state.get_history().is_empty());
+        assert_eq!(state.history_len(), 0);
 
         // 重複するエントリは先頭に移動する
         state.add_to_history("first");
         state.add_to_history("second");
         state.add_to_history("first");
-        let h = state.get_history();
+        let h = collect_history(&state);
         assert_eq!(h[0], "first");
         assert_eq!(h[1], "second");
         assert_eq!(h.len(), 2);
@@ -397,12 +441,12 @@ mod tests {
         for i in 0..(limit + 5) {
             state.add_to_history(format!("item-{i}"));
         }
-        assert_eq!(state.get_history().len(), limit);
-        assert_eq!(state.get_history()[0], format!("item-{}", limit + 4));
+        assert_eq!(state.history_len(), limit);
+        assert_eq!(collect_history(&state)[0], format!("item-{}", limit + 4));
 
         // clear_history で履歴が空になること
         state.clear_history();
-        assert!(state.get_history().is_empty());
+        assert_eq!(state.history_len(), 0);
     }
 
     /// 加工成功時に書き戻し本文と観測済み本文が更新されること
@@ -412,24 +456,24 @@ mod tests {
         state.record_processing_success("processed");
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "processed");
-        assert_eq!(ps.last_written_text.as_deref(), Some("processed"));
+        assert!(ps.matches_last_seen("processed"));
+        assert!(ps.matches_last_written("processed"));
     }
 
-    /// 観測のみの場合は `last_written_text` を変更しないこと
+    /// 観測のみの場合は `last_written` を変更しないこと
     #[test]
     fn test_record_clipboard_observed() {
         let state = test_app_state();
         state.with_processed_state(|ps| {
-            ps.last_written_text = Some("written".to_string());
-            ps.last_seen_text = "old".to_string();
+            ps.last_written = Some(ContentFingerprint::from_text("written"));
+            ps.last_seen = ContentFingerprint::from_text("old");
         });
 
         state.record_clipboard_observed("observed");
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "observed");
-        assert_eq!(ps.last_written_text.as_deref(), Some("written"));
+        assert!(ps.matches_last_seen("observed"));
+        assert!(ps.matches_last_written("written"));
     }
 
     /// 履歴復元など外部設定時は書き戻しフラグをクリアすること
@@ -437,15 +481,15 @@ mod tests {
     fn test_record_clipboard_set() {
         let state = test_app_state();
         state.with_processed_state(|ps| {
-            ps.last_written_text = Some("written".to_string());
-            ps.last_seen_text = "old".to_string();
+            ps.last_written = Some(ContentFingerprint::from_text("written"));
+            ps.last_seen = ContentFingerprint::from_text("old");
         });
 
         state.record_clipboard_set("restored");
 
         let ps = state.with_processed_state(|s| s.clone());
-        assert_eq!(ps.last_seen_text, "restored");
-        assert_eq!(ps.last_written_text, None);
+        assert!(ps.matches_last_seen("restored"));
+        assert_eq!(ps.last_written, None);
     }
 
     /// 加工取り消し用テキストの記録と取得
@@ -456,7 +500,17 @@ mod tests {
         assert!(state.take_undo_source().is_none());
 
         state.record_undo_source("original");
-        assert_eq!(state.take_undo_source().as_deref(), Some("original"));
+        assert_eq!(
+            state.take_undo_source().as_ref().map(|s| s.as_str()),
+            Some("original")
+        );
         assert!(state.take_undo_source().is_none());
+    }
+
+    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
+    #[test]
+    fn test_app_state_disables_config_persistence() {
+        let state = test_app_state();
+        assert!(!state.is_config_persistence_enabled());
     }
 }

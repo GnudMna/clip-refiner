@@ -123,12 +123,12 @@ mod tests {
 mod platform {
     use std::path::PathBuf;
 
+    use super::{current_exe_path, normalize_path, paths_match};
+    use crate::consts;
+
     use anyhow::{Context, Result};
     use winreg::RegKey;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
-
-    use super::{current_exe_path, normalize_path, paths_match};
-    use crate::consts;
 
     const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -183,10 +183,10 @@ mod platform {
     use std::fs;
     use std::io::Write;
 
-    use anyhow::{Context, Result};
-
     use super::{current_exe_path, xml_escape};
     use crate::consts;
+
+    use anyhow::{Context, Result};
 
     /// LaunchAgent が配置されているかどうかを返す
     pub fn is_enabled() -> bool {
@@ -252,10 +252,10 @@ mod platform {
     use std::fs;
     use std::io::Write;
 
-    use anyhow::{Context, Result};
-
     use super::current_exe_path;
     use crate::consts;
+
+    use anyhow::{Context, Result};
 
     /// XDG autostart の .desktop ファイルが存在するかどうかを返す
     pub fn is_enabled() -> bool {

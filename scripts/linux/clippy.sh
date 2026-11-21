@@ -21,7 +21,7 @@ echo "Clippy による静的解析を実行しています..."
 echo
 
 echo "Clippy を実行中..."
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --features test-helpers -- -D warnings
 echo
 
 # 完了メッセージを表示

@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::refiner::OrderedValue;
+use crate::security::is_within_parser_limit;
 
 use serde_norway::Value;
 
@@ -18,6 +19,11 @@ use serde_norway::Value;
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("YAML 入力が上限を超えているためスキップ (yaml_to_json)");
+        return Cow::Borrowed(text);
+    }
+
     let v: Value = match serde_norway::from_str(text) {
         Ok(v) => v,
         Err(e) => {
@@ -46,6 +52,11 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返す。
 pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
+    if !is_within_parser_limit(text) {
+        crate::log_debug!("YAML 入力が上限を超えているためスキップ (yaml_to_json_preserve_order)");
+        return Cow::Borrowed(text);
+    }
+
     let v: OrderedValue = match serde_norway::from_str(text) {
         Ok(v) => v,
         Err(e) => {

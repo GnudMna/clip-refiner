@@ -6,12 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url("selector.css");
+
+        .selector-heading {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 
 <body>
     <div id="container">
         <div id="search-box">
+            <div class="selector-heading">クイックセレクター</div>
             <input type="text" id="input" placeholder="モード名・カテゴリ・CLI名で検索..." autocomplete="off" spellcheck="false">
         </div>
         <div id="results"></div>

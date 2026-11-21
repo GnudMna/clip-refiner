@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ClipRefiner
+Comment=クリップボードのテキストを加工するツール
+Exec=ClipRefiner
+Icon=clip-refiner
+Terminal=false
+Categories=Utility;
+StartupNotify=false
