@@ -29,7 +29,7 @@ pub struct HotkeyFix {
     pub original: String,
     /// 置き換え後の値 (無効化時は空)
     pub replacement: String,
-    /// 重複相手のフィールドキー (重複系以外は空)
+    /// 重複相手のフィールドキー (`DuplicateReplacedWithDefault` 以外は空)
     pub conflicted_with: String,
 }
 
@@ -76,7 +76,7 @@ impl HotkeyFix {
 /// 正規化結果を設定 UI 向けのフィードバック文言へまとめる
 ///
 /// # Arguments
-/// * `fixes` - `fix_invalid` が返した修正一覧
+/// * `fixes` - `fix_invalid` / `fix_duplicates` が返した修正一覧
 ///
 /// # Returns
 /// * `Option<String>` - 修正が 1 件以上ある場合のみメッセージ

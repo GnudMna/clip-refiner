@@ -163,6 +163,7 @@ pub fn set_test_config_dir(dir: PathBuf) {
 
 /// テスト用設定ディレクトリの上書きを解除する
 ///
+/// キャッシュ済みの登録クリップ暗号化鍵も破棄する
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub fn clear_test_config_dir() {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = None);
@@ -182,7 +183,7 @@ fn test_config_dir_override() -> Option<PathBuf> {
 /// * `Result<PathBuf>` - `config.toml` の完全なパス
 ///
 /// # Errors
-/// 設定ディレクトリの作成に失敗した場合
+/// 設定ディレクトリの取得または作成に失敗した場合
 pub fn get_config_file_path() -> Result<PathBuf, ConfigError> {
     let config_dir = get_config_dir()?;
     fs::create_dir_all(&config_dir).map_err(ConfigError::CreateDir)?;

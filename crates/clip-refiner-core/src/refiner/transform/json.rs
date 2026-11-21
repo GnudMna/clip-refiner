@@ -19,7 +19,7 @@ use crate::security::is_within_parser_limit;
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合や入力がパーサの上限を超える場合は元の文字列を返す
 pub fn format_json(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json)");
@@ -58,7 +58,7 @@ pub fn format_json(text: &str) -> Cow<'_, str> {
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合や入力がパーサの上限を超える場合は元の文字列を返す
 pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json_preserve_order)");
@@ -103,7 +103,8 @@ pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のYAML文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 変換後のYAML文字列。パース・変換に失敗した場合 (YAML で表現できない数値を含む場合など) や
+///   入力がパーサの上限を超える場合は元の文字列を返す
 pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml)");
@@ -136,7 +137,8 @@ pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のYAML文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 変換後のYAML文字列。パース・変換に失敗した場合 (YAML で表現できない数値を含む場合など) や
+///   入力がパーサの上限を超える場合は元の文字列を返す
 pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml_preserve_order)");
@@ -255,7 +257,7 @@ fn to_yaml_string(
 /// `serde_json::Value` を YAML の数値・文字列表現で直列化するラッパー
 ///
 /// `arbitrary_precision` 有効時の `Number` は JSON 以外の直列化先で内部構造体として
-/// 出力されるため、数値だけ `serialize_yaml_number` で整数・浮動小数点へ変換する。
+/// 出力されるため、数値だけ `serialize_yaml_number` で整数・浮動小数点へ変換する
 /// 文字列とキーは `QuoteGuard` で YAML 1.1 の真偽値語に引用符を付ける
 struct YamlValue<'a> {
     value: &'a Value,
@@ -552,7 +554,7 @@ mod tests {
         }
     }
 
-    /// キーと配列要素の真偽値語も引用符で囲うこと
+    /// キーと配列要素の真偽値語も引用符で囲うようにすること
     #[test]
     fn test_json_to_yaml_quotes_yaml11_bool_words_in_keys_and_arrays() {
         let input = r#"{"on":["yes","no"],"k":{"y":"n"}}"#;
@@ -564,7 +566,7 @@ mod tests {
         }
     }
 
-    /// 真偽値語を含むだけの文字列や、他の語は引用符を付けないこと
+    /// 真偽値語を含むだけの文字列や、他の語は引用符を付けないようにすること
     #[test]
     fn test_json_to_yaml_keeps_other_strings_plain() {
         let input = r#"{"a":"yes sir","b":"yesterday","c":"ok"}"#;
@@ -578,7 +580,7 @@ c: ok
         );
     }
 
-    /// 置き換え用の接頭辞を含む入力でも文字列を壊さないこと
+    /// 置き換え用の接頭辞を含む入力でも文字列を壊さないようにすること
     #[test]
     fn test_json_to_yaml_survives_prefix_collision() {
         let input = r#"{"a":"__clip_refiner_yaml11_yes__","b":"yes"}"#;
@@ -591,7 +593,7 @@ b: 'yes'
         );
     }
 
-    /// YAML で表現できない数値は元の文字列を返すこと
+    /// YAML で表現できない数値は元の文字列を返すようにすること
     #[test]
     fn test_json_to_yaml_out_of_range_number_returns_input() {
         let input = r#"{"a":1e400}"#;

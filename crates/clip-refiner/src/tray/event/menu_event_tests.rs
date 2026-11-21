@@ -35,7 +35,7 @@ fn should_hide_selector_after_focus_loss_delay() {
 // ======================================================================
 // 変換モード・監視設定
 // ======================================================================
-/// `update_refine` が設定とワーカーコマンドを更新すること
+/// `update_refine` が設定を更新し、ワーカーへ加工コマンドを送信すること
 #[test]
 fn update_refine_updates_config_and_sends_command() {
     let ctx = TrayTestContext::new();
@@ -74,7 +74,7 @@ fn update_monitor_mode_switches_to_event() {
     );
 }
 
-/// 同一モードへの `update_monitor_mode` は no-op であようにすること
+/// 同一モードへの `update_monitor_mode` は no-op となるようにすること
 #[test]
 fn update_monitor_mode_noop_when_unchanged() {
     let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
@@ -108,7 +108,7 @@ fn handle_menu_event_quit_exits() {
     assert!(matches!(control_flow, ControlFlow::Exit));
 }
 
-/// 自動変換メニューのチェック OFF で自動変換が無効になること
+/// 自動変換メニューのチェック OFF で自動変換が無効になるようにすること
 #[test]
 fn handle_menu_event_auto_refine_toggle_disables_auto_refine() {
     let ctx = TrayTestContext::new();
@@ -128,7 +128,7 @@ fn handle_menu_event_auto_refine_toggle_disables_auto_refine() {
     assert!(!ctx.state().monitor_snapshot().auto_processing_enabled());
 }
 
-/// 自動変換が無効でも変換モードメニューを選ぶと自動変換が有効になること
+/// 自動変換が無効でも変換モードメニューを選ぶと自動変換が有効になるようにすること
 #[test]
 fn handle_menu_event_mode_selection_enables_auto_refine() {
     let ctx = TrayTestContext::with_config(|c| c.auto_refine_enabled = false);
@@ -306,7 +306,7 @@ fn handle_menu_event_continuous_record_enabled() {
     ctx.assert_no_command();
 }
 
-/// 連続記録を有効にすると、有効だった自動変換が無効になること
+/// 連続記録を有効にすると、有効だった自動変換が無効になるようにすること
 #[test]
 fn handle_menu_event_continuous_record_enabled_disables_auto_refine() {
     let ctx = TrayTestContext::with_config(|c| {
@@ -329,7 +329,7 @@ fn handle_menu_event_continuous_record_enabled_disables_auto_refine() {
     assert!(!ctx.menu().refine.auto_refine_item.is_checked());
 }
 
-/// 自動変換を有効にすると、有効だった連続記録が無効になること
+/// 自動変換を有効にすると、有効だった連続記録が無効になるようにすること
 #[test]
 fn handle_menu_event_auto_refine_enabled_disables_continuous_record() {
     let ctx = TrayTestContext::with_config(|c| {
@@ -354,7 +354,7 @@ fn handle_menu_event_auto_refine_enabled_disables_continuous_record() {
     assert!(ctx.state().monitor_snapshot().auto_processing_enabled());
 }
 
-/// 連続記録中に変換モードを選ぶと、自動変換が有効になり連続記録が無効になること
+/// 連続記録中に変換モードを選ぶと、自動変換が有効になり連続記録が無効になるようにすること
 #[test]
 fn handle_menu_event_mode_selection_disables_continuous_record() {
     let ctx = TrayTestContext::with_config(|c| {

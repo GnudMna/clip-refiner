@@ -40,7 +40,7 @@ mod tests {
         let _ = token();
     }
 
-    /// 連続呼び出しでトークンが安定すること (変更がなければ同値)できるようにすること
+    /// 変更がなければ連続呼び出しで同じトークンを返すようにすること
     #[test]
     fn consecutive_tokens_are_stable_when_unchanged() {
         if let (Some(first), Some(second)) = (token(), token()) {

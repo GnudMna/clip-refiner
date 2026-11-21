@@ -80,7 +80,7 @@ impl HotkeyTestContext {
 /// 常駐中の本体や他アプリと衝突しにくいキーを割り当てる
 ///
 /// 本体の既定 (固定キー・お気に入りスロットとも `Alt+Shift` 系) と重ならないよう
-/// テスト用キーは `Alt+Ctrl+Shift` 系に限り、並列実行される他テストとも重ならない範囲を使う。
+/// テスト用キーは `Alt+Ctrl+Shift` 系に限り、並列実行される他テストとも重ならない範囲を使う
 /// お気に入りスロットは未指定だと既定キーになるため明示する
 fn test_hotkeys() -> HotkeySettings {
     HotkeySettings {
@@ -323,7 +323,7 @@ fn toggle_auto_refine_updates_state_and_menu() {
     assert!(!ctx.menu.refine.auto_refine_item.is_checked());
 }
 
-/// 連続記録が有効なときに `toggle_auto_refine` で自動変換を有効にすると、連続記録が無効になること
+/// 連続記録が有効なときに `toggle_auto_refine` で自動変換を有効にすると、連続記録が無効になるようにすること
 #[test]
 fn toggle_auto_refine_disables_continuous_record() {
     let mut ctx = HotkeyTestContext::new();
@@ -339,7 +339,7 @@ fn toggle_auto_refine_disables_continuous_record() {
     assert!(!ctx.menu.continuous_record.enabled_item.is_checked());
 }
 
-/// 自動変換が有効なときに `toggle_continuous_record` で連続記録を有効にすると、自動変換が無効になること
+/// 自動変換が有効なときに `toggle_continuous_record` で連続記録を有効にすると、自動変換が無効になるようにすること
 #[test]
 fn toggle_continuous_record_disables_auto_refine() {
     let mut ctx = HotkeyTestContext::new();

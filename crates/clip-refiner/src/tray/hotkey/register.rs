@@ -147,7 +147,9 @@ impl HotkeyHandler {
         Ok(self.register_favorite_hotkeys(hotkeys, favorite_count))
     }
 
-    /// 登録済みホットキーを配列として返す
+    /// 固定ホットキーの割り当て一覧を返す
+    ///
+    /// OS への登録に失敗したものも含み、お気に入りスロットは含まない
     pub(super) fn registered_hotkeys(&self) -> Vec<HotKey> {
         let hotkeys = vec![
             self.quick_selector_hotkey,

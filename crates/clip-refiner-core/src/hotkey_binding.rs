@@ -481,6 +481,7 @@ mod tests {
             consts::DEFAULT_HOTKEY_AUTO_REFINE,
             consts::DEFAULT_HOTKEY_QUIT,
             consts::DEFAULT_HOTKEY_UNDO,
+            consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
             consts::DEFAULT_HOTKEY_OCR,
             consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
             consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,

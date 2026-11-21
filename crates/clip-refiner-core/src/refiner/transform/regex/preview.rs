@@ -18,7 +18,7 @@ pub struct RegexPreviewResult {
     pub valid: bool,
     /// 状態メッセージ
     pub message: String,
-    /// 置換後テキスト (`valid` かつパターン非空のとき)
+    /// 置換後テキスト (`preview_regex_replace` で `valid` のとき。パターンが空ならサンプルのまま)
     pub result: Option<String>,
 }
 
@@ -150,7 +150,7 @@ mod tests {
         });
     }
 
-    /// 複数ステップの順次置換をプレビューできること
+    /// 複数ステップの順次置換をプレビューできるようにすること
     #[test]
     fn preview_applies_steps_in_order() {
         with_pool_test_lock(|| {

@@ -403,7 +403,7 @@ mod tests {
         );
     }
 
-    /// 生成 HTML にモード JSON と CSS が埋め込まれようにすること
+    /// 生成 HTML にモード JSON・CSS・JS・CSP が埋め込まれるようにすること
     #[test]
     fn assemble_quick_selector_html_embeds_modes_and_css() {
         let html = assemble_quick_selector_html(r#"[{"id":"trim"}]"#);
@@ -428,21 +428,21 @@ mod tests {
         assert!(script.ends_with(");"));
     }
 
-    /// 自動変換が無効なときは現在モードに `null` を渡すこと
+    /// 自動変換が無効なときは現在モードに `null` を渡すようにすること
     #[test]
     fn quick_selector_focus_script_passes_null_without_auto_refine() {
         let script = quick_selector_focus_script(None, "[]", &[]);
         assert_eq!(script, "focusInput(null, [], []);");
     }
 
-    /// フォーカス用スクリプトに展開中カテゴリを JSON 配列で渡すこと
+    /// フォーカス用スクリプトに展開中カテゴリを JSON 配列で渡すようにすること
     #[test]
     fn quick_selector_focus_script_passes_expanded_categories() {
         let script = quick_selector_focus_script(None, "[]", &["URL操作".to_string()]);
         assert_eq!(script, r#"focusInput(null, [], ["URL操作"]);"#);
     }
 
-    /// `expanded-categories:` メッセージから展開中カテゴリを取り出せること
+    /// `expanded-categories:` メッセージから展開中カテゴリを取り出せるようにすること
     #[test]
     fn parse_expanded_categories_message_reads_json_array() {
         assert_eq!(
@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(parse_expanded_categories_message("close"), None);
     }
 
-    /// 上限を超える件数・長すぎるカテゴリ名は捨てること
+    /// 上限を超える件数・長すぎるカテゴリ名は捨てるようにすること
     #[test]
     fn parse_expanded_categories_message_limits_input() {
         let long = "あ".repeat(MAX_EXPANDED_CATEGORY_CHARS + 1);

@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(got.as_str(), plaintext);
     }
 
-    /// wrap key が壊れている場合は None を返すこと
+    /// wrap key が壊れている場合は `None` を返すこと
     #[test]
     fn unwrap_blob_returns_none_on_wrong_wrap_key() {
         let plaintext = "synthetic-bridge-download-key";

@@ -28,7 +28,7 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 /// * `input` - 各行をトリムする対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返す
 pub fn trim_lines(input: &str) -> Cow<'_, str> {
     super::utils::process_lines(input, |line| Some(Cow::Borrowed(line.trim())))
 }
@@ -94,8 +94,7 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 空白文字のみの行に対するトリムできるようにすること
-    /// 空行になることを確認できるようにすること
+    /// 空白文字のみの行をトリムして空行にすること
     #[test]
     fn test_trim_lines_whitespace_only() {
         let input = "  \n\t\n";

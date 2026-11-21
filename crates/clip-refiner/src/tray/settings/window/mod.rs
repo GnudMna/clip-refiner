@@ -404,7 +404,7 @@ fn set_dwm_color(
     }
 }
 
-/// 画面中央に配置する非表示の設定ウィンドウを生成する
+/// 保存済みの幾何 (未保存なら画面中央) で配置した非表示の設定ウィンドウを生成する
 fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) -> Result<Window> {
     let geometry = load_settings_window_geometry();
     let builder = WindowBuilder::new()

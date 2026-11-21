@@ -24,7 +24,7 @@ use crate::platform::screen_capture::virtual_screen_bounds;
 /// Win32 レイヤードウィンドウによる画面範囲選択オーバーレイ
 pub(crate) struct OverlayWindow {
     hwnd: HWND,
-    /// `Box::into_raw` で確保した状態 (`GWLP_USERDATA` と共有し、`Drop` で解放)
+    /// `Box::leak` で確保した状態 (`GWLP_USERDATA` と共有し、`Drop` で解放)
     ///
     /// ウィンドウプロシージャも同じポインタ経由で触るため、`Box` のまま保持せず生ポインタで持つ
     state: NonNull<OverlayState>,

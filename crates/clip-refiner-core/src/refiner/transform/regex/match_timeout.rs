@@ -79,7 +79,7 @@ impl RegexMatchPool {
     /// * `timeout` - 取得待ちの上限時間
     ///
     /// # Returns
-    /// * `Result<RegexMatchPermit, RegexMatchTimeout>` - 取得成功時は `Permit`
+    /// * `Result<RegexMatchPermit, RegexMatchTimeout>` - 取得成功時は `RegexMatchPermit`
     ///   制限時間内に空きがなければタイムアウト
     fn acquire(&'static self, timeout: Duration) -> Result<RegexMatchPermit, RegexMatchTimeout> {
         let deadline = Instant::now() + timeout;
@@ -145,7 +145,7 @@ where
 
 /// 指定した制限時間で正規表現マッチを実行する
 ///
-/// スロット取得に使った時間を差し引いて結果待ちする。取得できなければ spawn しない。
+/// スロット取得に使った時間を差し引いて結果待ちする。取得できなければ spawn しない
 /// 待ちが切れたらキャンセルを要求し、実行側の早期終了を促す
 pub(super) fn run_with_match_timeout_duration<T, F>(
     timeout: Duration,
@@ -289,6 +289,8 @@ pub(super) fn with_pool_test_lock<T>(f: impl FnOnce() -> T) -> T {
 }
 
 /// 実行中スロットが 0 になるまで短周期で待つ
+///
+/// 2 秒で待機を打ち切り、それでも 0 に戻らなければ panic する
 #[cfg(test)]
 fn wait_until_pool_idle() {
     let deadline = Instant::now() + Duration::from_secs(2);

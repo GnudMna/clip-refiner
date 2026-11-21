@@ -145,7 +145,7 @@ fn migrate_v3_to_v4(mut config: AppConfig) -> AppConfig {
 ///
 /// v5 で廃止: `is_paused` (一時停止は自動変換の無効化へ統合)
 /// v5 で変更: `hotkeys.pause` → `hotkeys.auto_refine`、`notify_pause` → `notify_auto_refine` (読み込み時の alias で引き継ぐ)
-/// 一時停止中だった設定は自動変換を無効にして挙動を維持する。
+/// 一時停止中だった設定は自動変換を無効にして挙動を維持する
 /// 自動変換と連続記録が同時に有効だった設定は、従来の挙動どおり連続記録を残して自動変換を無効にする
 fn migrate_v4_to_v5(mut config: AppConfig) -> AppConfig {
     if config.legacy_is_paused {
@@ -194,7 +194,7 @@ mod tests {
         assert!(result.config.history_enabled);
     }
 
-    /// v0 設定の移行後は `favorite_modes` が空配列であようにすること
+    /// v0 設定の移行後は `favorite_modes` が空配列となるようにすること
     #[test]
     fn migrate_v0_to_v1_initializes_favorite_modes() {
         let config = AppConfig {
@@ -206,7 +206,7 @@ mod tests {
         assert!(result.config.favorite_modes.is_empty());
     }
 
-    /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃えようにすること
+    /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃えるようにすること
     #[test]
     fn migrate_newer_version_clamps_version_and_preserves_settings() {
         let config = AppConfig {
@@ -225,7 +225,7 @@ mod tests {
         assert!(result.config.history_enabled);
     }
 
-    /// 現行 version 指定時は `migrated` にならなようにすること
+    /// 現行 version 指定時は `migrated` にならないようにすること
     #[test]
     fn migrate_at_current_version_does_not_mark_migrated() {
         let config = AppConfig {

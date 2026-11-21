@@ -362,7 +362,7 @@ proptest! {
         prop_assert_eq!(&unescaped, &input);
     }
 
-    /// JSON→YAML→JSON で値が一致すること (大きな整数・浮動小数点・任意のキーを含む)
+    /// 大きな整数・浮動小数点・任意のキーを含む JSON で、JSON→YAML→JSON の往復後も値が一致すること
     #[test]
     fn json_yaml_json_roundtrip(value in json_value()) {
         let json = serde_json::to_string(&value).expect("JSON 値は直列化できる");
@@ -380,7 +380,9 @@ proptest! {
         }
     }
 
-    /// JSON 整形は値を変えないこと (数値の表記も保つ)
+    /// JSON 整形は値を変えないこと
+    ///
+    /// 数値の表記も保つ
     #[test]
     fn json_format_preserves_value(value in json_value()) {
         let json = serde_json::to_string(&value).expect("JSON 値は直列化できる");

@@ -3,8 +3,8 @@
 //! version API の各アセットに GitHub Release Asset の `digest` (`sha256:<hex>`) が
 //! 含まれることを前提とする。ダウンロード中は宣言サイズ超過または絶対上限で打ち切り、
 //! 完了後にサイズと SHA-256 を検証してから適用する
-//! 保護対象タグのアセット DL にはビルド時埋め込みキー (`CLIP_REFINER_KEY`) を
-//! ChaCha20-Poly1305 で暗号化して埋め込み、復号した値を `Authorization: Bearer` で付与する
+//! 保護対象タグ向けにビルド時のキー (`CLIP_REFINER_KEY`) を ChaCha20-Poly1305 で暗号化して埋め込み、
+//! 埋め込まれていればアセット・署名の DL で復号した値を `Authorization: Bearer` で付与する
 //! 適用前に `<asset>.minisig` の minisign 署名を埋め込み公開鍵で検証し、
 //! 信頼コメントで更新先バージョンとアセット名が一致することを確かめる
 

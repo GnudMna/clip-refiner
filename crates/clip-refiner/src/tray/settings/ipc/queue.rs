@@ -9,6 +9,7 @@ use crate::tray::state::AppState;
 /// 適用待ちキューへ部分更新 JSON を原子的にマージして格納する
 ///
 /// マージに失敗した場合は既存キューを保持し、`false` を返す
+/// キューが空のときも、JSON オブジェクトとして解釈できない入力は格納せず `false` を返す
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn enqueue_settings_patch_json(state: &Arc<AppState>, patch_json: &str) -> bool {
     let mut guard = state.settings_pending().patch_mut();

@@ -5,7 +5,7 @@ use crate::consts::{MAX_CLIPBOARD_TEXT_BYTES, MAX_PARSER_INPUT_BYTES};
 // ======================================================================
 /// クリップボード本文が処理上限以内か判定する
 ///
-/// バイト長で比較する (UTF-8 のマルチバイト文字も 1 バイトとして数える)
+/// バイト長で比較する (UTF-8 のマルチバイト文字は 1 文字を複数バイトとして数える)
 ///
 /// # Arguments
 /// * `text` - 判定対象のテキスト
@@ -48,7 +48,7 @@ mod tests {
         assert!(!is_within_clipboard_limit(&text));
     }
 
-    /// パーサー上限の境界値できるようにすること
+    /// パーサー上限ちょうどは許可し、超過は拒否するようにすること
     #[test]
     fn parser_limit_at_boundary() {
         let text = "a".repeat(MAX_PARSER_INPUT_BYTES);

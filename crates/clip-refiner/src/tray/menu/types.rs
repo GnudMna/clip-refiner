@@ -63,7 +63,7 @@ pub struct HistoryMenu {
     pub enabled_item: CheckMenuItem,
     /// 履歴を全削除する項目
     pub clear_item: MenuItem,
-    /// 過去のテキスト項目(表示用の ID とストア内インデックス)のリスト。メニュー更新時に利用される
+    /// 過去のテキスト項目 (表示用の ID とストア内インデックス) のリスト。メニュー更新時に利用される
     pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
 }
 
@@ -105,7 +105,7 @@ pub struct RegexPresetMenu {
 
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体
 pub struct TrayMenu {
-    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する。
+    /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する
     pub(in crate::tray::menu) tray_icon: TrayIcon,
     /// 終了項目
     pub quit_item: MenuItem,

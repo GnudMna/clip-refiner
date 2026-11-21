@@ -60,7 +60,7 @@ pub struct AppConfig {
     /// 監視時に順に適用する変換モードの連鎖 (空の場合は `mode` のみを使用)
     #[serde(default)]
     pub pipeline: Vec<RefineMode>,
-    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
+    /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される
     pub interval_ms: u64,
     /// 使用する監視方式 (`Event` 既定。`Polling` も可)
     #[serde(default)]
@@ -97,7 +97,7 @@ pub struct AppConfig {
     /// グローバルホットキー設定
     #[serde(default)]
     pub hotkeys: HotkeySettings,
-    /// 正規表現加工用のパターンと置換文字列
+    /// 正規表現加工用のプリセット一覧
     #[serde(default)]
     pub regex: RegexSettings,
     /// クリップボードへコピーする登録クリップ (`registered-clips.dat` に保存)
@@ -163,7 +163,7 @@ impl AppConfig {
         migration
     }
 
-    /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新
+    /// 保存前の正規化: 数値クランプ・各項目の正規化・旧通知設定の移行を行い、スキーマバージョンを現行へ更新
     ///
     /// # Arguments
     /// * `self` - 正規化対象の設定
@@ -539,6 +539,7 @@ impl AppConfig {
     /// 加工パイプラインを許容範囲内に正規化する
     ///
     /// 画像出力モードは末尾1つのみ残し、それ以外の位置からは除去する
+    /// 段数が上限を超える場合は画像出力モードを残し、テキスト加工の超過分を切り捨てる
     pub(crate) fn normalize_pipeline(&mut self) {
         let image_mode = self
             .pipeline
@@ -546,12 +547,10 @@ impl AppConfig {
             .rfind(|mode| mode.produces_image())
             .copied();
         self.pipeline.retain(|mode| !mode.produces_image());
+        let text_limit = consts::MAX_PIPELINE_LENGTH - usize::from(image_mode.is_some());
+        self.pipeline.truncate(text_limit);
         if let Some(image_mode) = image_mode {
             self.pipeline.push(image_mode);
-        }
-
-        if self.pipeline.len() > consts::MAX_PIPELINE_LENGTH {
-            self.pipeline.truncate(consts::MAX_PIPELINE_LENGTH);
         }
     }
 

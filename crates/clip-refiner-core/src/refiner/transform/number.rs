@@ -11,7 +11,7 @@ use std::borrow::Cow;
 /// * `text` - カンマを付与する対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す
 pub fn add_commas(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| Some(add_commas_single(line)))
 }
@@ -26,7 +26,7 @@ pub fn add_commas(text: &str) -> Cow<'_, str> {
 /// * `text` - カンマを付与する対象の文字列 (改行を含まない)
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 3桁ごとにカンマが付与された文字列。数値として認識できない場合は元の文字列を返す
 fn add_commas_single(text: &str) -> Cow<'_, str> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -101,7 +101,7 @@ fn add_commas_single(text: &str) -> Cow<'_, str> {
 /// * `text` - カンマを除去する対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す。
+/// * `Cow<'_, str>` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す
 pub fn remove_commas(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| Some(remove_commas_single(line)))
 }
@@ -115,7 +115,7 @@ pub fn remove_commas(text: &str) -> Cow<'_, str> {
 /// * `text` - カンマを除去する対象の文字列 (改行を含まない)
 ///
 /// # Returns
-/// * `Cow<'_, str>` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す。
+/// * `Cow<'_, str>` - カンマが除去された文字列。数値として認識できない場合は元の文字列を返す
 fn remove_commas_single(text: &str) -> Cow<'_, str> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(add_commas("0.0"), "0.0");
     }
 
-    /// 先頭ゼロのある整数部は ID や電話番号を壊さないよう変換しないこと
+    /// 先頭ゼロのある整数部は ID や電話番号を壊さないよう変換しないようにすること
     #[test]
     fn test_add_commas_leading_zero_is_untouched() {
         for input in ["00123456", "0123", "-0123456", "0123456.78", "00,123,456"] {
@@ -282,8 +282,7 @@ mod tests {
         assert_eq!(add_commas("-.5"), "-.5");
     }
 
-    /// 数値判定ロジックできるようにすること
-    /// 数字、カンマ、ピリオド、マイナス記号以外が含まれる場合はfalseとなることを確認できるようにすること
+    /// 数字・カンマ・ピリオド・マイナス記号以外を含む入力や複数の小数点を数値とみなさないようにすること
     #[test]
     fn test_is_numeric_input_check() {
         assert!(!is_numeric_input("abc"));
@@ -291,7 +290,7 @@ mod tests {
         assert!(is_numeric_input("-1,234.5"));
     }
 
-    /// カンマ位置の不正パターンを弾くとすること
+    /// カンマ位置の不正パターンを弾くようにすること
     #[test]
     fn test_is_numeric_input_invalid_comma() {
         assert!(!is_numeric_input(",123"), "先頭カンマは不正");
@@ -301,7 +300,7 @@ mod tests {
         assert!(!is_numeric_input("1,.2"), "カンマ直後の小数点は不正");
     }
 
-    /// 3 桁区切りでないカンマ位置を数値として扱わないこと
+    /// 3 桁区切りでないカンマ位置を数値として扱わないようにすること
     #[test]
     fn test_is_numeric_input_invalid_grouping() {
         assert!(!is_numeric_input("1,2,3"));
@@ -317,7 +316,7 @@ mod tests {
         assert!(!is_numeric_input("-1,2,3"));
     }
 
-    /// カンマ位置が不正な文字列 (CSV 風の値) を変換せず元のまま返すこと
+    /// カンマ位置が不正な文字列 (CSV 風の値) を変換せず元のまま返すようにすること
     #[test]
     fn test_comma_separated_values_are_untouched() {
         for input in ["1,2,3", "12,34", "1234,567", "1,23.5", "-1,2,3"] {
@@ -359,13 +358,13 @@ mod tests {
         assert_eq!(add_commas("1234."), "1,234.");
     }
 
-    /// スペース前後のトリムが効くとすること
+    /// 前後の空白を除いてカンマを付与すること
     #[test]
     fn test_add_commas_trimmed_input() {
         assert_eq!(add_commas("  5678  "), "5,678");
     }
 
-    /// 複数行の数値を行ごとに処理し、数値でない行と改行コードを保つこと
+    /// 複数行の数値を行ごとに処理し、数値でない行と改行コードを保つようにすること
     #[test]
     fn test_number_multiline() {
         assert_eq!(

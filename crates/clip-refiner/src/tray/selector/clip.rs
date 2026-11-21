@@ -416,7 +416,7 @@ mod tests {
         assert_eq!(parse_clip_selector_ipc_message("full:"), None);
     }
 
-    /// 全文スクリプトが引用符・改行・バックスラッシュを含む本文でも文字列リテラルを壊さないこと
+    /// 全文スクリプトが引用符・改行・バックスラッシュを含む本文でも文字列リテラルを壊さないようにすること
     #[test]
     fn clip_selector_full_text_script_escapes_text() {
         let script = clip_selector_full_text_script(2, "it's\n\"a\"\\b");
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(parse_clip_selector_ipc_message("select:not-a-number"), None);
     }
 
-    /// 生成 HTML に CSS が埋め込まれようにすること
+    /// 生成 HTML に CSS・JS・CSP が埋め込まれるようにすること
     #[test]
     fn assemble_clip_selector_html_embeds_css() {
         let html = assemble_clip_selector_html();
@@ -458,7 +458,7 @@ mod tests {
         assert!(script.ends_with(");"));
     }
 
-    /// 再描画用スクリプトが `refreshItems` を呼ようにすること
+    /// 再描画用スクリプトが `refreshItems` を呼ぶようにすること
     #[test]
     fn clip_selector_refresh_script_calls_refresh_items() {
         let script = clip_selector_refresh_script(r"[]");

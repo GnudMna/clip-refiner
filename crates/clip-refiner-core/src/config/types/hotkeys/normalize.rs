@@ -11,7 +11,7 @@ use crate::hotkey_binding::{ParsedHotkey, parse_hotkey_binding};
 impl HotkeySettings {
     /// 不正なホットキー文字列をデフォルト値へ置き換える
     ///
-    /// 重複解消もあわせて実行する
+    /// お気に入りスロットの正規化 (上限超過の切り捨て・不正値の無効化) と重複解消もあわせて実行する
     ///
     /// # Arguments
     /// * `self` - 修正対象のホットキー設定
@@ -286,7 +286,7 @@ fn dedupe_fixed_field(
 /// 不正なホットキー文字列をデフォルト値へ置き換える
 ///
 /// # Arguments
-/// * `field` - 不正なホットキー文字列
+/// * `field` - 検証対象のホットキー文字列 (不正なら置き換える)
 /// * `default` - デフォルトホットキー文字列
 /// * `label` - ホットキー設定のラベル
 /// * `fixes` - 実施した修正の追記先

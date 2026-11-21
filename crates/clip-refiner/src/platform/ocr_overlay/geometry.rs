@@ -110,7 +110,7 @@ pub(crate) fn clamp_rect(
 mod tests {
     use super::*;
 
-    /// 2点から正規化矩形を作るできるようにすること
+    /// 2点から正規化矩形を作れること
     #[test]
     fn normalize_rect_orders_corners() {
         let rect = normalize_rect((30, 40), (10, 20));
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(rect.height, 20);
     }
 
-    /// クライアント座標から仮想デスクトップ座標への変換を検検証すること
+    /// クライアント座標を仮想デスクトップ座標へ変換できること
     #[test]
     fn map_client_rect_to_screen_adds_virtual_origin() {
         let rect = map_client_rect_to_screen(

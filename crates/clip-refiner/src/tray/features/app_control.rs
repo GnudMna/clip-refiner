@@ -51,7 +51,7 @@ mod tests {
     use super::*;
     use crate::test_helpers::TrayTestContext;
 
-    /// 監視再開メニューで `RestartClipboardWorker` をキューすること
+    /// 監視再開メニューを処理済みとし、イベントループを終了しないようにすること
     #[test]
     fn handle_app_control_retry_sends_restart_event() {
         let ctx = TrayTestContext::new();
@@ -66,7 +66,7 @@ mod tests {
 
     /// 設定メニューで処理が完了しイベントループを終了しないようにすること
     ///
-    /// テスト用 `AppState` は `EventLoop` を保持しないため、`ShowSettingsWindow` の
+    /// テスト用 `AppState` は `EventLoop` を保持しないため、`SettingsEvent::Show` の
     /// 受信は検証できない。メニュー ID 照合と `ControlFlow` 維持を固定する
     #[test]
     fn handle_app_control_open_settings_keeps_event_loop() {

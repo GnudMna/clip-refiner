@@ -46,6 +46,17 @@ function test_normalize_pipeline_truncates_to_max_length() {
     assert.deepEqual(normalized, ['a', 'b']);
 }
 
+/** 上限を超えても末尾の画像出力モードを残し、テキスト加工の超過分を切り捨てること */
+function test_normalize_pipeline_keeps_image_mode_when_truncating() {
+    const normalized = SettingsSharedLogic.normalizePipeline(
+        ['excel-to-image', 'a', 'b', 'c'],
+        3,
+        IMAGE_MODES
+    );
+
+    assert.deepEqual(normalized, ['a', 'b', 'excel-to-image']);
+}
+
 /** 通知タブの DOM 状態から IPC パッチを組み立てられること */
 function test_build_notification_settings_patch() {
     const patch = SettingsSharedLogic.buildNotificationSettingsPatch({
@@ -291,6 +302,7 @@ const tests = [
     test_escape_html,
     test_normalize_pipeline_moves_image_mode_to_tail,
     test_normalize_pipeline_truncates_to_max_length,
+    test_normalize_pipeline_keeps_image_mode_when_truncating,
     test_build_notification_settings_patch,
     test_validate_hotkey_binding,
     test_build_hotkeys_patch,

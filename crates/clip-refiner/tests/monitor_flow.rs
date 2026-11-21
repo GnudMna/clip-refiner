@@ -132,7 +132,7 @@ fn event_mode_processes_clipboard() {
     assert_eq!(harness.clipboard_text(), "hello");
 }
 
-/// Event 監視方式でも Undo で加工前テキストへ戻せようにすること
+/// Event 監視方式でも Undo で加工前テキストへ戻せるようにすること
 #[test]
 fn event_mode_process_then_undo_restores_original() {
     let mut harness = ClipboardHarness::with_text("  undo-me  ")
@@ -179,22 +179,31 @@ fn event_mode_skips_own_write_back_echo_once() {
     assert_eq!(harness.clipboard_text(), "hello");
 }
 
-/// イベント監視時も加工済みテキストの再イベントでもポーリングと異なり観測を試みるようにすること
+/// 内容が変わらないクリップボードでも、イベント監視は加工を試み、ポーリングはスキップすること
+///
+/// 自身の書き戻しエコーを消化したあとで、同じ内容を変化させるモードへ切り替えて比べる
 #[test]
 fn event_mode_attempts_reprocess_on_unchanged_clipboard() {
-    let mut polling = ClipboardHarness::with_text("  hello  ")
-        .with_mode(RefineMode::Trim)
-        .with_monitor_mode(MonitorMode::Polling);
-    assert!(polling.run_configured_monitor_update());
-    assert!(!polling.run_configured_monitor_update());
+    for (monitor_mode, expected_written, expected_text) in [
+        (MonitorMode::Polling, false, "hello"),
+        (MonitorMode::Event, true, "ｈｅｌｌｏ"),
+    ] {
+        let mut harness = ClipboardHarness::with_text("  hello  ")
+            .with_mode(RefineMode::Trim)
+            .with_monitor_mode(monitor_mode);
+        assert!(harness.run_configured_monitor_update());
+        // 書き戻しのエコーはどちらの方式でもスキップする
+        assert!(!harness.run_configured_monitor_update());
 
-    let mut event = ClipboardHarness::with_text("  hello  ")
-        .with_mode(RefineMode::Trim)
-        .with_monitor_mode(MonitorMode::Event);
-    assert!(event.run_configured_monitor_update());
-    // 加工結果と同じ `hello` に対する再イベントでは `Unchanged` だが、ポーリングとは異なり観測する
-    assert!(!event.run_configured_monitor_update());
-    assert_eq!(event.clipboard_text(), "hello");
+        // クリップボードは `hello` のまま、加工すれば変わるモードへ切り替える
+        harness.set_mode(RefineMode::ToFullwidth);
+        assert_eq!(
+            harness.run_configured_monitor_update(),
+            expected_written,
+            "{monitor_mode:?}"
+        );
+        assert_eq!(harness.clipboard_text(), expected_text, "{monitor_mode:?}");
+    }
 }
 
 // ======================================================================
@@ -222,7 +231,7 @@ fn monitor_pipeline_overrides_mode_when_active() {
     assert_eq!(harness.clipboard_text(), "hello world");
 }
 
-/// パイプライン監視加工後に Undo で加工前テキストへ戻せようにすること
+/// パイプライン監視加工後に Undo で加工前テキストへ戻せるようにすること
 #[test]
 fn monitor_pipeline_then_undo_restores_original() {
     let mut harness = ClipboardHarness::with_text("  %E3%81%82  ")

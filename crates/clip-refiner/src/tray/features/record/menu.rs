@@ -111,7 +111,7 @@ mod tests {
         assert_eq!(format_record_menu_label(0, &text), format!("1. {text}"));
     }
 
-    /// 30 文字超は省略記号付きで 30 文字になるようにすること
+    /// 30 文字超は本文を省略記号付きの 30 文字に短縮し、番号を付けるようにすること
     #[test]
     fn format_record_menu_label_truncates() {
         let text = "あ".repeat(35);

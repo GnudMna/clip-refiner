@@ -1,6 +1,6 @@
 //! 画像をエクスプローラへファイルとして貼り付けられるようにする
 //!
-//! PNG を一時フォルダへ書き出し、そのパスを `CF_HDROP` としてクリップボードへ追加する。
+//! PNG を一時フォルダへ書き出し、そのパスを `CF_HDROP` としてクリップボードへ追加する
 //! 画像のビットマップ (`arboard`) を書き込んだ直後に呼び、既存の形式は消さない
 
 use std::fs;
@@ -52,7 +52,7 @@ pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> io::Result<Vec
 
 /// 保持時間を過ぎた、このアプリが書き出した画像ファイルを削除する
 ///
-/// 書き出し先フォルダが無い場合や、削除できないファイルがある場合は何もしない
+/// 書き出し先フォルダが無い場合は何もせず、削除できないファイルは残す
 pub(crate) fn remove_stale_image_files() {
     let retention = Duration::from_secs(consts::CLIPBOARD_IMAGE_FILE_RETENTION_SECS);
     remove_stale_files(&image_dir(), retention, SystemTime::now());
@@ -60,7 +60,7 @@ pub(crate) fn remove_stale_image_files() {
 
 /// PNG を一時フォルダへ書き出し、そのパスを `CF_HDROP` としてクリップボードへ追加する
 ///
-/// 既存のクリップボード内容 (ビットマップなど) は消さない。
+/// 既存のクリップボード内容 (ビットマップなど) は消さない
 /// 書き出す前に、保持時間を過ぎた古い画像ファイルを削除する
 ///
 /// # Arguments
@@ -237,7 +237,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// 実クリップボードへ書き込み、ビットマップとファイルの両方が載ることを確認する
+    /// 実クリップボードへビットマップとファイルの両方を載せるようにすること
     ///
     /// 実クリップボードの内容を書き換えるため、手動実行 (`cargo test -- --ignored`) 専用
     #[test]

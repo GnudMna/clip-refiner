@@ -4,7 +4,7 @@ use crate::security::ContentFingerprint;
 
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
-/// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する。
+/// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
 /// `bool` 項目は `AppConfig` の同名キーをそのまま写す
 #[allow(
     clippy::struct_excessive_bools,

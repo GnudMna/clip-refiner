@@ -146,7 +146,7 @@ mod tests {
     use crate::test_helpers::InMemoryTextClipboard;
     use crate::tray::state::test_app_state;
 
-    /// `Ctrl+V` の前に `Ctrl` / `Alt` / `Shift` / `Win` (左右) をすべて離すこと
+    /// `Ctrl+V` の前に `Ctrl` / `Alt` / `Shift` / `Win` (左右) をすべて離すようにすること
     ///
     /// `Win` を離さないとフォアグラウンドアプリへ `Win+Ctrl+V` として届く
     #[test]

@@ -87,7 +87,7 @@ impl SettingsPendingState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `std::sync::MutexGuard<'_, Option<String>>` - 適用待ちの部分更新 JSON キューへ排他アクセスする
+    /// * `std::sync::MutexGuard<'_, Option<String>>` - 適用待ちの部分更新 JSON キューのロックガード
     pub fn patch_mut(&self) -> std::sync::MutexGuard<'_, Option<String>> {
         self.patch.lock_ignore_poison()
     }
@@ -149,7 +149,7 @@ impl SettingsPendingState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - 条件を満たす場合は `true`
+    /// * `bool` - ビジーにできた場合は `true`、既に更新操作中の場合は `false`
     pub fn try_begin_update_op(&self) -> bool {
         self.update_busy
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)

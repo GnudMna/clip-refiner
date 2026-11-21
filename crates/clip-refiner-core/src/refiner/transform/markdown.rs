@@ -17,7 +17,7 @@ use crate::security::is_within_parser_limit;
 /// * `text` - 変換対象のMarkdownテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合や入力がパーサの上限を超える場合は元の文字列への参照を返す
 pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("Markdown 入力が上限を超えているためスキップ (markdown_to_html)");
@@ -72,7 +72,7 @@ pub(crate) fn markdown_to_rich_text_html(text: &str) -> String {
 /// * `text` - 変換対象のTSVテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。読み取れるレコードが無い場合 (空入力など) は元の文字列を返す
 pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b'\t')
@@ -158,7 +158,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 /// パイプ区切りのMarkdownテーブルを解析し、タブ区切り(TSV)に変換する
 /// セル内の `<br>` (`<br/>`・`<br />` を含む) は改行に戻し、エスケープされたパイプ (`\|`) は復元する
 /// インラインコード内の `|` はセルの区切りとみなさない
-/// 区切り行 (`|---|`) はスキップする
+/// 表の 2 行目 (見出し行の直後) にある区切り行 (`|---|`) はスキップする
 ///
 /// # Arguments
 /// * `text` - 変換対象のMarkdownテーブル文字列
@@ -217,7 +217,7 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
 
 /// Markdownテーブル行をパースしてセル配列のリストを返す
 ///
-/// 区切り行とみなすのは表の 2 行目 (見出し行の直後) だけとする (GFM と同じ)。
+/// 区切り行とみなすのは表の 2 行目 (見出し行の直後) だけとする (GFM と同じ)
 /// 見出しやデータ行のセルがすべて `-` でも (`| - | - |`) データとして残す
 fn parse_markdown_table_rows(text: &str) -> Vec<Vec<String>> {
     let mut records = Vec::new();
@@ -312,7 +312,7 @@ fn has_closing_backticks(chars: &[char], run: usize) -> bool {
 
 /// 区切り行 (`|---|`, `|:---:|` など) かどうかを判定する
 ///
-/// 全セルが `-` を含む必要がある。空セルだけの行 (`|  |  |`) はデータ行として残す。
+/// 全セルが `-` を含む必要がある。空セルだけの行 (`|  |  |`) はデータ行として残す
 fn is_separator_row(cells: &[String]) -> bool {
     cells.iter().all(|cell| {
         let trimmed = cell.trim();
@@ -389,14 +389,14 @@ mod tests {
         assert!(output.contains("<em>italic</em>"));
     }
 
-    /// `取り消し線の変換(ENABLE_STRIKETHROUGH)`できるようにすること
+    /// 取り消し線 (`ENABLE_STRIKETHROUGH`) を変換できるようにすること
     #[test]
     fn test_markdown_to_html_strikethrough() {
         let output = markdown_to_html("~~strike~~");
         assert!(output.contains("<del>strike</del>"));
     }
 
-    /// `テーブルの変換(ENABLE_TABLES)`できるようにすること
+    /// テーブル (`ENABLE_TABLES`) を変換できるようにすること
     #[test]
     fn test_markdown_to_html_table() {
         let input = "| A | B |\n|---|---|\n| 1 | 2 |";
@@ -480,7 +480,7 @@ mod tests {
         assert_eq!(output, "Col\n\"a\nb\"");
     }
 
-    /// `markdown_table_to_excel`: `<br/>`・`<br />`・大文字の `<BR>` も改行に戻すこと
+    /// `markdown_table_to_excel`: `<br/>`・`<br />`・大文字の `<BR>` も改行に戻すようにすること
     #[test]
     fn test_markdown_table_to_excel_br_variants_to_newline() {
         let input = "| Col |\n|---|\n| a<br/>b<br />c<BR>d<Br  />e |";
@@ -491,7 +491,7 @@ mod tests {
         assert_eq!(markdown_table_to_excel(input), "Col\n<bra> <br <b>x");
     }
 
-    /// `markdown_table_to_excel`: インラインコード内の `|` をセルの区切りとみなさないこと
+    /// `markdown_table_to_excel`: インラインコード内の `|` をセルの区切りとみなさないようにすること
     #[test]
     fn test_markdown_table_to_excel_keeps_pipe_in_code_span() {
         let input = "| Cmd | Note |\n|---|---|\n| `a | b` | x |\n| ``c ` | d`` | y |";
@@ -505,14 +505,14 @@ mod tests {
         assert_eq!(markdown_table_to_excel(input), "A\tB\n`x\ty\n\\`p\tq`");
     }
 
-    /// `markdown_table_to_excel`: インラインコード内の `\|` も `|` に戻すこと
+    /// `markdown_table_to_excel`: インラインコード内の `\|` も `|` に戻すようにすること
     #[test]
     fn test_markdown_table_to_excel_unescapes_pipe_in_code_span() {
         let input = "| Cmd |\n|---|\n| `a \\| b` |";
         assert_eq!(markdown_table_to_excel(input), "Cmd\n`a | b`");
     }
 
-    /// `markdown_table_to_excel`: 中身が空の行を区切り行とみなさず残すこと
+    /// `markdown_table_to_excel`: 中身が空の行を区切り行とみなさず残すようにすること
     #[test]
     fn test_markdown_table_to_excel_keeps_empty_row() {
         let input = "| A | B |\n|:---|---:|\n| 1 | 2 |\n|  |  |\n| 3 | 4 |";
@@ -521,14 +521,14 @@ mod tests {
         assert_eq!(output, "A\tB\n1\t2\n\t\n3\t4");
     }
 
-    /// `markdown_table_to_excel`: セルがすべて `-` の見出し・データ行を区切り行とみなさず残すこと
+    /// `markdown_table_to_excel`: セルがすべて `-` の見出し・データ行を区切り行とみなさず残すようにすること
     #[test]
     fn test_markdown_table_to_excel_keeps_dash_only_rows() {
         let input = "| - | - |\n|---|---|\n| 1 | 2 |\n| - | :-: |";
         assert_eq!(markdown_table_to_excel(input), "-\t-\n1\t2\n-\t:-:");
     }
 
-    /// `markdown_table_to_excel`: 表ごとに 2 行目の区切り行を読み飛ばすこと
+    /// `markdown_table_to_excel`: 表ごとに 2 行目の区切り行を読み飛ばすようにすること
     #[test]
     fn test_markdown_table_to_excel_skips_separator_per_table() {
         let input = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";

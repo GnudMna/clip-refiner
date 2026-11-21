@@ -40,9 +40,9 @@ pub(crate) fn base64_encode_bytes(input: &[u8]) -> String {
 
 /// Base64 文字列をバイト列へデコードする
 ///
-/// 空白と改行は無視する (MIME のように折り返された Base64 も扱う)。
-/// 標準 (`+` `/`) と URL セーフ (`-` `_`) のどちらのアルファベットも受け付け、パディングは有無を問わない。
-/// `data:<MIME>;base64,` で始まる data URI は、先頭の宣言を除いて扱う。
+/// 空白と改行は無視する (MIME のように折り返された Base64 も扱う)
+/// 標準 (`+` `/`) と URL セーフ (`-` `_`) のどちらのアルファベットも受け付け、パディングは有無を問わない
+/// `data:<MIME>;base64,` で始まる data URI は、先頭の宣言を除いて扱う
 ///
 /// # Arguments
 /// * `input` - デコード対象の Base64 文字列
@@ -68,7 +68,7 @@ pub(crate) fn base64_decode_bytes(input: &str) -> Option<Vec<u8>> {
 
 /// Base64 文字列をデコードし、UTF-8 の文字列として返す
 ///
-/// 受け付ける形式は `base64_decode_bytes` と同じ。
+/// 受け付ける形式は `base64_decode_bytes` と同じ
 ///
 /// # Arguments
 /// * `input` - デコード対象の Base64 文字列
@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(base64_decode("aGVs bG8 =").as_deref(), Some("hello"));
     }
 
-    /// Base64 として不正な入力は `None` を返すこと
+    /// Base64 として不正な入力は `None` を返すようにすること
     #[test]
     fn test_base64_decode_invalid() {
         assert_eq!(base64_decode(""), None);
@@ -179,14 +179,14 @@ mod tests {
         assert_eq!(base64_decode("あいう"), None);
     }
 
-    /// デコード結果が UTF-8 として不正な場合は `None` を返すこと
+    /// デコード結果が UTF-8 として不正な場合は `None` を返すようにすること
     #[test]
     fn test_base64_decode_invalid_utf8() {
         // 0xFF 0xFE
         assert_eq!(base64_decode("//4="), None);
     }
 
-    /// エンコード結果をデコードして元に戻せること
+    /// エンコード結果をデコードして元に戻せるようにすること
     #[test]
     fn test_base64_roundtrip() {
         let original = "user+tag@example.com あいう\r\n🙂 a&b=c/d";

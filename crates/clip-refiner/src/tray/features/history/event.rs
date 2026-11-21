@@ -12,7 +12,7 @@ use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 /// * `id` - クリックされたメニュー項目の ID
 /// * `menu` - トレイメニュー構造体
 /// * `state` - アプリケーションの共有状態
-/// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
+/// * `clipboard_worker` - クリップボードワーカーへの送信ハンドル
 ///
 /// # Returns
 /// * `bool` - イベントがこの関数内で処理された場合は `true`、そうでない場合は `false` を返す

@@ -11,7 +11,7 @@ use crate::consts;
 /// Base64 と相互変換する画像の失敗理由
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Base64ImageError {
-    /// 画像として扱えない (Base64 や画像形式として不正)
+    /// 画像として扱えない (Base64 や画像形式として不正、寸法が 0、バッファ長が寸法と不一致)
     Invalid,
     /// 画像の辺長またはピクセル数が上限を超えている
     TooLarge,
@@ -36,7 +36,7 @@ const MAX_DECODE_ALLOC_BYTES: u64 = 256 * 1024 * 1024;
 // ======================================================================
 /// Base64 文字列を画像 (PNG / JPEG / BMP) として復元する
 ///
-/// 画像のデコードを始める前に、ヘッダーから読み取った寸法を上限と照合する。
+/// 画像のデコードを始める前に、ヘッダーから読み取った寸法を上限と照合する
 ///
 /// # Arguments
 /// * `input` - Base64 文字列 (data URI も可)
@@ -159,7 +159,7 @@ mod tests {
         vec![1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255]
     }
 
-    /// 画像を PNG の Base64 へエンコードし、元の RGBA に復元できること
+    /// 画像を PNG の Base64 へエンコードし、元の RGBA に復元できるようにすること
     #[test]
     fn test_png_base64_roundtrip() {
         let encoded = encode_base64_png(2, 2, sample_rgba()).expect("encode");
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(decoded.rgba, sample_rgba());
     }
 
-    /// data URI と折り返し付きの Base64 から画像を復元できること
+    /// data URI と折り返し付きの Base64 から画像を復元できるようにすること
     #[test]
     fn test_decode_data_uri_and_wrapped() {
         let encoded = encode_base64_png(2, 2, sample_rgba()).expect("encode");
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(decoded.rgba, sample_rgba());
     }
 
-    /// 画像以外の Base64 は `Invalid` になること
+    /// 画像以外の Base64 は `Invalid` とすること
     #[test]
     fn test_decode_non_image_is_invalid() {
         // "hello" と、PNG シグネチャだけで本体のないデータ
@@ -207,7 +207,7 @@ mod tests {
         );
     }
 
-    /// 上限を超える寸法は `TooLarge` になること
+    /// 上限を超える寸法は `TooLarge` とすること
     #[test]
     fn test_oversized_dimensions_are_too_large() {
         let side = consts::MAX_BASE64_IMAGE_DIMENSION + 1;
@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(check_dimensions(4096, 4096), Ok(()));
     }
 
-    /// バッファ長が寸法と合わない場合は `Invalid` になること
+    /// バッファ長が寸法と合わない場合は `Invalid` とすること
     #[test]
     fn test_encode_rejects_mismatched_buffer() {
         assert_eq!(
@@ -237,7 +237,7 @@ mod tests {
         );
     }
 
-    /// 寸法を上限超過に書き換えた PNG は、デコードせずに `TooLarge` になること
+    /// 寸法を上限超過に書き換えた PNG は、デコードせずに `TooLarge` とすること
     #[test]
     fn test_decode_rejects_oversized_png_header() {
         let png = png_with_width(consts::MAX_BASE64_IMAGE_DIMENSION + 1);

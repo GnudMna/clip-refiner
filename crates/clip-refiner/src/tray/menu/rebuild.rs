@@ -89,7 +89,7 @@ pub(crate) fn rebuild_toggle_records_submenu(
 mod tests {
     use super::*;
 
-    /// `&` は `&&` にし、改行とタブは空白に置き換えること
+    /// `&` は `&&` にし、改行とタブは空白に置き換えるようにすること
     #[test]
     fn escape_menu_text_escapes_ampersand_and_control_chars() {
         assert_eq!(escape_menu_text("Q&A"), "Q&&A");
@@ -98,7 +98,7 @@ mod tests {
         assert_eq!(escape_menu_text("plain"), "plain");
     }
 
-    /// 動的レコードのラベルがエスケープされて項目に載ること
+    /// 動的レコードのラベルがエスケープされて項目に載るようにすること
     #[test]
     fn rebuild_escapes_record_labels() {
         let enabled = CheckMenuItem::new("有効", true, true, None);

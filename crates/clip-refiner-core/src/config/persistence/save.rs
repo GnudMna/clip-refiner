@@ -37,7 +37,7 @@ pub struct ConfigFileFingerprint([u8; 32]);
 /// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
 ///
 /// # Errors
-/// 設定ファイルのメタデータ取得に失敗した場合
+/// 設定ファイルパス取得、メタデータ取得、更新時刻取得のいずれかに失敗した場合
 pub fn disk_config_modified_time() -> Result<Option<SystemTime>, ConfigError> {
     config_file_modified_time()
 }
@@ -72,7 +72,8 @@ impl AppConfig {
     /// * `Result<()>` - 保存に成功した場合は `Ok(())`
     ///
     /// # Errors
-    /// 設定パス取得、登録クリップ保存、TOML 書き出し、パーミッション設定のいずれかに失敗した場合
+    /// 設定パス取得、既存ファイル読み取り、登録クリップ保存、TOML 生成、書き込みのいずれかに失敗した場合
+    /// (パーミッション設定の失敗は警告のみ)
     pub fn save(&self) -> Result<(), ConfigError> {
         let config_path = get_config_file_path().map_err(|e| {
             tracing::error!("設定ファイルパスの取得に失敗: {}", e);
@@ -114,9 +115,9 @@ impl AppConfig {
 // ======================================================================
 /// コメントや未知のキーを引き継ぐため、保存前に既存の設定ファイルを読む
 ///
-/// 一時的なロック (エディタやウイルス対策ソフトなど) に備えて短くリトライする。
-/// リトライしても読めない場合は、コメントや未知のキーを黙って消さないよう保存を中止する。
-/// UTF-8 として不正な場合は引き継げる内容がないため、警告を出して `None` を返す。
+/// 一時的なロック (エディタやウイルス対策ソフトなど) に備えて短くリトライする
+/// リトライしても読めない場合は、コメントや未知のキーを黙って消さないよう保存を中止する
+/// UTF-8 として不正な場合は引き継げる内容がないため、警告を出して `None` を返す
 ///
 /// # Arguments
 /// * `path` - 設定ファイルのパス
@@ -167,6 +168,7 @@ fn read_existing_config(path: &Path) -> Result<Option<String>, ConfigError> {
 mod tests {
     use super::*;
     use crate::config::paths::get_config_file_path;
+    use crate::config::registered_clips::{load_registered_clips, registered_clip_from_plain_text};
 
     /// 既存ファイルを読めない場合は保存を中止し、登録クリップも書き込まないこと
     ///
@@ -177,13 +179,23 @@ mod tests {
             let path = get_config_file_path().expect("path");
             fs::create_dir_all(&path).expect("読めないエントリ");
 
-            let result = AppConfig::default().save();
+            let config = AppConfig {
+                clips: vec![
+                    registered_clip_from_plain_text("ラベル".to_string(), "本文")
+                        .expect("登録クリップ"),
+                ],
+                ..AppConfig::default()
+            };
+            let result = config.save();
 
             assert!(
                 matches!(result, Err(ConfigError::Read(_))),
                 "読み取り失敗で中止されること: {result:?}"
             );
             assert!(path.is_dir(), "既存エントリが置き換えられないこと");
+            // 登録クリップのストアにも書き込まれていない
+            let (clips, _) = load_registered_clips().expect("登録クリップの読み込み");
+            assert!(clips.is_empty(), "登録クリップが書き込まれないこと");
         });
     }
 

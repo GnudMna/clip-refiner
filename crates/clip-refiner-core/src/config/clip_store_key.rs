@@ -34,7 +34,7 @@ thread_local! {
 /// * `Result<[u8; CIPHER_KEY_LEN]>` - 暗号化鍵。取得または生成に失敗した場合は `Err`
 ///
 /// # Errors
-/// 設定ディレクトリ取得、鍵ファイル読み書き、DPAPI / パーミッション設定のいずれかに失敗した場合
+/// 設定ディレクトリ取得、鍵ファイル読み書き、鍵生成、DPAPI のいずれかに失敗した場合 (パーミッション設定の失敗は警告のみ)
 pub fn clip_store_key() -> Result<[u8; CIPHER_KEY_LEN]> {
     #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
     if let Some(key) = thread_local_clip_store_key() {

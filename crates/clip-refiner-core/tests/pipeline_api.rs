@@ -97,7 +97,7 @@ fn apply_text_pipeline_empty_modes_returns_none() {
     assert_eq!(apply_text_pipeline("hello", &[], &default_ctx()), None);
 }
 
-/// 設定の正規表現がパイプライン全体に効ようにすること
+/// 設定の正規表現がパイプライン経由で適用されるようにすること
 #[test]
 fn config_regex_applies_through_pipeline() {
     let ctx = RefineContext::with_regex(clip_refiner_core::config::RegexSettings::single(
@@ -174,7 +174,7 @@ fn parser_limit_boundary_is_exposed() {
     assert!(!is_within_parser_limit(&over));
 }
 
-/// 全モードが少なくとも 1 回はパイプライン API 経由で呼び出せようにすること
+/// 全モードをパイプライン API 経由でパニックせずに呼び出せるようにすること
 #[test]
 fn every_mode_runs_through_apply_pipeline_without_panic() {
     let ctx = default_ctx();

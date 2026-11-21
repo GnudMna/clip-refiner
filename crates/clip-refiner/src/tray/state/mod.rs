@@ -34,7 +34,7 @@ mod tests {
     use crate::config::MonitorMode;
     use crate::refiner::RefineMode;
 
-    /// `with_config` / `monitor_generation` の基本動作できるようにすること
+    /// `with_config` / `monitor_generation` が基本どおりに動作すること
     #[test]
     fn test_app_state_helpers() {
         let state = test_app_state();
@@ -51,7 +51,7 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 履歴機能の更新できるようにすること
+    /// 履歴機能の有効・無効を更新できるようにすること
     #[test]
     fn test_history_enabled_accessor() {
         let state = test_app_state();
@@ -60,7 +60,31 @@ mod tests {
         assert!(state.with_config(|c| c.history_enabled));
     }
 
-    /// 通知設定の更新できるようにすること
+    /// `with_config_mut` のクロージャが変更途中でパニックしたら変更前の設定へ戻すこと
+    #[test]
+    fn with_config_mut_rolls_back_on_panic() {
+        let state = test_app_state();
+        let before_interval = state.with_config(|c| c.interval_ms);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            state.with_config_mut(|c| {
+                c.mode = RefineMode::UrlEncode;
+                c.interval_ms = before_interval + 1;
+                panic!("panic while mutating config");
+            });
+        }));
+        assert!(result.is_err());
+
+        // 途中まで書き換えたフィールドも含めて変更前へ戻る
+        assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
+        assert_eq!(state.with_config(|c| c.interval_ms), before_interval);
+
+        // ポイズン解除後も通常どおり変更できる
+        state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
+        assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlEncode);
+    }
+
+    /// 通知設定を更新できるようにすること
     #[test]
     fn test_notification_settings_accessor() {
         let state = test_app_state();

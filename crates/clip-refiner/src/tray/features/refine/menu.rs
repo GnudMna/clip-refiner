@@ -39,7 +39,9 @@ impl TrayMenu {
     ///
     /// # Arguments
     /// * `current_mode` - 現在選択されている変換モード
+    /// * `active_modes` - チェック状態にする変換モード集合
     /// * `favorite_modes` - お気に入り登録済みモード
+    /// * `hotkeys` - お気に入りラベルに表示するホットキー設定
     ///
     /// # Returns
     /// * `Result<RefineMenu>` - 成功した場合は `RefineMenu` インスタンス、失敗した場合は `Err`

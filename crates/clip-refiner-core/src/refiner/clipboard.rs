@@ -142,7 +142,7 @@ impl From<ClipboardIoError> for ClipboardProcessError {
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
 ///
 /// # Errors
-/// テキストが空、またはサイズ上限を超えている場合
+/// テキストが空、サイズ上限を超えている場合、または変更がなく正規表現のタイムアウト・パーサー入力上限超過・HTML の入れ子上限超過で打ち切られた場合
 pub fn apply_pipeline_to_text(
     text: &str,
     pipeline: &[RefineMode],
@@ -195,7 +195,7 @@ pub fn apply_pipeline_to_text(
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
 ///
 /// # Errors
-/// クリップボード I/O 失敗、空テキスト、サイズ上限超過のいずれか
+/// クリップボード I/O 失敗、空テキスト、サイズ上限超過、正規表現のタイムアウト、画像取得失敗のいずれか
 pub fn process_clipboard<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     mode: RefineMode,
@@ -219,7 +219,7 @@ pub fn process_clipboard<C: TextClipboard + ImageClipboard + HtmlClipboard>(
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
 ///
 /// # Errors
-/// クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
+/// クリップボード I/O 失敗、空テキスト、サイズ上限超過、正規表現のタイムアウト、画像取得失敗のいずれか
 pub fn process_clipboard_pipeline<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     pipeline: &[RefineMode],
@@ -259,7 +259,7 @@ pub(crate) fn process_image_clipboard<C: TextClipboard + ImageClipboard>(
 /// クリップボードから画像を取得する
 ///
 /// Excel コピーは Unicode テキストより `CF_DIB` の到着が遅れることがあるため、
-/// TSV 形式の場合は短い間隔でリトライする
+/// テキストが空または TSV 形式の場合 (`excel_tsv` が `true`) は短い間隔でリトライする
 fn wait_for_clipboard_image<C: ImageClipboard>(
     clipboard: &mut C,
     excel_tsv: bool,
@@ -314,7 +314,7 @@ fn is_excel_tsv(text: &str) -> bool {
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
 ///
 /// # Errors
-/// パイプラインが空、クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
+/// パイプラインが空、クリップボード I/O 失敗、空テキスト、サイズ上限超過、正規表現のタイムアウト、画像取得失敗のいずれか
 pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     pipeline: &[RefineMode],
@@ -637,7 +637,7 @@ mod tests {
         );
     }
 
-    /// 描画画像がある場合はクリップボードへ書き込ようにすること
+    /// 描画画像がある場合はクリップボードへ書き込むようにすること
     #[test]
     fn process_image_clipboard_writes_excel_bitmap() {
         let rgba = vec![255_u8; 4 * 2 * 2];
@@ -655,7 +655,7 @@ mod tests {
         assert!(cb.image_written_as_file());
     }
 
-    /// Unicode テキストが無くても描画画像があれば書き込ようにすること
+    /// Unicode テキストが無くても描画画像があれば書き込むようにすること
     #[test]
     fn process_image_clipboard_succeeds_when_text_unavailable() {
         let rgba = vec![255_u8; 4 * 2 * 2];
@@ -833,7 +833,7 @@ bold",
         assert_eq!(cb.html(), None);
     }
 
-    /// Excel TSV 判定の境界ようにすること
+    /// Excel TSV 判定は空文字列を除外し、表形式と単一セルを TSV とみなすようにすること
     #[test]
     fn is_excel_tsv_detects_tabular_and_single_cell() {
         assert!(!is_excel_tsv(""));

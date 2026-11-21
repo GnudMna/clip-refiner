@@ -7,7 +7,7 @@ use crate::refiner::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipbo
 ///
 /// - `get_text` は監視が読み取り済みの本文を 1 度だけ返す。除外判定・サイズ上限・重複判定・
 ///   履歴・Undo 元と、実際に加工する本文を同じ値にそろえる
-/// - 書き込みは、観測を始めた時点から変更トークンが進んでいない場合のみ行う。
+/// - 書き込みは、観測を始めた時点から変更トークンが進んでいない場合のみ行う
 ///   途中で別のコピー (パスワードマネージャー等) が入った内容は加工も上書きもしない
 ///
 /// 変更トークンを取得できない環境では、書き込みの確認は行わない
@@ -167,7 +167,7 @@ mod tests {
     use super::*;
     use crate::test_helpers::InMemoryTextClipboard;
 
-    /// 読み取り済みの本文を 1 度だけ返し、以降は実際のクリップボードを読むこと
+    /// 読み取り済みの本文を 1 度だけ返し、以降は実際のクリップボードを読むようにすること
     #[test]
     fn get_text_returns_observed_text_once() {
         let mut inner = InMemoryTextClipboard::with_text("actual");
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(guarded.get_text().as_deref(), Ok("actual"));
     }
 
-    /// 変更トークンが進んでいなければ書き込めること
+    /// 変更トークンが進んでいなければ書き込めるようにすること
     #[test]
     fn set_text_writes_when_token_unchanged() {
         let mut inner = InMemoryTextClipboard::with_text("a");
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(inner.text(), "b");
     }
 
-    /// 自身の書き込みでトークンが進んでも、続く書き込みを見送らないこと
+    /// 自身の書き込みでトークンが進んでも、続く書き込みを見送らないようにすること
     #[test]
     fn consecutive_own_writes_are_allowed() {
         let mut inner = InMemoryTextClipboard::with_text("a");
@@ -202,7 +202,7 @@ mod tests {
         assert!(!guarded.is_superseded());
     }
 
-    /// 別のコピーでトークンが進んでいれば書き込みを見送ること
+    /// 別のコピーでトークンが進んでいれば書き込みを見送るようにすること
     #[test]
     fn writes_are_rejected_when_token_advanced() {
         let mut inner = InMemoryTextClipboard::with_text("a");
@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(inner.text(), "external");
     }
 
-    /// 変更トークンを取得できない場合は書き込みを妨げないこと
+    /// 変更トークンを取得できない場合は書き込みを妨げないようにすること
     #[test]
     fn writes_are_allowed_without_token() {
         let mut inner = InMemoryTextClipboard::with_text("a");

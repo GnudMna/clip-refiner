@@ -21,7 +21,8 @@ use crate::security::is_within_parser_limit;
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 変換後のJSON文字列。パース・変換に失敗した場合 (`.inf` / `.nan` を含む場合など) や
+///   入力がパーサの上限を超える場合は元の文字列を返す
 pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("YAML 入力が上限を超えているためスキップ (yaml_to_json)");
@@ -65,7 +66,8 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のJSON文字列。パースに失敗した場合は元の文字列を返す。
+/// * `Cow<'_, str>` - 変換後のJSON文字列。パース・変換に失敗した場合 (`.inf` / `.nan` を含む場合など) や
+///   入力がパーサの上限を超える場合は元の文字列を返す
 pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
     if !is_within_parser_limit(text) {
         tracing::debug!("YAML 入力が上限を超えているためスキップ (yaml_to_json_preserve_order)");
@@ -95,7 +97,7 @@ pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
 /// YAML をキー順序を保って `OrderedValue` へ読み取るためのラッパー
 ///
 /// `OrderedValue` の派生実装 (`untagged`) は値をいったん serde 内部の型へ溜めるため、
-/// `u64` / `i64` を超える整数を扱えず、数値や真偽値のキー (`1: x`) も読めない。
+/// `u64` / `i64` を超える整数を扱えず、数値や真偽値のキー (`1: x`) も読めない
 /// 整数は `u128` / `i128` の範囲まで桁を保ち、キーは文字列として読む
 struct YamlInput(OrderedValue);
 
@@ -281,7 +283,7 @@ mod tests {
         assert!(output.contains("\"!Ref\": \"b\""), "{output}");
     }
 
-    /// `.inf` / `.nan` を含む YAML は null へ変えず元の文字列を返すこと
+    /// `.inf` / `.nan` を含む YAML は null へ変えず元の文字列を返すようにすること
     #[test]
     fn test_yaml_to_json_rejects_non_finite_numbers() {
         for input in [

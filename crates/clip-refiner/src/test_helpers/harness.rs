@@ -311,7 +311,7 @@ impl ClipboardHarness {
     /// 監視ループのクリップボード更新処理を実行する
     ///
     /// `event_driven` は OS イベント通知を受けたかどうかを表す。`false` のときは
-    /// ポーリングで変更トークンの更新を確認した場合として扱う。
+    /// ポーリングで変更トークンの更新を確認した場合として扱う
     /// `MonitorMode::Event` 設定時のワーカー挙動と一致させる場合は
     /// [`Self::run_configured_monitor_update`] を使う
     ///
@@ -466,7 +466,7 @@ impl ClipboardHarness {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - 条件を満たす場合は `true`
+    /// * `bool` - 取り消す記録があった場合は `true`、キューが空の場合は `false`
     pub fn undo_last_continuous_record(&self) -> bool {
         self.state.undo_last_continuous_record()
     }

@@ -15,7 +15,7 @@ use super::state::{AppEvent, SelectorEvent, SettingsEvent};
 /// この関数はアプリケーションが終了するまでブロックされる
 ///
 /// # Arguments
-/// * `e2e_window` - E2E 時に自動表示するウィンドウ。通常起動では `None`
+/// * `e2e_window` - E2E 時に自動表示するウィンドウ (通常起動では `None`)
 ///
 /// # Returns
 /// * `Result<()>` - アプリケーションが正常に終了した場合は `Ok(())`、起動や実行中にエラーが発生した場合は `Err` を返す

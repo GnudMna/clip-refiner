@@ -133,7 +133,7 @@ where
 mod tests {
     use super::*;
 
-    /// 行ごとに改行コードを判別して分けること
+    /// 行ごとに改行コードを判別して分けるようにすること
     #[test]
     fn test_split_line_endings() {
         assert_eq!(

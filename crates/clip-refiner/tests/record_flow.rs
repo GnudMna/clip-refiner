@@ -20,7 +20,7 @@ fn continuous_record_stores_raw_text_without_processing() {
     assert_eq!(harness.history_len(), 0);
 }
 
-/// 連続記録モードでは同一テキストの再コピーごとにキュー末尾へ積ようにすること
+/// 連続記録モードでは同一テキストの再コピーごとにキュー末尾へ積むようにすること
 #[test]
 fn continuous_record_keeps_duplicate_entries_in_fifo_order() {
     let mut harness = ClipboardHarness::with_text("same")
@@ -110,7 +110,7 @@ fn continuous_record_paste_skips_when_queue_empty() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// メニュー選択相当で指定位置の項目を取り出ようにすること
+/// メニュー選択相当で指定位置の項目を取り出すようにすること
 #[test]
 fn continuous_record_menu_discharge_removes_entry() {
     let mut harness = ClipboardHarness::with_text("first")

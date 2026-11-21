@@ -54,6 +54,7 @@ pub(crate) fn protect(data: &[u8]) -> Result<Vec<u8>> {
 /// DPAPI 保護済みデータを平文へ復元する
 ///
 /// DPAPI が確保した平文領域は解放前にゼロ化し、戻り値も破棄時にゼロ化する
+/// 復号結果の長さが `expected_len` と異なる場合はエラーにする
 pub(crate) fn unprotect(blob: &[u8], expected_len: usize) -> Result<Zeroizing<Vec<u8>>> {
     let input = CRYPT_INTEGER_BLOB {
         cbData: blob_len_u32(blob.len())?,

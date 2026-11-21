@@ -39,7 +39,7 @@ impl WorkerState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - 条件を満たす場合は `true`
+    /// * `bool` - 稼働中の場合は `true`
     pub fn is_alive(&self) -> bool {
         self.alive.load(Ordering::SeqCst)
     }
@@ -66,7 +66,7 @@ impl WorkerState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - 条件を満たす場合は `true`
+    /// * `bool` - 通知が必要だった場合は `true`
     pub fn take_recovery_pending(&self) -> bool {
         self.recovery_pending.swap(false, Ordering::SeqCst)
     }

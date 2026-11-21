@@ -130,7 +130,7 @@ impl RegexSettings {
     /// 有効プリセットを返す (不正 ID のときは先頭)
     ///
     /// # Returns
-    /// * `Option<&RegexPreset>` - プリセットが 1 件以上あるとき
+    /// * `Option<&RegexPreset>` - 有効プリセット。プリセットが無いときは `None`
     pub fn active_preset(&self) -> Option<&RegexPreset> {
         if let Some(preset) = self
             .presets

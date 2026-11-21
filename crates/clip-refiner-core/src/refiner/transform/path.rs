@@ -13,7 +13,7 @@ use std::path::Path;
 /// * `text` - パスを含む文字列(複数行可)
 ///
 /// # Returns
-/// * `Cow<'_, str>` - ベースネームが抽出されたテキスト。変更がない行はそのまま維持される。
+/// * `Cow<'_, str>` - ベースネームが抽出されたテキスト。変更がない行はそのまま維持される
 pub fn extract_basename(text: &str) -> Cow<'_, str> {
     super::utils::process_lines(text, |line| extract_single_basename(line).map(Cow::Owned))
 }
@@ -112,7 +112,7 @@ pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
 
 /// パス内のスラッシュをバックスラッシュに変換する
 ///
-/// `Unix形式のパス区切り文字をWindows形式に変換する`
+/// Unix 形式のパス区切り文字を Windows 形式に変換する
 /// 複数行の入力に対応している
 ///
 /// # Arguments
@@ -174,7 +174,7 @@ fn is_path_like_raw(text: &str) -> bool {
 /// * `line` - 処理対象の1行
 ///
 /// # Returns
-/// * `Option<String>` - ベースネームが抽出できた場合は `Some(ベースネーム)` を返す
+/// * `Option<String>` - ベースネームが抽出できた場合は `Some(ベースネーム)`、パスでない場合や抽出できない場合は `None`
 fn extract_single_basename(line: &str) -> Option<String> {
     let trimmed = line.trim();
     let path_str = if trimmed.starts_with('"') && trimmed.ends_with('"') {
@@ -258,7 +258,7 @@ mod tests {
         assert_eq!(convert_to_forward_slash(input), expected);
     }
 
-    /// 既にスラッシュ区切りの場合に変更されないことを確認すること
+    /// 既にスラッシュ区切りの場合は変更しないようにすること
     #[test]
     fn test_convert_to_forward_slash_already_slash() {
         let input = "/usr/local/bin";
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(convert_to_backslash(input), expected);
     }
 
-    /// 既にバックスラッシュ区切りの場合に変更されないことを確認すること
+    /// 既にバックスラッシュ区切りの場合は変更しないようにすること
     #[test]
     fn test_convert_to_backslash_already_backslash() {
         let input = "C:\\Windows\\System32";
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(extract_basename(input), "baz.txt");
     }
 
-    /// URL を各パス変換で変更しないこと
+    /// URL を各パス変換で変更しないようにすること
     #[test]
     fn test_url_is_not_converted() {
         let input = "https://example.com/a/b?x=1";
@@ -324,7 +324,7 @@ mod tests {
         assert!(matches!(extract_basename(input), Cow::Borrowed(_)));
     }
 
-    /// 区切り文字を含む通常の文章を各パス変換で変更しないこと
+    /// 区切り文字を含む通常の文章を各パス変換で変更しないようにすること
     #[test]
     fn test_prose_with_slash_is_not_converted() {
         for input in ["TCP/IP and/or UDP", "and/or", "foo/bar.txt", "a\\b"] {

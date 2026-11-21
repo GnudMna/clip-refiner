@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "3.0.0" }
+//! clip-refiner-core = { version = "3.0.1" }
 //! # テキスト変換のみ: default-features = false
 //! ```
 //!
@@ -70,7 +70,10 @@ pub(crate) use clip_refiner_core::security;
 /// * `anyhow::Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す
 ///
 /// # Errors
-/// ログ初期化、引数解析、クリップボード初期化、常駐ループのいずれかが失敗した場合
+/// ログ初期化、多重起動防止、ワンショット実行 (クリップボード初期化・IPC 委譲を含む)、
+/// 常駐ループ、ポータブル更新の差し替えのいずれかが失敗した場合
+///
+/// 引数解析の失敗は `Err` を返さず、clap がエラーを表示してプロセスを終了する
 #[cfg(feature = "app")]
 pub fn run() -> anyhow::Result<()> {
     bootstrap::run()

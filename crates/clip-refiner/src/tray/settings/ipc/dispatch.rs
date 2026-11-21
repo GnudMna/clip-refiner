@@ -16,8 +16,10 @@ use crate::user_error;
 // ======================================================================
 /// IPC アクションを `AppEvent` へ変換して送信する
 ///
-/// 設定ウィンドウ内で完結する操作 (`Apply` / データ削除 / 設定ファイル起動) は
-/// 専用の `SettingsEvent` としてイベントループへ送り、`user_event` 側の共通ハンドラへ委譲する
+/// 設定ウィンドウ内で完結する操作 (`Apply` / データ削除 / 設定ファイル起動など) は
+/// `SettingsEvent` としてイベントループへ送り、`SettingsWindow::handle_event` で処理する
+/// 登録クリップ・お気に入りの操作は `ClipsEvent` / `FavoritesEvent` として送り、
+/// `user_event` 側の共通ハンドラへ委譲する
 pub(crate) fn dispatch_settings_ipc(
     proxy: &EventLoopProxy<AppEvent>,
     state: &Arc<AppState>,

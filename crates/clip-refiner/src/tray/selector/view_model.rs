@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(trim["favoriteIndex"], 0);
     }
 
-    /// 登録テキストの暗号文をセレクターの JSON に含めないこと
+    /// 登録テキストの暗号文をセレクターの JSON に含めないようにすること
     #[test]
     fn clip_selector_value_excludes_ciphertext() {
         let config = AppConfig {
@@ -255,21 +255,21 @@ mod tests {
         assert!(item.get("hover_preview").is_none());
     }
 
-    /// 通常の本文はそのままホバー表示用に返すこと
+    /// 通常の本文はそのままホバー表示用に返すようにすること
     #[test]
     fn clip_hover_text_keeps_plain_text() {
         let text = "1 行目\n2 行目 with  spaces";
         assert_eq!(clip_hover_text(text).as_deref(), Some(text));
     }
 
-    /// 機密情報らしい本文と空白のみの本文はホバー表示しないこと
+    /// 機密情報らしい本文と空白のみの本文はホバー表示しないようにすること
     #[test]
     fn clip_hover_text_hides_sensitive_and_blank() {
         assert_eq!(clip_hover_text("api_key=supersecret"), None);
         assert_eq!(clip_hover_text("  \n\t"), None);
     }
 
-    /// 上限を超える本文は文字境界で切り詰めて `...` を付けること
+    /// 上限を超える本文は文字境界で切り詰めて `...` を付けるようにすること
     #[test]
     fn clip_hover_text_truncates_at_char_boundary() {
         let max = consts::REGISTERED_CLIP_HOVER_TEXT_MAX_CHARS;

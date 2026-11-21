@@ -248,7 +248,7 @@ mod tests {
         assert!(format_process_notification_body(&settings, &[RefineMode::Trim], "abc").is_none());
     }
 
-    /// モード名と加工結果の両方を含むとすること
+    /// モード名と加工結果の両方を含むようにすること
     #[test]
     fn format_body_includes_mode_and_result() {
         let body = format_process_notification_body(
@@ -262,7 +262,7 @@ mod tests {
         assert!(body.contains("内容: hello"));
     }
 
-    /// `notify_result` OFF の場合はモード行だけ含むとすること
+    /// `notify_result` OFF の場合はモード行だけ含むようにすること
     #[test]
     fn format_body_mode_only_when_result_off() {
         let mut settings = enabled_settings();
@@ -352,7 +352,7 @@ mod tests {
         ));
     }
 
-    /// 自動変換の有効化時の通知本文を返すこと
+    /// 自動変換の有効化時の通知本文を返すようにすること
     #[test]
     fn auto_refine_notification_body_when_enabled() {
         assert_eq!(
@@ -361,7 +361,7 @@ mod tests {
         );
     }
 
-    /// 自動変換の無効化時の通知本文を返すこと
+    /// 自動変換の無効化時の通知本文を返すようにすること
     #[test]
     fn auto_refine_notification_body_when_disabled() {
         assert_eq!(

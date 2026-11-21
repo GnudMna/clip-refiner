@@ -155,7 +155,7 @@ pub enum OneshotIpcRequest {
 /// 旧クライアントの単一ステップフィールド (`pattern` 等) は `steps` が無いときだけ使う
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OneshotRegexOverride {
-    /// 有効化するプリセット名 (名前の先頭一致。ステップ列適用時は表示名としても使う)
+    /// 有効化するプリセット名 (名前の完全一致。ステップ列適用時は表示名としても使う)
     #[serde(
         default,
         rename = "presetName",

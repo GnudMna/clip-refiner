@@ -107,13 +107,13 @@ impl AppConfig {
 
     /// ディスク上の設定ファイルを再読み込みする
     ///
-    /// スキーマ移行が必要な場合は移行後の内容を保存する
+    /// スキーマ移行またはレガシー移行を行った場合は移行後の内容を保存する (未対応 version の場合は保存しない)
     ///
     /// # Returns
     /// * `Result<ConfigDiskReload, ConfigReloadError>` - 読み込んだ設定と移行・警告メタデータ
     ///
     /// # Errors
-    /// 設定ファイルが存在しない、読み取り失敗、TOML 解析失敗のいずれか
+    /// 設定ファイルパスの取得失敗、ファイルが存在しない、読み取り失敗、TOML 解析失敗のいずれか
     pub fn reload_from_disk() -> Result<ConfigDiskReload, ConfigReloadError> {
         let config_path =
             get_config_file_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
@@ -221,7 +221,7 @@ const SHADOWED_LEGACY_KEYS: &[(&str, &str, &str)] = &[
 
 /// 現行キー名と同じテーブルにある旧キー名を取り除く
 ///
-/// 旧版へ戻して保存した後に再び更新した場合や手編集で、旧キー名と現行キー名が同居することがある。
+/// 旧版へ戻して保存した後に再び更新した場合や手編集で、旧キー名と現行キー名が同居することがある
 /// 現行キー名の値を優先する
 fn drop_shadowed_legacy_keys(value: &mut toml::Value) {
     for (table, legacy, current) in SHADOWED_LEGACY_KEYS {

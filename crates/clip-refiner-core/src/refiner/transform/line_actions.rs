@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 /// * `descending` - 降順にする場合は `true`、昇順にする場合は `false`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す
 pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     sort_with(text, descending, false)
 }
@@ -29,14 +29,14 @@ pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
 /// * `descending` - 降順にする場合は `true`、昇順にする場合は `false`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す
 pub fn sort_lines_natural(text: &str, descending: bool) -> Cow<'_, str> {
     sort_with(text, descending, true)
 }
 
 /// 比較方法を指定して行またはCSVレコード単位で並び替える
 ///
-/// RFC 4180 の CSV として読めるテキストはレコード単位、読めないテキストは行単位で並び替える。
+/// RFC 4180 の CSV として読めるテキストはレコード単位、読めないテキストは行単位で並び替える
 /// どちらも単位の先頭行で比較するため、行単位の結果がたまたま CSV として読めても、
 /// 再度並び替えたときに順序が変わらない (同順位は元の順序を保つ)
 ///
@@ -46,7 +46,7 @@ pub fn sort_lines_natural(text: &str, descending: bool) -> Cow<'_, str> {
 /// * `natural` - 連続する数字を数値として比較する場合は `true`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す
 fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -93,7 +93,7 @@ fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
 /// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 空行が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 空行が削除されたテキスト。変更がない場合は元の文字列への参照を返す
 pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -114,7 +114,7 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
 
 /// 重複行またはCSVレコードを削除する(出現順序を維持する)
 ///
-/// `sort_lines` と同じ単位で重複を判定し、最初に出現した単位のみを残して他を削除する。
+/// `sort_lines` と同じ単位で重複を判定し、最初に出現した単位のみを残して他を削除する
 /// クォート内に改行を含む CSV のレコードは、改行を含めて 1 つの単位として比較する
 /// セット(HashSet)を使用して効率的に重複を判定する
 ///
@@ -122,7 +122,7 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
 /// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 重複が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - 重複が削除されたテキスト。変更がない場合は元の文字列への参照を返す
 pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -156,7 +156,7 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 /// * `text` - 分割する対象のテキスト
 ///
 /// # Returns
-/// * `Vec<(&str, &str)>` - (改行を除いた各単位の元の文字列, 単位末尾の改行コード) の組。
+/// * `Vec<(&str, &str)>` - (改行を除いた各単位の元の文字列, 単位末尾の改行コード) の組
 ///   最終行が改行で終わっていなければ、その改行コードは空文字列
 fn split_units(text: &str) -> Vec<(&str, &str)> {
     split_csv_records(text).unwrap_or_else(|| super::utils::split_line_endings(text))
@@ -177,16 +177,16 @@ enum FieldState {
 
 /// テキストを RFC 4180 の CSV としてレコード単位に分ける
 ///
-/// クォートで囲んだフィールドだけが改行・カンマ・`""` (エスケープしたクォート) を含められる。
-/// 閉じクォートの直後はカンマか行末に限り、空行を除くレコードのフィールド数は 2 以上でそろっている必要がある。
-/// 改行は LF と CRLF で、単独の CR は行単位の並び替え (`str::lines`) と同じく改行とみなさない。
+/// クォートで囲んだフィールドだけが改行・カンマ・`""` (エスケープしたクォート) を含められる
+/// 閉じクォートの直後はカンマか行末に限り、空行を除くレコードのフィールド数は 2 以上でそろっている必要がある
+/// 改行は LF と CRLF で、単独の CR は行単位の分割 (`split_line_endings`) と同じく改行とみなさない
 /// 空行は空のレコードとして残す
 ///
 /// # Arguments
 /// * `text` - 分割する対象のテキスト
 ///
 /// # Returns
-/// * `Option<Vec<(&str, &str)>>` - (改行を除いた各レコードの元の文字列, レコード末尾の改行コード) の組。
+/// * `Option<Vec<(&str, &str)>>` - (改行を除いた各レコードの元の文字列, レコード末尾の改行コード) の組
 ///   最終レコードが改行で終わっていなければ、その改行コードは空文字列。CSV として読めない場合は `None`
 fn split_csv_records(text: &str) -> Option<Vec<(&str, &str)>> {
     let bytes = text.as_bytes();
@@ -273,9 +273,9 @@ fn key_comparator(natural: bool) -> fn(&str, &str) -> Ordering {
 
 /// 連続する数字を数値として文字列を比較する
 ///
-/// 数字以外は文字単位で比較し、数字の連続 (ASCII 数字のみ) は桁数に依らず数値の大小で比較する。
-/// 先頭の 0 は無視するため、数値が等しい場合は次の部分の比較に進む。
-/// 桁数の大きい数字も扱えるよう、数値へ変換せず桁数と文字列で比較する。
+/// 数字以外は文字単位で比較し、数字の連続 (ASCII 数字のみ) は桁数に依らず数値の大小で比較する
+/// 先頭の 0 は無視するため、数値が等しい場合は次の部分の比較に進む
+/// 桁数の大きい数字も扱えるよう、数値へ変換せず桁数と文字列で比較する
 ///
 /// # Arguments
 /// * `a` - 比較する文字列 (小文字化済み)
@@ -376,14 +376,14 @@ mod tests {
         assert_eq!(sort_lines(input, false), "\n\n\n\n\nc,d\nz,\"a\nb\"\n");
     }
 
-    /// クォート内改行が無ければ、元の行の文字列のまま並び替えること
+    /// クォート内改行が無ければ、元の行の文字列のまま並び替えるようにすること
     #[test]
     fn test_sort_csv_like_lines_keeps_original_text() {
         let input = "log(\"y\", 2)\nlog(\"x\", 1)";
         assert_eq!(sort_lines(input, false), "log(\"x\", 1)\nlog(\"y\", 2)");
     }
 
-    /// クォート内改行が無ければ、CSV とみなせても空行を残し、元の末尾の改行も保つこと
+    /// クォート内改行が無ければ、CSV とみなせても空行を残し、元の末尾の改行も保つようにすること
     ///
     /// 空行は空文字列として比較するため、昇順では先頭に来る
     #[test]
@@ -392,7 +392,7 @@ mod tests {
         assert_eq!(sort_lines("b,1\n\na,2", false), "\na,2\nb,1");
     }
 
-    /// 行操作は元の末尾の改行の有無を保つこと
+    /// 行操作は元の末尾の改行の有無を保つようにすること
     #[test]
     fn test_line_actions_keep_trailing_newline() {
         // 末尾が改行 1 つの場合
@@ -410,7 +410,7 @@ mod tests {
         assert_eq!(remove_empty_lines("\n \n"), "");
     }
 
-    /// クォート内に単独の CR を含む CSV でも、CR を改行に変えず行単位で並び替えること
+    /// クォート内に単独の CR を含む CSV でも、CR を改行に変えず行単位で並び替えるようにすること
     #[test]
     fn test_sort_csv_with_lone_cr_keeps_lines() {
         let input = "\"\r\"zz,1\n\r,.";
@@ -418,7 +418,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), "\r,.\n\"\r\"zz,1");
     }
 
-    /// 降順で空行が最後に来ても、空行の数を保つこと
+    /// 降順で空行が最後に来ても、空行の数を保つようにすること
     #[test]
     fn test_sort_lines_descending_keeps_trailing_blank_line() {
         let output = sort_lines("\na\nb", true);
@@ -428,14 +428,14 @@ mod tests {
         assert_eq!(sort_lines(&output, true), output);
     }
 
-    /// 重複行削除で末尾の空行を残すこと
+    /// 重複行削除で末尾の空行を残すようにすること
     #[test]
     fn test_remove_duplicate_lines_keeps_trailing_blank_line() {
         assert_eq!(remove_duplicate_lines("a\n\na\n"), "a\n\n");
         assert!(matches!(remove_duplicate_lines("a\n\n"), Cow::Borrowed(_)));
     }
 
-    /// クォート内改行を含む CSV の重複削除をレコード単位で行うこと
+    /// クォート内改行を含む CSV の重複削除をレコード単位で行うようにすること
     ///
     /// 行単位で比べると、別のレコードの断片 (`x"` など) が重複と判定されて壊れる
     #[test]
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(remove_duplicate_lines("a,\"x\nb\na,\"x"), "a,\"x\nb");
     }
 
-    /// 空行削除の基本動作できるようにすること
+    /// 空行削除が基本どおりに動作すること
     #[test]
     fn test_remove_empty_lines() {
         let input = "line1\n\n  \nline2\n\t\nline3";
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(sort_lines_natural(input, false), "2,b\n9,c\n10,\"x\ny\"");
     }
 
-    /// `split_csv_records`: クォート内の改行・カンマ・エスケープしたクォートをレコードに含めること
+    /// `split_csv_records`: クォート内の改行・カンマ・エスケープしたクォートをレコードに含めるようにすること
     #[test]
     fn test_split_csv_records_quoted_fields() {
         assert_eq!(
@@ -586,7 +586,7 @@ mod tests {
         );
     }
 
-    /// `split_csv_records`: 1 レコードの CSV も読み、1 列のテキストは CSV として読まないこと
+    /// `split_csv_records`: 1 レコードの CSV も読み、1 列のテキストは CSV として読まないようにすること
     #[test]
     fn test_split_csv_records_single_record_or_column() {
         assert_eq!(
@@ -598,7 +598,7 @@ mod tests {
         assert_eq!(split_csv_records("\"\n\n\"\nx"), None);
     }
 
-    /// `split_csv_records`: RFC 4180 に従わないテキストは CSV として読まないこと
+    /// `split_csv_records`: RFC 4180 に従わないテキストは CSV として読まないようにすること
     #[test]
     fn test_split_csv_records_rejects_invalid_csv() {
         // クォートで囲まない値の途中のクォート
@@ -615,7 +615,7 @@ mod tests {
         );
     }
 
-    /// 1 レコードだけの CSV は、クォート内の改行で行に分けず変更しないこと
+    /// 1 レコードだけの CSV は、クォート内の改行で行に分けず変更しないようにすること
     #[test]
     fn test_sort_single_csv_record_keeps_quoted_newlines() {
         let input = "\"x\na,x\n0\",";
@@ -623,7 +623,7 @@ mod tests {
         assert!(matches!(sort_lines_natural(input, true), Cow::Borrowed(_)));
     }
 
-    /// 行単位の結果が CSV として読めても、再度並び替えたときに順序が変わらないこと
+    /// 行単位の結果が CSV として読めても、再度並び替えたときに順序が変わらないようにすること
     ///
     /// 閉じていないクォートを含むため行単位で並び替え、結果の `"x` と `0",` はクォート内改行を含むレコードになる
     #[test]
@@ -655,7 +655,7 @@ mod tests {
         assert_eq!(lines[2], "apple,1");
     }
 
-    /// 後ろの方にフィールド数の合わない行があっても行を失わずに並び替えること
+    /// 後ろの方にフィールド数の合わない行があっても行を失わずに並び替えるようにすること
     #[test]
     fn test_sort_csv_keeps_unparsable_record_after_many_rows() {
         let mut rows: Vec<String> = (0..10).map(|i| format!("a{i},\"b\nc\"")).collect();

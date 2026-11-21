@@ -306,7 +306,7 @@ notify_result = false
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
     }
 
-    /// v0 TOML は移行後に v1 へ更新され、設定値と `favorite_modes` が保持されるようにすること
+    /// v0 TOML は移行後に現行バージョンへ更新され、設定値と `favorite_modes` が保持されるようにすること
     #[test]
     fn test_prepare_loaded_migrates_v0_toml() {
         let v0_toml = r#"
@@ -328,7 +328,7 @@ interval_ms = 500
         assert!(prepared.favorite_modes.is_empty());
     }
 
-    /// v0 TOML を保存すると v1 スキーマで書き出されるようにすること
+    /// v0 TOML を保存すると現行スキーマで書き出されるようにすること
     #[test]
     fn test_save_after_v0_migration_writes_current_version() {
         use super::serialize::config_to_toml;
@@ -833,7 +833,7 @@ history_enabled = true
         assert_eq!(decoded.pipeline, config.pipeline);
     }
 
-    /// `normalize_pipeline` が画像モードを末尾へ移動し件数を制限すること
+    /// `normalize_pipeline` が画像モードを末尾へ移動すること
     #[test]
     fn test_normalize_pipeline_moves_image_mode_to_end() {
         let mut config = AppConfig {
@@ -852,6 +852,30 @@ history_enabled = true
                 RefineMode::UrlDecode,
                 RefineMode::ExcelToImage,
             ]
+        );
+    }
+
+    /// 段数が上限を超えても末尾の画像モードを残し、テキスト加工の超過分を切り捨てること
+    #[test]
+    fn test_normalize_pipeline_keeps_image_mode_when_truncating() {
+        let mut pipeline = vec![RefineMode::ExcelToImage];
+        pipeline.extend(std::iter::repeat_n(
+            RefineMode::Trim,
+            consts::MAX_PIPELINE_LENGTH,
+        ));
+        let mut config = AppConfig {
+            pipeline,
+            ..Default::default()
+        };
+        config.normalize_pipeline();
+
+        assert_eq!(config.pipeline.len(), consts::MAX_PIPELINE_LENGTH);
+        assert_eq!(config.pipeline.last(), Some(&RefineMode::ExcelToImage));
+        // 画像モード以外はテキスト加工のみ
+        assert!(
+            config.pipeline[..consts::MAX_PIPELINE_LENGTH - 1]
+                .iter()
+                .all(|mode| *mode == RefineMode::Trim)
         );
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::{RwLock, atomic::AtomicU64};
+use std::sync::{RwLock, RwLockWriteGuard, atomic::AtomicU64};
 
 use tao::event_loop::EventLoopProxy;
 
@@ -24,7 +24,9 @@ use crate::security::SecretString;
 pub struct AppState {
     worker: WorkerState,
     /// 永続化設定データ
-    pub config: RwLock<AppConfig>,
+    ///
+    /// 書き込みは `with_config_mut` に限定し、パニック時のロールバックを必ず通す
+    config: RwLock<AppConfig>,
     /// クリップボード監視スレッドの世代管理カウンタ
     pub monitor_generation: AtomicU64,
     clipboard_session: ClipboardSessionState,
@@ -38,7 +40,7 @@ pub struct AppState {
 // 初期化・設定保存・アクセサ
 // ======================================================================
 impl AppState {
-    /// デフォルトの設定を読み込んで新しい状態を生成する
+    /// 設定ファイルを読み込んで新しい状態を生成する
     ///
     /// # Arguments
     /// * `proxy` - メインイベントループへ通知を送るプロキシ
@@ -120,13 +122,41 @@ impl AppState {
 
     /// 設定を変更する
     ///
+    /// クロージャが変更の途中でパニックした場合は、呼び出し前の内容へ戻してからロックを解放する
+    /// ポイズン解除後に中途半端な設定を正常なものとして使い続け、次の保存でディスクへ書くのを防ぐ
+    ///
     /// # Arguments
     /// * `f` - `AppConfig` へ排他アクセスして変更を行うクロージャ
     ///
     /// # Returns
     /// * `R` - クロージャ `f` の戻り値
     pub fn with_config_mut<R>(&self, f: impl FnOnce(&mut AppConfig) -> R) -> R {
-        f(&mut self.config.write_ignore_poison())
+        let guard = self.config.write_ignore_poison();
+        let mut rollback = ConfigRollback {
+            snapshot: Some(guard.clone()),
+            guard,
+        };
+        let result = f(&mut rollback.guard);
+        rollback.snapshot = None;
+        result
+    }
+}
+
+/// `with_config_mut` のクロージャがパニックしたときに設定を変更前へ戻すガード
+///
+/// 書き込みロックより先に `Drop` が走るよう、ロックガードを内包する
+struct ConfigRollback<'a> {
+    guard: RwLockWriteGuard<'a, AppConfig>,
+    /// 変更前の設定。正常終了時は `None` にして復元しない
+    snapshot: Option<AppConfig>,
+}
+
+impl Drop for ConfigRollback<'_> {
+    fn drop(&mut self) {
+        if let Some(snapshot) = self.snapshot.take() {
+            crate::log_error!("設定の変更中にパニックが発生したため、変更前の設定へ戻します");
+            *self.guard = snapshot;
+        }
     }
 }
 
@@ -142,7 +172,7 @@ impl AppState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `MonitorSnapshot` - 監視ループ向けに設定フィールドをまとめて一括取得する
+    /// * `MonitorSnapshot` - 監視ループ向けの設定フィールドの写し
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
             pipeline: config.effective_pipeline(),
@@ -177,7 +207,7 @@ impl AppState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `MenuSnapshot` - トレイメニュー構築・同期向けに設定フィールドを一括取得する
+    /// * `MenuSnapshot` - トレイメニュー構築・同期向けの設定フィールドの写し
     pub fn menu_snapshot(&self) -> MenuSnapshot {
         self.with_config(|config| MenuSnapshot {
             mode: config.mode,
@@ -280,7 +310,7 @@ impl AppState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `bool` - 条件を満たす場合は `true`
+    /// * `bool` - 取り消した場合は `true`、記録が空の場合は `false`
     pub fn undo_last_continuous_record(&self) -> bool {
         let undone = self.clipboard_session.undo_last_continuous_record();
         if undone.is_some() {

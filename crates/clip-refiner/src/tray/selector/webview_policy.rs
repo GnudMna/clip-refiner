@@ -52,7 +52,7 @@ pub(crate) fn inline_script_block(js: &str) -> String {
 
 /// HTML の CSP プレースホルダを本番ポリシーへ置換する
 ///
-/// `script-src` は `inline_script_block(js)` で埋め込んだ固定スクリプトのハッシュのみ許可する。
+/// `script-src` は `inline_script_block(js)` で埋め込んだ固定スクリプトのハッシュのみ許可する
 /// ハッシュは HTML を走査せず `js` から計算するため、後から HTML に混入した
 /// `<script>` は実行されない
 ///
@@ -306,7 +306,7 @@ mod tests {
         assert!(!lf.contains('\r'));
     }
 
-    /// 長い拒否 URL を切り詰めること
+    /// 長い拒否 URL を切り詰めるようにすること
     #[test]
     fn preview_denied_webview_url_truncates() {
         let long = "https://example.com/".to_string() + &"a".repeat(300);
@@ -319,7 +319,7 @@ mod tests {
         );
     }
 
-    /// 多バイト文字を含む長い拒否 URL を文字境界で切り詰めること
+    /// 多バイト文字を含む長い拒否 URL を文字境界で切り詰めるようにすること
     #[test]
     fn preview_denied_webview_url_truncates_multibyte() {
         // 先頭 1 バイト + 3 バイト文字の並びで 200 バイト目を文字の途中にする

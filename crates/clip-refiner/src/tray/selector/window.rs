@@ -30,7 +30,7 @@ pub(crate) enum WindowVerticalAlign {
     UpperThird,
 }
 
-/// 生成済みウィンドウを現在のモニター中央付近へ配置する
+/// 生成済みウィンドウを現在のモニターの水平中央へ配置する (垂直位置は `align` に従う)
 pub(crate) fn position_window_on_monitor(window: &Window, align: WindowVerticalAlign) {
     let Some(monitor) = window.current_monitor() else {
         return;
@@ -119,7 +119,7 @@ pub(crate) struct WebSelectorWindow {
 }
 
 impl WebSelectorWindow {
-    /// 非表示のベースウィンドウと `WebView` を生成する
+    /// 渡された非表示ウィンドウ上に `WebView` を生成する
     ///
     /// 直前プロセスの `WebView2` ユーザーデータロックで失敗した場合に備え、
     /// 同一ディレクトリ再試行のあとプロセス固有ディレクトリへフォールバックする
@@ -305,7 +305,7 @@ impl WebSelectorWindow {
 // ======================================================================
 // ウィンドウ生成
 // ======================================================================
-/// 画面中央付近に配置する非表示セレクターウィンドウを生成する
+/// 画面の水平中央・上から 1/3 の位置に配置する非表示セレクターウィンドウを生成する
 pub(crate) fn build_hidden_selector_window(
     event_loop: &EventLoopWindowTarget<AppEvent>,
     title: &str,

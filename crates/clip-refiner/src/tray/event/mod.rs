@@ -42,7 +42,7 @@ pub(crate) use ocr::dispatch_ocr_result;
 #[cfg(test)]
 mod menu_event_tests;
 
-/// クイックセレクターのフォーカス喪失時に非表示へ遷移すべきか判定する
+/// セレクター (クイック / 登録クリップ) のフォーカス喪失時に非表示へ遷移すべきか判定する
 ///
 /// 表示直後のフォーカスロスト (Windows の Alt キーイベント等) は無視する
 pub(crate) fn should_hide_selector_on_focus_loss(elapsed_ms: u128) -> bool {
@@ -90,6 +90,8 @@ impl FocusDismissibleSelector for ClipSelectorWindow {
 /// * `menu` - トレイメニュー構造体
 /// * `state` - アプリケーションの共有状態
 /// * `clipboard_worker` - クリップボード・ワーカー
+/// * `quick_selector` - クイックセレクター (お気に入り・変換モード操作時の表示更新用、無い場合は `None`)
+/// * `control_flow` - イベントループの制御フロー (終了選択時に `Exit` にする)
 pub fn handle_menu_event(
     event: &MenuEvent,
     menu: &TrayMenu,

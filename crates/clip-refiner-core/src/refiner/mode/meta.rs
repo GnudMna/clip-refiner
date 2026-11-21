@@ -182,7 +182,7 @@ impl RefineMode {
     /// * `favorite_modes` - お気に入り登録済みモード (登録順)
     ///
     /// # Returns
-    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名・お気に入り状態を含む JSON 配列文字列
+    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名・お気に入り状態・お気に入りの登録順・画像出力モードかどうかを含む JSON 配列文字列
     pub fn to_json_list(favorite_modes: &[Self]) -> String {
         use std::collections::HashMap;
 
@@ -240,7 +240,7 @@ mod tests {
 
     use super::super::defs::{RefineCategory, RefineMode};
 
-    /// `RefineMode` のラベルとカテゴリが期待どおりであようにすること
+    /// `RefineMode` のラベルとカテゴリが期待どおりになるようにすること
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(RefineMode::ExcelToImage.category(), RefineCategory::Excel);
     }
 
-    /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されていようにすること
+    /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されるようにすること
     #[test]
     fn test_submenu_order_covers_all_categories() {
         use std::collections::HashSet;
@@ -310,7 +310,7 @@ mod tests {
         }
     }
 
-    /// `is_deferred_in_menu` が Datetime / Number のみ true であようにすること
+    /// `is_deferred_in_menu` が Datetime / Number のみ true を返すようにすること
     #[test]
     fn test_refine_category_is_deferred_in_menu() {
         use RefineCategory::*;
@@ -493,7 +493,7 @@ mod tests {
         assert!(RefineMode::quick_selector_modes().contains(&RefineMode::ExcelToImage));
     }
 
-    /// `ExcelToImage` がクイックセレクタに含まれるようにすること
+    /// `RefineMode::iter` が主要なバリアントを含む全 55 バリアントを列挙するようにすること
     #[test]
     fn test_refine_mode_variants() {
         let variants: Vec<_> = RefineMode::iter().collect();

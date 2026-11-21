@@ -73,7 +73,7 @@ pub(crate) fn copy_registered_clip(
 
 /// 登録クリップ本文の全文をセレクターのホバー表示へ渡す
 ///
-/// 画像・機密情報らしい本文・復号失敗の場合は何も返さない
+/// 画像・機密情報らしい本文・空白のみの本文・復号失敗の場合は何もしない
 pub(crate) fn show_registered_clip_full_text(
     state: &Arc<AppState>,
     clip_selector: &ClipSelectorWindow,
@@ -269,7 +269,7 @@ mod tests {
     use super::*;
     use crate::tray::state::test_app_state;
 
-    /// 編集用の取り出しがテキスト登録のラベルと全文を返し、機密らしい本文も省略しないこと
+    /// 編集用の取り出しがテキスト登録のラベルと全文を返し、機密らしい本文も省略しないようにすること
     #[test]
     fn registered_clip_for_edit_returns_label_and_full_text() {
         crate::test_helpers::with_temp_config_dir(|| {
@@ -292,7 +292,7 @@ mod tests {
         });
     }
 
-    /// 範囲外と画像登録は編集用に取り出せないこと
+    /// 範囲外と画像登録は編集用に取り出せないようにすること
     #[test]
     fn registered_clip_for_edit_rejects_missing_and_image() {
         crate::test_helpers::with_temp_config_dir(|| {
@@ -337,7 +337,7 @@ mod tests {
         });
     }
 
-    /// 編集内容の保存で、トークンが一致しない指定は別のクリップを書き換えず `NotFound` となること
+    /// 編集内容の保存で、トークンが一致しない指定は別のクリップを書き換えず `NotFound` となるようにすること
     #[test]
     fn stale_edit_request_does_not_update_other_clip() {
         crate::test_helpers::with_temp_config_dir(|| {

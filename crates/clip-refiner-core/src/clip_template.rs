@@ -61,8 +61,8 @@ pub enum ClipTemplateError {
 /// テンプレートを展開する
 ///
 /// 対応するプレースホルダは `{date}` `{time}` `{datetime}` (`{date:%Y/%m/%d}` のように
-/// chrono の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`、`{counter}`。
-/// `{counter}` は 1 回の展開の中ではすべて同じ値になる。
+/// chrono の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`、`{counter}`
+/// `{counter}` は 1 回の展開の中ではすべて同じ値になる
 /// `{{` / `}}` は `{` / `}` になる。未知の名前や閉じていない `{` は書かれたまま残す
 ///
 /// # Arguments
@@ -204,8 +204,8 @@ impl<'a> Iterator for Tokens<'a> {
 /// * `rest` - `{` で始まる文字列
 ///
 /// # Returns
-/// * `Option<(Placeholder, usize)>` - プレースホルダと消費したバイト数。
-///   閉じていない・未知の名前・引数を取らない名前への引数指定は `None`
+/// * `Option<(Placeholder, usize)>` - プレースホルダと消費したバイト数を返し、
+///   閉じていない・未知の名前・引数を取らない名前への引数指定は `None` を返す
 fn parse_placeholder(rest: &str) -> Option<(Placeholder<'_>, usize)> {
     let close = rest.find('}')?;
     let inner = &rest[1..close];

@@ -94,7 +94,7 @@ pub fn should_guide_runtime_install(err: &anyhow::Error) -> bool {
 /// ダウンロード案内ページを既定ブラウザで開く (プロセス内で1回まで)
 ///
 /// # Returns
-/// * `Result<bool>` - 実際に起動した場合は `Ok(true)`、既に開済みなら `Ok(false)`
+/// * `Result<bool>` - 実際に起動した場合は `Ok(true)`、既に開いていれば `Ok(false)`
 pub fn open_download_page_once() -> Result<bool> {
     if DOWNLOAD_PAGE_OPENED.swap(true, Ordering::SeqCst) {
         return Ok(false);

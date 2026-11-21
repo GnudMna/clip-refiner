@@ -2,7 +2,7 @@
 //!
 //! マスキングは通知・トレイメニュー・プレビューなど UI 表示の置換のみ
 //! クリップボード本体や履歴復元・登録クリップコピー時の本文は書き換えない
-//! AEAD と指紋は feature `config` が必要
+//! AEAD・指紋・`SecretString` は feature `config` が必要
 
 #[cfg(feature = "config")]
 mod clip_cipher;

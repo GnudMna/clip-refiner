@@ -85,7 +85,8 @@ struct RegisteredClipsPayloadWire {
 /// * `Result<(Vec<RegisteredClip>, bool)>` - 登録クリップ一覧と、形式移行が発生したか
 ///
 /// # Errors
-/// 鍵取得、ファイル読み込み、復号、JSON 解析、本文暗号化のいずれかに失敗した場合
+/// 鍵取得、ファイル読み込み、サイズ上限超過、復号、JSON 解析のいずれかに失敗した場合
+/// (個別エントリの変換失敗はエラーにせずスキップする)
 pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
     let result = read_registered_clips();
     let path = registered_clips_path();
@@ -158,7 +159,7 @@ fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool, bool)> {
 /// * `Result<()>` - 保存または削除に成功した場合は `Ok(())`
 ///
 /// # Errors
-/// 鍵取得、シリアライズ、暗号化、退避コピー、ファイル書き込みのいずれかに失敗した場合
+/// 鍵取得、シリアライズ、サイズ上限超過、暗号化、ディレクトリ作成、退避コピー、ファイル書き込みのいずれかに失敗した場合
 pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     ensure_clip_store_key()?;
 
@@ -216,7 +217,7 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
 /// * `clips` - 移行対象の登録クリップ一覧
 ///
 /// # Returns
-/// * `bool` - 1 件以上移行した場合は `true`
+/// * `bool` - 1 件以上移行した場合 (移行失敗で画像参照を外した場合を含む) は `true`
 pub fn migrate_legacy_clip_images(clips: &mut [RegisteredClip]) -> bool {
     let mut migrated = false;
     for clip in clips {
@@ -635,7 +636,7 @@ mod tests {
         });
     }
 
-    /// ファイルが存在しない場合は退避もマークもせず、空保存は何もしないこと
+    /// ファイルが存在しない場合は読み込み失敗として扱わず、退避もマークもしないようにすること
     #[test]
     fn missing_file_is_not_treated_as_load_failure() {
         crate::test_helpers::with_temp_config_dir(|| {

@@ -35,7 +35,7 @@ const LEGACY_IMAGE_EXT: &str = "png";
 /// * `Result<PathBuf>` - 登録画像ディレクトリのパス
 ///
 /// # Errors
-/// 設定ディレクトリ取得、ディレクトリ作成、パーミッション設定のいずれかに失敗した場合
+/// 設定ディレクトリ取得またはディレクトリ作成に失敗した場合 (パーミッション設定の失敗は警告のみ)
 pub fn registered_images_dir() -> Result<PathBuf> {
     let dir = get_config_dir()?.join(REGISTERED_IMAGES_DIR);
     if !dir.exists() {
@@ -59,7 +59,7 @@ pub fn registered_images_dir() -> Result<PathBuf> {
 /// * `Result<String>` - `registered-images` 内の相対ファイル名
 ///
 /// # Errors
-/// バッファ検証、PNG エンコード、暗号化、ファイル書き込みのいずれかに失敗した場合
+/// バッファ検証、PNG エンコード、サイズ上限超過、鍵取得、暗号化、ファイル書き込みのいずれかに失敗した場合
 pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<String> {
     validate_rgba_buffer(width, height, rgba)?;
 

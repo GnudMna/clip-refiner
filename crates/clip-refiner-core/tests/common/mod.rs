@@ -161,7 +161,7 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 // ======================================================================
 // アサーション
 // ======================================================================
-/// 全 `RefineMode` バリアントに回帰ケースが存在すること
+/// 全 `RefineMode` バリアントに回帰ケースが存在することを検証する
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();
     // 固定ケース 45 + ローカル日時 5 + 正規表現 4 + 画像 1 = 55

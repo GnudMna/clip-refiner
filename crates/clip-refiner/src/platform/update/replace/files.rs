@@ -214,7 +214,7 @@ impl ReplaceTransaction {
 
     /// ディレクトリを再帰的に同期する
     ///
-    /// 宛先に無いファイルは追加し、配布物に無い宛先のエントリは退避する
+    /// 配布物のファイルを追加・上書きし、配布物に無い宛先のエントリは退避する
     fn sync_dir(&mut self, from: &Path, to: &Path) -> Result<(), UpdateError> {
         self.ensure_dir(to)?;
 

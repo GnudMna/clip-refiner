@@ -28,7 +28,7 @@ impl App {
     /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合は `Err`
     ///
     /// # Errors
-    /// 状態・メニュー・ホットキーのいずれかの初期化に失敗した場合
+    /// 状態・メニュー・ホットキーの初期化、または履歴・連続記録メニューの更新に失敗した場合
     pub fn new(proxy: &EventLoopProxy<AppEvent>) -> Result<Self> {
         let (state, config_fallback, unknown_keys, unsupported_version_kept) =
             AppState::new(proxy.clone())?;

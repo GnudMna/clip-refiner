@@ -326,7 +326,7 @@ mode = "UrlDecode"
 pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 ```
 
-- **最大段数**: 10 段まで
+- **最大段数**: 10 段まで。超える分は切り捨てる (`ExcelToImage` は残す)
 - **画像出力**: `ExcelToImage` はパイプライン末尾へ自動移動
 - **HTML 形式**: `HtmlToMarkdown` は先頭のときだけクリップボードの HTML 形式を読み、`MarkdownToRichText` はテキスト加工の最終段のときだけ HTML 形式を書き込む ([リッチテキストと HTML 形式](modes.md#リッチテキストと-html-形式) 参照)
 - **通知**: 連鎖適用時は `URLデコード → 全体をトリム → JSON整形` のようにモード名を連結して表示

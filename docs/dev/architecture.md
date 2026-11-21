@@ -46,7 +46,7 @@ clip-refiner/
 │           ├── native/      # DPAPI (`config`)・クリップボード画像・画像のファイル貼り付け (`CF_HDROP`)・監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   ├── mode/        # `RefineMode` / `RefineCategory` の定義・表示名・CLI 名・メニュー順
-│           │   ├── dispatch/    # モードからカテゴリ別の変換処理への振り分け
+│           │   ├── dispatch/    # モードから変換処理への振り分け
 │           │   └── transform/   # 変換処理の本体 (`regex/` はキャッシュ / マッチタイムアウト / 実行パス / プレビュー)
 │           ├── security/    # 入力サイズ上限・表示マスキング・AEAD 暗号・鍵付き指紋・ゼロ化する文字列
 │           └── test_helpers/ # コア単体テスト用
@@ -72,7 +72,12 @@ clip-refiner/
 
 第三者クレートと `clip-refiner-core` の版はルート `Cargo.toml` の `[workspace.dependencies]` に置く。メンバ側は `workspace = true` とし、`optional` や追加 `features` だけを各 `Cargo.toml` に書く。
 
-`clip-refiner` の `platform/` はデスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API 取得・アセットのダウンロードと検証・MSI / ポータブル ZIP の適用を担う (利用者向けは [アプリの更新](../user/usage.md#アプリの更新))。更新の HTTPS 通信 (`ureq`) は TLS に OS 標準の SChannel、ルート証明書に Windows の証明書ストアを使い、独自の TLS 実装や CA バンドルは同梱しない (`platform/update/http.rs`)。多重起動の判定は `platform/single_instance.rs` の名前付き mutex で行う。`clip-refiner-core` の `native/` は feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く (`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける)。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護し、名前に `.<ログオンセッション ID>` を付けてセッションごとに分ける (多重起動防止の mutex がセッション単位のため。利用者向けは [ワンショット IPC](../user/security.md#ワンショット-ipc))。
+OS 連携と IPC の置き場所は次のとおり。
+
+- **`platform/` (`clip-refiner`):** デスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。多重起動の判定は `platform/single_instance.rs` の名前付き mutex で行う
+- **`platform/update/`:** gh-release-bridge の version API 取得・アセットのダウンロードと検証・MSI / ポータブル ZIP の適用を担う (利用者向けは [アプリの更新](../user/usage.md#アプリの更新))。HTTPS 通信 (`ureq`) は TLS に OS 標準の SChannel、ルート証明書に Windows の証明書ストアを使い、独自の TLS 実装や CA バンドルは同梱しない (`platform/update/http.rs`)
+- **`native/` (`clip-refiner-core`):** feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く。`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける
+- **`ipc/`:** 常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなる。パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護し、名前に `.<ログオンセッション ID>` を付けてセッションごとに分ける (多重起動防止の mutex がセッション単位のため。利用者向けは [ワンショット IPC](../user/security.md#ワンショット-ipc))
 
 本書のパス (構成図・表の 1 列目・バッククォートで囲んだパス) は `cargo test` (`tests/architecture_doc_flow.rs`) が実在を検証する。個々のファイルの責務はモジュールコメントに任せ、本書はディレクトリと命名規則の単位で書く。
 
@@ -239,7 +244,12 @@ flowchart TB
 
 ### UI の遅延生成
 
-クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成する。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。セレクターの非表示後の保持は `selector_webview_retention` で選べる (`Keep` 既定で保持、`DisposeOnHide` で非表示時破棄、`DisposeAfterIdle` で N 分アイドル後に破棄)。非表示は `hide_with_retention`、方針変更後の同期と期限到来破棄は毎ループの `sync_selector_retention`、アイドル起床は `apply_idle_control_flow` (`ControlFlow::WaitUntil`) が担う。設定ウィンドウと画面 OCR オーバーレイは非表示時に破棄する (アイドル時の RSS 削減)。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `OcrEvent::DisposeOverlay` を経由する。ライフサイクルは `selector/{lazy,quick,clip,retention}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
+クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成する。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。
+
+- **セレクターの保持:** 非表示後の扱いは `selector_webview_retention` で選べる (`Keep` 既定で保持、`DisposeOnHide` で非表示時破棄、`DisposeAfterIdle` で N 分アイドル後に破棄)。非表示は `hide_with_retention`、方針変更後の同期と期限到来破棄は毎ループの `sync_selector_retention`、アイドル起床は `apply_idle_control_flow` (`ControlFlow::WaitUntil`) が担う
+- **設定ウィンドウと OCR オーバーレイ:** 非表示時に破棄する (アイドル時の RSS 削減)。OCR オーバーレイの破棄は `OcrEvent::DisposeOverlay` を経由する
+- **イベントループとの関係:** 遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取る
+- **テスト:** ライフサイクルは `selector/{lazy,quick,clip,retention}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する
 
 ### 通信の要点
 

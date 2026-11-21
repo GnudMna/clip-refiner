@@ -104,7 +104,7 @@ impl OneshotIpcServer {
     /// * `worker` - クリップボードワーカーへのハンドル
     /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
     /// * `read_timeout` - 接続から要求 1 行を受け取り終えるまでの上限
-    /// * `first_instance_only` - 手持ちインスタンスが無いときに `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか
+    /// * `first_instance_only` - 名前を最初に確保するインスタンスにだけ `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか
     ///
     /// # Returns
     /// * `Result<Self>` - 停止時に待受を終了するガード

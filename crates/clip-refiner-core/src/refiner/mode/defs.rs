@@ -42,8 +42,8 @@ pub enum RefineMode {
     Base64Encode,
     /// Base64 文字列をデコードする。失敗した場合は元のテキストを維持する
     ///
-    /// 空白・改行は無視し、URL セーフ形式 (`-` `_`)・パディングの省略・data URI も受け付ける。
-    /// デコード結果が PNG / JPEG / BMP の画像なら、テキストではなくクリップボードの画像として書き込む。
+    /// 空白・改行は無視し、URL セーフ形式 (`-` `_`)・パディングの省略・data URI も受け付ける
+    /// デコード結果が PNG / JPEG / BMP の画像なら、テキストではなくクリップボードの画像として書き込む
     /// 画像以外で UTF-8 として不正な場合は失敗として扱う
     #[strum(message = "Base64デコード")]
     Base64Decode,
@@ -155,7 +155,7 @@ pub enum RefineMode {
     ExcelToImage,
     /// 日時を `YYYY-MM-DD HH:MM:SS` 形式のローカル日時文字列へ変換する
     ///
-    /// 入力の形式 (Unixタイムスタンプ・Excel のシリアル値・ISO 8601・RFC 2822・和文形式・和暦・月名と米国式) は行ごとに自動で判定する。
+    /// 入力の形式 (Unixタイムスタンプ・Excel のシリアル値・ISO 8601・RFC 2822・和文形式・和暦・月名と米国式) は行ごとに自動で判定する
     /// 旧名 `TimestampToDatetime` / `timestamp-to-datetime` も受け付ける
     #[strum(
         to_string = "to-datetime-string",
@@ -181,7 +181,7 @@ pub enum RefineMode {
     ToJapaneseDatetime,
     /// 日時をUnixタイムスタンプへ変換する
     ///
-    /// Unixタイムスタンプの数値は変換しない。
+    /// Unixタイムスタンプの数値は変換しない
     /// 旧名 `DatetimeToTimestamp` / `datetime-to-timestamp` も受け付ける
     #[strum(
         to_string = "to-unix-timestamp",

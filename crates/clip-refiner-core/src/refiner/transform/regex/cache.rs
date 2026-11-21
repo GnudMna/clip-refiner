@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(first, second);
     }
 
-    /// 異なるパターンを複数キャッシュできること
+    /// 異なるパターンを複数キャッシュできるようにすること
     #[test]
     fn test_regex_cache_keeps_multiple_entries() {
         let mut cache = RegexPatternCache::default();

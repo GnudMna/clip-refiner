@@ -53,7 +53,7 @@ impl InMemoryTextClipboard {
         }
     }
 
-    /// Excel 描画ビットマップを同時に保持するクリップボードを生成する
+    /// 読み取り元の画像 (Excel 描画ビットマップなど) を同時に保持するクリップボードを生成する
     ///
     /// # Arguments
     /// * `self` - ベースとなるインメモリクリップボード
@@ -87,7 +87,7 @@ impl InMemoryTextClipboard {
         }
     }
 
-    /// 次の `get_text` を失敗させる
+    /// 以降の `get_text` をすべて失敗させる
     ///
     /// # Arguments
     /// * `self` - 設定対象のインメモリクリップボード
@@ -100,7 +100,7 @@ impl InMemoryTextClipboard {
         self
     }
 
-    /// 次の `set_text` を失敗させる
+    /// 以降の `set_text` / `set_html` をすべて失敗させる
     ///
     /// # Arguments
     /// * `self` - 設定対象のインメモリクリップボード
@@ -128,7 +128,7 @@ impl InMemoryTextClipboard {
 
     /// 次の `get_text` の直後に別アプリがコピーしたものとして内容を差し替える
     ///
-    /// 本文の読み取りと書き戻しの間に入るコピー (パスワードマネージャー等) を再現する。
+    /// 本文の読み取りと書き戻しの間に入るコピー (パスワードマネージャー等) を再現する
     /// 差し替え時に変更トークンが進む
     ///
     /// # Arguments

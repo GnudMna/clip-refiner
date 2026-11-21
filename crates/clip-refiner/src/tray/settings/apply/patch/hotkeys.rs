@@ -11,7 +11,7 @@ use crate::tray::state::{AppState, HotkeyEvent};
 // ======================================================================
 /// ホットキー設定のパッチを適用する
 ///
-/// 不正・重複は `fix_invalid` で正規化し、OS 再登録は `ReloadHotkeys` で行う
+/// 不正・重複は `fix_invalid` で正規化し、OS 再登録は `HotkeyEvent::ReloadAll` で行う
 /// 正規化が発生した場合は設定 UI 向けのフィードバックを返す
 pub(super) fn apply_hotkeys_patch(
     patch: &SettingsPatch,

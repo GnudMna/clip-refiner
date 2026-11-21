@@ -228,7 +228,7 @@ fn oneshot_ipc_pipe_drops_oversized_request_without_response() {
         drop(rx);
         let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
 
-        // パイプバッファ (64 KiB) より小さく、メッセージ上限 (64 KiB) より大きい行
+        // メッセージ上限 (64 KiB) をわずかに超える行
         // (改行はクライアントの writeln が付与する)
         let oversized = "x".repeat(64 * 1024 + 64);
         let err = send_raw_oneshot_line(&pipe_name, &oversized).expect_err("応答なし切断を期待");

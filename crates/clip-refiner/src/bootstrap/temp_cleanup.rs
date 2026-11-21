@@ -30,7 +30,7 @@ const FALLBACK_DIR_PREFIX: &str = "pid-";
 /// 保持時間を過ぎた作業ディレクトリを一時フォルダから削除する
 ///
 /// 対象は `clip-refiner-update` 直下の版ごとのフォルダと、
-/// `ClipRefiner-*-WebView2*` 直下の `pid-*` フォルダ。
+/// `ClipRefiner-*-WebView2*` 直下の `pid-*` フォルダ
 /// 削除できないものは残し、次回の起動時に再試行する
 pub(super) fn remove_stale_temp_dirs() {
     remove_stale_temp_dirs_in(

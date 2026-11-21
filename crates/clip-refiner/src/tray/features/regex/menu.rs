@@ -104,7 +104,7 @@ impl RegexPresetMenu {
 }
 
 impl TrayMenu {
-    /// 正規表現プリセットメニューの再構築失敗をログする
+    /// 正規表現プリセットメニューを再構築し、失敗時はログに記録する
     pub(crate) fn refresh_regex_presets_logged(&self, state: &AppState) {
         if let Err(err) = self.refresh_regex_presets(state) {
             dispatch::log_menu_operation_error("正規表現プリセットメニューの再構築", err);

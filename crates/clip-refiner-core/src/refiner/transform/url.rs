@@ -19,7 +19,7 @@ const ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
 // ======================================================================
 /// 文字列をURLエンコード(パーセントエンコーディング)する
 ///
-/// 英数字と `-` `.` `_` `~` 以外の文字を `%XX` 形式に変換する。空白は `%20` にする。
+/// 英数字と `-` `.` `_` `~` 以外の文字を `%XX` 形式に変換する。空白は `%20` にする
 ///
 /// # Arguments
 /// * `input` - エンコード対象の文字列
@@ -32,8 +32,8 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 
 /// URLエンコードされた文字列をデコードする
 ///
-/// `%XX` 形式の記述を元の文字に戻す。結果はUTF-8として解釈される。
-/// `+` はメールアドレスの `user+tag@example.com` などで文字そのものとして使われるため、そのまま残す。
+/// `%XX` 形式の記述を元の文字に戻す。結果はUTF-8として解釈される
+/// `+` はメールアドレスの `user+tag@example.com` などで文字そのものとして使われるため、そのまま残す
 ///
 /// # Arguments
 /// * `input` - デコード対象の文字列
@@ -42,7 +42,7 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 /// * `Result<String, std::str::Utf8Error>` - デコードされた文字列
 ///
 /// # Errors
-/// 不正なパーセントエンコード、または UTF-8 として不正な場合
+/// デコード結果が UTF-8 として不正な場合 (`%ZZ` のような不正なパーセントエンコードはエラーにせずそのまま残す)
 pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
@@ -63,7 +63,7 @@ pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
 /// * `input` - 対象のテキスト (URL単体、URLを含む文章、URLの一覧など)
 ///
 /// # Returns
-/// * `Cow<'_, str>` - UTMパラメータが除去されたテキスト。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - UTMパラメータが除去されたテキスト。変更がない場合は元の文字列への参照を返す
 pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut output: Option<String> = None;
     // `input` のうち `output` へ未コピーの範囲の開始位置
@@ -109,7 +109,7 @@ fn is_query_terminator(c: char) -> bool {
 /// * `from` - `?` の直後の位置
 ///
 /// # Returns
-/// * `usize` - 終了位置 (排他)。文末の句読点は含めない。
+/// * `usize` - 終了位置 (排他)。文末の句読点は含めない
 fn query_end(input: &str, from: usize) -> usize {
     let rest = &input[from..];
     let len = rest.find(is_query_terminator).unwrap_or(rest.len());
@@ -132,7 +132,8 @@ fn is_tracking_param(key: &str) -> bool {
 /// * `query_and_fragment` - `?` の直後から始まるクエリ文字列 (`#` 以降のフラグメントを含む)
 ///
 /// # Returns
-/// * `Option<String>` - 除去した場合は、`?` を含めた置き換え後の文字列。除去するものがなければ `None`。
+/// * `Option<String>` - 除去した場合は、`?` を含めた置き換え後の文字列 (パラメータがすべて除去された場合は `?` を含めない)
+///   除去するものがなければ `None`
 fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
     // クエリ文字列とフラグメント(#以降)を分離する
     let (query, fragment) = match query_and_fragment.split_once('#') {
@@ -173,8 +174,7 @@ fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// 英数字のURLエンコードできるようにすること
-    /// 変更されないことを確認できるようにすること
+    /// 英数字はURLエンコードで変更しないようにすること
     #[test]
     fn test_url_encode_alphanumeric() {
         assert_eq!(url_encode("abc123"), "abc123");
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
-    /// `+` は空白にせずそのまま残し、`%2B` は `+` に戻すこと
+    /// `+` は空白にせずそのまま残し、`%2B` は `+` に戻すようにすること
     #[test]
     fn test_url_decode_plus() {
         assert_eq!(url_decode("foo+bar").unwrap(), "foo+bar");
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(url_decode("a%26b%3Dc%2Bd%2Fe").unwrap(), "a&b=c+d/e");
     }
 
-    /// `url_encode` の結果を `url_decode` で元に戻せること
+    /// `url_encode` の結果を `url_decode` で元に戻せるようにすること
     #[test]
     fn test_url_encode_decode_roundtrip() {
         let original = "user+tag@example.com a&b=c/d";
@@ -224,14 +224,13 @@ mod tests {
         assert_eq!(url_decode("%E3%81%82%E3%81%84%E3%81%86").unwrap(), "あいう");
     }
 
-    /// 不正なUTF-8シーケンスのURLデコードできるようにすること
-    /// エラーになることを確認できるようにすること
+    /// 不正なUTF-8シーケンスのURLデコードはエラーとすること
     #[test]
     fn test_url_decode_bad_utf8() {
         assert!(url_decode("%FF").is_err());
     }
 
-    /// UTMパラメータ削除のテスト(基本)できるようにすること
+    /// 基本的なUTMパラメータを削除できるようにすること
     #[test]
     fn test_remove_utm_params() {
         assert_eq!(
@@ -281,7 +280,7 @@ mod tests {
         assert_eq!(url_encode("あいう"), "%E3%81%82%E3%81%84%E3%81%86");
     }
 
-    /// UTMパラメータが他のパラメータと混在している場合できるようにすること
+    /// UTMパラメータが他のパラメータと混在していても、UTMパラメータだけを除去できるようにすること
     #[test]
     fn test_remove_utm_params_complex() {
         assert_eq!(
@@ -411,7 +410,7 @@ mod tests {
         );
     }
 
-    /// 変更するURLがない文章は元の参照をそのまま返すこと
+    /// 変更するURLがない文章は元の参照をそのまま返すようにすること
     #[test]
     fn test_remove_utm_params_unchanged_text_is_borrowed() {
         let input = "see https://b.com/?id=1\n  and more";

@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(to_halfwidth("゛゜"), "ﾞﾟ");
     }
 
-    /// 半角に対応する文字が無いものはそのまま残すこと
+    /// 半角に対応する文字が無いものはそのまま残すようにすること
     #[test]
     fn test_to_halfwidth_keeps_unmapped() {
         assert_eq!(to_halfwidth("ひらがなと漢字"), "ひらがなと漢字");
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(to_fullwidth("ｶﾞﾞ"), "ガ゛");
     }
 
-    /// 全角に対応する文字が無いものはそのまま残すこと
+    /// 全角に対応する文字が無いものはそのまま残すようにすること
     #[test]
     fn test_to_fullwidth_keeps_unmapped() {
         assert_eq!(to_fullwidth("ab\tc\r\n"), "ａｂ\tｃ\r\n");
@@ -275,7 +275,7 @@ mod tests {
         assert!(matches!(to_fullwidth("\r\n"), Cow::Borrowed(_)));
     }
 
-    /// 半角カナ領域の全文字が往復変換で元に戻ること
+    /// 半角カナ領域の全文字が往復変換で元に戻るようにすること
     #[test]
     fn test_halfwidth_kana_round_trip() {
         let halfwidth: String = (0xFF61..=0xFF9D).filter_map(char::from_u32).collect();

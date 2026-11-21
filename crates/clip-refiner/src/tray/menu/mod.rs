@@ -52,7 +52,7 @@ mod tests {
         );
     }
 
-    /// 選択カテゴリのサブメニューにチェックプレフィックスが付くとすること
+    /// 選択カテゴリのサブメニューにチェックプレフィックスが付くようにすること
     #[test]
     fn refresh_category_labels_marks_current_category() {
         use std::collections::HashSet;
@@ -102,7 +102,7 @@ mod tests {
         assert!(url_group.submenu.text().starts_with('✓'));
     }
 
-    /// 自動変換の切り替えと変換モード変更が変換モードのサブメニュー名へ反映されること
+    /// 自動変換の切り替えと変換モード変更が変換モードのサブメニュー名へ反映されるようにすること
     #[test]
     fn refine_submenu_title_follows_auto_refine_and_mode() {
         let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
@@ -134,7 +134,7 @@ mod tests {
         );
     }
 
-    /// 連続記録有効時は正規表現プリセットメニューだけが無効になり、変換モードメニューは操作できること
+    /// 連続記録有効時は正規表現プリセットメニューだけが無効になり、変換モードメニューは操作できるようにすること
     #[test]
     fn sync_auto_processing_state_disables_regex_presets_when_continuous_record_enabled() {
         let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {

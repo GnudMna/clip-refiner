@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(prepared.height, 80);
     }
 
-    /// 十分なサイズの画像は拡大しないできるようにすること
+    /// 十分なサイズの画像は拡大しないこと
     #[test]
     fn prepare_ocr_image_keeps_large_selection() {
         let image = RgbaImage {
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(prepared.height, 120);
     }
 
-    /// 最近傍拡大でピクセルが複製されるできるようにすること
+    /// 最近傍拡大でピクセルを複製すること
     #[test]
     fn upscale_nearest_duplicates_pixels() {
         let image = RgbaImage {

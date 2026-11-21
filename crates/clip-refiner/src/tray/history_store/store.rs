@@ -81,7 +81,7 @@ impl EncryptedHistoryStore {
     /// 指定インデックスの履歴を復号して返す
     ///
     /// # Arguments
-    /// * `index` - 履歴ストア内のインデックス (0 が最新)
+    /// * `index` - ストア内のインデックス (`add` で積んだ履歴では 0 が最新、`enqueue` で積んだキューでは 0 が最も古い)
     ///
     /// # Returns
     /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
@@ -101,7 +101,7 @@ impl EncryptedHistoryStore {
 impl EncryptedHistoryStore {
     /// 履歴を追加する
     ///
-    /// 空文字は無視し、同一内容 (指紋一致) は先頭へ移動する
+    /// 空白のみの文字列は無視し、同一内容 (指紋一致) は先頭へ移動する
     ///
     /// # Arguments
     /// * `text` - 追加する履歴テキスト
@@ -174,7 +174,7 @@ impl EncryptedHistoryStore {
     /// * `self` - この `EncryptedHistoryStore`
     ///
     /// # Returns
-    /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
+    /// * `Option<SecretString>` - 先頭エントリ。空の場合や復号失敗時は `None`
     pub fn discharge_front(&mut self) -> Option<SecretString> {
         if self.entries.is_empty() {
             return None;
@@ -193,7 +193,7 @@ impl EncryptedHistoryStore {
     /// * `index` - キュー内インデックス (0 が先頭)
     ///
     /// # Returns
-    /// * `Option<SecretString>` - 排出した本文。範囲外の場合は `None`
+    /// * `Option<SecretString>` - 排出した本文。範囲外や復号失敗時は `None`
     pub fn discharge_at(&mut self, index: usize) -> Option<SecretString> {
         if index >= self.entries.len() {
             return None;
@@ -246,7 +246,7 @@ impl EncryptedHistoryStore {
     /// * `self` - この `EncryptedHistoryStore`
     ///
     /// # Returns
-    /// * `Option<SecretString>` - 末尾エントリ。空の場合は `None`
+    /// * `Option<SecretString>` - 末尾エントリ。空の場合や復号失敗時は `None`
     pub fn pop_back(&mut self) -> Option<SecretString> {
         let entry = self.entries.pop()?;
         self.decrypt_entry(&entry)

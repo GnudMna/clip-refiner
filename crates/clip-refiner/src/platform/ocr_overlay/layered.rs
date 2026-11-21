@@ -150,6 +150,8 @@ impl LayeredPresenter {
             .and_then(|w| w.checked_mul(usize::try_from(height).ok()?))
             .and_then(|pixels| pixels.checked_mul(4))
             .context("DIB セクションのサイズ計算に失敗")?;
+        // ハンドル取得後に `?` で抜けると解放漏れになるため、失敗しうる前処理は先に済ませる
+        let bmi = bitmap_info(width, height)?;
 
         // SAFETY: 失敗時は取得済みのハンドルだけを解放して早期に返す
         // `bmi` / `bits` は呼び出し中に生存するローカル変数を指す
@@ -165,21 +167,32 @@ impl LayeredPresenter {
                 bail!("互換 DC の作成に失敗");
             }
 
-            let bmi = bitmap_info(width, height)?;
             let mut bits: *mut core::ffi::c_void = ptr::null_mut();
-            let hbmp = CreateDIBSection(
+            let created = CreateDIBSection(
                 Some(hdc_mem),
                 &raw const bmi,
                 DIB_RGB_COLORS,
                 &raw mut bits,
                 None,
                 0,
-            )?;
-            if hbmp.is_invalid() || bits.is_null() {
-                let _ = DeleteDC(hdc_mem);
-                let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
-                bail!("DIB セクションの作成に失敗");
-            }
+            );
+            let hbmp = match created {
+                Ok(hbmp) if !hbmp.is_invalid() && !bits.is_null() => hbmp,
+                other => {
+                    if let Ok(hbmp) = &other
+                        && !hbmp.is_invalid()
+                    {
+                        let _ = DeleteObject((*hbmp).into());
+                    }
+                    let _ = DeleteDC(hdc_mem);
+                    let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
+                    let error = match other {
+                        Err(err) => anyhow::Error::new(err),
+                        Ok(_) => anyhow::anyhow!("無効なハンドルが返された"),
+                    };
+                    return Err(error.context("DIB セクションの作成に失敗"));
+                }
+            };
 
             let saved_bitmap = SelectObject(hdc_mem, hbmp.into());
             Ok(Self {
@@ -405,7 +418,7 @@ mod tests {
         assert_eq!(bgra[3], DIM_ALPHA);
     }
 
-    /// 差分更新で選択範囲を戻せようにすること
+    /// 透明にした選択範囲を暗転状態へ戻せること
     #[test]
     fn restore_dim_rect_refills_selection_area() {
         let dim_row = build_dim_row(4);
@@ -465,5 +478,34 @@ mod tests {
 
         // 選択外は暗転のまま
         assert_eq!(bgra[3], DIM_ALPHA);
+    }
+
+    /// DIB セクションの確保に失敗しても GDI ハンドルを解放すること
+    #[test]
+    fn presenter_new_releases_handles_on_failure() {
+        use windows::Win32::System::Threading::{
+            GR_GDIOBJECTS, GetCurrentProcess, GetGuiResources,
+        };
+
+        const ATTEMPTS: u32 = 32;
+        // SAFETY: 現在のプロセスの擬似ハンドルで GDI オブジェクト数を読むだけ
+        let gdi_objects = || unsafe { GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) };
+
+        let before = gdi_objects();
+        for _ in 0..ATTEMPTS {
+            // 幅が `i32` に収まらず `BITMAPINFO` を作れない
+            assert!(
+                LayeredPresenter::new(u32::try_from(i32::MAX).unwrap_or(u32::MAX) + 1, 1).is_err()
+            );
+            // 約 40 GB のため `CreateDIBSection` が失敗する
+            assert!(LayeredPresenter::new(100_000, 100_000).is_err());
+        }
+        let after = gdi_objects();
+
+        // 解放漏れがあれば試行ごとに互換 DC が残る。並行するテストの増減を許容して判定する
+        assert!(
+            after.saturating_sub(before) < ATTEMPTS,
+            "GDI オブジェクトが増え続けた: {before} -> {after}"
+        );
     }
 }

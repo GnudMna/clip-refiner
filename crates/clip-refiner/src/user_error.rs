@@ -451,7 +451,7 @@ mod tests {
         assert!(notification.body().contains("キュー"));
     }
 
-    /// 起動失敗通知は長文を切り詰めようにすること
+    /// 起動失敗通知は長文を切り詰めるようにすること
     #[test]
     fn fatal_startup_truncates_long_body() {
         let err = anyhow::anyhow!("x".repeat(300));

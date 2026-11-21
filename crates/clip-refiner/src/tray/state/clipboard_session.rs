@@ -196,7 +196,7 @@ impl ClipboardSessionState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `usize` - 数値
+    /// * `usize` - 履歴の件数
     pub fn history_len(&self) -> usize {
         self.history_store.lock_ignore_poison().len()
     }
@@ -259,7 +259,7 @@ impl ClipboardSessionState {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `usize` - 数値
+    /// * `usize` - 連続記録の件数
     pub fn continuous_record_len(&self) -> usize {
         self.continuous_record_store.lock_ignore_poison().len()
     }
@@ -425,7 +425,7 @@ mod tests {
         assert!(ps.matches_last_written("written"));
     }
 
-    /// 履歴復元など外部設定時は書き戻しフラグを1回分のエコーとして記録すること
+    /// 履歴復元など外部設定時は書き戻し指紋と観測済み指紋の両方を更新すること
     #[test]
     fn record_clipboard_set_updates_both_fingerprints() {
         let session = session();

@@ -47,7 +47,7 @@ impl MonitorLoopState {
     /// 監視世代の切り替え時にベースラインを再同期する
     ///
     /// 現在のクリップボード本文を観測済みとして記録し、イベント監視用トークンと
-    /// ポーリング用タイマーをリセットする。監視除外が指定された内容は本文を読まない。
+    /// ポーリング用タイマーをリセットする。監視除外が指定された内容は本文を読まない
     ///
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
@@ -169,6 +169,7 @@ impl MonitorLoopState {
     /// 連続記録向けにクリップボード変更を検知する
     ///
     /// 監視方式に依存せず変更トークンで検知する (`ClipboardChanged` 起床後も同じ判定)
+    /// トークンを取得できない環境では `interval_ms` 間隔で本文を観測する
     fn tick_continuous_record(
         &mut self,
         clipboard: &mut OwnedClipboard,
@@ -284,8 +285,8 @@ pub(super) fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLo
 
 /// 監視世代を同期する
 ///
-/// 現在のクリップボード本文を観測済みとして記録し、イベント監視用トークンと
-/// ポーリング用タイマーをリセットする
+/// 監視世代が 0 なら追跡中の世代を 0 に戻す。追跡中の世代と異なる場合だけ
+/// `MonitorLoopState::reset` でベースライン (観測済み本文・トークン・ポーリング用タイマー) を再同期する
 ///
 /// # Arguments
 /// * `monitor` - 監視ループ状態

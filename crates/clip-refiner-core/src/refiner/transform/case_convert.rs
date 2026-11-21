@@ -5,7 +5,7 @@ use std::borrow::Cow;
 // ======================================================================
 /// 識別子文字列を単語列へ分割する
 ///
-/// `snake_case` / `kebab-case` / 空白区切り / `camelCase` / `PascalCase` に対応。
+/// `snake_case` / `kebab-case` / 空白区切り / `camelCase` / `PascalCase` に対応
 /// 区切り文字で分けた各部分にも `camelCase` の境界を適用する (`myVar_name` → `my`, `var`, `name`)
 fn split_identifier(input: &str) -> Vec<String> {
     input

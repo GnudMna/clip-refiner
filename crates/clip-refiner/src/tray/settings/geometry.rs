@@ -103,7 +103,9 @@ pub(crate) fn save_settings_window_geometry(window: &Window) {
     }
 }
 
-/// 保存済み幾何を `WindowBuilder` へ適用する
+/// 保存済み幾何のサイズをクランプして `WindowBuilder` へ適用する
+///
+/// 位置は生成後に `apply_saved_position` で適用する
 pub(crate) fn apply_geometry_to_builder(
     mut builder: WindowBuilder,
     geometry: SettingsWindowGeometry,
@@ -114,6 +116,8 @@ pub(crate) fn apply_geometry_to_builder(
 }
 
 /// 生成済みウィンドウへ保存済み位置を適用する
+///
+/// 位置が未保存の場合はモニター中央へ配置する
 pub(crate) fn apply_saved_position(window: &Window, geometry: SettingsWindowGeometry) {
     let Some(x) = geometry.x else {
         crate::tray::selector::position_window_on_monitor(

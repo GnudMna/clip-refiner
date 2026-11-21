@@ -17,8 +17,8 @@ path = "src/lib.rs"
 
 [dependencies]
 clip-refiner-core = { path = "../crates/clip-refiner-core", default-features = false }
-libfuzzer-sys = "0.4.10"
-serde_json = "1.0.150"
+libfuzzer-sys = "0.4.13"
+serde_json = "1.0.154"
 strum = "0.28.0"
 
 [workspace]

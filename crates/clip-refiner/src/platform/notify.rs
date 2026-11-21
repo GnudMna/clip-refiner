@@ -41,7 +41,7 @@ pub fn init_notifications() {
 /// システム通知を表示する
 ///
 /// OSの通知機能を使用して、デスクトップ上にメッセージを表示する
-/// 通知は約3秒後に自動的に消える
+/// 通知は短い表示時間 (`duration="short"`) の経過後に自動的に消える
 /// 表示に失敗した場合はログへ記録する
 ///
 /// # Arguments
@@ -224,7 +224,7 @@ mod tests {
         );
     }
 
-    /// `REG_EXPAND_SZ` の型が正しいとなるようにすること
+    /// `to_reg_expand_sz` が `REG_EXPAND_SZ` 型の値を返すこと
     #[test]
     fn to_reg_expand_sz_uses_expand_sz_type() {
         assert_eq!(to_reg_expand_sz("ClipRefiner").vtype, REG_EXPAND_SZ);

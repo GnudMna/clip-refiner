@@ -47,7 +47,7 @@ pub(super) struct Args {
     /// 正規表現で複数行モードを有効にする
     #[arg(long = "regex-multiline")]
     pub(super) regex_multiline: bool,
-    /// 正規表現プリセット名 (`config.toml` の `regex.presets[].name` で先頭一致)
+    /// 正規表現プリセット名 (`config.toml` の `regex.presets[].name` と完全一致する最初のプリセット)
     #[arg(long = "regex-preset")]
     pub(super) regex_preset: Option<String>,
     /// E2E 用: 指定 `WebView` を自動表示して常駐する (Playwright + CDP)

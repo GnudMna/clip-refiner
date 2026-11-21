@@ -45,7 +45,7 @@ pub struct MockReleaseBridge {
 /// モックが返す version JSON とアセット本文
 #[derive(Debug, Default, Clone)]
 struct BridgeRoutes {
-    /// `GET /{owner}/{repo}/version` の本文 (空なら 404)
+    /// `GET /{owner}/{repo}/version` の本文 (`None` なら 404)
     version_body: Option<Vec<u8>>,
     /// パス (`/{owner}/{repo}/{tag}/{asset}`) → 本文
     assets: HashMap<String, Vec<u8>>,
@@ -106,7 +106,7 @@ impl MockReleaseBridge {
     /// * `self` - 自身
     ///
     /// # Returns
-    /// * `&str` - 文字列
+    /// * `&str` - `http://127.0.0.1:{port}` 形式のベース URL
     #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url

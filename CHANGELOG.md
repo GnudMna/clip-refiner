@@ -29,6 +29,18 @@
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-24
+
+### Fixed
+
+- 加工パイプラインが上限の段数を超えると、末尾の画像出力 (`ExcelToImage`) が外れる問題を修正
+- 設定の変更中に内部エラーが起きると、途中まで変更された設定が保存される恐れがある問題を修正
+- 画面 OCR の範囲選択の表示準備に失敗するたびに、Windows の描画資源が解放されずに残る問題を修正
+
+### Security
+
+- 脆弱性が報告された暗号処理ライブラリを修正版へ更新
+
 ## [3.0.0] - 2026-10-18
 
 ### Changed
@@ -1015,7 +1027,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.1...develop
+[3.0.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.0...v3.0.1
 [3.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.2.0...v3.0.0
 [2.2.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.1...v2.2.0
 [2.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...v2.1.1

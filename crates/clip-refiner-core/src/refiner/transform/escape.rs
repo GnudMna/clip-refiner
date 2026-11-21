@@ -8,12 +8,13 @@ use std::fmt::Write;
 ///
 /// JSONやプログラム文字列内で特殊な意味を持つ文字(改行、タブ、ダブルクォートなど)の前に
 /// バックスラッシュを挿入する
+/// 名前付きエスケープを持たない制御文字 (U+0000..U+001F) は `\u00XX` 形式にする
 ///
 /// # Arguments
 /// * `input` - エスケープ対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す
 pub fn escape_string(input: &str) -> Cow<'_, str> {
     if input.is_empty() {
         return Cow::Borrowed(input);
@@ -62,7 +63,7 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
 /// * `input` - エスケープ解除対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す
 pub fn unescape_string(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -167,7 +168,7 @@ const REGEX_META_CHARS: &str = "\\.+*?()|[]{}^$#&-~";
 /// * `input` - エスケープ対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - エスケープ済みの文字列。変更がない場合は元の文字列への参照を返す
 pub fn regex_escape(input: &str) -> Cow<'_, str> {
     let result = regex::escape(input);
     if result == input {
@@ -185,7 +186,7 @@ pub fn regex_escape(input: &str) -> Cow<'_, str> {
 /// * `input` - エスケープ解除対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す。
+/// * `Cow<'_, str>` - エスケープ解除済みの文字列。変更がない場合は元の文字列への参照を返す
 pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     if !input.contains('\\') {
         return Cow::Borrowed(input);
@@ -229,7 +230,7 @@ mod tests {
         assert!(matches!(escape_string("plain"), Cow::Borrowed(_)));
     }
 
-    /// アンエスケープの基本動作できるようにすること
+    /// アンエスケープが基本どおりに動作すること
     #[test]
     fn test_unescape_string() {
         assert_eq!(unescape_string("hello\\nworld"), "hello\nworld");
@@ -258,7 +259,7 @@ mod tests {
         assert_eq!(unescape_string("\\uD83D\\u+E00"), "\\uD83D\\u+E00");
     }
 
-    /// `regex_escape` の基本動作できるようにすること
+    /// `regex_escape` が基本どおりに動作すること
     #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("h.w"), "h\\.w");
@@ -266,7 +267,7 @@ mod tests {
         assert!(matches!(regex_escape("plain"), Cow::Borrowed(_)));
     }
 
-    /// `regex_unescape` の基本動作できるようにすること
+    /// `regex_unescape` が基本どおりに動作すること
     #[test]
     fn test_regex_unescape() {
         assert_eq!(regex_unescape("h\\.w"), "h.w");
@@ -303,7 +304,7 @@ mod tests {
         assert_eq!(unescape_string(&escaped), all);
     }
 
-    /// `unescape_string`: 4 桁に満たない `\u` は後続のエスケープを巻き込まず、変更なしとして扱うこと
+    /// `unescape_string`: 4 桁に満たない `\u` は後続のエスケープを巻き込まず、変更なしとして扱うようにすること
     #[test]
     fn test_unescape_string_incomplete_unicode() {
         assert_eq!(unescape_string("\\u12\\n"), "\\u12\n");

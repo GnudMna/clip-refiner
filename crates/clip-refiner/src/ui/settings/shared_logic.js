@@ -86,7 +86,7 @@ const SettingsSharedLogic = (function () {
     /**
      * 加工パイプラインを正規化する
      *
-     * 画像出力モードは末尾に1つのみ残し、最大段数を超える分は切り捨てる
+     * 画像出力モードは末尾に1つのみ残し、最大段数を超える分はテキスト加工側から切り捨てる
      *
      * @param {string[]} pipeline
      * @param {number} maxPipelineLength
@@ -101,12 +101,12 @@ const SettingsSharedLogic = (function () {
                 break;
             }
         }
-        let normalized = pipeline.filter((modeId) => !modeProducesImage(modeId, imageModeIds));
+        const textLimit = Math.max(0, maxPipelineLength - (imageMode === null ? 0 : 1));
+        const normalized = pipeline
+            .filter((modeId) => !modeProducesImage(modeId, imageModeIds))
+            .slice(0, textLimit);
         if (imageMode !== null) {
             normalized.push(imageMode);
-        }
-        if (normalized.length > maxPipelineLength) {
-            normalized = normalized.slice(0, maxPipelineLength);
         }
         return normalized;
     }

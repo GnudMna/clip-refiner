@@ -278,7 +278,7 @@ mod tests {
         assert!(!ctx.menu().retry_clipboard_worker_item.is_enabled());
     }
 
-    /// `restart` で監視世代が進むとすること
+    /// `restart` で監視世代が進むようにすること
     #[test]
     fn restart_bumps_monitor_generation() {
         with_clipboard_worker_spawn_lock(|| {

@@ -34,7 +34,7 @@ fn default_hotkey_bindings_parse() {
     }
 }
 
-/// テスト専用 F キー割り当てでグローバルホットキー登録が成功すること
+/// テスト専用の `Alt+Ctrl+Shift` 系割り当てでグローバルホットキー登録が成功すること
 #[test]
 fn test_hotkey_bindings_register_with_os() {
     assert_test_hotkeys_register();

@@ -199,6 +199,10 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
 /// 加工は行わず、クリップボードへの書き戻しや通知も発生しない
 /// 監視除外が指定された内容は本文を読まずに記録対象外とする
 ///
+/// # Arguments
+/// * `clipboard` - クリップボード操作用のインスタンス
+/// * `state` - アプリケーションの共有状態
+///
 /// # Returns
 /// * `ClipboardObserveResult` - 読み取り失敗時は `ReadFailed`、それ以外は `Observed`
 pub(crate) fn observe_continuous_record<C: TextClipboard>(
@@ -247,7 +251,7 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `snap` - 監視設定スナップショット
-/// * `outcome` - `process_clipboard` の結果
+/// * `outcome` - `process_clipboard_pipeline_io` の結果
 /// * `observed_text` - 加工前に観測したクリップボード本文
 ///
 /// # Returns
@@ -485,7 +489,7 @@ mod tests {
         assert!(!ps.matches_last_seen("  secret  "));
     }
 
-    /// 読み取り後に監視除外指定付きのコピーが入っても、その内容を加工・上書きしないこと
+    /// 読み取り後に監視除外指定付きのコピーが入っても、その内容を加工・上書きしないようにすること
     ///
     /// 判定に使った本文と書き戻し時のクリップボードが食い違うため、履歴と Undo 元も残さない
     #[test]
@@ -519,7 +523,7 @@ mod tests {
         assert!(!ps.matches_last_written("public"));
     }
 
-    /// 読み取り後に別のコピーが入った場合、加工結果で上書きしないこと
+    /// 読み取り後に別のコピーが入った場合、加工結果で上書きしないようにすること
     #[test]
     fn handle_update_does_not_overwrite_copy_made_after_read() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -550,7 +554,7 @@ mod tests {
         assert_eq!(clipboard.text(), "second");
     }
 
-    /// ポーリングで変更を確認できないときは、テキストの無い画像を加工しないこと
+    /// ポーリングで変更を確認できないときは、テキストの無い画像を加工しないようにすること
     #[test]
     fn handle_update_skips_textless_image_when_polling_change_unconfirmed() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -607,7 +611,7 @@ mod tests {
         );
     }
 
-    /// 除外判定の後に監視除外指定付きのコピーが入っても、連続記録キューへ積まないこと
+    /// 除外判定の後に監視除外指定付きのコピーが入っても、連続記録キューへ積まないようにすること
     #[test]
     fn continuous_record_skips_excluded_copy_made_after_check() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -625,7 +629,7 @@ mod tests {
         );
     }
 
-    /// 連続記録モードでは元テキストを加工せず履歴へ記録すること
+    /// 連続記録モードでは元テキストを加工せず連続記録キューへ積み、履歴には追加しないようにすること
     #[test]
     fn continuous_record_stores_observed_text_without_processing() {
         let state = Arc::new(crate::tray::state::test_app_state());
