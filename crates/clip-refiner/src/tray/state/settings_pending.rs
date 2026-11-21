@@ -2,7 +2,6 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::lock_ext::LockExt;
-
 use crate::config::RegexSettings;
 use crate::platform::update::{
     AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome, UpdateCheckSource,
@@ -39,6 +38,9 @@ pub(crate) struct SettingsPendingState {
 
 impl SettingsPendingState {
     /// 空の適用待ちキューを生成する
+    ///
+    /// # Returns
+    /// * `Self` - 生成したインスタンス
     pub fn new() -> Self {
         Self {
             patch: Mutex::new(None),
@@ -52,29 +54,54 @@ impl SettingsPendingState {
     }
 
     /// 適用待ちの部分更新 JSON キューへ排他アクセスする
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `std::sync::MutexGuard<'_, Option<String>>` - 適用待ちの部分更新 JSON キューへ排他アクセスする
     pub fn patch_mut(&self) -> std::sync::MutexGuard<'_, Option<String>> {
         self.patch.lock_ignore_poison()
     }
 
     /// キュー済みの部分更新 JSON を取り出す
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `Option<String>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_patch(&self) -> Option<String> {
         self.patch.lock_ignore_poison().take()
     }
 
     /// 正規表現プレビュー要求を格納する
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    /// * `request` - リクエスト
     pub fn set_regex_preview_request(&self, request: RegexPreviewRequest) {
         *self.regex_preview.lock_ignore_poison() = Some(request);
     }
 
     /// 処理待ちの正規表現プレビュー要求を取り出す
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `Option<RegexPreviewRequest>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_regex_preview_request(&self) -> Option<RegexPreviewRequest> {
         self.regex_preview.lock_ignore_poison().take()
     }
 
     /// 更新操作を開始できるとき `true` を返しビジーにする
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `bool` - 開始できた場合は `true`
+    /// * `bool` - 条件を満たす場合は `true`
     pub fn try_begin_update_op(&self) -> bool {
         self.update_busy
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -82,6 +109,9 @@ impl SettingsPendingState {
     }
 
     /// 更新操作のビジー状態を解除する
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn end_update_op(&self) {
         self.update_busy.store(false, Ordering::SeqCst);
     }
@@ -96,8 +126,11 @@ impl SettingsPendingState {
 
     /// 更新確認の起動元を取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<UpdateCheckSource>` - 記録されていれば起動元
+    /// * `Option<UpdateCheckSource>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_update_check_source(&self) -> Option<UpdateCheckSource> {
         self.update_check_source.lock_ignore_poison().take()
     }
@@ -122,8 +155,11 @@ impl SettingsPendingState {
 
     /// 更新確認結果を取り出し、UI レスポンスへ変換する
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<UpdateCheckUiResponse>` - 結果があれば UI 向けレスポンス
+    /// * `Option<UpdateCheckUiResponse>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_update_check_ui_response(&self) -> Option<UpdateCheckUiResponse> {
         self.update_check_result
             .lock_ignore_poison()
@@ -133,8 +169,11 @@ impl SettingsPendingState {
 
     /// 適用待ちの更新アセットを取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<AvailableUpdate>` - 確認済みの更新があればその情報
+    /// * `Option<AvailableUpdate>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_available_update(&self) -> Option<AvailableUpdate> {
         self.available_update.lock_ignore_poison().take()
     }
@@ -149,8 +188,11 @@ impl SettingsPendingState {
 
     /// 更新適用結果を取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<UpdateApplyOutcome>` - 適用結果
+    /// * `Option<UpdateApplyOutcome>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_update_apply_result(&self) -> Option<UpdateApplyOutcome> {
         self.update_apply_result.lock_ignore_poison().take()
     }
@@ -180,7 +222,7 @@ mod tests {
         }
     }
 
-    /// 更新操作のビジーフラグを排他的に立てられること
+    /// 更新操作のビジーフラグを排他的に立てられるようにすること
     #[test]
     fn try_begin_update_op_is_exclusive() {
         let pending = SettingsPendingState::new();
@@ -190,7 +232,7 @@ mod tests {
         assert!(pending.try_begin_update_op());
     }
 
-    /// Available 結果が適用用スロットへ控えられること
+    /// Available 結果が適用用スロットへ控えられるようにすること
     #[test]
     fn available_check_result_stores_apply_target() {
         let pending = SettingsPendingState::new();
@@ -203,7 +245,7 @@ mod tests {
         assert!(pending.take_available_update().is_none());
     }
 
-    /// `UpToDate` / `Error` では適用用スロットがクリアされること
+    /// `UpToDate` / `Error` では適用用スロットがクリアされるようにすること
     #[test]
     fn non_available_check_result_clears_apply_target() {
         let pending = SettingsPendingState::new();
@@ -221,7 +263,7 @@ mod tests {
         assert!(pending.take_available_update().is_none());
     }
 
-    /// 更新確認の起動元を取り出して消費できること
+    /// 更新確認の起動元を取り出して消費できるようにすること
     #[test]
     fn update_check_source_round_trip() {
         let pending = SettingsPendingState::new();
@@ -233,7 +275,7 @@ mod tests {
         assert_eq!(pending.take_update_check_source(), None);
     }
 
-    /// 更新適用結果を取り出して消費できること
+    /// 更新適用結果を取り出して消費できるようにすること
     #[test]
     fn update_apply_result_round_trip() {
         let pending = SettingsPendingState::new();

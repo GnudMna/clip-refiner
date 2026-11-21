@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::super::feedback::SettingsApplyFeedback;
-
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify;
@@ -74,7 +73,6 @@ pub(super) fn apply_system_patch(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::test_helpers::TrayTestContext;
 
     /// 一時停止パッチが `AppConfig` とトレイメニューへ反映されるようにすること
@@ -93,5 +91,22 @@ mod tests {
         assert!(ctx.state().with_config(|c| c.is_paused));
         assert!(ctx.menu().pause_item.is_checked());
         assert!(config_dirty);
+    }
+
+    /// 既に同じ一時停止状態なら no-op となるようにすること
+    #[test]
+    fn pause_patch_noop_when_unchanged() {
+        let ctx = TrayTestContext::new();
+        let current = ctx.state().with_config(|c| c.is_paused);
+        let patch = SettingsPatch {
+            is_paused: Some(current),
+            ..SettingsPatch::default()
+        };
+
+        let mut config_dirty = false;
+        assert!(
+            !apply_system_patch(&patch, ctx.state(), ctx.menu(), &mut config_dirty).force_refresh
+        );
+        assert!(!config_dirty);
     }
 }

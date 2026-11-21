@@ -1,11 +1,10 @@
 //! 加工変換のプロパティベーステスト
 
 use clip_refiner_core::{AppConfig, RefineContext, RefineMode, Refiner};
-
 use proptest::prelude::*;
 
 proptest! {
-    /// URL エンコード後にデコードすると元の文字列に戻ること
+    /// URL エンコード後にデコードすると元の文字列に戻るようにすること
     #[test]
     fn url_encode_decode_roundtrip(input in "\\PC*") {
         let ctx = RefineContext::default();
@@ -14,7 +13,7 @@ proptest! {
         prop_assert_eq!(&decoded, &input);
     }
 
-    /// JSON エスケープ後にアンエスケープすると元の文字列に戻ること
+    /// JSON エスケープ後にアンエスケープすると元の文字列に戻るようにすること
     #[test]
     fn escape_unescape_roundtrip(input in "[\\x20-\\x7E]*") {
         let ctx = RefineContext::default();
@@ -23,7 +22,7 @@ proptest! {
         prop_assert_eq!(&unescaped, &input);
     }
 
-    /// 正規表現エスケープ後にアンエスケープすると元の文字列に戻ること
+    /// 正規表現エスケープ後にアンエスケープすると元の文字列に戻るようにすること
     #[test]
     fn regex_escape_unescape_roundtrip(input in "[A-Za-z0-9_]*") {
         let ctx = RefineContext::default();
@@ -32,7 +31,7 @@ proptest! {
         prop_assert_eq!(&unescaped, &input);
     }
 
-    /// 数字のみの文字列は正規表現置換で一貫して変換されること
+    /// 数字のみの文字列は正規表現置換で一貫して変換されるようにすること
     #[test]
     fn regex_replace_digits_are_stable(input in "[0-9]{0,32}") {
         let mut config = AppConfig::default();

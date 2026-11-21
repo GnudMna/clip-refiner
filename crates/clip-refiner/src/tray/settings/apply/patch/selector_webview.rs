@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-
 use crate::consts;
 use crate::tray::menu::TrayMenu;
 use crate::tray::settings::ipc::SettingsPatch;
@@ -47,7 +46,6 @@ pub(super) fn apply_selector_webview_patch(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::SelectorWebviewRetention;
     use crate::test_helpers::TrayTestContext;
 

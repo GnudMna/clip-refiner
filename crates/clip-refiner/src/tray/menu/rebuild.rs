@@ -67,7 +67,7 @@ pub(crate) fn rebuild_toggle_records_submenu(
 mod tests {
     use super::*;
 
-    /// レコードありのとき有効トグル・レコード・フッターの順になること
+    /// レコードありのとき有効トグル・レコード・フッターの順になるようにすること
     #[test]
     fn rebuild_with_records_keeps_enabled_records_footer_order() {
         let enabled = CheckMenuItem::new("有効", true, true, None);
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(records[1].1, 1);
     }
 
-    /// レコードなしのとき有効トグルとフッターのみになること
+    /// レコードなしのとき有効トグルとフッターのみになるようにすること
     #[test]
     fn rebuild_without_records_omits_record_separator() {
         let enabled = CheckMenuItem::new("有効", true, false, None);

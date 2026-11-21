@@ -69,7 +69,7 @@ pub(crate) fn evaluate_script(webview: &WebView, context: &str, script: &str) {
 mod tests {
     use super::*;
 
-    /// 設定スナップショット注入が `JSON.parse` 経由であるようにすること
+    /// 設定スナップショット注入が `JSON.parse` 経由となるようにすること
     #[test]
     fn settings_load_script_uses_json_parse() {
         let script = settings_load_script(r#"{"mode":"Trim"}"#, false, false);
@@ -86,7 +86,7 @@ mod tests {
         assert!(!script.contains(r#"pattern":"it's"#));
     }
 
-    /// 改行を含む JSON でもシングルクォート文字列リテラルが壊れないであるようにすること
+    /// 改行を含む JSON でもシングルクォート文字列リテラルが壊れないようにすること
     #[test]
     fn settings_load_script_escapes_newlines() {
         let json = "{\"regex\":{\"pattern\":\"a\nb\"}}";

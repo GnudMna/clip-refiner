@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use super::permissions::restrict_private_dir_permissions;
-
 use crate::consts;
 use crate::error::ConfigError;
 
@@ -236,7 +235,6 @@ mod tests {
     use std::fs;
 
     use super::*;
-
     use crate::config::{clear_test_config_dir, set_test_config_dir};
     use crate::consts;
     use crate::test_helpers::with_temp_config_dir;
@@ -299,7 +297,7 @@ mod tests {
         });
     }
 
-    /// マーカー `portable` があるとき実行ファイル隣の `data` を返すこと
+    /// マーカー `portable` があるとき実行ファイル隣の `data` を返すようにすること
     #[test]
     fn portable_config_dir_uses_data_when_marker_exists() {
         let exe_dir = std::env::temp_dir().join(format!(
@@ -316,7 +314,7 @@ mod tests {
         assert_eq!(resolved, Some(exe_dir.join(consts::PORTABLE_DATA_DIR_NAME)));
     }
 
-    /// マーカーが無いときはポータブル設定ディレクトリを返さないこと
+    /// マーカーが無いときはポータブル設定ディレクトリを返さないようにすること
     #[test]
     fn portable_config_dir_none_without_marker() {
         let exe_dir =
@@ -330,7 +328,7 @@ mod tests {
         assert_eq!(resolved, None);
     }
 
-    /// マーカーがディレクトリのときはポータブルとみなさないこと
+    /// マーカーがディレクトリのときはポータブルとみなさないようにすること
     #[test]
     fn portable_config_dir_none_when_marker_is_directory() {
         let exe_dir = std::env::temp_dir().join(format!(
@@ -347,7 +345,7 @@ mod tests {
         assert_eq!(resolved, None);
     }
 
-    /// 環境変数上書き中は `is_portable_mode` が偽になること
+    /// 環境変数上書き中は `is_portable_mode` が偽になるようにすること
     #[test]
     fn is_portable_mode_false_with_env_override() {
         let dir =

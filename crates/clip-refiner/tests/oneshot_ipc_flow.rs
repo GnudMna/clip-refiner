@@ -8,7 +8,7 @@ use clip_refiner::test_helpers::{
     set_worker_alive, spawn_oneshot_stub_responder, start_oneshot_ipc_for_test, stub_worker,
     test_app_state_arc,
 };
-use clip_refiner::{RefineContext, RefineMode};
+use clip_refiner_core::{RefineContext, RefineMode};
 
 /// 実パイプ IPC 統合テストの直列化ロック
 ///
@@ -26,7 +26,7 @@ fn with_oneshot_ipc_lock<T>(f: impl FnOnce() -> T) -> T {
 // テスト
 // ======================================================================
 
-/// 実パイプ経由で加工成功応答を受け取れること
+/// 実パイプ経由で加工成功応答を受け取れるようにすること
 #[test]
 fn oneshot_ipc_pipe_returns_processed() {
     with_oneshot_ipc_lock(|| {
@@ -45,7 +45,7 @@ fn oneshot_ipc_pipe_returns_processed() {
     });
 }
 
-/// 実パイプ経由で変更なし応答を受け取れること
+/// 実パイプ経由で変更なし応答を受け取れるようにすること
 #[test]
 fn oneshot_ipc_pipe_returns_unchanged() {
     with_oneshot_ipc_lock(|| {
@@ -63,7 +63,7 @@ fn oneshot_ipc_pipe_returns_unchanged() {
     });
 }
 
-/// 正規表現上書きがワーカーへ渡ること
+/// 正規表現上書きがワーカーへ渡るようにすること
 #[test]
 fn oneshot_ipc_pipe_forwards_regex_override() {
     with_oneshot_ipc_lock(|| {
@@ -90,7 +90,7 @@ fn oneshot_ipc_pipe_forwards_regex_override() {
     });
 }
 
-/// 空パイプラインはワーカーを呼ばずエラー応答になること
+/// 空パイプラインはワーカーを呼ばずエラー応答になるようにすること
 #[test]
 fn oneshot_ipc_pipe_rejects_empty_pipeline() {
     with_oneshot_ipc_lock(|| {
@@ -109,7 +109,7 @@ fn oneshot_ipc_pipe_rejects_empty_pipeline() {
     });
 }
 
-/// 不正 JSON はエラー応答になること
+/// 不正 JSON はエラー応答になるようにすること
 #[test]
 fn oneshot_ipc_pipe_rejects_invalid_json() {
     with_oneshot_ipc_lock(|| {
@@ -126,7 +126,7 @@ fn oneshot_ipc_pipe_rejects_invalid_json() {
     });
 }
 
-/// ワーカー停止中はエラー応答になること
+/// ワーカー停止中はエラー応答になるようにすること
 #[test]
 fn oneshot_ipc_pipe_reports_worker_stopped() {
     with_oneshot_ipc_lock(|| {
@@ -159,15 +159,18 @@ fn oneshot_ipc_pipe_drops_oversized_request_without_response() {
         // (改行はクライアントの writeln が付与する)
         let oversized = "x".repeat(64 * 1024 + 64);
         let err = send_raw_oneshot_line(&pipe_name, &oversized).expect_err("応答なし切断を期待");
+        let message = err.to_string();
 
         assert!(
-            err.contains("切断") || err.contains("通信") || err.contains("タイムアウト"),
-            "unexpected error: {err}"
+            message.contains("切断")
+                || message.contains("通信")
+                || message.contains("タイムアウト"),
+            "unexpected error: {message}"
         );
     });
 }
 
-/// 連続して複数回の委譲ができること
+/// 連続して複数回の委譲ができるようにすること
 #[test]
 fn oneshot_ipc_pipe_handles_sequential_requests() {
     with_oneshot_ipc_lock(|| {

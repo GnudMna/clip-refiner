@@ -4,7 +4,6 @@ use super::context::RefineContext;
 use super::mode::RefineMode;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
 use super::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
-
 use crate::security::{is_within_clipboard_limit, is_within_parser_limit};
 
 // ======================================================================
@@ -363,7 +362,6 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::test_helpers::InMemoryTextClipboard;
 
     fn empty_ctx() -> RefineContext {

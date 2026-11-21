@@ -292,11 +292,10 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-
     use crate::tray::state::test_app_state;
     use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
-    /// 空シェルは非表示で、`hide` が no-op であること
+    /// 空シェルは非表示で、`hide` が no-op となるようにすること
     #[test]
     fn empty_shell_is_not_visible_and_hide_is_noop() {
         let state = Arc::new(test_app_state());
@@ -309,7 +308,7 @@ mod tests {
         assert!(!ocr.is_visible());
     }
 
-    /// 擬似表示の `show` / `hide` が実 HWND なしで切り替わること
+    /// 擬似表示の `show` / `hide` が実 HWND なしで切り替わるようにすること
     #[test]
     fn simulated_show_and_hide_toggle_visibility() {
         let state = Arc::new(test_app_state());
@@ -324,7 +323,7 @@ mod tests {
         assert!(!ocr.is_visible());
     }
 
-    /// 新しいジョブ開始で旧世代が無効になること
+    /// 新しいジョブ開始で旧世代が無効になるようにすること
     #[test]
     fn begin_job_invalidates_previous_generation() {
         let gate = OcrJobGate::new();
@@ -336,7 +335,7 @@ mod tests {
         assert!(gate.is_current(second));
     }
 
-    /// 最新世代の OCR 結果だけワーカーへ送ること
+    /// 最新世代の OCR 結果だけワーカーへ送るようにすること
     #[test]
     fn apply_ocr_job_result_dispatches_only_current_generation() {
         let state = Arc::new(test_app_state());

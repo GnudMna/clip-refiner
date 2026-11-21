@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
+use crate::config::MonitorMode;
 use crate::tray::clipboard_monitor::{self, bump_monitor_generation};
 use crate::tray::menu::TrayMenu;
 use crate::tray::state::AppState;
-
-use crate::config::MonitorMode;
 
 // ======================================================================
 // 監視設定更新

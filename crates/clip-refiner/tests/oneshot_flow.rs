@@ -1,8 +1,8 @@
 //! ワンショット加工経路の統合テスト
 
-use clip_refiner::refiner::TextClipboard;
 use clip_refiner::test_helpers::{ClipboardHarness, InMemoryTextClipboard};
-use clip_refiner::{
+use clip_refiner_core::refiner::TextClipboard;
+use clip_refiner_core::{
     AppConfig, ClipboardProcessOutcome, RefineContext, RefineMode, apply_pipeline_to_text,
 };
 
@@ -10,7 +10,7 @@ fn run_oneshot_on_clipboard(
     clipboard: &mut InMemoryTextClipboard,
     pipeline: &[RefineMode],
     ctx: &RefineContext,
-) -> clip_refiner::ClipboardProcessOutcome {
+) -> ClipboardProcessOutcome {
     let input = clipboard.text().to_string();
     let outcome = apply_pipeline_to_text(&input, pipeline, ctx).expect("apply_pipeline_to_text");
     if let ClipboardProcessOutcome::Processed(result) = &outcome {
@@ -78,7 +78,7 @@ fn oneshot_context_uses_config_regex_settings() {
     assert_eq!(clipboard.text(), "hello ClipRefiner");
 }
 
-/// 常駐委譲相当のワンショット加工後、監視がエコー再加工しないこと
+/// 常駐委譲相当のワンショット加工後、監視がエコー再加工しないようにすること
 #[test]
 fn oneshot_via_worker_skips_monitor_write_back_echo() {
     let mut harness = ClipboardHarness::with_text("  hello  ").with_mode(RefineMode::UrlEncode);

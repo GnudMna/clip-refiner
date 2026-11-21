@@ -2,7 +2,6 @@ use std::sync::Mutex;
 
 use super::lock_ext::LockExt;
 use super::monitor_snapshot::ProcessedState;
-
 use crate::security::{SecretString, secret_from};
 use crate::tray::history_store::{EncryptedHistoryStore, EncryptedRecordStore};
 
@@ -102,16 +101,22 @@ impl ClipboardSessionState {
 
     /// 取り消し用の元テキストを取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<SecretString>` - 取り消し可能な加工があれば `Some(元テキスト)`
+    /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_undo_source(&self) -> Option<SecretString> {
         self.undo_text.lock_ignore_poison().take()
     }
 
     /// 履歴の件数を返す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `usize` - 保持している履歴件数
+    /// * `usize` - 数値
     pub fn history_len(&self) -> usize {
         self.history_store.lock_ignore_poison().len()
     }
@@ -128,6 +133,9 @@ impl ClipboardSessionState {
     }
 
     /// 履歴をクリアする
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn clear_history(&self) {
         self.history_store.lock_ignore_poison().clear();
     }
@@ -153,8 +161,11 @@ impl ClipboardSessionState {
 
     /// 連続記録の件数を返す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `usize` - 保持している連続記録件数
+    /// * `usize` - 数値
     pub fn continuous_record_len(&self) -> usize {
         self.continuous_record_store.lock_ignore_poison().len()
     }
@@ -173,6 +184,9 @@ impl ClipboardSessionState {
     }
 
     /// 連続記録をクリアする
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn clear_continuous_record(&self) {
         self.continuous_record_store.lock_ignore_poison().clear();
     }
@@ -200,8 +214,11 @@ impl ClipboardSessionState {
 
     /// 連続記録キュー先頭を取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
+    /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
     pub fn discharge_continuous_record_front(&self) -> Option<SecretString> {
         self.continuous_record_store
             .lock_ignore_poison()
@@ -223,8 +240,11 @@ impl ClipboardSessionState {
 
     /// 連続記録キュー末尾 (直近の記録) を取り消す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<SecretString>` - 取り消した本文。空の場合は `None`
+    /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
     pub fn undo_last_continuous_record(&self) -> Option<SecretString> {
         self.continuous_record_store.lock_ignore_poison().pop_back()
     }
@@ -236,7 +256,6 @@ impl ClipboardSessionState {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::security::ContentFingerprint;
     use crate::tray::state::ProcessedState;
 
@@ -245,7 +264,7 @@ mod tests {
         ClipboardSessionState::new().expect("テスト用クリップボードセッションの生成に失敗")
     }
 
-    /// 加工成功時に書き戻し本文と観測済み本文が更新されること
+    /// 加工成功時に書き戻し本文と観測済み本文が更新されるようにすること
     #[test]
     fn record_processing_success_updates_fingerprints() {
         let session = session();
@@ -256,7 +275,7 @@ mod tests {
         assert!(ps.matches_last_written("processed"));
     }
 
-    /// 観測のみの場合は `last_written` を変更しないこと
+    /// 観測のみの場合は `last_written` を変更しないようにすること
     #[test]
     fn record_clipboard_observed_preserves_last_written() {
         let session = session();
@@ -288,7 +307,7 @@ mod tests {
         assert!(ps.matches_last_written("restored"));
     }
 
-    /// 加工取り消し用テキストの記録と取得ができること
+    /// 加工取り消し用テキストの記録と取得ができるようにすること
     #[test]
     fn undo_source_record_and_take() {
         let session = session();
@@ -303,7 +322,7 @@ mod tests {
         assert!(session.take_undo_source().is_none());
     }
 
-    /// `with_processed_state` で二重加工防止状態を更新できること
+    /// `with_processed_state` で二重加工防止状態を更新できるようにすること
     #[test]
     fn with_processed_state_updates_last_seen() {
         let session = session();

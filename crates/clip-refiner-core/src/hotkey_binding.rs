@@ -322,7 +322,6 @@ fn letter_to_key(ch: char) -> Option<HotkeyKey> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts;
 
     /// デフォルトホットキー文字列が解析できるようにすること

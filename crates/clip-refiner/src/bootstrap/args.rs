@@ -106,7 +106,6 @@ pub(super) fn sample_args_for_test() -> Args {
 #[cfg(test)]
 mod tests {
     use super::{Args, is_oneshot, sample_args_for_test};
-
     use crate::refiner::RefineMode;
 
     /// `--mode` 指定時はワンショットと判定すること

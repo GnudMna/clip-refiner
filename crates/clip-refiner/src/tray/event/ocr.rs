@@ -38,7 +38,6 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
-
     use crate::tray::state::test_app_state;
     use crate::tray::worker::ClipboardWorkerHandle;
 
@@ -57,7 +56,7 @@ mod tests {
         }
     }
 
-    /// 空白のみの OCR 結果はコマンドを送らないであるようにすること
+    /// 空白のみの OCR 結果はコマンドを送らないようにすること
     #[test]
     fn dispatch_ocr_result_empty_text_sends_no_command() {
         let state = Arc::new(test_app_state());
@@ -69,7 +68,7 @@ mod tests {
         assert!(rx.try_recv().is_err());
     }
 
-    /// OCR 失敗時はコマンドを送らないであるようにすること
+    /// OCR 失敗時はコマンドを送らないようにすること
     #[test]
     fn dispatch_ocr_result_error_sends_no_command() {
         let state = Arc::new(test_app_state());

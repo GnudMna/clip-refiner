@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
+use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
+use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
 use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::state::{AppState, HotkeyEvent};
-
-use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
-use crate::refiner::RefineMode;
 
 // ======================================================================
 // メニューイベント処理
@@ -135,7 +134,6 @@ pub(crate) fn refresh_quick_selector_modes(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::FavoriteMoveDirection;
     use crate::consts;
     use crate::refiner::RefineMode;
@@ -280,7 +278,7 @@ mod tests {
         );
     }
 
-    /// 未登録モードの解除操作は no-op であるようにすること
+    /// 未登録モードの解除操作は no-op となるようにすること
     #[test]
     fn handle_favorites_event_remove_skips_unregistered_mode() {
         let ctx = TrayTestContext::with_config(|config| config.mode = RefineMode::Trim);

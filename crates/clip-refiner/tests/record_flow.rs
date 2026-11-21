@@ -1,7 +1,7 @@
 //! 連続記録キューの統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // テスト
@@ -155,7 +155,7 @@ fn monitor_skips_continuous_record_when_disabled() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// 連続記録 ON 時は既にクリップボードにあるテキストを記録しないこと
+/// 連続記録 ON 時は既にクリップボードにあるテキストを記録しないようにすること
 #[test]
 fn continuous_record_enable_skips_existing_clipboard() {
     let mut harness = ClipboardHarness::with_text("already-on-clipboard")

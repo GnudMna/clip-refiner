@@ -186,7 +186,7 @@ fn format_unknown_keys_preview(keys: &[String]) -> String {
 mod tests {
     use super::*;
 
-    /// 既知キーのみの TOML では未知キーが空であること
+    /// 既知キーのみの TOML では未知キーが空となるようにすること
     #[test]
     fn collect_returns_empty_for_known_keys() {
         let value: toml::Value = toml::from_str(
@@ -245,7 +245,7 @@ enabled = true
         );
     }
 
-    /// レガシー `[[clips]]` は未知キー扱いにしないであること
+    /// レガシー `[[clips]]` は未知キー扱いにしないようにすること
     #[test]
     fn collect_allows_legacy_clips_array() {
         let value: toml::Value = toml::from_str(
@@ -264,7 +264,7 @@ text = "b"
         assert!(collect_unknown_config_keys(&value).is_empty());
     }
 
-    /// ユーザー向けメッセージが件数制限付きで組み立てられること
+    /// ユーザー向けメッセージが件数制限付きで組み立てられるようにすること
     #[test]
     fn format_message_truncates_long_key_list() {
         let keys: Vec<String> = (1..=7).map(|n| format!("k{n}")).collect();

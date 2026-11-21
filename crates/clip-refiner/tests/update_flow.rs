@@ -47,7 +47,7 @@ fn cleanup_update_work_dir(version: &str) {
 // テスト
 // ======================================================================
 
-/// ローカル bridge で更新確認からポータブル ZIP 展開まで通ること
+/// ローカル bridge で更新確認からポータブル ZIP 展開まで通るようにすること
 #[test]
 fn update_flow_check_and_apply_portable_zip() {
     let version = unique_version();
@@ -100,7 +100,7 @@ fn update_flow_check_and_apply_portable_zip() {
     cleanup_update_work_dir(&version);
 }
 
-/// 同一バージョンは `UpToDate` になること
+/// 同一バージョンは `UpToDate` になるようにすること
 #[test]
 fn update_flow_reports_up_to_date() {
     let version = unique_version();
@@ -135,7 +135,7 @@ fn update_flow_reports_up_to_date() {
     }
 }
 
-/// digest 欠落時は確認がエラーになること
+/// digest 欠落時は確認がエラーになるようにすること
 #[test]
 fn update_flow_errors_when_digest_missing() {
     let version = unique_version();
@@ -161,7 +161,7 @@ fn update_flow_errors_when_digest_missing() {
     }
 }
 
-/// SHA-256 不一致時は適用せずエラーになること
+/// SHA-256 不一致時は適用せずエラーになるようにすること
 #[test]
 fn update_flow_rejects_sha256_mismatch_on_apply() {
     let version = unique_version();
@@ -209,7 +209,7 @@ fn update_flow_rejects_sha256_mismatch_on_apply() {
     cleanup_update_work_dir(&version);
 }
 
-/// サイズ不一致時は適用せずエラーになること
+/// サイズ不一致時は適用せずエラーになるようにすること
 #[test]
 fn update_flow_rejects_size_mismatch_on_apply() {
     let version = unique_version();
@@ -250,7 +250,7 @@ fn update_flow_rejects_size_mismatch_on_apply() {
     cleanup_update_work_dir(&version);
 }
 
-/// 応答本文が宣言サイズを超える場合は途中で打ち切り適用しないこと
+/// 応答本文が宣言サイズを超える場合は途中で打ち切り適用しないようにすること
 #[test]
 fn update_flow_aborts_download_when_body_exceeds_declared_size() {
     let version = unique_version();
@@ -303,7 +303,7 @@ fn update_flow_aborts_download_when_body_exceeds_declared_size() {
     cleanup_update_work_dir(&version);
 }
 
-/// version API が 404 のとき確認がエラーになること
+/// version API が 404 のとき確認がエラーになるようにすること
 #[test]
 fn update_flow_errors_when_version_api_missing() {
     let bridge = MockReleaseBridge::start();
@@ -323,7 +323,7 @@ fn update_flow_errors_when_version_api_missing() {
     }
 }
 
-/// キー必須のアセットを正しい Bearer で適用できること
+/// キー必須のアセットを正しい Bearer で適用できるようにすること
 #[test]
 fn update_flow_applies_with_required_download_key() {
     let version = unique_version();
@@ -371,7 +371,7 @@ fn update_flow_applies_with_required_download_key() {
     cleanup_update_work_dir(&version);
 }
 
-/// キー必須のアセットをキー無しで適用すると認証エラーになること
+/// キー必須のアセットをキー無しで適用すると認証エラーになるようにすること
 #[test]
 fn update_flow_errors_when_download_key_missing() {
     let version = unique_version();
@@ -410,7 +410,7 @@ fn update_flow_errors_when_download_key_missing() {
     cleanup_update_work_dir(&version);
 }
 
-/// キー必須のアセットを誤ったキーで適用すると認証エラーになること
+/// キー必須のアセットを誤ったキーで適用すると認証エラーになるようにすること
 #[test]
 fn update_flow_errors_when_download_key_wrong() {
     let version = unique_version();
@@ -449,7 +449,7 @@ fn update_flow_errors_when_download_key_wrong() {
     cleanup_update_work_dir(&version);
 }
 
-/// MSI アセットもダウンロード検証まで通ること (`msiexec` は起動しない)
+/// `msiexec` を起動せず MSI アセットのダウンロード検証まで通るようにすること
 #[test]
 fn update_flow_check_and_verify_msi_without_launch() {
     let version = unique_version();

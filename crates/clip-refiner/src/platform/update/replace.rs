@@ -10,7 +10,6 @@ use std::process::Command;
 use std::time::Duration;
 
 use super::error::UpdateError;
-
 use crate::consts::{APP_NAME, PORTABLE_DATA_DIR_NAME};
 
 use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0, WAIT_TIMEOUT};
@@ -349,7 +348,7 @@ fn wide_null(value: &str) -> Vec<u16> {
 mod tests {
     use super::*;
 
-    /// `data` を残したまま配布ファイルを上書きコピーできること
+    /// `data` を残したまま配布ファイルを上書きコピーできるようにすること
     #[test]
     fn copy_portable_payload_skips_data_and_overwrites_files() {
         let root =
@@ -399,7 +398,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// 展開直下の exe を検出できること
+    /// 展開直下の exe を検出できるようにすること
     #[test]
     fn find_portable_exe_finds_case_insensitive_name() {
         let root =

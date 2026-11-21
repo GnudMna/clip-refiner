@@ -9,7 +9,6 @@ use super::super::docs::{
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
-
 use crate::config::types::AppConfig;
 
 use anyhow::Result;

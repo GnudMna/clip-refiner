@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-
 use crate::tray::event::update_refine;
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
@@ -75,7 +74,6 @@ fn sync_refine_menu_checks(state: &Arc<AppState>, menu: &TrayMenu) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::refiner::RefineMode;
     use crate::test_helpers::{ClipboardCommand, TrayTestContext};
 

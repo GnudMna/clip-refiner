@@ -241,7 +241,7 @@ mod tests {
         set_runtime_available_for_test(None);
     }
 
-    /// ダウンロードページはプロセス内で1回だけ開くこと
+    /// ダウンロードページはプロセス内で1回だけ開くようにすること
     #[test]
     fn open_download_page_once_opens_only_first_time() {
         reset_download_page_opened_for_test();
@@ -259,7 +259,7 @@ mod tests {
         reset_download_page_opened_for_test();
     }
 
-    /// クライアント GUID 定数がレジストリパスに使われていること
+    /// クライアント GUID 定数がレジストリパスに使われているようにすること
     #[test]
     fn registry_paths_include_webview2_guid() {
         let paths: Vec<_> = runtime_registry_paths().map(|(_, path)| path).collect();
@@ -267,7 +267,7 @@ mod tests {
         assert!(paths.len() >= 3);
     }
 
-    /// 実環境の Runtime 検出がパニックしないこと
+    /// 実環境の Runtime 検出がパニックしないようにすること
     #[test]
     fn is_runtime_available_does_not_panic() {
         set_runtime_available_for_test(None);

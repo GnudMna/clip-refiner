@@ -1,7 +1,7 @@
 //! 暗号化履歴の統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // テスト

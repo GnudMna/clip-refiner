@@ -1,5 +1,4 @@
 use super::resolve::ResolvedHotkeys;
-
 use crate::config::HotkeySettings;
 use crate::platform;
 use crate::refiner::RefineMode;

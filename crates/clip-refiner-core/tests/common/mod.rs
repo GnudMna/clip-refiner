@@ -6,7 +6,6 @@ use std::collections::HashSet;
 
 use clip_refiner_core::config::RegexSettings;
 use clip_refiner_core::{RefineContext, RefineMode, Refiner};
-
 use strum::IntoEnumIterator;
 
 // ======================================================================

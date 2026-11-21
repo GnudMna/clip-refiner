@@ -72,8 +72,14 @@ impl MockReleaseBridge {
         let join = thread::spawn(move || {
             while !shutdown_thread.load(Ordering::SeqCst) {
                 match listener.accept() {
-                    Ok((stream, _)) => {
-                        if let Err(err) = handle_client(stream, &routes_thread) {
+                    Ok((mut stream, _)) => {
+                        // listener が nonblocking だと accept 済みソケットも継承される
+                        // リクエスト到着前の WouldBlock で空応答→404 にしないよう blocking へ戻す
+                        if let Err(err) = stream.set_nonblocking(false) {
+                            crate::log_warn!("モック bridge blocking 設定失敗: {err}");
+                            continue;
+                        }
+                        if let Err(err) = handle_client(&mut stream, &routes_thread) {
                             crate::log_warn!("モック bridge 応答失敗: {err}");
                         }
                     }
@@ -95,8 +101,11 @@ impl MockReleaseBridge {
 
     /// bridge ベース URL を返す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `&str` - `http://127.0.0.1:{port}`
+    /// * `&str` - 文字列
     #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url
@@ -114,6 +123,9 @@ impl MockReleaseBridge {
     }
 
     /// version API を 404 にする
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn clear_version_json(&self) {
         self.routes
             .lock()
@@ -293,7 +305,7 @@ pub fn version_api_json(tag: &str, asset_name: &str, size: u64, digest: Option<&
 // プライベート関数
 // ======================================================================
 /// 1 クライアント分の HTTP リクエストを処理する
-fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io::Result<()> {
+fn handle_client(stream: &mut TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io::Result<()> {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
 
@@ -311,9 +323,20 @@ fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io
                     break;
                 }
             }
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+            // blocking + read_timeout 下では TimedOut。ヘッダ未完了なら打ち切る
+            Err(err)
+                if err.kind() == std::io::ErrorKind::WouldBlock
+                    || err.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                break;
+            }
             Err(err) => return Err(err),
         }
+    }
+
+    // shutdown 起床用の空接続など、要求行が無い場合は応答しない
+    if buffer.is_empty() {
+        return Ok(());
     }
 
     let request = String::from_utf8_lossy(&buffer);
@@ -331,6 +354,9 @@ fn handle_client(mut stream: TcpStream, routes: &Mutex<BridgeRoutes>) -> std::io
             }
         })
         .unwrap_or_default();
+    if path.is_empty() {
+        return Ok(());
+    }
     let bearer = extract_bearer(&request);
 
     let version_path = format!("/{RELEASE_OWNER}/{RELEASE_REPO}/version");

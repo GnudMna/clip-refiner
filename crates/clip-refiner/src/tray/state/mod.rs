@@ -30,7 +30,6 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use super::*;
-
     use crate::config::MonitorMode;
     use crate::refiner::RefineMode;
 
@@ -174,7 +173,7 @@ mod tests {
             .collect()
     }
 
-    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になること
+    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になるようにすること
     ///
     /// `add_to_history` は設定の `history_limit` を参照する横断処理として検証する
     #[test]
@@ -219,7 +218,7 @@ mod tests {
             .collect()
     }
 
-    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になること
+    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になるようにすること
     ///
     /// `enqueue_continuous_record` は設定の `continuous_record_limit` を参照する横断処理として検証する
     #[test]
@@ -296,14 +295,14 @@ mod tests {
         );
     }
 
-    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
+    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないようにすること
     #[test]
     fn test_app_state_disables_config_persistence() {
         let state = test_app_state();
         assert!(!state.config_sync().is_persistence_enabled());
     }
 
-    /// 永続化付きテスト用 `AppState` はディスク保存が有効であること
+    /// 永続化付きテスト用 `AppState` はディスク保存が有効となるようにすること
     #[test]
     fn test_app_state_with_persistence_enables_config_persistence() {
         let state = test_app_state_with_persistence();

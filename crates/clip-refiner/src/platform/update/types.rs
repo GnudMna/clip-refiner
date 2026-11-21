@@ -34,8 +34,11 @@ pub(crate) struct VersionApiAsset {
 impl VersionApiAsset {
     /// 完全性検証に使う生文字列を返す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<&str>` - `digest` を優先し、無ければ `sha256`
+    /// * `Option<&str>` - 値がある場合は `Some`、ない場合は `None`
     pub fn integrity_raw(&self) -> Option<&str> {
         self.digest
             .as_deref()
@@ -319,7 +322,7 @@ pub(crate) enum UpdateCheckSource {
 mod tests {
     use super::*;
 
-    /// 更新確認 UI レスポンスが kebab-case / camelCase でシリアライズされること
+    /// 更新確認 UI レスポンスが kebab-case / camelCase でシリアライズされるようにすること
     #[test]
     fn update_check_ui_response_serializes_for_js() {
         let available = UpdateCheckUiResponse::Available {
@@ -339,7 +342,7 @@ mod tests {
         assert_eq!(busy["status"], "busy");
     }
 
-    /// 更新適用 UI レスポンスが設定 UI 向け JSON になること
+    /// 更新適用 UI レスポンスが設定 UI 向け JSON になるようにすること
     #[test]
     fn update_apply_ui_response_serializes_for_js() {
         let portable = UpdateApplyUiResponse::from(&UpdateApplyOutcome::PortableExtracted {
@@ -363,7 +366,7 @@ mod tests {
         assert_eq!(json["status"], "msi-started");
     }
 
-    /// `UpdateCheckOutcome` から UI レスポンスへ変換できること
+    /// `UpdateCheckOutcome` から UI レスポンスへ変換できるようにすること
     #[test]
     fn update_check_outcome_maps_to_ui_response() {
         let outcome = UpdateCheckOutcome::UpToDate {

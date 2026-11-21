@@ -5,7 +5,6 @@ use super::notification::NotificationSettings;
 use super::regex::RegexSettings;
 use super::registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
 use super::selector_webview::{SelectorWebviewRetention, default_selector_webview_idle_minutes};
-
 use crate::consts;
 use crate::refiner::RefineMode;
 

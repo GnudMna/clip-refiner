@@ -52,7 +52,6 @@ fn apply_config_to_document(doc: &mut DocumentMut, config: &AppConfig) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::NotificationSettings;
     use crate::consts;
 

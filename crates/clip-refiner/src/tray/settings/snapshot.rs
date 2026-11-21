@@ -1,5 +1,4 @@
 use super::model::SettingsWritable;
-
 use crate::config::AppConfig;
 use crate::consts;
 use crate::refiner::{REGEX_PREVIEW_SAMPLE, RefineMode};
@@ -169,7 +168,6 @@ impl SettingsSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::{AppConfig, NotificationSettings, RegexSettings};
     use crate::consts;
     use crate::refiner::RefineMode;

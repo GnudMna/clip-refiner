@@ -1,13 +1,12 @@
 //! version API レスポンスから更新の有無を判定する
 
-use super::asset::{asset_matches_kind, select_asset};
-use super::version::{parse_semver, strip_version_prefix};
-
 use super::super::error::UpdateError;
 use super::super::types::{
     AvailableUpdate, UpdateCheckOutcome, UpdatePackageKind, VersionApiResponse,
 };
 use super::super::verify::{parse_asset_digest, validate_declared_download_size};
+use super::asset::{asset_matches_kind, select_asset};
+use super::version::{parse_semver, strip_version_prefix};
 
 use semver::Version;
 
@@ -94,12 +93,11 @@ pub(crate) fn evaluate_update(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::evaluate_update;
-
     use super::super::super::types::{
         UpdateCheckOutcome, UpdatePackageKind, VersionApiAsset, VersionApiResponse,
     };
     use super::super::super::verify::MAX_UPDATE_DOWNLOAD_BYTES;
+    use super::evaluate_update;
 
     use semver::Version;
 
@@ -140,7 +138,7 @@ mod tests {
         assert!(matches!(outcome, UpdateCheckOutcome::UpToDate { .. }));
     }
 
-    /// 新しい版があればアセット付きで Available になること
+    /// 新しい版があればアセット付きで Available になるようにすること
     #[test]
     fn evaluate_update_returns_available_when_newer() {
         let current = Version::parse("0.13.0").expect("semver");
@@ -174,7 +172,7 @@ mod tests {
         }
     }
 
-    /// 宣言サイズ 0 のアセットは Available にしないこと
+    /// 宣言サイズ 0 のアセットは Available にしないようにすること
     #[test]
     fn evaluate_update_errors_when_size_is_zero() {
         let current = Version::parse("0.13.0").expect("semver");
@@ -198,7 +196,7 @@ mod tests {
         }
     }
 
-    /// 絶対上限を超える宣言サイズは Available にしないこと
+    /// 絶対上限を超える宣言サイズは Available にしないようにすること
     #[test]
     fn evaluate_update_errors_when_size_exceeds_absolute_max() {
         let current = Version::parse("0.13.0").expect("semver");
@@ -225,7 +223,7 @@ mod tests {
         }
     }
 
-    /// digest が無いアセットは Available にしないこと
+    /// digest が無いアセットは Available にしないようにすること
     #[test]
     fn evaluate_update_errors_when_digest_missing() {
         let current = Version::parse("0.13.0").expect("semver");
@@ -249,7 +247,7 @@ mod tests {
         }
     }
 
-    /// `sha256` フィールドだけでも Available になること
+    /// `sha256` フィールドだけでも Available になるようにすること
     #[test]
     fn evaluate_update_accepts_sha256_field() {
         let current = Version::parse("0.13.0").expect("semver");
@@ -279,7 +277,7 @@ mod tests {
         }
     }
 
-    /// 対象アセットが無い場合はエラーになること
+    /// 対象アセットが無い場合はエラーになるようにすること
     #[test]
     fn evaluate_update_errors_when_package_missing() {
         let current = Version::parse("0.12.0").expect("semver");
@@ -304,7 +302,7 @@ mod tests {
         }
     }
 
-    /// 種別はあるがアーキテクチャ不一致の場合は CPU 向けエラーになること
+    /// 種別はあるがアーキテクチャ不一致の場合は CPU 向けエラーになるようにすること
     #[test]
     fn evaluate_update_errors_when_arch_mismatches() {
         let current = Version::parse("0.12.0").expect("semver");
@@ -349,7 +347,7 @@ mod tests {
         assert!(matches!(outcome, UpdateCheckOutcome::UpToDate { .. }));
     }
 
-    /// 不正なタグはエラーになること
+    /// 不正なタグはエラーになるようにすること
     #[test]
     fn evaluate_update_errors_on_invalid_tag() {
         let current = Version::parse("0.13.0").expect("semver");

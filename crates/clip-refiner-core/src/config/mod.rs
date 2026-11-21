@@ -39,11 +39,10 @@ pub use unknown_keys::format_unknown_config_keys_message;
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts;
     use crate::refiner::RefineMode;
 
-    /// `AppConfig` のデフォルト値が正しいであるようにすること
+    /// `AppConfig` のデフォルト値が正しいとなるようにすること
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
@@ -75,7 +74,7 @@ mod tests {
         assert_eq!(config.hotkeys, decoded.hotkeys);
     }
 
-    /// `NotificationSettings` のデフォルト値が正しいであるようにすること
+    /// `NotificationSettings` のデフォルト値が正しいとなるようにすること
     #[test]
     fn test_notification_settings_default() {
         let ns = NotificationSettings::default();
@@ -202,7 +201,7 @@ interval_ms = 2000
         assert!(content.contains("favorite_modes"));
     }
 
-    /// version 未指定の TOML は現行スキーマとして読み込まれ、移行不要であるようにすること
+    /// version 未指定の TOML は現行スキーマとして読み込まれ、移行不要となるようにすること
     #[test]
     fn test_prepare_loaded_without_version_is_current_schema() {
         let toml_str = r#"
@@ -302,7 +301,7 @@ history_enabled = true
         assert!(hotkeys.favorite_mode_slots[1].is_empty());
     }
 
-    /// `add_registered_clip` が登録・検証・上限チェックを行い、平文を常駐させないこと
+    /// `add_registered_clip` が登録・検証・上限チェックを行い、平文を常駐させないようにすること
     #[test]
     fn test_add_registered_clip() {
         use super::AddRegisteredClipError;

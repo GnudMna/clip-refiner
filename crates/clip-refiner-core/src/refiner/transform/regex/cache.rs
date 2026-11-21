@@ -67,7 +67,6 @@ fn compile_pattern(settings: &RegexSettings) -> Option<Regex> {
 #[cfg(test)]
 mod tests {
     use super::RegexPatternCache;
-
     use crate::config::RegexSettings;
 
     fn settings(pattern: &str) -> RegexSettings {

@@ -144,7 +144,7 @@ mod tests {
         );
     }
 
-    /// 有効な画像は検証を通ること
+    /// 有効な画像は検証を通るようにすること
     #[test]
     fn validate_ocr_image_accepts_non_empty() {
         assert!(
@@ -157,7 +157,7 @@ mod tests {
         );
     }
 
-    /// RGBA から BGRA へチャンネルを入れ替えること
+    /// RGBA から BGRA へチャンネルを入れ替えるようにすること
     #[test]
     fn copy_rgba_to_bgra_swaps_red_and_blue() {
         let rgba = [10, 20, 30, 40, 50, 60, 70, 80];
@@ -178,7 +178,7 @@ mod tests {
         assert!(err.to_string().contains("空"));
     }
 
-    /// 小さな RGBA 画像から `SoftwareBitmap` を生成できること
+    /// 小さな RGBA 画像から `SoftwareBitmap` を生成できるようにすること
     #[test]
     fn create_ocr_bitmap_accepts_tiny_rgba_image() {
         let image = RgbaImage {

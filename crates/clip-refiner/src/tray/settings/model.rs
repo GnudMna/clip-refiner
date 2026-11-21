@@ -153,7 +153,6 @@ pub(crate) fn deep_merge_json_values(base: &mut serde_json::Value, other: &serde
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::AppConfig;
     use crate::refiner::RefineMode;
 
@@ -203,7 +202,7 @@ mod tests {
         assert_eq!(writable.interval_ms, original_interval);
     }
 
-    /// `SettingsPatch` の未設定フィールドは JSON に含めないこと
+    /// `SettingsPatch` の未設定フィールドは JSON に含めないようにすること
     #[test]
     fn settings_patch_omits_none_fields_on_serialize() {
         let patch = SettingsPatch {

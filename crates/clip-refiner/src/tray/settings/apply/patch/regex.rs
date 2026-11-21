@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::super::feedback::SettingsApplyFeedback;
-
 use crate::refiner::{REGEX_PREVIEW_SAMPLE, preview_regex_replace};
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;
@@ -37,7 +36,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-
     use crate::tray::state::test_app_state;
 
     /// 正規表現パッチが `AppConfig` へ反映されるようにすること

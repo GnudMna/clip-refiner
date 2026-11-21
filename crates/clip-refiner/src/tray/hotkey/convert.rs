@@ -1,5 +1,4 @@
 use clip_refiner_core::hotkey_binding::{HotkeyKey, HotkeyParseError, ParsedHotkey};
-
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
 
 // ======================================================================

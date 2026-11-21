@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::super::state::AppState;
-
 use crate::config::NotificationSettings;
 use crate::platform;
 use crate::refiner::RefineMode;
@@ -185,7 +184,6 @@ pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::NotificationSettings;
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
 
@@ -209,14 +207,14 @@ mod tests {
         assert!(body.contains("モード: URLデコード → 全体をトリム"));
     }
 
-    /// 通知無効時は本文を生成しないであるようにすること
+    /// 通知無効時は本文を生成しないようにすること
     #[test]
     fn format_body_returns_none_when_disabled() {
         let settings = NotificationSettings::default();
         assert!(format_process_notification_body(&settings, &[RefineMode::Trim], "abc").is_none());
     }
 
-    /// 加工完了 OFF 時は本文を生成しないであるようにすること
+    /// 加工完了 OFF 時は本文を生成しないようにすること
     #[test]
     fn format_body_returns_none_when_process_disabled() {
         let mut settings = enabled_settings();
@@ -283,14 +281,14 @@ mod tests {
         assert!(!body.contains("supersecretvalue"));
     }
 
-    /// 通知無効時は一時停止通知を表示しないであるようにすること
+    /// 通知無効時は一時停止通知を表示しないようにすること
     #[test]
     fn pause_notification_disabled_when_settings_off() {
         let settings = NotificationSettings::default();
         assert!(!should_show_pause_notification(&settings));
     }
 
-    /// `notify_pause` のみ OFF の場合は一時停止通知を表示しないであるようにすること
+    /// `notify_pause` のみ OFF の場合は一時停止通知を表示しないようにすること
     #[test]
     fn pause_notification_disabled_when_notify_pause_off() {
         let mut settings = enabled_settings();
@@ -298,7 +296,7 @@ mod tests {
         assert!(!should_show_pause_notification(&settings));
     }
 
-    /// 履歴復元カテゴリ OFF 時は通知しないであるようにすること
+    /// 履歴復元カテゴリ OFF 時は通知しないようにすること
     #[test]
     fn history_restore_category_disabled() {
         let mut settings = enabled_settings();

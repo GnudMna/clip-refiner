@@ -8,7 +8,7 @@ use std::process::Command;
 // ======================================================================
 /// `tests/` 配下の JavaScript テストスクリプトを Node.js で実行する
 ///
-/// Node.js 未インストール時は `CLIP_REFINER_REQUIRE_NODE=1` のときのみ失敗する。
+/// Node.js 未インストール時は `CLIP_REFINER_REQUIRE_NODE=1` のときのみ失敗する
 /// 意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する
 ///
 /// # Arguments

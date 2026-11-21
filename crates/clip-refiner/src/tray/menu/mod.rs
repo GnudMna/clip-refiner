@@ -24,7 +24,6 @@ mod tests {
 
     use super::icon::create_icon;
     use super::*;
-
     use crate::config::{HotkeySettings, MonitorMode, NotificationSettings};
     use crate::refiner::{RefineCategory, RefineMode};
 
@@ -132,7 +131,7 @@ mod tests {
         assert!(!interval.custom_item.is_checked());
     }
 
-    /// プリセット外の間隔ではカスタム項目がチェックされること
+    /// プリセット外の間隔ではカスタム項目がチェックされるようにすること
     #[test]
     fn build_interval_menu_checks_custom_interval() {
         let interval = TrayMenu::build_interval_menu(750, MonitorMode::Polling)

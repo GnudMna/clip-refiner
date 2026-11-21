@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use super::InMemoryTextClipboard;
-
 use crate::config::{AppConfig, MonitorMode};
 use crate::refiner::text_clipboard::TextClipboard;
 use crate::refiner::{RefineContext, RefineMode};
@@ -423,8 +422,11 @@ impl ClipboardHarness {
 
     /// 連続記録キュー末尾 (直近の記録) を取り消す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `bool` - 取り消した場合は `true`
+    /// * `bool` - 条件を満たす場合は `true`
     pub fn undo_last_continuous_record(&self) -> bool {
         self.state.undo_last_continuous_record()
     }

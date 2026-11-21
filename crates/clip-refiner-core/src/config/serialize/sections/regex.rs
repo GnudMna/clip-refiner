@@ -7,7 +7,6 @@ use super::super::docs::{
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
-
 use crate::config::types::AppConfig;
 
 use anyhow::{Context, Result};

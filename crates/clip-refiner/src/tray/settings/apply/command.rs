@@ -3,7 +3,6 @@ use std::sync::Arc;
 use super::feedback::SettingsApplyFeedback;
 use super::patch::apply_settings_patch;
 use super::refresh::refresh_settings_window;
-
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;

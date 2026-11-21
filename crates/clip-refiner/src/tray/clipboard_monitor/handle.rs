@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::decision::{should_process_clipboard, should_record_continuous_clipboard};
-
 use crate::config::MonitorMode;
 use crate::refiner::{
     ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode,
@@ -281,7 +280,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-
     use crate::config::RegexSettings;
     use crate::refiner::RefineMode;
     use crate::test_helpers::InMemoryTextClipboard;
@@ -375,7 +373,7 @@ mod tests {
         assert_eq!(collect_history(&state), vec!["unchanged".to_string()]);
     }
 
-    /// 履歴無効時は履歴に追加しないであるようにすること
+    /// 履歴無効時は履歴に追加しないようにすること
     #[test]
     fn record_outcome_skips_history_when_disabled() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -386,7 +384,7 @@ mod tests {
         assert_eq!(state.clipboard_session().history_len(), 0);
     }
 
-    /// `NoText` エラー時は観測のみ記録し履歴に追加しないであるようにすること
+    /// `NoText` エラー時は観測のみ記録し履歴に追加しないようにすること
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -433,7 +431,7 @@ mod tests {
         assert_eq!(collect_history(&state), Vec::<String>::new());
     }
 
-    /// 監視再同期時は既観測テキストを連続記録キューへ積まないこと
+    /// 監視再同期時は既観測テキストを連続記録キューへ積まないようにすること
     #[test]
     fn recover_continuous_record_skips_already_seen_text() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -447,7 +445,7 @@ mod tests {
         assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
     }
 
-    /// 監視開始直後の初回同期では既存クリップボードを記録しないこと
+    /// 監視開始直後の初回同期では既存クリップボードを記録しないようにすること
     #[test]
     fn recover_continuous_record_skips_initial_sync() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -458,7 +456,7 @@ mod tests {
         assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
     }
 
-    /// 監視再同期と同時の未観測コピーは連続記録キューへ積むこと
+    /// 監視再同期と同時の未観測コピーは連続記録キューへ積むようにすること
     #[test]
     fn recover_continuous_record_enqueues_unseen_copy_on_reset() {
         let state = Arc::new(crate::tray::state::test_app_state());

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::tray::settings::SettingsWindow;
 use crate::tray::settings::snapshot::SettingsSnapshot;
-
 use crate::tray::state::AppState;
 
 // ======================================================================

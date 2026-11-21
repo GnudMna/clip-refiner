@@ -39,6 +39,23 @@ impl ConfigReloadError {
             Self::Parse(_) => "設定ファイルの形式が不正です",
         }
     }
+
+    /// デスクトップ通知向けのメッセージを返す
+    ///
+    /// `Parse` のみ詳細を括弧付きで付与し、それ以外は `user_message` と同じ
+    ///
+    /// # Arguments
+    /// * `self` - 再読み込みエラー
+    ///
+    /// # Returns
+    /// * `String` - 通知本文
+    #[must_use]
+    pub fn notification_message(&self) -> String {
+        match self {
+            Self::Parse(detail) => format!("{} ({detail})", self.user_message()),
+            _ => self.user_message().to_string(),
+        }
+    }
 }
 
 /// 設定読み込みの結果
@@ -84,12 +101,7 @@ impl ConfigLoadFallback {
     /// * `String` - エラー内容とバックアップ成否を含むメッセージ
     #[must_use]
     pub fn user_message(&self) -> String {
-        let core = match &self.error {
-            ConfigReloadError::Parse(detail) => {
-                format!("{} ({detail})", self.error.user_message())
-            }
-            _ => self.error.user_message().to_string(),
-        };
+        let core = self.error.notification_message();
         let suffix = match (&self.error, self.backup_created) {
             (ConfigReloadError::Parse(_), true) => {
                 "。デフォルト設定で起動します。元ファイルは config.toml.bak に保存しました"
@@ -109,6 +121,22 @@ impl ConfigLoadFallback {
 #[cfg(test)]
 mod tests {
     use super::{ConfigLoadFallback, ConfigReloadError};
+
+    /// 通知向けメッセージが Parse 詳細のみ括弧付きになるようにすること
+    #[test]
+    fn config_reload_error_notification_message_includes_parse_detail() {
+        let parse = ConfigReloadError::Parse("unexpected key".to_string());
+        assert_eq!(
+            parse.notification_message(),
+            "設定ファイルの形式が不正です (unexpected key)"
+        );
+
+        let read = ConfigReloadError::Read("access denied".to_string());
+        assert_eq!(
+            read.notification_message(),
+            "設定ファイルを読み取れませんでした"
+        );
+    }
 
     /// フォールバック理由からユーザー向けメッセージを組み立てられるようにすること
     #[test]

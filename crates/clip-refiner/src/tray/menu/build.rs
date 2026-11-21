@@ -1,6 +1,5 @@
 use super::icon::create_icon;
 use super::types::TrayMenu;
-
 use crate::tray::state::{AppState, MenuSnapshot};
 
 use anyhow::{Context, Result};

@@ -9,7 +9,6 @@ use super::menu_snapshot::MenuSnapshot;
 use super::monitor_snapshot::MonitorSnapshot;
 use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
-
 use crate::config::{AppConfig, ConfigLoadFallback};
 use crate::security::SecretString;
 
@@ -90,6 +89,9 @@ impl AppState {
     /// 現在の設定をファイルへ保存する
     ///
     /// テスト用 `AppState` ではディスクへ書き込まない
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn save_config(&self) {
         if !self.config_sync.should_persist() {
             return;
@@ -133,8 +135,11 @@ impl AppState {
     ///
     /// `config` `RwLock` の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `MonitorSnapshot` - 監視ループ向け設定スナップショット
+    /// * `MonitorSnapshot` - 監視ループ向けに設定フィールドをまとめて一括取得する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
             pipeline: config.effective_pipeline(),
@@ -151,8 +156,11 @@ impl AppState {
     /// 登録クリップ一覧を含む `AppConfig` 全体の clone を避け、メニュー表示に必要な
     /// フィールドだけをコピーする
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `MenuSnapshot` - メニュー向け設定スナップショット
+    /// * `MenuSnapshot` - トレイメニュー構築・同期向けに設定フィールドを一括取得する
     pub fn menu_snapshot(&self) -> MenuSnapshot {
         self.with_config(|config| MenuSnapshot {
             mode: config.mode,
@@ -199,8 +207,11 @@ impl AppState {
 
     /// 連続記録キュー先頭を取り出す
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
+    /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
     pub fn discharge_continuous_record_front(&self) -> Option<SecretString> {
         let discharged = self.clipboard_session.discharge_continuous_record_front();
         if discharged.is_some() {
@@ -228,8 +239,11 @@ impl AppState {
     ///
     /// 取り消し成功時は UI スレッドへ連続記録更新イベントを通知する
     ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
     /// # Returns
-    /// * `bool` - 取り消した場合は `true`、キューが空の場合は `false`
+    /// * `bool` - 条件を満たす場合は `true`
     pub fn undo_last_continuous_record(&self) -> bool {
         let undone = self.clipboard_session.undo_last_continuous_record();
         if undone.is_some() {

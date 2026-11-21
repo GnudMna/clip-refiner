@@ -1,31 +1,19 @@
-//! クリップボードのテキストを加工するツール `ClipRefiner` のライブラリクレート
+//! クリップボードのテキストを加工するツール `ClipRefiner` のアプリクレート
 //!
-//! 加工ロジックと設定型は [`clip_refiner_core`] クレートに分離されている
-//! feature `app` (デフォルト有効) ではトレイ常駐 UI と [`run`] を提供する
+//! feature `app` (デフォルト有効) でトレイ常駐 UI と [`run`] を提供する
+//! 加工ロジック・設定型などのライブラリ API は [`clip_refiner_core`] を直接依存する
 //!
-//! # ライブラリのみ利用する場合
+//! # ライブラリとして使う場合
 //!
-//! GUI 依存を避けるには `default-features = false` を指定し、
-//! [`clip-refiner-core`](clip_refiner_core) 相当の API のみをリンクする
-//!
-//! ```toml
-//! [dependencies]
-//! clip-refiner = { version = "0.14.3", default-features = false }
-//! ```
-//!
-//! または [`clip-refiner-core`] を直接依存に追加する
+//! GUI 依存を避けるには本クレートではなく [`clip-refiner-core`](clip_refiner_core) を使う
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "0.14.3" }
+//! clip-refiner-core = { version = "0.15.0" }
 //! ```
 //!
-//! # 単一モードの加工
-//!
-//! [`Refiner`] トレイトで 1 モードを適用する
-//!
 //! ```
-//! use clip_refiner::{RefineContext, RefineMode, Refiner};
+//! use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 //!
 //! let ctx = RefineContext::default();
 //! let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
@@ -34,8 +22,9 @@
 //!
 //! # 互換性
 //!
-//! ライブラリ API は [`Cargo.toml`] の semver に従う。破壊的変更は CHANGELOG の
-//! **Breaking changes** 節に記載する
+//! アプリの起動 API ([`run`]) と `test_helpers` の変更は `Cargo.toml` の semver に従う
+//! 加工・設定の公開 API は `clip-refiner-core` 側の semver に従う
+//! 破壊的変更は CHANGELOG の **Breaking changes** 節に記載する
 
 #[cfg(not(target_os = "windows"))]
 compile_error!("ClipRefiner は Windows 専用です");
@@ -57,22 +46,14 @@ mod user_error;
 #[cfg(feature = "app")]
 pub mod test_helpers;
 
-pub use clip_refiner_core::config;
-pub use clip_refiner_core::consts;
-pub use clip_refiner_core::hotkey_binding;
-pub use clip_refiner_core::refiner;
-pub use clip_refiner_core::security;
-pub use clip_refiner_core::{
-    AddRegisteredClipError, AppConfig, CONFIG_VERSION, ClipboardIoError, ClipboardProcessError,
-    ClipboardProcessOutcome, ConfigDiskReload, ConfigError, ConfigLoadFallback, ConfigLoadOutcome,
-    ConfigReloadError, Error, FavoriteMoveDirection, FavoriteToggleResult, HotkeyParseError,
-    HotkeySettings, MonitorMode, NotificationSettings, OrderedValue, OwnedClipboard,
-    RefineCategory, RefineContext, RefineMode, Refiner, RegexSettings, ResolvedClip,
-    SelectorWebviewRetention, apply_pipeline_to_text, apply_text_pipeline,
-    disk_config_modified_time, format_unknown_config_keys_message, get_config_dir,
-    is_portable_mode, is_within_clipboard_limit, is_within_parser_limit, open_config_file,
-    process_clipboard, process_clipboard_pipeline, split_pipeline,
-};
+// ======================================================================
+// 内部モジュールエイリアス
+// ======================================================================
+// アプリ内部向け。公開 API には含めない (ライブラリ利用は clip_refiner_core)
+pub(crate) use clip_refiner_core::config;
+pub(crate) use clip_refiner_core::consts;
+pub(crate) use clip_refiner_core::refiner;
+pub(crate) use clip_refiner_core::security;
 
 // ======================================================================
 // エントリポイント

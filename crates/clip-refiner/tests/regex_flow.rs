@@ -1,7 +1,7 @@
 //! 正規表現加工の統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{ClipboardHarness, MonitorMode};
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // 監視経路

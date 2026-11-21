@@ -40,7 +40,6 @@ impl RegexPreviewResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::RegexSettings;
     use crate::refiner::REGEX_PREVIEW_SAMPLE;
 

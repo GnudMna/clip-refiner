@@ -70,7 +70,6 @@ pub(crate) fn should_record_continuous_clipboard(ps: &mut ProcessedState, text: 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::security::ContentFingerprint;
 
     /// 空文字列は加工対象外とすること

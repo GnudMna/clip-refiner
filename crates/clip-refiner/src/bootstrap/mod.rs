@@ -8,16 +8,15 @@ mod logging;
 mod oneshot;
 mod portable;
 
+use crate::log_error;
+use crate::platform;
+use crate::tray;
+use crate::user_error::fatal_startup;
 use args::{Args, is_oneshot};
 use instance::ensure_single_instance;
 use logging::{setup_console, setup_logging};
 use oneshot::run_once;
 use portable::run_portable_update_helper;
-
-use crate::log_error;
-use crate::platform;
-use crate::tray;
-use crate::user_error::fatal_startup;
 
 use anyhow::Result;
 use clap::Parser;

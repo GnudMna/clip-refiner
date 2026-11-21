@@ -3,7 +3,6 @@ use std::sync::mpsc;
 use std::time::Instant;
 
 use super::*;
-
 use crate::config::HotkeySettings;
 use crate::refiner::RefineMode;
 use crate::test_helpers::{stub_worker, test_app_state_arc, test_tray_menu};
@@ -411,7 +410,7 @@ fn hotkey_ui_overlay_mutual_exclusion() {
     assert!(!ctx.clip_selector.as_ref().unwrap().is_visible());
 }
 
-/// ホットキー受信タイムアウトが短い応答性向けの値であること
+/// ホットキー受信タイムアウトが短い応答性向けの値となるようにすること
 #[test]
 fn hotkey_recv_timeout_is_responsive() {
     assert_eq!(HOTKEY_RECV_TIMEOUT.as_millis(), 10);

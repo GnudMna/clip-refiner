@@ -112,4 +112,26 @@ mod tests {
         let input = "a: 1\n  b: 2";
         assert_eq!(yaml_to_json_preserve_order(input), input);
     }
+
+    /// パーサ上限超過の入力は JSON 変換をスキップすること
+    #[test]
+    fn test_yaml_to_json_skips_oversized_input() {
+        use crate::consts::MAX_PARSER_INPUT_BYTES;
+
+        let input = "a".repeat(MAX_PARSER_INPUT_BYTES + 1);
+        let output = yaml_to_json(&input);
+        assert!(matches!(output, Cow::Borrowed(_)));
+        assert_eq!(output.len(), input.len());
+    }
+
+    /// パーサ上限超過の入力はキー順序保持でもスキップすること
+    #[test]
+    fn test_yaml_to_json_preserve_order_skips_oversized_input() {
+        use crate::consts::MAX_PARSER_INPUT_BYTES;
+
+        let input = "a".repeat(MAX_PARSER_INPUT_BYTES + 1);
+        let output = yaml_to_json_preserve_order(&input);
+        assert!(matches!(output, Cow::Borrowed(_)));
+        assert_eq!(output.len(), input.len());
+    }
 }

@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::ipc::{
-    OneshotIpcResponse, OneshotIpcServer, OneshotProcessResult, process_via_pipe,
+    ClientError, OneshotIpcResponse, OneshotIpcServer, OneshotProcessResult, process_via_pipe,
     send_raw_line_to_pipe, wait_for_named_pipe,
 };
 use crate::refiner::{RefineContext, RefineMode};
@@ -85,7 +85,7 @@ pub fn start_oneshot_ipc_for_test(
 /// * `ctx` - 加工コンテキスト
 ///
 /// # Returns
-/// * `Result<OneshotIpcResponse, String>` - 応答またはエラー文字列
+/// * `Result<OneshotIpcResponse, ClientError>` - 応答または型付き通信エラー
 ///
 /// # Errors
 /// 接続・送受信・プロトコルエラーのいずれか
@@ -93,8 +93,8 @@ pub fn process_oneshot_via_pipe(
     pipe_name: &str,
     pipeline: &[RefineMode],
     ctx: &RefineContext,
-) -> Result<OneshotIpcResponse, String> {
-    process_via_pipe(pipe_name, pipeline, ctx).map_err(|e| e.to_string())
+) -> Result<OneshotIpcResponse, ClientError> {
+    process_via_pipe(pipe_name, pipeline, ctx)
 }
 
 /// 指定パイプへ生の 1 行を送り、応答を待つ
@@ -104,12 +104,15 @@ pub fn process_oneshot_via_pipe(
 /// * `line` - 改行を含まない JSON など
 ///
 /// # Returns
-/// * `Result<OneshotIpcResponse, String>` - 応答またはエラー文字列
+/// * `Result<OneshotIpcResponse, ClientError>` - 応答または型付き通信エラー
 ///
 /// # Errors
 /// 接続・送受信・プロトコルエラーのいずれか
-pub fn send_raw_oneshot_line(pipe_name: &str, line: &str) -> Result<OneshotIpcResponse, String> {
-    send_raw_line_to_pipe(pipe_name, line).map_err(|e| e.to_string())
+pub fn send_raw_oneshot_line(
+    pipe_name: &str,
+    line: &str,
+) -> Result<OneshotIpcResponse, ClientError> {
+    send_raw_line_to_pipe(pipe_name, line)
 }
 
 /// 名前付きパイプが接続可能になるまで待つ

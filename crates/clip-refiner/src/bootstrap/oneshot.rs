@@ -1,7 +1,6 @@
 //! ワンショット加工 (IPC 委譲またはローカル実行)
 
 use super::args::Args;
-
 use crate::config::{self, AppConfig};
 use crate::refiner::{
     self, ClipboardProcessError, ClipboardProcessOutcome, OwnedClipboard, RefineContext, RefineMode,
@@ -15,7 +14,7 @@ use anyhow::{Context, Result};
 // ======================================================================
 /// クリップボードの内容を一度だけ加工して終了する
 ///
-/// 常駐プロセスがある場合は IPC で委譲し、監視のエコー再加工を避ける。
+/// 常駐プロセスがある場合は IPC で委譲し、監視のエコー再加工を避ける
 /// 常駐が無い場合はローカルでクリップボードを直接加工する
 ///
 /// # Arguments
@@ -46,7 +45,7 @@ pub(super) fn run_once(args: &Args) -> Result<()> {
                 // 常駐ありで IPC に失敗した場合はローカル実行しない (二重操作を避ける)
                 log_error!("常駐プロセスへのワンショット委譲に失敗: {err}");
                 eprintln!("エラー: {err}");
-                return Err(anyhow::anyhow!(err.to_string()));
+                return Err(err.into());
             }
         }
     }
@@ -147,9 +146,9 @@ fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
 #[cfg(test)]
 mod tests {
     use super::super::args::{Args, sample_args_for_test};
-    use super::{build_refinement_context, resolve_oneshot_pipeline};
-
+    use super::{build_refinement_context, report_oneshot_ipc_response, resolve_oneshot_pipeline};
     use crate::config::AppConfig;
+    use crate::ipc::{OneshotIpcResponse, OneshotIpcStatus};
     use crate::refiner::RefineMode;
 
     /// `--mode` 指定時は単一モードのパイプラインになるようにすること
@@ -201,5 +200,49 @@ mod tests {
         assert_eq!(ctx.regex.replacement, "bar");
         assert!(ctx.regex.case_insensitive);
         assert!(ctx.regex.multiline);
+    }
+
+    /// 加工成功の IPC 応答を `Ok` として扱うようにすること
+    #[test]
+    fn report_oneshot_ipc_response_ok_on_processed() {
+        let response = OneshotIpcResponse {
+            request_id: "req-1".to_string(),
+            status: OneshotIpcStatus::Processed,
+            message: "加工が完了しました".to_string(),
+            detail: None,
+        };
+        assert!(report_oneshot_ipc_response(&response).is_ok());
+
+        let image = OneshotIpcResponse {
+            status: OneshotIpcStatus::ImageProcessed,
+            message: "画像加工が完了しました".to_string(),
+            ..response
+        };
+        assert!(report_oneshot_ipc_response(&image).is_ok());
+    }
+
+    /// 変更なしの IPC 応答を `Ok` として扱うようにすること
+    #[test]
+    fn report_oneshot_ipc_response_ok_on_unchanged() {
+        let response = OneshotIpcResponse {
+            request_id: "req-2".to_string(),
+            status: OneshotIpcStatus::Unchanged,
+            message: "テキストに変更はありませんでした".to_string(),
+            detail: None,
+        };
+        assert!(report_oneshot_ipc_response(&response).is_ok());
+    }
+
+    /// エラーの IPC 応答を `Err` として扱うようにすること
+    #[test]
+    fn report_oneshot_ipc_response_err_on_error() {
+        let response = OneshotIpcResponse {
+            request_id: "req-3".to_string(),
+            status: OneshotIpcStatus::Error,
+            message: "加工に失敗しました".to_string(),
+            detail: Some("read failed".to_string()),
+        };
+        let err = report_oneshot_ipc_response(&response).expect_err("Error は Err");
+        assert!(err.to_string().contains("加工に失敗しました"));
     }
 }

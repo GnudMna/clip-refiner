@@ -157,7 +157,7 @@ mod tests {
         assert!((geometry.height - MIN_HEIGHT).abs() < f64::EPSILON);
     }
 
-    /// デフォルト幾何が既定サイズであるようにすること
+    /// デフォルト幾何が既定サイズとなるようにすること
     #[test]
     fn default_geometry_matches_initial_window_size() {
         let geometry = SettingsWindowGeometry::default();
@@ -167,7 +167,7 @@ mod tests {
         assert!(geometry.y.is_none());
     }
 
-    /// 幾何 JSON を保存して再読込できること
+    /// 幾何 JSON を保存して再読込できるようにすること
     #[test]
     fn geometry_round_trips_through_settings_window_json() {
         use crate::config::get_config_dir;
@@ -188,6 +188,75 @@ mod tests {
 
             let loaded = load_settings_window_geometry();
             assert_eq!(loaded, geometry);
+        });
+    }
+
+    /// 下限未満のサイズがクランプされるようにすること
+    #[test]
+    fn geometry_clamps_below_minimum_size() {
+        let geometry = SettingsWindowGeometry {
+            width: 1.0,
+            height: 1.0,
+            x: None,
+            y: None,
+        }
+        .clamped();
+        assert!((geometry.width - MIN_WIDTH).abs() < f64::EPSILON);
+        assert!((geometry.height - MIN_HEIGHT).abs() < f64::EPSILON);
+    }
+
+    /// ファイル欠落時は既定幾何へフォールバックすること
+    #[test]
+    fn load_geometry_falls_back_when_file_missing() {
+        use crate::test_helpers::with_temp_config_dir;
+
+        with_temp_config_dir(|| {
+            let loaded = load_settings_window_geometry();
+            assert_eq!(loaded, SettingsWindowGeometry::default());
+        });
+    }
+
+    /// 不正 JSON は既定幾何へフォールバックすること
+    #[test]
+    fn load_geometry_falls_back_on_invalid_json() {
+        use crate::config::get_config_dir;
+        use crate::test_helpers::with_temp_config_dir;
+
+        with_temp_config_dir(|| {
+            let path = get_config_dir()
+                .expect("テスト用設定ディレクトリ")
+                .join(GEOMETRY_FILE);
+            std::fs::write(&path, "{not-json").expect("不正 JSON の書き込み");
+
+            let loaded = load_settings_window_geometry();
+            assert_eq!(loaded, SettingsWindowGeometry::default());
+        });
+    }
+
+    /// 読込時に範囲外サイズをクランプすること
+    #[test]
+    fn load_geometry_clamps_out_of_range_size() {
+        use crate::config::get_config_dir;
+        use crate::test_helpers::with_temp_config_dir;
+
+        with_temp_config_dir(|| {
+            let path = get_config_dir()
+                .expect("テスト用設定ディレクトリ")
+                .join(GEOMETRY_FILE);
+            let geometry = SettingsWindowGeometry {
+                width: 10_000.0,
+                height: 10.0,
+                x: Some(1.0),
+                y: Some(2.0),
+            };
+            let json = serde_json::to_string_pretty(&geometry).expect("幾何 JSON のシリアライズ");
+            std::fs::write(&path, json).expect("幾何 JSON の書き込み");
+
+            let loaded = load_settings_window_geometry();
+            assert!((loaded.width - MAX_WIDTH).abs() < f64::EPSILON);
+            assert!((loaded.height - MIN_HEIGHT).abs() < f64::EPSILON);
+            assert_eq!(loaded.x, Some(1.0));
+            assert_eq!(loaded.y, Some(2.0));
         });
     }
 }

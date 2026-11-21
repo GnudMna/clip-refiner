@@ -85,7 +85,7 @@ mod tests {
         let _icon = create_window_icon().expect("ウィンドウアイコンの作成に失敗");
     }
 
-    /// データ URL が PNG 形式であるようにすること
+    /// データ URL が PNG 形式となるようにすること
     #[test]
     fn app_icon_png_data_url_is_png_data_uri() {
         let data_url = app_icon_png_data_url();

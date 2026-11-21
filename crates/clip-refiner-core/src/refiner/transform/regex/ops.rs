@@ -5,7 +5,6 @@ use super::match_timeout::{
     RegexMatchTimeout, extract_cancellable, on_match_timeout, replace_all_cancellable,
     run_with_match_timeout, split_cancellable,
 };
-
 use crate::config::RegexSettings;
 
 // ======================================================================
@@ -144,7 +143,6 @@ mod tests {
 
     use super::super::match_timeout::with_pool_test_lock;
     use super::{RegexPatternCache, regex_delete, regex_extract, regex_replace, regex_split};
-
     use crate::config::RegexSettings;
 
     fn settings(pattern: &str) -> RegexSettings {

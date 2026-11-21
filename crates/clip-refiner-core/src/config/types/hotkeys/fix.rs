@@ -131,10 +131,9 @@ pub(super) fn favorite_slot_field_key(index: usize) -> String {
 mod tests {
     use super::super::HotkeySettings;
     use super::{HotkeyFixKind, format_hotkey_fixes_message};
-
     use crate::consts;
 
-    /// 不正な固定ホットキーの修正メッセージを組み立てられること
+    /// 不正な固定ホットキーの修正メッセージを組み立てられるようにすること
     #[test]
     fn format_invalid_fix_message() {
         let mut hotkeys = HotkeySettings {
@@ -149,7 +148,7 @@ mod tests {
         assert!(message.contains(consts::DEFAULT_HOTKEY_PAUSE));
     }
 
-    /// 重複する固定ホットキーの修正メッセージを組み立てられること
+    /// 重複する固定ホットキーの修正メッセージを組み立てられるようにすること
     #[test]
     fn format_duplicate_fix_message() {
         let mut hotkeys = HotkeySettings {
@@ -170,7 +169,7 @@ mod tests {
         assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
     }
 
-    /// 重複するお気に入りスロットの無効化メッセージを組み立てられること
+    /// 重複するお気に入りスロットの無効化メッセージを組み立てられるようにすること
     #[test]
     fn format_favorite_duplicate_disabled_message() {
         let mut hotkeys = HotkeySettings {

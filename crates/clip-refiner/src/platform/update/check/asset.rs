@@ -62,7 +62,7 @@ mod tests {
         }
     }
 
-    /// ポータブル向けに `-portable.zip` を選ぶこと
+    /// ポータブル向けに `-portable.zip` を選ぶようにすること
     #[test]
     fn select_asset_prefers_portable_zip() {
         let assets = [
@@ -74,7 +74,7 @@ mod tests {
         assert!(selected.name.ends_with("-portable.zip"));
     }
 
-    /// アーキテクチャが一致するアセットを選ぶこと
+    /// アーキテクチャが一致するアセットを選ぶようにすること
     #[test]
     fn select_asset_requires_matching_arch() {
         let assets = [
@@ -85,14 +85,14 @@ mod tests {
         assert_eq!(selected.name, "clip-refiner-0.13.1-x86_64.msi");
     }
 
-    /// アーキテクチャ不一致時は先頭候補へフォールバックしないこと
+    /// アーキテクチャ不一致時は先頭候補へフォールバックしないようにすること
     #[test]
     fn select_asset_returns_none_when_arch_mismatches() {
         let assets = [asset("clip-refiner-0.13.1-aarch64.msi", 1)];
         assert!(select_asset(&assets, UpdatePackageKind::Msi, "x86_64").is_none());
     }
 
-    /// `.MSI` など大文字拡張子も選ぶこと
+    /// `.MSI` など大文字拡張子も選ぶようにすること
     #[test]
     fn select_asset_accepts_uppercase_msi_extension() {
         let assets = [asset("clip-refiner-0.13.1-x86_64.MSI", 3)];

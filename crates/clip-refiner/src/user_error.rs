@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(restore.title(), titles::CLIPBOARD);
     }
 
-    /// 加工エラーは core の `user_message` を本文に使うこと
+    /// 加工エラーは core の `user_message` を本文に使うようにすること
     #[test]
     fn clipboard_process_error_maps_user_message() {
         let notification = UserNotification::from(ClipboardProcessError::NoText);
@@ -355,7 +355,7 @@ mod tests {
         assert_eq!(notification.body(), "クリップボードにテキストがありません");
     }
 
-    /// 更新エラーは `UPDATE` タイトルと `Display` 本文になること
+    /// 更新エラーは `UPDATE` タイトルと `Display` 本文になるようにすること
     #[test]
     fn update_error_maps_to_update_notification() {
         let notification = UserNotification::from(UpdateError::IntegrityFailed);
@@ -363,7 +363,7 @@ mod tests {
         assert!(notification.body().contains("SHA-256"));
     }
 
-    /// 設定保存失敗通知が固定の案内文を返すこと
+    /// 設定保存失敗通知が固定の案内文を返すようにすること
     #[test]
     fn config_save_failure_has_settings_title() {
         let notification = config_save_failure();
@@ -371,7 +371,7 @@ mod tests {
         assert!(notification.body().contains("保存に失敗"));
     }
 
-    /// 設定パッチキュー失敗通知が固定の案内文を返すこと
+    /// 設定パッチキュー失敗通知が固定の案内文を返すようにすること
     #[test]
     fn settings_patch_enqueue_failure_has_settings_title() {
         let notification = settings_patch_enqueue_failure();
@@ -398,7 +398,7 @@ mod tests {
         );
     }
 
-    /// 起動時の `WebView2` 案内が監視継続を伝えること
+    /// 起動時の `WebView2` 案内が監視継続を伝えるようにすること
     #[test]
     fn webview2_runtime_missing_startup_mentions_monitor_still_works() {
         let notification = webview2_runtime_missing_startup();
@@ -407,7 +407,7 @@ mod tests {
         assert!(notification.body().contains("WebView2"));
     }
 
-    /// 表示失敗時の `WebView2` 案内が UI 名と再起動を含むこと
+    /// 表示失敗時の `WebView2` 案内が UI 名と再起動を含むようにすること
     #[test]
     fn webview2_runtime_missing_on_open_includes_ui_label() {
         let notification = webview2_runtime_missing_on_open("設定");
@@ -416,7 +416,7 @@ mod tests {
         assert!(notification.body().contains("再起動"));
     }
 
-    /// `WebView` 一般失敗は UI 名をタイトルに使うこと
+    /// `WebView` 一般失敗は UI 名をタイトルに使うようにすること
     #[test]
     fn webview_window_generic_failure_uses_ui_label_as_title() {
         let notification = webview_window_generic_failure("クイックセレクター");
@@ -424,7 +424,7 @@ mod tests {
         assert!(notification.body().contains("初期化に失敗"));
     }
 
-    /// Runtime 未導入時は導入ページを開き、一般失敗では開かないこと
+    /// Runtime 未導入時は導入ページを開き、一般失敗では開かないようにすること
     #[test]
     fn notify_webview_window_init_failure_opens_download_only_when_guiding() {
         use crate::platform::webview2::{

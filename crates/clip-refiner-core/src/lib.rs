@@ -38,7 +38,7 @@ pub use hotkey_binding::{
     HotkeyKey, HotkeyModifiers, HotkeyParseError, ParsedHotkey, parse_hotkey_binding,
     parse_hotkey_or_default, parse_hotkey_or_default_labeled,
 };
-mod platform;
+mod native;
 pub mod refiner;
 pub mod security;
 

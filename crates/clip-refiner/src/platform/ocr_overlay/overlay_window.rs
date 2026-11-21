@@ -6,7 +6,6 @@ use super::geometry;
 use super::layered::LayeredOverlay;
 use super::types::{DragSelection, OVERLAY_CLASS_NAME, OverlayCompleteFn};
 use super::wndproc::{OverlayState, hide_overlay, register_overlay_class};
-
 use crate::platform::screen_capture::virtual_screen_bounds;
 
 use anyhow::{Context, Result, bail};
@@ -148,7 +147,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-
     use crate::platform::ocr_overlay::geometry::make_lparam;
     use crate::platform::ocr_overlay::types::{BORDER_PIXEL, SelectionRect};
     use crate::platform::screen_capture::ScreenRect;
@@ -186,7 +184,7 @@ mod tests {
         }
     }
 
-    /// オーバーレイを生成・表示・非表示・破棄できること
+    /// オーバーレイを生成・表示・非表示・破棄できるようにすること
     #[test]
     fn overlay_lifecycle_create_show_hide() {
         let mut overlay =
@@ -197,7 +195,7 @@ mod tests {
         assert!(!overlay.is_visible(), "非表示後は不可視であること");
     }
 
-    /// マウスメッセージ注入で範囲選択が確定し枠色が描画されること
+    /// マウスメッセージ注入で範囲選択が確定し枠色が描画されるようにすること
     #[test]
     fn overlay_drag_completes_with_screen_rect_and_border() {
         let completed: Arc<Mutex<Option<Option<ScreenRect>>>> = Arc::new(Mutex::new(None));
@@ -253,7 +251,7 @@ mod tests {
         assert!(screen.height >= 5);
     }
 
-    /// Escape で選択をキャンセルできること
+    /// Escape で選択をキャンセルできるようにすること
     #[test]
     fn overlay_escape_cancels_selection() {
         let completed: Arc<Mutex<Option<Option<ScreenRect>>>> = Arc::new(Mutex::new(None));

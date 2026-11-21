@@ -13,7 +13,13 @@ use std::sync::Arc;
 
 use super::feedback::SettingsPatchApplyResult;
 use super::refresh::{SettingsRefreshScope, refresh_settings_window_scoped};
-
+use crate::tray::clipboard_monitor::bump_monitor_generation;
+use crate::tray::menu::TrayMenu;
+use crate::tray::selector::QuickSelectorWindow;
+use crate::tray::settings::SettingsWindow;
+use crate::tray::settings::ipc::SettingsPatch;
+use crate::tray::state::AppState;
+use crate::tray::worker::ClipboardWorkerHandle;
 use continuous_record::apply_continuous_record_patch;
 use history::apply_history_patch;
 use hotkeys::apply_hotkeys_patch;
@@ -24,14 +30,6 @@ use refine::apply_refine_patch;
 use regex::apply_regex_patch;
 use selector_webview::apply_selector_webview_patch;
 use system::apply_system_patch;
-
-use crate::tray::clipboard_monitor::bump_monitor_generation;
-use crate::tray::menu::TrayMenu;
-use crate::tray::selector::QuickSelectorWindow;
-use crate::tray::settings::SettingsWindow;
-use crate::tray::settings::ipc::SettingsPatch;
-use crate::tray::state::AppState;
-use crate::tray::worker::ClipboardWorkerHandle;
 
 // ======================================================================
 // パッチ適用
@@ -147,10 +145,8 @@ pub(super) fn refresh_plan_after_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use super::super::feedback::should_notify_apply_error_via_desktop;
-
+    use super::*;
     use crate::config::NotificationSettings;
     use crate::refiner::RefineMode;
     use crate::test_helpers::TrayTestContext;
@@ -175,7 +171,7 @@ mod tests {
         assert!(ctx.menu().history.enabled_item.is_checked());
     }
 
-    /// ウィンドウ非表示後の無効な正規表現パッチがフォールバック通知対象であるようにすること
+    /// ウィンドウ非表示後の無効な正規表現パッチがフォールバック通知対象となるようにすること
     #[test]
     fn invalid_regex_feedback_targets_desktop_fallback_after_hide() {
         let ctx = TrayTestContext::new();
@@ -246,7 +242,7 @@ mod tests {
         );
     }
 
-    /// ホットキー正規化時に設定 UI 向けフィードバックを返すこと
+    /// ホットキー正規化時に設定 UI 向けフィードバックを返すようにすること
     #[test]
     fn apply_without_ui_returns_hotkey_normalization_feedback() {
         let ctx = TrayTestContext::new();

@@ -58,14 +58,14 @@ mod tests {
         assert!(fp.matches("hello"));
     }
 
-    /// 異なるテキストは一致しないであるようにすること
+    /// 異なるテキストは一致しないようにすること
     #[test]
     fn fingerprint_rejects_different_text() {
         let fp = ContentFingerprint::from_text("hello");
         assert!(!fp.matches("world"));
     }
 
-    /// 長さが異なる場合は一致しないであるようにすること
+    /// 長さが異なる場合は一致しないようにすること
     #[test]
     fn fingerprint_rejects_different_length() {
         let fp = ContentFingerprint::from_text("ab");

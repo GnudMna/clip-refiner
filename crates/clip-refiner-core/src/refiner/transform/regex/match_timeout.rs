@@ -46,7 +46,7 @@ impl MatchCancel {
 
 /// 正規表現マッチの同時実行スロットを管理するプール
 ///
-/// タイムアウト時はキャンセルを要求し、実行側がマッチ境界で中断してスロットを返す。
+/// タイムアウト時はキャンセルを要求し、実行側がマッチ境界で中断してスロットを返す
 /// スロット数を超えて spawn しない
 struct RegexMatchPool {
     available: Mutex<usize>,
@@ -79,7 +79,7 @@ impl RegexMatchPool {
     /// * `timeout` - 取得待ちの上限時間
     ///
     /// # Returns
-    /// * `Result<RegexMatchPermit, RegexMatchTimeout>` - 取得成功時は `Permit`。
+    /// * `Result<RegexMatchPermit, RegexMatchTimeout>` - 取得成功時は `Permit`
     ///   制限時間内に空きがなければタイムアウト
     fn acquire(&'static self, timeout: Duration) -> Result<RegexMatchPermit, RegexMatchTimeout> {
         let deadline = Instant::now() + timeout;
@@ -132,7 +132,7 @@ static REGEX_MATCH_POOL: LazyLock<RegexMatchPool> =
 
 /// 正規表現マッチを制限時間内で実行する
 ///
-/// 制限時間を超えた場合はキャンセルを要求して `Err(RegexMatchTimeout)` を返す。
+/// 制限時間を超えた場合はキャンセルを要求して `Err(RegexMatchTimeout)` を返す
 /// 実行側は `MatchCancel` を見てマッチ境界で中断する。同時実行は
 /// `REGEX_MATCH_MAX_IN_FLIGHT` で上限する
 pub(super) fn run_with_match_timeout<T, F>(op: F) -> Result<T, RegexMatchTimeout>
@@ -316,7 +316,6 @@ mod tests {
         replace_all_cancellable, run_with_match_timeout_duration, wait_until_pool_idle,
         with_pool_test_lock,
     };
-
     use crate::consts::REGEX_MATCH_MAX_IN_FLIGHT;
 
     use regex::Regex;
@@ -338,7 +337,7 @@ mod tests {
         });
     }
 
-    /// 制限時間内に終わるマッチは結果を返すこと
+    /// 制限時間内に終わるマッチは結果を返すようにすること
     #[test]
     fn test_run_with_match_timeout_completes() {
         with_pool_test_lock(|| {
@@ -350,7 +349,7 @@ mod tests {
         });
     }
 
-    /// タイムアウト時は置換せず元テキストを返すこと
+    /// タイムアウト時は置換せず元テキストを返すようにすること
     #[test]
     fn test_regex_replace_timeout_keeps_original() {
         with_pool_test_lock(|| {
@@ -393,7 +392,7 @@ mod tests {
         });
     }
 
-    /// プール飽和時は追加マッチを拒否し、解放後は再実行できること
+    /// プール飽和時は追加マッチを拒否し、解放後は再実行できるようにすること
     #[test]
     fn test_match_pool_rejects_when_saturated_then_recovers() {
         with_pool_test_lock(|| {

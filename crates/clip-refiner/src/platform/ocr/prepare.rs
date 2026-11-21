@@ -111,7 +111,7 @@ mod tests {
         );
     }
 
-    /// 倍率が 1 以下なら元画像を返すこと
+    /// 倍率が 1 以下なら元画像を返すようにすること
     #[test]
     fn upscale_nearest_keeps_image_when_scale_is_one() {
         let image = RgbaImage {

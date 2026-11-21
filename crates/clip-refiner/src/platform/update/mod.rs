@@ -2,7 +2,7 @@
 //!
 //! version API の各アセットに GitHub Release Asset の `digest` (`sha256:<hex>`) が
 //! 含まれることを前提とする。ダウンロード中は宣言サイズ超過または絶対上限で打ち切り、
-//! 完了後にサイズと SHA-256 を検証してから適用する。
+//! 完了後にサイズと SHA-256 を検証してから適用する
 //! 保護対象タグのアセット DL にはビルド時埋め込みキー (`CLIP_REFINER_KEY`) を
 //! `Authorization: Bearer` で付与する
 
@@ -23,7 +23,9 @@ pub(crate) use types::{UpdateApplyUiResponse, UpdateCheckSource, UpdateCheckUiRe
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use apply::ApplyOptions;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub(crate) use apply::{apply_update_at, apply_update_at_with_key};
+pub(crate) use apply::apply_update_at;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use apply::apply_update_at_with_key;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use check::check_for_update_at;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
@@ -49,7 +51,7 @@ pub(crate) fn current_app_version() -> &'static str {
 
 /// ビルド時に埋め込まれた bridge ダウンロードキーを返す
 ///
-/// 環境変数 `CLIP_REFINER_KEY` がビルド時に設定されていればその値。
+/// 環境変数 `CLIP_REFINER_KEY` がビルド時に設定されていればその値
 /// 未設定または空文字のときは `None` (無認証 GET)
 ///
 /// # Returns

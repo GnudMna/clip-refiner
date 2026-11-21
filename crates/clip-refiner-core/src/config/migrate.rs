@@ -1,5 +1,4 @@
 use super::types::AppConfig;
-
 use crate::consts;
 
 // ======================================================================
@@ -99,11 +98,10 @@ fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts;
     use crate::refiner::RefineMode;
 
-    /// 現行バージョンの設定は移行不要であるようにすること
+    /// 現行バージョンの設定は移行不要となるようにすること
     #[test]
     fn migrate_current_version_is_noop() {
         let config = AppConfig::default();

@@ -1,10 +1,8 @@
 //! 設定ウィンドウ IPC とパッチ適用の統合テスト
 
-use clip_refiner::AppConfig;
-use clip_refiner::MonitorMode;
-use clip_refiner::RefineMode;
-use clip_refiner::consts;
 use clip_refiner::test_helpers::SettingsTestContext;
+use clip_refiner_core::consts;
+use clip_refiner_core::{AppConfig, MonitorMode, RefineMode};
 
 // ======================================================================
 // テスト
@@ -192,7 +190,7 @@ fn apply_ipc_updates_hotkeys_and_fixes_invalid() {
     assert_eq!(hotkeys.favorite_mode_slots, vec![String::new()]);
 }
 
-/// 無効な正規表現パッチは設定を更新しないこと
+/// 無効な正規表現パッチは設定を更新しないようにすること
 #[test]
 fn apply_ipc_rejects_invalid_regex() {
     let ctx = SettingsTestContext::new();
@@ -229,7 +227,7 @@ fn apply_ipc_pauses_monitoring() {
     assert!(ctx.menu().pause_item.is_checked());
 }
 
-/// IPC `apply` 後に `config.toml` へ保存され再読込できること
+/// IPC `apply` 後に `config.toml` へ保存され再読込できるようにすること
 #[test]
 fn apply_ipc_persists_settings_to_config_toml() {
     SettingsTestContext::with_persistence(|ctx| {

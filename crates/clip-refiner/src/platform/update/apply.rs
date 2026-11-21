@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use super::error::UpdateError;
 use super::replace::{current_install_dir, launch_portable_replace_helper};
 use super::types::{AvailableUpdate, UpdateApplyOutcome};
-use super::verify::{download_and_verify, download_and_verify_with_key};
+use super::verify::download_and_verify;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+use super::verify::download_and_verify_with_key;
 use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO};
 
 use zip::ZipArchive;
@@ -56,7 +58,7 @@ pub(crate) fn apply_update(update: &AvailableUpdate) -> UpdateApplyOutcome {
 
 /// 指定した bridge ベース URL で更新アセットをダウンロードして適用する
 ///
-/// 統合テストからローカル HTTP サーバへ向けて呼び出す。
+/// 統合テストからローカル HTTP サーバへ向けて呼び出す
 /// ダウンロードキーはビルド埋め込み値を使う
 ///
 /// # Arguments
@@ -99,6 +101,7 @@ pub(crate) fn apply_update_at(
 ///
 /// # Returns
 /// * `UpdateApplyOutcome` - 適用結果
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn apply_update_at_with_key(
     update: &AvailableUpdate,
     base_url: &str,
@@ -334,14 +337,14 @@ fn open_in_explorer(path: &Path) {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::io::Write;
+
+    use super::*;
 
     use zip::ZipWriter;
     use zip::write::SimpleFileOptions;
 
-    /// ダウンロード URL が bridge パス規約に従うこと
+    /// ダウンロード URL が bridge パス規約に従うようにすること
     #[test]
     fn asset_download_url_matches_bridge_convention() {
         let url = asset_download_url(BRIDGE_BASE_URL, "v0.13.1", "clip-refiner-0.13.1-x86_64.msi");
@@ -351,7 +354,7 @@ mod tests {
         );
     }
 
-    /// ZIP を展開してファイル内容を復元できること
+    /// ZIP を展開してファイル内容を復元できるようにすること
     #[test]
     fn extract_zip_archive_writes_nested_files() {
         let root = std::env::temp_dir().join(format!(
@@ -382,7 +385,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// Zip Slip なエントリを展開先外へ書かないこと
+    /// Zip Slip なエントリを展開先外へ書かないようにすること
     #[test]
     fn extract_zip_archive_skips_zip_slip_entries() {
         let root = std::env::temp_dir().join(format!(
@@ -418,7 +421,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// 展開直下の単一フォルダをポータブルルートとして返すこと
+    /// 展開直下の単一フォルダをポータブルルートとして返すようにすること
     #[test]
     fn find_portable_root_returns_single_child_dir() {
         let root = std::env::temp_dir().join(format!(
@@ -436,7 +439,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// 直下にファイルがある場合はルートを返さないこと
+    /// 直下にファイルがある場合はルートを返さないようにすること
     #[test]
     fn find_portable_root_none_when_files_present() {
         let root = std::env::temp_dir().join(format!(
@@ -448,6 +451,85 @@ mod tests {
         fs::write(root.join("ClipRefiner.exe"), b"x").expect("exe");
 
         assert!(find_portable_root(&root).is_none());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    fn sample_update(asset_name: &str) -> AvailableUpdate {
+        AvailableUpdate {
+            current_version: "0.14.0".to_string(),
+            latest_version: "0.14.3".to_string(),
+            tag: "v0.14.3".to_string(),
+            asset_name: asset_name.to_string(),
+            size: 1,
+            sha256: "a".repeat(64),
+        }
+    }
+
+    /// MSI で `launch_msi` 無効時は起動せず `MsiStarted` を返すようにすること
+    #[test]
+    fn apply_downloaded_msi_skips_launch_when_disabled() {
+        let update = sample_update("clip-refiner-0.14.3-x86_64.msi");
+        let dummy = PathBuf::from("unused.msi");
+        let work = PathBuf::from("unused-work");
+
+        let outcome = apply_downloaded_asset(&update, &dummy, &work, ApplyOptions::TEST);
+        assert!(matches!(outcome, UpdateApplyOutcome::MsiStarted));
+    }
+
+    /// 非 MSI・非ポータブル ZIP は未対応アセットとして失敗すること
+    #[test]
+    fn apply_downloaded_asset_rejects_unsupported_name() {
+        let update = sample_update("clip-refiner-0.14.3.zip");
+        let dummy = PathBuf::from("unused.zip");
+        let work = PathBuf::from("unused-work");
+
+        let outcome = apply_downloaded_asset(&update, &dummy, &work, ApplyOptions::TEST);
+        match outcome {
+            UpdateApplyOutcome::Error { message } => {
+                assert!(message.contains("clip-refiner-0.14.3.zip") || message.contains("未対応"));
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    /// ポータブル ZIP を展開しヘルパー起動なしで完了すること
+    #[test]
+    fn apply_downloaded_portable_extracts_without_helper() {
+        let root = std::env::temp_dir().join(format!(
+            "clip-refiner-update-test-apply-portable-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("temp dir");
+        let zip_path = root.join("clip-refiner-0.14.3-portable.zip");
+
+        {
+            let file = File::create(&zip_path).expect("zip create");
+            let mut writer = ZipWriter::new(file);
+            let options =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            writer
+                .start_file("clip-refiner/PORTABLE.txt", options)
+                .expect("start file");
+            writer.write_all(b"portable").expect("write");
+            writer.finish().expect("finish zip");
+        }
+
+        let update = sample_update("clip-refiner-0.14.3-portable.zip");
+        let outcome = apply_downloaded_asset(&update, &zip_path, &root, ApplyOptions::TEST);
+        match outcome {
+            UpdateApplyOutcome::PortableExtracted {
+                path,
+                helper_launched,
+            } => {
+                assert!(!helper_launched);
+                assert!(
+                    Path::new(&path).join("PORTABLE.txt").is_file() || Path::new(&path).is_dir()
+                );
+            }
+            other => panic!("expected PortableExtracted, got {other:?}"),
+        }
 
         let _ = fs::remove_dir_all(&root);
     }

@@ -3,8 +3,6 @@
 use std::fs;
 use std::path::Path;
 
-use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
-
 use super::super::paths::get_config_file_path;
 use super::super::permissions::restrict_private_file_permissions;
 use super::super::registered_clips::{
@@ -12,6 +10,7 @@ use super::super::registered_clips::{
 };
 use super::super::types::{AppConfig, RegisteredClip};
 use super::super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
+use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
 
 use serde::Deserialize;
 
@@ -294,7 +293,6 @@ fn backup_corrupted_config(config_path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::paths::get_config_file_path;
 
     /// 破損した `config.toml` はデフォルトへフォールバックし、`.bak` を作成すること
@@ -318,7 +316,7 @@ mod tests {
         });
     }
 
-    /// 未知キーがあっても既知キーは読み込み、警告一覧に含めること
+    /// 未知キーがあっても既知キーは読み込み、警告一覧に含めるようにすること
     #[test]
     fn load_keeps_known_values_and_reports_unknown_keys() {
         crate::test_helpers::with_temp_config_dir(|| {

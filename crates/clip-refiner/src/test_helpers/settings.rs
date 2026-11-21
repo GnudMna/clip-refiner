@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::sync::mpsc;
 
+use super::worker::{stub_worker, test_tray_menu};
 use crate::tray::menu::TrayMenu;
 use crate::tray::settings::test_support::{
     SettingsIpcAction, SettingsPatch, apply_settings_patch_without_ui, enqueue_settings_patch,
@@ -10,8 +11,6 @@ use crate::tray::settings::test_support::{
 };
 use crate::tray::state::{AppState, test_app_state, test_app_state_with_persistence};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use super::worker::{stub_worker, test_tray_menu};
 
 use clip_refiner_core::test_helpers::with_temp_config_dir;
 

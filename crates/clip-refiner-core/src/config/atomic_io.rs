@@ -142,11 +142,11 @@ fn path_to_wide(path: &Path) -> io::Result<Vec<u16>> {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// 新規ファイルを原子的に作成し、一時ファイルを残さないこと
+    use super::*;
+
+    /// 新規ファイルを原子的に作成し、一時ファイルを残さないようにすること
     #[test]
     fn write_bytes_atomically_creates_new_file() {
         let dir = unique_temp_dir("atomic-create");
@@ -164,7 +164,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// 既存ファイルを置き換え、一時ファイルと `.prev` を残さないこと
+    /// 既存ファイルを置き換え、一時ファイルと `.prev` を残さないようにすること
     #[test]
     fn write_bytes_atomically_replaces_existing_file() {
         let dir = unique_temp_dir("atomic-replace");
@@ -180,7 +180,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// 置き換え中も最終パスが読み取り可能であること
+    /// 置き換え中も最終パスが読み取り可能となるようにすること
     ///
     /// 旧実装の `.prev` 退避では `rename(dest, .prev)` と `rename(tmp, dest)` の間に
     /// 最終パスが消える隙間があり、並行読取が `ENOENT` になることがあった

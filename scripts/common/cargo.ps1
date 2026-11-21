@@ -1,8 +1,9 @@
 # ========================================================================
 # Script Name : cargo.ps1
-# Description : Cargo コマンドの共通ラッパー (ドットソース用)
+# Description : Cargo コマンドの共通ラッパー (fmt / clippy / test / llvm-cov)
 # Usage       : . (Join-Path $PSScriptRoot 'cargo.ps1')
 # Requires    : PowerShell 7.0+, Rust / Cargo
+#               Invoke-CargoLlvmCov は cargo-llvm-cov と llvm-tools-preview も必要
 # ========================================================================
 
 #requires -Version 7.0
@@ -64,4 +65,77 @@ function Invoke-CargoBuild {
 
     cargo build -p clip-refiner
     Assert-LastExitCode -CommandLabel 'cargo build -p clip-refiner'
+}
+
+# cargo-llvm-cov と llvm-tools-preview が使えることを検証する
+function Assert-CargoLlvmCovReady {
+    [CmdletBinding()]
+    param()
+
+    if (-not (Get-Command cargo-llvm-cov -ErrorAction SilentlyContinue)) {
+        throw @(
+            'エラー: cargo-llvm-cov が見つかりません',
+            'インストール: cargo install cargo-llvm-cov --locked',
+            'あわせて: rustup component add llvm-tools-preview'
+        ) -join [Environment]::NewLine
+    }
+
+    $installed = rustup component list --installed 2>$null
+    Assert-LastExitCode -CommandLabel 'rustup component list --installed'
+    $hasLlvmTools = $installed | Where-Object {
+        $_ -match '^llvm-tools(-preview)?(-|$)'
+    }
+    if (-not $hasLlvmTools) {
+        throw @(
+            'エラー: rustup の llvm-tools-preview が未インストールです',
+            'インストール: rustup component add llvm-tools-preview'
+        ) -join [Environment]::NewLine
+    }
+}
+
+# テストをカバレッジ計測付きで実行し、レポートを出力する
+#
+# 既定は端末向けテキスト要約。統合テスト・test_helpers・*_tests.rs は集計から除外する。
+# doctests は cargo-llvm-cov では不安定のため含めない (呼び出し側で別途実行する)
+function Invoke-CargoLlvmCov {
+    [CmdletBinding()]
+    param(
+        [switch]$Html,
+        [switch]$Open
+    )
+
+    Assert-CargoLlvmCovReady
+
+    # 本番コードの厚みを見るため、テスト専用パスを除外する
+    $ignoreFilenameRegex = '(^|[/\\])(tests|test_helpers)([/\\]|$)|[/\\][^/\\]*_tests\.rs$|[/\\]tests\.rs$'
+
+    $llvmCovArgs = @(
+        'llvm-cov',
+        '--all-targets',
+        '--features', $script:CargoTestFeatures,
+        '--ignore-filename-regex', $ignoreFilenameRegex
+    )
+
+    if ($Open) {
+        $llvmCovArgs += '--open'
+    }
+    elseif ($Html) {
+        $llvmCovArgs += '--html'
+    }
+
+    cargo @llvmCovArgs
+    Assert-LastExitCode -CommandLabel 'cargo llvm-cov'
+
+    if ($Open -or $Html) {
+        $targetRoot = if ($env:CARGO_TARGET_DIR) {
+            $env:CARGO_TARGET_DIR
+        }
+        else {
+            Join-Path (Get-Location) 'target'
+        }
+        $reportPath = Join-Path $targetRoot 'llvm-cov\html\index.html'
+        if (Test-Path -LiteralPath $reportPath) {
+            Write-Host "HTML レポート: $reportPath"
+        }
+    }
 }

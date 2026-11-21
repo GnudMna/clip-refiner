@@ -66,3 +66,60 @@ impl<T> RwLockExt<T> for RwLock<T> {
         }
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex, RwLock};
+    use std::thread;
+
+    use super::*;
+
+    /// `Mutex` のポイズン後も値を復旧できるようにすること
+    #[test]
+    fn mutex_lock_ignore_poison_recovers_value() {
+        let mutex = Arc::new(Mutex::new(42));
+        let poisoned = Arc::clone(&mutex);
+        let _ = thread::spawn(move || {
+            let _guard = poisoned.lock().expect("lock");
+            panic!("poison mutex");
+        })
+        .join();
+
+        assert!(mutex.lock().is_err());
+        assert_eq!(*mutex.lock_ignore_poison(), 42);
+    }
+
+    /// `RwLock` 読み取りのポイズン後も値を復旧できるようにすること
+    #[test]
+    fn rwlock_read_ignore_poison_recovers_value() {
+        let lock = Arc::new(RwLock::new("ok".to_string()));
+        let poisoned = Arc::clone(&lock);
+        let _ = thread::spawn(move || {
+            let _guard = poisoned.write().expect("write");
+            panic!("poison rwlock");
+        })
+        .join();
+
+        assert!(lock.read().is_err());
+        assert_eq!(lock.read_ignore_poison().as_str(), "ok");
+    }
+
+    /// `RwLock` 書き込みのポイズン後も値を更新できるようにすること
+    #[test]
+    fn rwlock_write_ignore_poison_recovers_value() {
+        let lock = Arc::new(RwLock::new(1));
+        let poisoned = Arc::clone(&lock);
+        let _ = thread::spawn(move || {
+            let _guard = poisoned.write().expect("write");
+            panic!("poison rwlock write");
+        })
+        .join();
+
+        assert!(lock.write().is_err());
+        *lock.write_ignore_poison() = 7;
+        assert_eq!(*lock.read_ignore_poison(), 7);
+    }
+}

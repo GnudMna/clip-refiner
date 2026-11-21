@@ -71,7 +71,7 @@ pub fn apply_text_pipeline(
 mod tests {
     use super::*;
 
-    /// 空パイプラインは分割結果が空であるようにすること
+    /// 空パイプラインは分割結果が空となるようにすること
     #[test]
     fn split_empty_pipeline() {
         assert_eq!(split_pipeline(&[]), (Vec::new(), None));

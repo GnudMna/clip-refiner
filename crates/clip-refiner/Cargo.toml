@@ -99,10 +99,6 @@ path = "tests/settings_flow.rs"
 required-features = ["app"]
 
 [[test]]
-name = "library_api"
-path = "tests/library_api.rs"
-
-[[test]]
 name = "worker_recovery_flow"
 path = "tests/worker_recovery_flow.rs"
 required-features = ["app"]
@@ -153,7 +149,7 @@ path = "tests/update_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.14.3" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.15.0" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.23.0", optional = true }
@@ -168,14 +164,14 @@ semver = { version = "1.0.27", optional = true }
 sha2 = { version = "0.11.0", optional = true }
 single-instance = { version = "0.3.3", optional = true }
 strum = { version = "0.28.0", optional = true, features = ["derive"] }
-tao = { version = "0.35.3", optional = true }
+tao = { version = "0.36.0", optional = true }
 thiserror = { version = "2.0.18", optional = true }
 tracing = "0.1.44"
 tracing-appender = { version = "0.2.5", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true, features = ["env-filter"] }
 tray-icon = { version = "0.24.1", optional = true }
 ureq = { version = "3.3.0", optional = true, features = ["json"] }
-wry = { version = "0.55.1", optional = true }
+wry = { version = "0.56.0", optional = true }
 clipboard-win = { version = "5.4.1", optional = true, features = ["std", "monitor"] }
 zip = { version = "8.6.0", optional = true, default-features = false, features = ["deflate"] }
 windows = { version = "0.62.2", optional = true, features = [

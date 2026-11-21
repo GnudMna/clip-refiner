@@ -1,5 +1,4 @@
 use super::super::model::SettingsPatch;
-
 use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::refiner::RefineMode;
 

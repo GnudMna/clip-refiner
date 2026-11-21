@@ -6,6 +6,33 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-01
+
+### Breaking changes
+
+- `clip-refiner` は core API をクレートルートから re-export しなくなった。ライブラリ利用は `clip-refiner-core` を直接依存する (アプリ起動は従来どおり `clip_refiner::run`)。互換用の `default-features = false` による facade 経路は廃止
+
+### Added
+
+- 開発: Rust カバレッジ計測スクリプト (`scripts/windows/coverage.ps1` / `cargo-llvm-cov`)。端末向け要約のほか `-Html` / `-Open` で HTML レポートを出力できる。`check.ps1 -Coverage` または `CLIP_REFINER_COVERAGE=1` でも品質チェック中に同じ計測を実行できる
+- ユニットテスト拡充: JSON / YAML 変換、登録クリップ暗号、ワンショット bootstrap、更新適用、連続記録 / システム設定パッチ、設定ウィンドウ幾何、設定ディスク同期、`RwLock` 拡張などカバレッジ不足箇所を追加
+
+### Changed
+
+- 設定再読み込み・クリップボード変更リスナ・履歴復号・ワンショット IPC クライアントの `Result<_, String>` を `thiserror` 型 (`ApplyConfigReloadError` / `ClipboardListenerError` / `HistoryDecryptError` / `ClientError`) へ統一した。ユーザー向け文言は `Display` に集約し、挙動は変更なし
+- `clip-refiner-core` の `platform/` を `native/` にリネームした。デスクトップ常駐の `clip-refiner` 側 `platform/` (通知・OCR・更新など) との同名衝突を避け、GUI 非依存のネイティブ OS API (DPAPI・クリップボード画像) であることを明示する。公開 API と挙動は変更なし
+- 依存クレートを更新
+- ドキュメント (README / CONFIG / DEVELOPMENT) をライブラリ API 分離・カバレッジ計測・型付きエラー・`native/` リネームに合わせて更新した
+
+### Fixed
+
+- 更新フロー統合テスト: モック bridge が子プロセスへ nonblocking ソケットを継承してフレーキーになる不具合を修正
+- リリースビルドでテスト専用シンボル (`ClientError` の公開 re-export、`apply_update_at_with_key`) の未使用警告が出ないよう、`test-helpers` / debug 向けに限定した
+
+### Removed
+
+- `clip-refiner` 統合テスト `library_api.rs` (re-export facade 検証)。加工 API の検証は `clip-refiner-core` の `pipeline_api` 等に集約
+
 ## [0.14.3] - 2026-07-31
 
 ### Security
@@ -524,7 +551,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...develop
+[0.15.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.3...v0.15.0
 [0.14.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...v0.14.3
 [0.14.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...v0.14.2
 [0.14.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...v0.14.1

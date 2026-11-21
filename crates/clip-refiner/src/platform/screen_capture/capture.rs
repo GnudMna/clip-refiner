@@ -167,7 +167,7 @@ mod tests {
         );
     }
 
-    /// 有効な矩形は検証を通ること
+    /// 有効な矩形は検証を通るようにすること
     #[test]
     fn validate_capture_rect_accepts_non_empty_region() {
         assert!(
@@ -181,7 +181,7 @@ mod tests {
         );
     }
 
-    /// BGRA から RGBA へチャンネルを入れ替えること
+    /// BGRA から RGBA へチャンネルを入れ替えるようにすること
     #[test]
     fn bgra_to_rgba_swaps_red_and_blue() {
         let bgra = [10, 20, 30, 40, 50, 60, 70, 80];
@@ -201,7 +201,7 @@ mod tests {
         assert!(err.to_string().contains("空"));
     }
 
-    /// 仮想デスクトップ境界が正のサイズを返すこと
+    /// 仮想デスクトップ境界が正のサイズを返すようにすること
     #[test]
     fn virtual_screen_bounds_returns_positive_size() {
         let (_x, _y, width, height) = virtual_screen_bounds();
@@ -209,7 +209,7 @@ mod tests {
         assert!(height > 0, "仮想画面高さが 0");
     }
 
-    /// 仮想画面左上の小領域をキャプチャできること
+    /// 仮想画面左上の小領域をキャプチャできるようにすること
     #[test]
     fn capture_screen_region_captures_tiny_virtual_origin() {
         let (x, y, width, height) = virtual_screen_bounds();

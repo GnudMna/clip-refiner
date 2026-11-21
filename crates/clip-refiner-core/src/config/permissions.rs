@@ -351,7 +351,7 @@ mod tests {
         result.expect("restrict_private_file_permissions");
     }
 
-    /// 現在ユーザー専用の `SECURITY_ATTRIBUTES` を構築できること
+    /// 現在ユーザー専用の `SECURITY_ATTRIBUTES` を構築できるようにすること
     #[test]
     fn owner_only_security_attributes_builds() {
         let attrs = OwnerOnlySecurityAttributes::new().expect("OwnerOnlySecurityAttributes::new");

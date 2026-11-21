@@ -1,7 +1,6 @@
 use super::{
     handle_menu_event, should_hide_selector_on_focus_loss, update_monitor_mode, update_refine,
 };
-
 use crate::config::MonitorMode;
 use crate::refiner::RefineMode;
 use crate::test_helpers::{ClipboardCommand, TrayTestContext};
@@ -310,7 +309,7 @@ fn handle_menu_event_interval_change() {
     assert!(!ctx.menu().interval.custom_item.is_checked());
 }
 
-/// カスタム周期項目は設定ウィンドウを開き、周期値は変えないこと
+/// カスタム周期項目は設定ウィンドウを開き、周期値は変えないようにすること
 #[test]
 fn handle_menu_event_custom_interval_opens_settings() {
     let ctx = TrayTestContext::with_config(|c| {
@@ -406,7 +405,7 @@ fn handle_menu_event_continuous_record_enabled() {
     ctx.assert_no_command();
 }
 
-/// 連続記録メニューから直近 1 件を取り消せること
+/// 連続記録メニューから直近 1 件を取り消せるようにすること
 #[test]
 fn handle_menu_event_continuous_record_undo_last() {
     let state = crate::test_helpers::test_app_state_arc();

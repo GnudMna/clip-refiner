@@ -1,6 +1,6 @@
 # ClipRefiner 開発者向けドキュメント
 
-ユーザ向けの機能説明・操作方法は [README.md](README.md) を参照してください。設定の詳細は [CONFIG.md](CONFIG.md)、バージョンごとの変更内容は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+ユーザ向けの機能説明・操作方法は [README.md](README.md)、設定リファレンスは [CONFIG.md](CONFIG.md)、バージョンごとの変更内容は [CHANGELOG.md](CHANGELOG.md) を参照してください。本ドキュメントはビルド・テスト・カバレッジ・ライブラリ利用 (`clip-refiner-core`) など開発者向け情報をまとめる。
 
 ## 目次
 
@@ -10,6 +10,7 @@
 - [Windows パッケージ作成](#windows-パッケージ作成)
 - [開発・テスト](#開発テスト)
 - [品質チェック](#品質チェック)
+  - [Rust カバレッジ (`cargo-llvm-cov`)](#rust-カバレッジ-cargo-llvm-cov)
 - [ライブラリとしての利用](#ライブラリとしての利用)
 - [プロジェクト構成](#プロジェクト構成)
 - [スレッドモデル](#スレッドモデル)
@@ -31,9 +32,10 @@
 | UI の静的解析・JS ロジックテスト | [Node.js](https://nodejs.org/) と npm |
 | WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | サプライチェーン監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) |
+| Rust カバレッジ | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) と `rustup component add llvm-tools-preview` (`coverage.ps1` / `check.ps1 -Coverage`) |
 | MSI 作成 | `cargo-wix`、`cargo-about`、WiX Toolset v3.14.1 以上 |
 
-`cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する。通常の `cargo test` は Node.js が無い場合に JS ロジックテストを `note:` 付きでスキップする。
+`cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する (カバレッジは任意)。通常の `cargo test` は Node.js が無い場合に JS ロジックテストを `note:` 付きでスキップする。
 
 ---
 
@@ -51,6 +53,10 @@ npm ci
 
 # check.ps1 のサプライチェーン監査用
 cargo install cargo-deny --locked
+
+# 任意: Rust カバレッジ計測 (coverage.ps1 / check.ps1 -Coverage)
+rustup component add llvm-tools-preview
+cargo install cargo-llvm-cov --locked
 ```
 
 任意で Git フックを有効化すると、コミット時に整形、プッシュ時に品質チェック一式を実行できる。
@@ -180,13 +186,13 @@ cargo test --test selector_logic
 cargo test --test regex_preview_logic
 
 # ライブラリ API のドキュメントを生成
-cargo doc --no-deps --open
+cargo doc -p clip-refiner-core --no-deps --open
 ```
 
-加工ロジックは `clip_refiner` ライブラリクレートとしても利用できる。
+加工ロジックは `clip_refiner_core` クレートとして利用できる。
 
 ```rust
-use clip_refiner::{RefineContext, RefineMode, Refiner};
+use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 
 let ctx = RefineContext::default();
 let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
@@ -216,7 +222,6 @@ assert_eq!(output, "hello world");
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
-| `library_api.rs` | クレートルート re-export と core 連携 |
 
 OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
 
@@ -281,11 +286,11 @@ npm run test:e2e
 
 ### テスト用ヘルパー (`test_helpers`)
 
-`clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy やドキュメントテストを走らせる場合は `--features test-helpers` を付ける。
+`clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy やドキュメントテストを走らせる場合は `--features test-helpers` を付ける。テスト専用の公開シンボル (`ipc::ClientError`、`apply_update_at_with_key` など) も同じ条件に限定し、通常のリリースビルドでは未使用警告を出さない。
 
 | モジュール | 所在 | 内容 |
 | :--------- | :--- | :--- |
-| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`, `update` モック bridge など) |
+| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`, `update` モック bridge、oneshot IPC など) |
 | `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
 
 アプリ側の `test_helpers` は core のヘルパーを re-export する。設定ディレクトリを触るテストは `with_temp_config_dir` で一時ディレクトリへ切り替える。
@@ -295,8 +300,8 @@ npm run test:e2e
 監視ループ (`handle_clipboard_update`) とワーカーコマンド (`handle_command`) を、OS クリップボードなしで横断検証するハーネス。`InMemoryTextClipboard` と `AppState` (テスト用初期化) を束ね、本番と同じ処理関数を直接呼び出す。
 
 ```rust
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner_core::RefineMode;
 
 let mut harness = ClipboardHarness::with_text("  hello  ")
     .with_mode(RefineMode::Trim);
@@ -384,7 +389,7 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 
 #### ワンショット IPC (`oneshot_ipc_flow`)
 
-本番パイプ名と衝突しないテスト用パイプで `OneshotIpcServer` を起動し、クライアント往復を検証する。クリップボード I/O はスタブワーカー (`spawn_oneshot_stub_responder`) で差し替え、トランスポートとプロトコル境界に焦点を当てる。
+本番パイプ名と衝突しないテスト用パイプで `OneshotIpcServer` を起動し、クライアント往復を検証する。クリップボード I/O はスタブワーカー (`spawn_oneshot_stub_responder`) で差し替え、トランスポートとプロトコル境界に焦点を当てる。通信失敗は `ClientError` (`thiserror`) として返す (テストヘルパー経由で利用)。
 
 | ヘルパー | 用途 |
 | :------- | :--- |
@@ -405,7 +410,43 @@ Windows の `check` スクリプト (`scripts/windows/check.ps1`) で、整形�
 ./scripts/windows/format.ps1
 # WebView E2E のみスキップする場合
 $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
+# テストをカバレッジ計測付きで実行する場合 (cargo-llvm-cov)
+./scripts/windows/check.ps1 -Coverage
+# または
+$env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
 ```
+
+### Rust カバレッジ (`cargo-llvm-cov`)
+
+ローカルで本番コードのテスト厚みを確認する。CI には組み込まず、必要なときだけ実行する。
+
+前提:
+
+```powershell
+rustup component add llvm-tools-preview
+cargo install cargo-llvm-cov --locked
+```
+
+```powershell
+# 端末にファイル別の行 / 領域カバレッジ要約を出す
+./scripts/windows/coverage.ps1
+
+# HTML レポートを target/llvm-cov/html/ に出力
+./scripts/windows/coverage.ps1 -Html
+
+# HTML を生成して既定ブラウザで開く
+./scripts/windows/coverage.ps1 -Open
+```
+
+挙動の要点:
+
+- `cargo test --all-targets --features test-helpers` 相当を LLVM 計測付きで実行する
+- 集計から `tests/`・`test_helpers/`・`*_tests.rs` / `tests.rs` を除外し、本番ソースの厚みを見やすくする
+- doctests は `cargo-llvm-cov` では不安定なためカバレッジ対象外とし、スクリプト末尾で通常の `cargo test --doc` を別実行する
+- JS ロジックテストは `CLIP_REFINER_REQUIRE_NODE=1` で必須化する (`test.ps1` と同様)
+- HTML 出力先は `target/llvm-cov/html/index.html` (`CARGO_TARGET_DIR` 設定時はその配下。Git 管理外)
+
+薄いモジュールを探すときは、要約の低いファイルから HTML の行ハイライトへ進むとよい。しきい値での失敗 (`--fail-under-lines` 等) は設けない。
 
 ### Git フック
 
@@ -456,6 +497,8 @@ npm run lint
 npm run format:check
 cargo test --all-targets --features test-helpers
 cargo test --doc --features test-helpers
+# カバレッジ (任意。coverage.ps1 と同条件)
+cargo llvm-cov --all-targets --features test-helpers --ignore-filename-regex '(^|[/\\])(tests|test_helpers)([/\\]|$)|[/\\][^/\\]*_tests\.rs$|[/\\]tests\.rs$'
 ```
 
 ### JavaScript リンター (ESLint / Prettier)
@@ -495,7 +538,7 @@ npm run format             # Prettier 整形適用
 | `scripts/common/` | 役割 |
 | :---------------- | :--- |
 | `assert.ps1` | 外部コマンドの終了コード検証 (`Assert-LastExitCode`) |
-| `cargo.ps1` | `cargo fmt` / `clippy` / `test` のラッパー |
+| `cargo.ps1` | `cargo fmt` / `clippy` / `test` / `llvm-cov` のラッパー |
 | `npm.ps1` | `npm ci` / 設定 UI バンドル / バンドルのコミットずれ検出 / ESLint / Prettier のラッパー |
 | `cargo-deny-check.ps1` | `cargo deny check` |
 | `wix.ps1` | `cargo-wix` / WiX Toolset v3 の存在確認 |
@@ -507,9 +550,9 @@ npm run format             # Prettier 整形適用
 
 | `scripts/windows/` | 役割 |
 | :----------------- | :--- |
-| `check.ps1` | 品質チェック一式 |
+| `check.ps1` | 品質チェック一式 (`-Coverage` でカバレッジ付きテストに切替可) |
 | `format.ps1` | rustfmt + Prettier 整形 |
-| `test.ps1` / `clippy.ps1` | 個別の Cargo コマンド |
+| `test.ps1` / `clippy.ps1` / `coverage.ps1` | 個別の Cargo コマンド (カバレッジは `cargo-llvm-cov`) |
 | `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
 | `build.ps1` / `build-msi.ps1` / `build-portable.ps1` | ビルド・MSI / ポータブル ZIP 作成 |
 | `verify-msi.ps1` | MSI 検証の CLI ラッパー |
@@ -549,34 +592,26 @@ npm run format             # Prettier 整形適用
 | プラットフォーム | 同梱先 |
 | :--------------- | :----- |
 | **Windows MSI** | `%LOCALAPPDATA%\ClipRefiner\THIRD_PARTY_NOTICES` (`build-msi.ps1` が生成後に同梱) |
+| **ポータブル ZIP** | 配布フォルダ直下の `THIRD_PARTY_NOTICES` (`build-portable.ps1` が生成後に同梱) |
 
 ---
 
 ## ライブラリとしての利用
 
-`ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは GUI 非依存の **`clip-refiner-core`** クレート (`clip_refiner_core`) として他プロジェクトから呼び出せる。`clip-refiner` パッケージは core を re-export しており、feature `app` (デフォルト有効) でトレイ常駐 UI と `run()` を追加する。
+`ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは GUI 非依存の **`clip-refiner-core`** クレート (`clip_refiner_core`) として他プロジェクトから呼び出せる。`clip-refiner` パッケージはアプリ起動 (`run`) とトレイ常駐 UI (feature `app`) 専用で、core の API は re-export しない。
 
-ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョンにある **Changed** または **Removed** 節へ明記し、設定スキーマ変更は **設定** 節にも移行方法を記載する。
+以前の `clip-refiner` (`default-features = false`) による facade 経路は廃止済み。ライブラリ利用は依存先を `clip-refiner-core` へ切り替える。アプリ起動だけなら従来どおり `clip_refiner::run` (feature `app`) を使う。
+
+ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョンにある **Breaking changes** / **Changed** / **Removed** 節へ明記し、設定スキーマ変更は **設定** 節にも移行方法を記載する。アプリ (`clip-refiner`) と加工・設定 (`clip-refiner-core`) の semver はクレートごとに独立して扱う。
 
 ### 依存の追加
-
-GUI 依存 (`tao`, `wry`, `tray-icon` など) を避ける場合は、次のいずれかを使う。
-
-**推奨: core クレートを直接依存**
 
 ```toml
 [dependencies]
 clip-refiner-core = { path = "crates/clip-refiner-core" }
 ```
 
-**互換: `clip-refiner` で feature を無効化**
-
-```toml
-[dependencies]
-clip-refiner = { path = "..", default-features = false }
-```
-
-Rust コード上のクレート名はいずれも `clip_refiner` (re-export) または `clip_refiner_core` を使える。
+公開ドキュメントは `cargo doc -p clip-refiner-core --open` で確認する。
 
 ### 公開 API 一覧
 
@@ -587,7 +622,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
-| 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace}` | 正規表現置換のプレビュー (設定 UI と同一エンジン。クレートルートからは re-export しない) |
+| 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace}` | 正規表現置換のプレビュー (設定 UI と同一エンジン) |
 | クリップボード | `OwnedClipboard`, `process_clipboard`, `process_clipboard_pipeline` | OS クリップボード本文 I/O の所有者と加工 API |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `NotificationSettings`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
@@ -596,14 +631,15 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
-| アプリ | `run()` | トレイ常駐アプリ全体の起動 (feature `app` が必要) |
+
+アプリ起動は `clip-refiner` の `run()` (feature `app`) を使う。
 
 ### 使用例
 
 単一モード:
 
 ```rust
-use clip_refiner::{RefineContext, RefineMode, Refiner};
+use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 
 let ctx = RefineContext::default();
 let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
@@ -613,7 +649,7 @@ assert_eq!(output, "hello world");
 加工パイプライン:
 
 ```rust
-use clip_refiner::{apply_text_pipeline, RefineContext, RefineMode};
+use clip_refiner_core::{apply_text_pipeline, RefineContext, RefineMode};
 
 let ctx = RefineContext::default();
 let result = apply_text_pipeline(
@@ -627,7 +663,7 @@ assert_eq!(result.as_deref(), Some("あ"));
 設定連携:
 
 ```rust
-use clip_refiner::{AppConfig, RefineContext, apply_text_pipeline};
+use clip_refiner_core::{AppConfig, RefineContext, apply_text_pipeline};
 
 let load_outcome = AppConfig::load();
 let config = load_outcome.config;
@@ -636,7 +672,7 @@ let pipeline = config.effective_pipeline();
 let _ = apply_text_pipeline("  hello  ", &pipeline, &ctx);
 ```
 
-詳細は `cargo doc --open` で生成される API ドキュメントを参照。
+詳細は `cargo doc -p clip-refiner-core --open` で生成される API ドキュメントを参照。
 
 ---
 
@@ -652,11 +688,11 @@ clip-refiner/
 │   ├── playwright.config.ts
 │   └── *.spec.ts
 ├── crates/
-│   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
+│   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)。core API は re-export しない
 │   │   ├── src/
 │   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / instance / oneshot / portable)
-│   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC
-│   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ・WebView2・アプリ更新)
+│   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC (`ClientError` は test-helpers / debug 向け)
+│   │   │   ├── platform/    # デスクトップ常駐向け OS 連携 (通知・自動起動・OCR・WebView2・更新)
 │   │   │   │   └── update/  # 確認 (check/) / digest 検証 / UpdateError / MSI・ポータブル適用
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
@@ -667,14 +703,15 @@ clip-refiner/
 │   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc/, window/, apply/, snapshot など)
 │   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ・OS リスナ
 │   │   │   │   └── ...
+│   │   │   ├── logger.rs    # 日次ローテーション付きファイルログ
 │   │   │   ├── user_error.rs # UpdateError 等から UserNotification を生成
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
 │   │   ├── tests/           # 統合テスト (`*_flow.rs`)
 │   │   └── build.rs
-│   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)
+│   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)。ライブラリ利用はこちら
 │       └── src/
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize など
-│           ├── platform/    # DPAPI・クリップボード画像など GUI 非依存の OS 連携
+│           ├── native/      # DPAPI・クリップボード画像など GUI 非依存のネイティブ OS API
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
@@ -690,7 +727,7 @@ clip-refiner/
 └── wix/
 ```
 
-`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード (`CLIP_REFINER_KEY` 埋め込み時は `Authorization: Bearer`)・`digest` (`sha256:<hex>`) 検証・宣言サイズ / 絶対上限でのダウンロード打ち切り・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
+`clip-refiner` の `platform/` はデスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード (`CLIP_REFINER_KEY` 埋め込み時は `Authorization: Bearer`)・`digest` (`sha256:<hex>`) 検証・宣言サイズ / 絶対上限でのダウンロード打ち切り・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `native/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く (`platform/` とは名前を分け、GUI 連携との混同を避ける)。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
 
 セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
 
@@ -855,7 +892,7 @@ flowchart TB
 | **Hotkey Listener** (`tray/hotkey/`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `HotkeyEvent::Received` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
 | **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
 | **Clipboard Listener** (`tray/worker/clipboard_listener.rs`) | 専用 | メッセージ専用ウィンドウで `AddClipboardFormatListener` を登録し、`WM_CLIPBOARDUPDATE` を `ClipboardCommand::ClipboardChanged` としてワーカーへ送る。連打は未処理フラグで束ねる。初期化失敗時はワーカーがシーケンストークンの短周期 peek にフォールバックする |
-| **Oneshot IPC Server** (`ipc/`) | 専用 | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。現在ユーザー専用 DACL + リモート拒否。常駐未検出時は CLI 側がローカル実行する |
+| **Oneshot IPC Server** (`ipc/`) | 専用 | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。現在ユーザー専用 DACL + リモート拒否。接続・送受信失敗は `ClientError`。常駐未検出時は CLI 側がローカル実行する |
 | **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き (`OwnedClipboard`)、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理。Event / 連続記録かつリスナ稼働時は設定ポーリング間隔まで待機し、`ClipboardChanged` で起床する。再起動・破棄時は `Shutdown` 後にリスナとワーカーを join してから戻る |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、監視世代、イベントプロキシ。履歴・Undo・二重加工防止は `clipboard_session()`、ワーカー稼働は `worker()`、設定ディスク同期は `config_sync()`、設定 UI 適用待ちは `settings_pending()` 経由 |
 
@@ -873,7 +910,7 @@ flowchart TB
 - **クリップボード**: 本文の読み書きはワーカースレッド内の `OwnedClipboard` 1 インスタンスに集約する (常駐なしワンショットのみ短命に別インスタンスを開く)。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する。変更検知は役割を分ける
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
   - `OwnedClipboard` (`arboard`): テキスト / 通常画像の `OpenClipboard` I/O
-  - `platform/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
+  - `native/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 
@@ -923,6 +960,7 @@ flowchart TB
 | `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |
 | `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき JS ロジックテストをスキップ |
 | `CLIP_REFINER_SKIP_E2E` | `1` のとき Playwright E2E をスキップ (`check.ps1` / pre-push) |
+| `CLIP_REFINER_COVERAGE` | `1` のとき `check.ps1` の通常テストを `cargo llvm-cov` に切り替える (`-Coverage` と同義) |
 | `CLIP_REFINER_SKIP_HOOK` | `1` のとき Git フック (pre-commit / pre-push) をスキップ |
 | `CLIP_REFINER_E2E_CDP_PORT` | E2E 用 WebView2 CDP ポート (`--e2e-window` 時) |
 | `CLIP_REFINER_E2E_EXE` | E2E で起動する `ClipRefiner.exe` のパス |

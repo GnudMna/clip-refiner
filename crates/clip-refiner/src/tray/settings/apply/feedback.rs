@@ -83,7 +83,7 @@ pub(crate) struct SettingsPatchApplyResult {
 mod tests {
     use super::*;
 
-    /// 適用フィードバック JSON が camelCase であるようにすること
+    /// 適用フィードバック JSON が camelCase となるようにすること
     #[test]
     fn apply_feedback_json_uses_camel_case() {
         let feedback = SettingsApplyFeedback::error(
@@ -105,7 +105,7 @@ mod tests {
         assert!(should_notify_apply_error_via_desktop(false, &feedback));
     }
 
-    /// 非表示でもデスクトップ通知済みのエラーは重複通知しないであるようにすること
+    /// 非表示でもデスクトップ通知済みのエラーは重複通知しないようにすること
     #[test]
     fn apply_feedback_hidden_error_skips_desktop_when_already_notified() {
         let feedback = SettingsApplyFeedback::error(Some("launchAtLogin"), "失敗")
@@ -113,14 +113,14 @@ mod tests {
         assert!(!should_notify_apply_error_via_desktop(false, &feedback));
     }
 
-    /// 表示中のウィンドウではデスクトップ通知フォールバックを使わないであるようにすること
+    /// 表示中のウィンドウではデスクトップ通知フォールバックを使わないようにすること
     #[test]
     fn apply_feedback_visible_window_skips_desktop_fallback() {
         let feedback = SettingsApplyFeedback::error(None, "エラー");
         assert!(!should_notify_apply_error_via_desktop(true, &feedback));
     }
 
-    /// 非表示かつ成功時はデスクトップ通知しないであるようにすること
+    /// 非表示かつ成功時はデスクトップ通知しないようにすること
     #[test]
     fn apply_feedback_hidden_success_skips_desktop_fallback() {
         let feedback = SettingsApplyFeedback::ok("保存しました");

@@ -82,7 +82,6 @@ impl TrayMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
     use crate::tray::state::LockExt;
 

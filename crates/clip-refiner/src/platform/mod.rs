@@ -1,4 +1,6 @@
-//! OS 連携 (通知・自動起動・画面キャプチャ・OCR など)
+//! デスクトップ常駐向けの OS 連携 (通知・自動起動・画面キャプチャ・OCR・更新など)
+//!
+//! 加工ロジック向けのネイティブ API (DPAPI・クリップボード画像) は `clip-refiner-core` の `native/` を参照
 
 pub(crate) mod autostart;
 pub(crate) mod ocr;

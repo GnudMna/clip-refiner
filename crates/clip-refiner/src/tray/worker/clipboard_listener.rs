@@ -10,6 +10,24 @@ use std::thread::{self, JoinHandle};
 use super::command::ClipboardCommand;
 
 use clipboard_win::monitor::{Monitor, Shutdown};
+use thiserror::Error;
+
+// ======================================================================
+// エラー
+// ======================================================================
+/// クリップボード変更リスナの起動失敗
+#[derive(Debug, Error)]
+pub(super) enum ClipboardListenerError {
+    /// 専用スレッドの spawn 失敗
+    #[error("リスナスレッドの起動に失敗: {0}")]
+    Spawn(String),
+    /// メッセージウィンドウ / リスナ登録の初期化失敗
+    #[error("クリップボードリスナの初期化に失敗: {0}")]
+    Init(String),
+    /// 準備完了通知前にスレッドが終了した
+    #[error("リスナスレッドが準備完了前に終了した")]
+    ReadyChannelClosed,
+}
 
 // ======================================================================
 // 連打抑制
@@ -64,18 +82,21 @@ impl ClipboardFormatListener {
     /// * `pending` - `ClipboardChanged` の連打抑制フラグ
     ///
     /// # Returns
-    /// * `Result<Self, String>` - 起動成功時はハンドル。ウィンドウ / リスナ登録失敗時は理由
-    pub fn start(tx: Sender<ClipboardCommand>, pending: Arc<AtomicBool>) -> Result<Self, String> {
+    /// * `Result<Self, ClipboardListenerError>` - 起動成功時はハンドル
+    pub fn start(
+        tx: Sender<ClipboardCommand>,
+        pending: Arc<AtomicBool>,
+    ) -> Result<Self, ClipboardListenerError> {
         let (ready_tx, ready_rx) = mpsc::channel();
         let join = thread::Builder::new()
             .name("clip-refiner-clipboard-listener".into())
             .spawn(move || run_listener_loop(&tx, &pending, &ready_tx))
-            .map_err(|err| format!("リスナスレッドの起動に失敗: {err}"))?;
+            .map_err(|err| ClipboardListenerError::Spawn(err.to_string()))?;
 
         let shutdown = match ready_rx.recv() {
             Ok(Ok(shutdown)) => shutdown,
             Ok(Err(err)) => return Err(err),
-            Err(_) => return Err("リスナスレッドが準備完了前に終了した".to_string()),
+            Err(_) => return Err(ClipboardListenerError::ReadyChannelClosed),
         };
 
         Ok(Self {
@@ -85,6 +106,9 @@ impl ClipboardFormatListener {
     }
 
     /// リスナを停止し、スレッド終了を待つ
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn stop(&self) {
         if let Ok(mut guard) = self.shutdown.lock() {
             guard.take();
@@ -107,12 +131,12 @@ impl Drop for ClipboardFormatListener {
 fn run_listener_loop(
     tx: &Sender<ClipboardCommand>,
     pending: &Arc<AtomicBool>,
-    ready_tx: &Sender<Result<Shutdown, String>>,
+    ready_tx: &Sender<Result<Shutdown, ClipboardListenerError>>,
 ) {
     let mut monitor = match Monitor::new() {
         Ok(monitor) => monitor,
         Err(err) => {
-            let _ = ready_tx.send(Err(format!("クリップボードリスナの初期化に失敗: {err}")));
+            let _ = ready_tx.send(Err(ClipboardListenerError::Init(err.to_string())));
             return;
         }
     };
@@ -146,7 +170,7 @@ mod tests {
 
     use super::*;
 
-    /// 未処理が無いときは `ClipboardChanged` を送ること
+    /// 未処理が無いときは `ClipboardChanged` を送るようにすること
     #[test]
     fn try_notify_sends_when_not_pending() {
         let (tx, rx) = mpsc::channel();
@@ -160,7 +184,7 @@ mod tests {
         ));
     }
 
-    /// 未処理中は追加の `ClipboardChanged` を送らないこと
+    /// 未処理中は追加の `ClipboardChanged` を送らないようにすること
     #[test]
     fn try_notify_coalesces_while_pending() {
         let (tx, rx) = mpsc::channel();
@@ -175,7 +199,7 @@ mod tests {
         assert!(rx.try_recv().is_err());
     }
 
-    /// フラグを下げた後は再び通知できること
+    /// フラグを下げた後は再び通知できるようにすること
     #[test]
     fn clear_pending_allows_next_notify() {
         let (tx, rx) = mpsc::channel();
@@ -192,7 +216,7 @@ mod tests {
         ));
     }
 
-    /// 送信失敗時は未処理フラグを戻すこと
+    /// 送信失敗時は未処理フラグを戻すようにすること
     #[test]
     fn try_notify_clears_pending_when_send_fails() {
         let (tx, rx) = mpsc::channel();
@@ -201,5 +225,23 @@ mod tests {
 
         assert!(!try_notify_clipboard_changed(&pending, &tx));
         assert!(!pending.load(Ordering::Acquire));
+    }
+
+    /// 起動失敗の `Display` がユーザー向け文言になるようにすること
+    #[test]
+    fn clipboard_listener_error_display() {
+        let spawn = ClipboardListenerError::Spawn("os error".into());
+        assert!(spawn.to_string().contains("リスナスレッドの起動に失敗"));
+
+        let init = ClipboardListenerError::Init("monitor".into());
+        assert!(
+            init.to_string()
+                .contains("クリップボードリスナの初期化に失敗")
+        );
+
+        assert_eq!(
+            ClipboardListenerError::ReadyChannelClosed.to_string(),
+            "リスナスレッドが準備完了前に終了した"
+        );
     }
 }

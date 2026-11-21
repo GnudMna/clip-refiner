@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::super::model::{SettingsPatch, deep_merge_json_values};
-
 use crate::tray::state::AppState;
 
 // ======================================================================

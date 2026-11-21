@@ -40,7 +40,7 @@ mod tests {
 
     use super::*;
 
-    /// 一時停止中は `bump_monitor_generation` が世代を進めないであるようにすること
+    /// 一時停止中は `bump_monitor_generation` が世代を進めないようにすること
     #[test]
     fn bump_monitor_generation_skips_when_paused() {
         let state = Arc::new(crate::tray::state::test_app_state());

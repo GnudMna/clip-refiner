@@ -1,6 +1,6 @@
 //! クリップボード操作と監視を単一スレッドで処理するワーカー
 //!
-//! 本文 I/O は [`OwnedClipboard`] を 1 インスタンスだけ保持する。
+//! 本文 I/O は [`OwnedClipboard`] を 1 インスタンスだけ保持する
 //! 変更検知は `clipboard_seq` (Open 不要) と `clipboard_listener` (本文非読) に分離する
 
 mod clipboard_listener;
@@ -15,13 +15,11 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
-use clipboard_listener::{ClipboardFormatListener, clear_clipboard_changed_pending};
-use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
-
 use super::dispatch;
 use super::state::{AppState, ConfigEvent, WorkerEvent};
-
 use crate::refiner::OwnedClipboard;
+use clipboard_listener::{ClipboardFormatListener, clear_clipboard_changed_pending};
+use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
 
 pub use command::ClipboardCommand;
 pub use handle::ClipboardWorkerHandle;
@@ -131,7 +129,6 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-
     use crate::config::MonitorMode;
     use crate::refiner::RefineContext;
     use crate::tray::state::test_app_state;
@@ -154,7 +151,7 @@ mod tests {
         assert!(should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中はティックを実行しないであるようにすること
+    /// 一時停止中はティックを実行しないようにすること
     #[test]
     fn should_not_run_monitor_tick_when_paused() {
         let state = Arc::new(test_app_state());
@@ -165,7 +162,7 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 監視世代が 0 の場合はティックを実行しないであるようにすること
+    /// 監視世代が 0 の場合はティックを実行しないようにすること
     #[test]
     fn should_not_run_monitor_tick_when_generation_zero() {
         let state = Arc::new(test_app_state());
@@ -175,7 +172,7 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 追跡中の世代と不一致の場合はティックを実行しないであるようにすること
+    /// 追跡中の世代と不一致の場合はティックを実行しないようにすること
     #[test]
     fn should_not_run_monitor_tick_when_generation_mismatch() {
         let state = Arc::new(test_app_state());
@@ -239,7 +236,7 @@ mod tests {
         );
     }
 
-    /// Event 監視でリスナ未使用時は短周期 peek 間隔であること
+    /// Event 監視でリスナ未使用時は短周期 peek 間隔となるようにすること
     #[test]
     fn recv_timeout_is_short_when_event_listener_inactive() {
         use crate::tray::clipboard_monitor::{EVENT_POLL_MS, POLL_TICK_MS};
@@ -281,7 +278,7 @@ mod tests {
         );
     }
 
-    /// 設定が Polling の場合は実効監視モードも Polling であるようにすること
+    /// 設定が Polling の場合は実効監視モードも Polling となるようにすること
     #[test]
     fn effective_mode_is_polling_when_configured() {
         let state = Arc::new(test_app_state());

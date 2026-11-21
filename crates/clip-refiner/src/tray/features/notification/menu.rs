@@ -1,9 +1,8 @@
+use crate::config::NotificationSettings;
 use crate::tray::menu::{NotificationMenu, TrayMenu};
 
 use anyhow::Result;
 use tray_icon::menu::{CheckMenuItem, PredefinedMenuItem, Submenu};
-
-use crate::config::NotificationSettings;
 
 // ======================================================================
 // 通知メニュー

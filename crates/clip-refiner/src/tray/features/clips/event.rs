@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
+use crate::config::AppConfig;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
 use crate::tray::selector::ClipSelectorWindow;
 use crate::tray::state::{AppState, LockExt};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use crate::config::AppConfig;
 
 // ======================================================================
 // メニューイベント処理

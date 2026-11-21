@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::super::feedback::SettingsApplyFeedback;
-
 use crate::config::format_hotkey_fixes_message;
 use crate::tray::dispatch;
 use crate::tray::settings::ipc::SettingsPatch;
@@ -56,7 +55,6 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-
     use crate::config::HotkeySettings;
     use crate::consts;
     use crate::tray::state::test_app_state;
@@ -84,7 +82,7 @@ mod tests {
         assert!(config_dirty);
     }
 
-    /// 不正な固定ホットキーはデフォルトへ正規化しフィードバックを返すこと
+    /// 不正な固定ホットキーはデフォルトへ正規化しフィードバックを返すようにすること
     #[test]
     fn hotkeys_patch_fixes_invalid_binding_with_feedback() {
         let state = Arc::new(test_app_state());
@@ -109,7 +107,7 @@ mod tests {
         );
     }
 
-    /// 重複するホットキーは正規化しフィードバックを返すこと
+    /// 重複するホットキーは正規化しフィードバックを返すようにすること
     #[test]
     fn hotkeys_patch_fixes_duplicate_binding_with_feedback() {
         let state = Arc::new(test_app_state());

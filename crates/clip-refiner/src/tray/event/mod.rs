@@ -12,7 +12,6 @@ use super::selector::{
 };
 use super::state::AppState;
 use super::worker::ClipboardWorkerHandle;
-
 use crate::config::SelectorWebviewRetention;
 
 use tao::event::WindowEvent;

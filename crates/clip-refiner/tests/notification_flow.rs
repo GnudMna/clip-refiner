@@ -1,8 +1,7 @@
 //! 通知設定の移行・IPC・トレイメニュー連携の統合テスト
 
-use clip_refiner::AppConfig;
-use clip_refiner::NotificationSettings;
 use clip_refiner::test_helpers::SettingsTestContext;
+use clip_refiner_core::{AppConfig, NotificationSettings};
 
 // ======================================================================
 // テスト

@@ -57,7 +57,6 @@ pub(crate) fn handle_app_control(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::test_helpers::TrayTestContext;
 
     use tao::event_loop::ControlFlow;
@@ -75,7 +74,7 @@ mod tests {
         assert!(matches!(control_flow, ControlFlow::Wait));
     }
 
-    /// 設定メニューで処理が完了しイベントループを終了しないこと
+    /// 設定メニューで処理が完了しイベントループを終了しないようにすること
     ///
     /// テスト用 `AppState` は `EventLoop` を保持しないため、`ShowSettingsWindow` の
     /// 受信は検証できない。メニュー ID 照合と `ControlFlow` 維持を固定する
@@ -91,7 +90,7 @@ mod tests {
         assert!(matches!(control_flow, ControlFlow::Wait));
     }
 
-    /// 更新確認メニューで処理が完了しイベントループを終了しないこと
+    /// 更新確認メニューで処理が完了しイベントループを終了しないようにすること
     #[test]
     fn handle_app_control_check_update_keeps_event_loop() {
         let ctx = TrayTestContext::new();

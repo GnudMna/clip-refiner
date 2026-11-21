@@ -1,5 +1,4 @@
 use super::types::SelectionRect;
-
 use crate::platform::screen_capture::ScreenRect;
 
 use windows::Win32::Foundation::LPARAM;

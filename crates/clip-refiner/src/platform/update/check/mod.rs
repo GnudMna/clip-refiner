@@ -6,12 +6,11 @@ mod asset;
 mod evaluate;
 mod version;
 
-use evaluate::evaluate_update;
-use version::parse_semver;
-
 use super::error::UpdateError;
 use super::types::{UpdateCheckOutcome, UpdatePackageKind, VersionApiResponse};
 use super::{BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, current_app_version};
+use evaluate::evaluate_update;
+use version::parse_semver;
 
 // ======================================================================
 // パブリック関数
@@ -100,7 +99,7 @@ fn fetch_version_api(url: &str) -> Result<VersionApiResponse, UpdateError> {
 mod tests {
     use super::super::types::VersionApiResponse;
 
-    /// version API JSON をデシリアライズできること
+    /// version API JSON をデシリアライズできるようにすること
     #[test]
     fn version_api_response_deserializes_bridge_json() {
         let json = r#"{
@@ -123,7 +122,7 @@ mod tests {
         );
     }
 
-    /// digest 無しの旧 bridge JSON もデシリアライズできること
+    /// digest 無しの旧 bridge JSON もデシリアライズできるようにすること
     #[test]
     fn version_api_response_deserializes_without_digest() {
         let json = r#"{

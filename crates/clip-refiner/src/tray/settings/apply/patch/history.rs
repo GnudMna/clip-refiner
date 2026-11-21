@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::settings::ipc::SettingsPatch;
@@ -43,7 +42,6 @@ pub(super) fn apply_history_patch(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts;
     use crate::test_helpers::TrayTestContext;
 

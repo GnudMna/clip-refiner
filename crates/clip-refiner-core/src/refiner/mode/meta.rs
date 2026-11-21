@@ -194,9 +194,9 @@ impl RefineMode {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::super::defs::{RefineCategory, RefineMode};
-
     use std::str::FromStr;
+
+    use super::super::defs::{RefineCategory, RefineMode};
 
     use strum::IntoEnumIterator;
 

@@ -1,6 +1,5 @@
 use super::types::TrayMenu;
 use crate::tray::dispatch;
-
 use crate::tray::state::{AppState, LockExt, MenuSnapshot};
 
 use anyhow::Result;

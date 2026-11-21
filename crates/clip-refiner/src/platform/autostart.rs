@@ -2,10 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
-
 use crate::consts;
 
+use anyhow::{Context, Result};
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
 
@@ -98,7 +97,7 @@ mod tests {
 
     use super::*;
 
-    /// パス比較が大文字小文字を区別しないであるようにすること
+    /// パス比較が大文字小文字を区別しないようにすること
     #[test]
     fn paths_match_ignore_case_on_windows() {
         assert!(paths_match(
@@ -114,7 +113,7 @@ mod tests {
         assert!(paths_match(path, path));
     }
 
-    /// 異なるパスは一致しないであるようにすること
+    /// 異なるパスは一致しないようにすること
     #[test]
     fn paths_match_different_paths() {
         assert!(!paths_match(

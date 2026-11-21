@@ -182,7 +182,7 @@ mod tests {
         );
     }
 
-    /// 条件を満たさないヘッダーは変更しないこと
+    /// 条件を満たさないヘッダーは変更しないようにすること
     #[test]
     fn tweak_skips_non_alpha_headers() {
         let mut dib = vec![0u8; 56];
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(dib, before);
     }
 
-    /// 1x1 の 24bit DIB を RGBA へデコードできること
+    /// 1x1 の 24bit DIB を RGBA へデコードできるようにすること
     #[test]
     fn decode_minimal_24bit_dib() {
         // BITMAPINFOHEADER (40) + 1 ピクセル BGR + パディング 1 バイト = 44

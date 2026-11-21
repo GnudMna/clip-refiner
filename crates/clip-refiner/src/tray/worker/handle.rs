@@ -5,11 +5,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use super::command::ClipboardCommand;
-use super::run_worker_loop;
-
 use super::super::dispatch;
 use super::super::state::{AppState, LockExt, WorkerEvent};
+use super::command::ClipboardCommand;
+use super::run_worker_loop;
 use crate::ipc::OneshotProcessResult;
 use crate::refiner::{RefineContext, RefineMode};
 use crate::tray::clipboard_monitor::bump_monitor_generation;
@@ -239,14 +238,13 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-
     use crate::refiner::RefineMode;
     use crate::test_helpers::{
         TrayTestContext, stub_worker, test_app_state_arc, with_clipboard_worker_spawn_lock,
     };
     use crate::tray::state::test_app_state;
 
-    /// ワーカー停止中はコマンドを送信しないであるようにすること
+    /// ワーカー停止中はコマンドを送信しないようにすること
     #[test]
     fn send_skips_command_when_worker_stopped() {
         let state = test_app_state_arc();
@@ -303,7 +301,7 @@ mod tests {
         });
     }
 
-    /// `restart` 完了時点で旧ワーカーの `JoinHandle` が差し替わっていること
+    /// `restart` 完了時点で旧ワーカーの `JoinHandle` が差し替わっているようにすること
     #[test]
     fn restart_replaces_join_handle_after_previous_exit() {
         with_clipboard_worker_spawn_lock(|| {

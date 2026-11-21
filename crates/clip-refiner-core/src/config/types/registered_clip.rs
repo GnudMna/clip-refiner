@@ -98,6 +98,14 @@ impl RegisteredClip {
 mod text_ciphertext_serde {
     use super::*;
 
+    /// バイト列を base64 文字列としてシリアライズする
+    ///
+    /// # Arguments
+    /// * `bytes` - バイト列
+    /// * `serializer` - `Serializer`
+    ///
+    /// # Returns
+    /// * `Result<S::Ok, S::Error>` - 成功時は `Ok`、失敗時は `Err`
     pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -109,6 +117,13 @@ mod text_ciphertext_serde {
         }
     }
 
+    /// base64 文字列からバイト列へデシリアライズする
+    ///
+    /// # Arguments
+    /// * `deserializer` - `Deserializer`
+    ///
+    /// # Returns
+    /// * `Result<Vec<u8>, D::Error>` - 成功時は `Ok`、失敗時は `Err`
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
     where
         D: Deserializer<'de>,

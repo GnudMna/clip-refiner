@@ -1,7 +1,7 @@
 //! 監視ループ経路の統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{ClipboardHarness, MAX_CLIPBOARD_TEXT_BYTES, MonitorMode};
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // 監視加工

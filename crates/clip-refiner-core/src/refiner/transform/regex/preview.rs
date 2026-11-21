@@ -1,5 +1,4 @@
 use super::match_timeout::{RegexMatchTimeout, replace_all_cancellable, run_with_match_timeout};
-
 use crate::config::RegexSettings;
 use crate::consts::{MAX_REGEX_PATTERN_BYTES, REGEX_MATCH_TIMEOUT_MS};
 
@@ -90,7 +89,6 @@ pub fn preview_regex_replace(sample: &str, settings: &RegexSettings) -> RegexPre
 mod tests {
     use super::super::match_timeout::with_pool_test_lock;
     use super::{REGEX_PREVIEW_SAMPLE, preview_regex_replace};
-
     use crate::config::RegexSettings;
 
     /// プレビューが置換結果とエラーを返すようにすること

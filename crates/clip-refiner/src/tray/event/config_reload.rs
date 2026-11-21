@@ -4,10 +4,12 @@ use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
-use crate::tray::selector::ClipSelectorWindow;
-
 use crate::config::{AppConfig, ConfigReloadError, format_unknown_config_keys_message};
 use crate::platform;
+use crate::tray::selector::ClipSelectorWindow;
+use crate::user_error::{UserNotification, titles};
+
+use thiserror::Error;
 
 // ======================================================================
 // 設定再読み込み
@@ -16,6 +18,34 @@ use crate::platform;
 pub struct ConfigReloadOutcome {
     /// ユーザー向けメッセージ
     pub message: String,
+}
+
+/// 設定再読み込みの適用失敗
+///
+/// ユーザー向け文言は `Display` (`#[error(...)]`) に集約し、通知へは `to_string()` で渡す
+#[derive(Debug, Error)]
+pub(crate) enum ApplyConfigReloadError {
+    /// ディスク上の設定読み込み失敗
+    #[error("{}", .0.notification_message())]
+    Disk(#[from] ConfigReloadError),
+    /// トレイメニュー同期失敗
+    #[error("メニュー同期に失敗: {0}")]
+    MenuSync(String),
+    /// ホットキー再登録失敗
+    #[error("ホットキーの再登録に失敗: {0}")]
+    HotkeyReload(String),
+    /// 履歴メニュー更新失敗
+    #[error("履歴メニュー更新に失敗: {0}")]
+    HistoryMenu(String),
+    /// 連続記録メニュー更新失敗
+    #[error("連続記録メニュー更新に失敗: {0}")]
+    ContinuousRecordMenu(String),
+}
+
+impl From<&ApplyConfigReloadError> for UserNotification {
+    fn from(err: &ApplyConfigReloadError) -> Self {
+        Self::new(titles::SETTINGS, err.to_string())
+    }
 }
 
 /// ディスク上の設定を読み込み、アプリ状態と UI へ反映する
@@ -27,14 +57,14 @@ pub struct ConfigReloadOutcome {
 /// * `clip_selector` - 登録クリップセレクター (表示中なら内容を更新)
 ///
 /// # Returns
-/// * `Result<ConfigReloadOutcome, String>` - 成功時は結果メッセージ、失敗時はエラー文言
+/// * `Result<ConfigReloadOutcome, ApplyConfigReloadError>` - 成功時は結果メッセージ、失敗時は型付きエラー
 pub fn apply_config_reload(
     state: &Arc<AppState>,
     menu: &TrayMenu,
     hotkey_handler: &mut HotkeyHandler,
     clip_selector: &ClipSelectorWindow,
-) -> Result<ConfigReloadOutcome, String> {
-    let loaded = AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
+) -> Result<ConfigReloadOutcome, ApplyConfigReloadError> {
+    let loaded = AppConfig::reload_from_disk()?;
     let unknown_keys = loaded.unknown_keys.clone();
     let migrated = loaded.migrated;
     let newer_version_clamped = loaded.newer_version_clamped;
@@ -58,7 +88,7 @@ pub fn apply_config_reload(
     state.config_sync().record_disk_sync();
 
     menu.sync_from_config(state)
-        .map_err(|e| format!("メニュー同期に失敗: {e}"))?;
+        .map_err(|e| ApplyConfigReloadError::MenuSync(e.to_string()))?;
 
     let mut change_labels = Vec::new();
     let mut hotkey_registration_message = None;
@@ -68,7 +98,7 @@ pub fn apply_config_reload(
         let favorite_modes = state.with_config(|c| c.favorite_modes.clone());
         let registration_failures = hotkey_handler
             .reload(&hotkeys, &favorite_modes)
-            .map_err(|e| format!("ホットキーの再登録に失敗: {e}"))?;
+            .map_err(|e| ApplyConfigReloadError::HotkeyReload(e.to_string()))?;
         change_labels.push("ホットキーを更新");
         if !registration_failures.is_empty() {
             change_labels.push("一部ホットキーの登録に失敗");
@@ -81,13 +111,13 @@ pub fn apply_config_reload(
     if history_disabled {
         state.clipboard_session().clear_history();
         menu.refresh_history(state)
-            .map_err(|e| format!("履歴メニュー更新に失敗: {e}"))?;
+            .map_err(|e| ApplyConfigReloadError::HistoryMenu(e.to_string()))?;
     }
 
     if continuous_record_disabled {
         state.clipboard_session().clear_continuous_record();
         menu.refresh_continuous_record(state)
-            .map_err(|e| format!("連続記録メニュー更新に失敗: {e}"))?;
+            .map_err(|e| ApplyConfigReloadError::ContinuousRecordMenu(e.to_string()))?;
     }
 
     if monitor_changed {
@@ -135,16 +165,6 @@ fn build_reload_message(extra_parts: &[&str]) -> String {
     parts.join(" / ")
 }
 
-/// 再読み込みエラーをユーザー向けメッセージへ変換する
-fn reload_error_message(error: &ConfigReloadError) -> String {
-    match error {
-        ConfigReloadError::Parse(detail) => {
-            format!("{} ({detail})", error.user_message())
-        }
-        _ => error.user_message().to_string(),
-    }
-}
-
 /// 設定再読み込みを実行し、結果をデスクトップ通知で表示する
 ///
 /// # Arguments
@@ -160,9 +180,10 @@ pub fn reload_config_with_notification(
 ) {
     match apply_config_reload(state, menu, hotkey_handler, clip_selector) {
         Ok(outcome) => platform::show_notification("設定を再読み込み", &outcome.message),
-        Err(message) => {
-            crate::log_warn!("設定の再読み込みに失敗: {}", message);
-            platform::show_notification("設定の再読み込み", &message);
+        Err(err) => {
+            // 再読み込み失敗は警告レベル。タイトルは成功時と同系統を維持する
+            crate::log_warn!("設定の再読み込みに失敗: {err}");
+            platform::show_notification("設定の再読み込み", &err.to_string());
         }
     }
 }
@@ -192,9 +213,28 @@ mod tests {
         assert!(message.contains("未知の設定キーを検出"));
     }
 
-    /// 変更がない場合は基本メッセージのみであるようにすること
+    /// 変更がない場合は基本メッセージのみとなるようにすること
     #[test]
     fn build_reload_message_without_changes() {
         assert_eq!(build_reload_message(&[]), "設定を反映しました");
+    }
+
+    /// ディスク読み込み失敗が通知向け文言を保持すること
+    #[test]
+    fn apply_config_reload_error_disk_uses_notification_message() {
+        let err = ApplyConfigReloadError::from(ConfigReloadError::Parse("bad key".into()));
+        assert!(err.to_string().contains("形式が不正"));
+        assert!(err.to_string().contains("bad key"));
+
+        let notification = UserNotification::from(&err);
+        assert_eq!(notification.title(), titles::SETTINGS);
+        assert_eq!(notification.body(), err.to_string());
+    }
+
+    /// UI 反映失敗が接頭辞付きの `Display` になるようにすること
+    #[test]
+    fn apply_config_reload_error_menu_sync_prefix() {
+        let err = ApplyConfigReloadError::MenuSync("broken".into());
+        assert_eq!(err.to_string(), "メニュー同期に失敗: broken");
     }
 }

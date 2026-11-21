@@ -67,7 +67,7 @@ impl OneshotIpcServer {
     /// # Returns
     /// * `Self` - 停止時に待受を終了するガード
     pub(crate) fn start_named(worker: Arc<ClipboardWorkerHandle>, pipe_name: String) -> Self {
-        // テスト用パイプは FIRST_PIPE_INSTANCE を付けない。
+        // テスト用パイプは FIRST_PIPE_INSTANCE を付けない
         // 連続接続でインスタンス再作成が失敗し、クライアントが応答待ちのまま残るのを避ける
         let first_instance_only = pipe_name == consts::ONESHOT_IPC_PIPE_NAME;
         let stop = Arc::new(AtomicBool::new(false));
@@ -275,7 +275,7 @@ mod tests {
 
     use super::{connect_pipe, create_pipe_instance_named};
 
-    /// 現在ユーザー専用 DACL のパイプへ同一ユーザーが接続できること
+    /// 現在ユーザー専用 DACL のパイプへ同一ユーザーが接続できるようにすること
     #[test]
     fn owner_only_pipe_allows_same_user_connect() {
         let pipe_name = format!(

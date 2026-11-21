@@ -8,7 +8,6 @@ use super::super::notify::{
 };
 use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent};
 use super::command::ClipboardCommand;
-
 use crate::config::{AddRegisteredClipError, ResolvedClip};
 use crate::ipc::OneshotProcessResult;
 use crate::refiner::{

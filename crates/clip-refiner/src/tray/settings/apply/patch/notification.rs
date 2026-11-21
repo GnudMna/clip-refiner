@@ -58,7 +58,6 @@ pub(super) fn apply_notification_patch(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::NotificationSettings;
     use crate::test_helpers::TrayTestContext;
 

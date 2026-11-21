@@ -99,6 +99,9 @@ pub struct NotificationSettings {
 
 impl NotificationSettings {
     /// 旧設定項目を新しい個別トグルへ移行する
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn migrate_legacy_fields(&mut self) {
         if !self.legacy_notify_mode && !self.notify_result {
             self.notify_process = false;

@@ -9,7 +9,6 @@ use super::super::permissions::restrict_private_file_permissions;
 use super::super::registered_clips::save_registered_clips;
 use super::super::serialize::config_to_toml;
 use super::super::types::AppConfig;
-
 use crate::error::ConfigError;
 
 /// ディスク上の設定ファイルの最終更新時刻を取得する
@@ -79,10 +78,9 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::config::paths::get_config_file_path;
 
-    /// `save` が既存設定を原子的に置き換え、一時ファイルを残さないこと
+    /// `save` が既存設定を原子的に置き換え、一時ファイルを残さないようにすること
     #[test]
     fn save_replaces_config_atomically_without_temp_files() {
         crate::test_helpers::with_temp_config_dir(|| {

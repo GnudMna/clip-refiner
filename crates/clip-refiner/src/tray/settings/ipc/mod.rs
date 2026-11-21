@@ -24,7 +24,6 @@ mod tests {
         SettingsIpcAction, SettingsPatch, enqueue_settings_patch, enqueue_settings_patch_json,
         parse_settings_ipc_message,
     };
-
     use crate::config::{FavoriteMoveDirection, NotificationSettings};
     use crate::refiner::RefineMode;
 
@@ -262,7 +261,7 @@ mod tests {
         assert_eq!(patch.continuous_record_enabled, None);
     }
 
-    /// 不正な単体 JSON はキューへ入れないこと
+    /// 不正な単体 JSON はキューへ入れないようにすること
     #[test]
     fn enqueue_settings_patch_json_rejects_invalid_standalone_payload() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -342,7 +341,7 @@ mod tests {
         assert_eq!(sample, "abc 42");
     }
 
-    /// `regex-preview` で sample 省略時は空文字になること
+    /// `regex-preview` で sample 省略時は空文字になるようにすること
     #[test]
     fn parse_ipc_regex_preview_without_sample() {
         let action = parse_settings_ipc_message(
@@ -388,7 +387,7 @@ mod tests {
         assert_eq!(restored.is_paused, Some(true));
     }
 
-    /// 旧プレフィックス形式は解釈しないであるようにすること
+    /// 旧プレフィックス形式は解釈しないようにすること
     #[test]
     fn parse_ipc_legacy_prefix_returns_none() {
         assert!(parse_settings_ipc_message("close").is_none());

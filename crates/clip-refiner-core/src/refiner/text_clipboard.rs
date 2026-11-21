@@ -101,8 +101,8 @@ impl ImageClipboard for arboard::Clipboard {
 fn read_rgba_image(
     clipboard: &mut arboard::Clipboard,
 ) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
-    if crate::platform::clipboard_image::dib_format_available()
-        && let Some(image) = crate::platform::clipboard_image::read_dib_image()
+    if crate::native::clipboard_image::dib_format_available()
+        && let Some(image) = crate::native::clipboard_image::read_dib_image()
     {
         return Ok((image.width, image.height, image.rgba));
     }

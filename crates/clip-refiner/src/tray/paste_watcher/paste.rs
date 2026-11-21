@@ -1,7 +1,6 @@
 use std::mem;
 
 use super::super::state::AppState;
-
 use crate::refiner::TextClipboard;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -110,11 +109,10 @@ fn keyboard_input(vk: VIRTUAL_KEY, key_up: bool) -> INPUT {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::test_helpers::InMemoryTextClipboard;
     use crate::tray::state::test_app_state;
 
-    /// 連続記録無効時は貼り付け排出を行わないであるようにすること
+    /// 連続記録無効時は貼り付け排出を行わないようにすること
     #[test]
     fn paste_skips_when_continuous_record_disabled() {
         let state = test_app_state();
@@ -124,7 +122,7 @@ mod tests {
         assert_eq!(clipboard.text(), "keep");
     }
 
-    /// キューが空のときは貼り付け排出を行わないであるようにすること
+    /// キューが空のときは貼り付け排出を行わないようにすること
     #[test]
     fn paste_skips_when_queue_empty() {
         let state = test_app_state();

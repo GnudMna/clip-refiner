@@ -205,7 +205,7 @@ pub(crate) fn earliest_idle_deadline(
 mod tests {
     use super::*;
 
-    /// アイドル破棄期限が分数どおりに進むこと
+    /// アイドル破棄期限が分数どおりに進むようにすること
     #[test]
     fn idle_dispose_deadline_adds_minutes() {
         let start = Instant::now();
@@ -241,7 +241,7 @@ mod tests {
         ));
     }
 
-    /// 複数期限のうち最も早いものを返すこと
+    /// 複数期限のうち最も早いものを返すようにすること
     #[test]
     fn earliest_idle_deadline_picks_minimum() {
         let earlier = Instant::now();
@@ -252,7 +252,7 @@ mod tests {
         assert!(earliest_idle_deadline([None, None], 1).is_none());
     }
 
-    /// 保持方針に応じて非表示 / 破棄 / アイドル開始が切り替わること
+    /// 保持方針に応じて非表示 / 破棄 / アイドル開始が切り替わるようにすること
     #[test]
     fn hide_with_retention_applies_policy() {
         use std::cell::Cell;

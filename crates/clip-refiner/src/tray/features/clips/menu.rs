@@ -1,7 +1,6 @@
 use std::sync::Mutex;
 
 use crate::tray::menu::{ClipsMenu, TrayMenu};
-
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::Result;

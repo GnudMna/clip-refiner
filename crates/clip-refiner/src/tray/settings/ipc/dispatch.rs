@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use super::message::SettingsIpcAction;
 use super::queue::enqueue_settings_patch;
-
 use crate::tray::dispatch;
 use crate::tray::state::{
     AppEvent, AppState, ClipsEvent, FavoritesEvent, RegexPreviewRequest, SettingsEvent,

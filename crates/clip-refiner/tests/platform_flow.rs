@@ -1,10 +1,10 @@
 //! OS 連携 (ホットキー・自動起動) の統合テスト
 
-use clip_refiner::AppConfig;
-use clip_refiner::hotkey_binding::parse_hotkey_binding;
 use clip_refiner::test_helpers::{
     assert_test_hotkeys_register, query_autostart_enabled, query_webview2_runtime_available,
 };
+use clip_refiner_core::AppConfig;
+use clip_refiner_core::hotkey_binding::{HotkeyParseError, parse_hotkey_binding};
 
 // ======================================================================
 // テスト
@@ -47,8 +47,7 @@ fn invalid_hotkey_binding_returns_parse_error() {
         parse_hotkey_binding("NotAValidBinding").expect_err("不正なバインディングは失敗する");
     assert!(matches!(
         error,
-        clip_refiner::HotkeyParseError::UnsupportedKey(_)
-            | clip_refiner::HotkeyParseError::UnsupportedModifier(_)
+        HotkeyParseError::UnsupportedKey(_) | HotkeyParseError::UnsupportedModifier(_)
     ));
 }
 

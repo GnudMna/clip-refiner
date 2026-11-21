@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::favorites::refresh_quick_selector_modes;
-
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;

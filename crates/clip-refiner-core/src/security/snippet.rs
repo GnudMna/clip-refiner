@@ -102,7 +102,7 @@ fn truncate_chars(text: &str, max_chars: usize) -> String {
 mod tests {
     use super::*;
 
-    /// 通常テキストは機密と判定しないであるようにすること
+    /// 通常テキストは機密と判定しないようにすること
     #[test]
     fn looks_sensitive_allows_plain_text() {
         assert!(!looks_sensitive("hello world"));

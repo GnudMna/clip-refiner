@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use super::clip_store_key::clip_store_key;
 use super::paths::get_config_dir;
 use super::permissions::{restrict_private_dir_permissions, restrict_private_file_permissions};
-
 use crate::consts;
 use crate::security::{decrypt_bytes, encrypt_bytes};
 

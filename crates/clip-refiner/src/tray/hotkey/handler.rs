@@ -15,7 +15,6 @@ use super::super::selector::{ClipSelectorWindow, QuickSelectorWindow};
 use super::super::state::AppState;
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::register::HotkeyHandler;
-
 use crate::config::AppConfig;
 use crate::platform;
 use crate::tray::selector::hide_with_retention;

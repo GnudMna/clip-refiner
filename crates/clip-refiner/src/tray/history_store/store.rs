@@ -8,6 +8,21 @@ use crate::security::{
 };
 
 use anyhow::Result;
+use thiserror::Error;
+
+// ======================================================================
+// エラー
+// ======================================================================
+/// 暗号化履歴エントリの復号失敗
+#[derive(Debug, Error)]
+enum HistoryDecryptError {
+    /// AEAD 復号失敗
+    #[error("履歴の復号に失敗: {0}")]
+    Decrypt(String),
+    /// 復号結果が UTF-8 でない
+    #[error("履歴の UTF-8 変換に失敗: {0}")]
+    Utf8(String),
+}
 
 // ======================================================================
 // 暗号化エントリ
@@ -72,7 +87,11 @@ impl EncryptedHistoryStore {
     /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn entry_at(&self, index: usize) -> Option<SecretString> {
         let entry = self.entries.get(index)?;
-        self.decrypt_entry(entry).ok()
+        self.decrypt_entry(entry)
+            .inspect_err(|e| {
+                crate::log_error!("{e}");
+            })
+            .ok()
     }
 }
 
@@ -160,7 +179,11 @@ impl EncryptedHistoryStore {
             return None;
         }
         let entry = self.entries.remove(0);
-        self.decrypt_entry(&entry).ok()
+        self.decrypt_entry(&entry)
+            .inspect_err(|e| {
+                crate::log_error!("{e}");
+            })
+            .ok()
     }
 
     /// 先頭から一致する最初のエントリを取り出す
@@ -199,7 +222,11 @@ impl EncryptedHistoryStore {
             return None;
         }
         let entry = self.entries.remove(index);
-        self.decrypt_entry(&entry).ok()
+        self.decrypt_entry(&entry)
+            .inspect_err(|e| {
+                crate::log_error!("{e}");
+            })
+            .ok()
     }
 
     /// キュー末尾 (最後に記録した項目) を取り除く
@@ -211,7 +238,11 @@ impl EncryptedHistoryStore {
     /// * `Option<SecretString>` - 末尾エントリ。空の場合は `None`
     pub fn pop_back(&mut self) -> Option<SecretString> {
         let entry = self.entries.pop()?;
-        self.decrypt_entry(&entry).ok()
+        self.decrypt_entry(&entry)
+            .inspect_err(|e| {
+                crate::log_error!("{e}");
+            })
+            .ok()
     }
 
     /// 履歴をすべて削除する
@@ -248,13 +279,13 @@ impl EncryptedHistoryStore {
     /// * `entry` - 復号対象の暗号化エントリ
     ///
     /// # Returns
-    /// * `Result<SecretString, String>` - 成功時は復号済みテキスト、失敗時はエラーメッセージ
-    fn decrypt_entry(&self, entry: &EncryptedEntry) -> Result<SecretString, String> {
+    /// * `Result<SecretString, HistoryDecryptError>` - 成功時は復号済みテキスト
+    fn decrypt_entry(&self, entry: &EncryptedEntry) -> Result<SecretString, HistoryDecryptError> {
         let plaintext = decrypt_bytes(&self.key, &entry.ciphertext)
-            .map_err(|e| format!("履歴の復号に失敗: {e:#}"))?;
+            .map_err(|e| HistoryDecryptError::Decrypt(format!("{e:#}")))?;
         String::from_utf8(plaintext)
             .map(SecretString::from)
-            .map_err(|e| format!("履歴の UTF-8 変換に失敗: {e:?}"))
+            .map_err(|e| HistoryDecryptError::Utf8(format!("{e:?}")))
     }
 }
 
@@ -403,5 +434,15 @@ mod tests {
             store.entry_at(1).as_ref().map(|s| s.as_str()),
             Some("second")
         );
+    }
+
+    /// 復号エラーの `Display` が接頭辞付きになるようにすること
+    #[test]
+    fn history_decrypt_error_display() {
+        let decrypt = HistoryDecryptError::Decrypt("aead".into());
+        assert_eq!(decrypt.to_string(), "履歴の復号に失敗: aead");
+
+        let utf8 = HistoryDecryptError::Utf8("invalid".into());
+        assert_eq!(utf8.to_string(), "履歴の UTF-8 変換に失敗: invalid");
     }
 }

@@ -244,6 +244,9 @@ impl WebSelectorWindow {
     }
 
     /// ウィンドウを非表示にする (`WebView` は保持する)
+    ///
+    /// # Arguments
+    /// * `self` - 自身
     pub fn hide(&self) {
         self.window.set_visible(false);
     }

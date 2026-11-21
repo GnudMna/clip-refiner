@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-
 use crate::tray::clipboard_monitor::bump_monitor_generation_unchecked;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
@@ -48,5 +47,101 @@ pub(super) fn apply_continuous_record_patch(
             c.normalize();
         });
         *config_dirty = true;
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::consts;
+    use crate::security::ContentFingerprint;
+    use crate::test_helpers::TrayTestContext;
+
+    /// 連続記録の有効化でメニューと `last_written` を更新すること
+    #[test]
+    fn continuous_record_enable_updates_menu_and_clears_last_written() {
+        let ctx = TrayTestContext::new();
+        ctx.state().clipboard_session().with_processed_state(|ps| {
+            ps.last_written = Some(ContentFingerprint::from_text("previous"));
+        });
+
+        let patch = SettingsPatch {
+            continuous_record_enabled: Some(true),
+            ..SettingsPatch::default()
+        };
+        let mut outcome = PatchApplyOutcome::default();
+        let mut config_dirty = false;
+
+        apply_continuous_record_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            ctx.worker(),
+            &mut outcome,
+            &mut config_dirty,
+        );
+
+        assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
+        assert!(ctx.menu().continuous_record.enabled_item.is_checked());
+        assert!(
+            ctx.state()
+                .clipboard_session()
+                .with_processed_state(|ps| ps.last_written.is_none())
+        );
+        assert!(config_dirty);
+    }
+
+    /// 同値の連続記録パッチは no-op となるようにすること
+    #[test]
+    fn continuous_record_enable_noop_when_unchanged() {
+        let ctx = TrayTestContext::new();
+        let current = ctx.state().with_config(|c| c.continuous_record_enabled);
+        let patch = SettingsPatch {
+            continuous_record_enabled: Some(current),
+            ..SettingsPatch::default()
+        };
+        let mut outcome = PatchApplyOutcome::default();
+        let mut config_dirty = false;
+
+        apply_continuous_record_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            ctx.worker(),
+            &mut outcome,
+            &mut config_dirty,
+        );
+
+        assert!(!config_dirty);
+    }
+
+    /// 連続記録件数パッチが `normalize` でクランプされるようにすること
+    #[test]
+    fn continuous_record_limit_patch_clamps_to_max() {
+        let ctx = TrayTestContext::new();
+        let patch = SettingsPatch {
+            continuous_record_limit: Some(999),
+            ..SettingsPatch::default()
+        };
+        let mut outcome = PatchApplyOutcome::default();
+        let mut config_dirty = false;
+
+        apply_continuous_record_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            ctx.worker(),
+            &mut outcome,
+            &mut config_dirty,
+        );
+
+        assert_eq!(
+            ctx.state().with_config(|c| c.continuous_record_limit),
+            consts::MAX_CONTINUOUS_RECORD_LIMIT
+        );
+        assert!(config_dirty);
     }
 }

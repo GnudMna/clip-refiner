@@ -141,4 +141,36 @@ mod tests {
         let decrypted = decrypt_bytes(&TEST_KEY, &encrypted).expect("decrypt");
         assert_eq!(decrypted, plaintext);
     }
+
+    /// 暗号化鍵をランダム生成できるようにすること
+    #[test]
+    fn generate_cipher_key_returns_nonzero_key() {
+        let key1 = generate_cipher_key().expect("generate key 1");
+        let key2 = generate_cipher_key().expect("generate key 2");
+        assert_ne!(key1, [0u8; CIPHER_KEY_LEN]);
+        assert_ne!(key1, key2);
+    }
+
+    /// 暗号化鍵をゼロ化できるようにすること
+    #[test]
+    fn zeroize_cipher_key_clears_bytes() {
+        let mut key = TEST_KEY;
+        zeroize_cipher_key(&mut key);
+        assert_eq!(key, [0u8; CIPHER_KEY_LEN]);
+    }
+
+    /// 短すぎる暗号文は復号を拒否すること
+    #[test]
+    fn decrypt_bytes_rejects_too_short_blob() {
+        let err = decrypt_bytes(&TEST_KEY, &[0u8; NONCE_LEN]).expect_err("too short");
+        assert!(err.to_string().contains("短すぎ"));
+    }
+
+    /// 鍵が異なる場合は復号に失敗すること
+    #[test]
+    fn decrypt_bytes_fails_with_wrong_key() {
+        let encrypted = encrypt_bytes(&TEST_KEY, b"secret").expect("encrypt");
+        let wrong_key = [9u8; CIPHER_KEY_LEN];
+        assert!(decrypt_bytes(&wrong_key, &encrypted).is_err());
+    }
 }

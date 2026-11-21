@@ -9,11 +9,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use super::protocol::{
     MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request, parse_response,
 };
-
 use crate::consts;
 use crate::refiner::{RefineContext, RefineMode};
 
 use single_instance::SingleInstance;
+use thiserror::Error;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Pipes::PeekNamedPipe;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
@@ -35,33 +35,18 @@ const RESPONSE_READ_TIMEOUT: Duration = Duration::from_secs(30);
 // エラー
 // ======================================================================
 /// ワンショット IPC クライアントの失敗理由
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ClientError {
     /// 常駐プロセスのパイプに接続できない
+    #[error("常駐プロセスへ接続できませんでした: {0}")]
     Connect(String),
     /// 要求の送受信に失敗した
+    #[error("常駐プロセスとの通信に失敗しました: {0}")]
     Io(String),
     /// 応答 JSON が不正
+    #[error("常駐プロセスからの応答を解釈できませんでした: {0}")]
     Protocol(String),
 }
-
-impl std::fmt::Display for ClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Connect(detail) => {
-                write!(f, "常駐プロセスへ接続できませんでした: {detail}")
-            }
-            Self::Io(detail) => {
-                write!(f, "常駐プロセスとの通信に失敗しました: {detail}")
-            }
-            Self::Protocol(detail) => {
-                write!(f, "常駐プロセスからの応答を解釈できませんでした: {detail}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ClientError {}
 
 impl ClientError {
     /// 接続失敗としてリトライ可能かどうか

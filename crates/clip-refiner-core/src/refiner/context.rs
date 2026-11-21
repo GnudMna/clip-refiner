@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 
 use super::transform::regex::RegexPatternCache;
-
 use crate::config::{AppConfig, RegexSettings};
 
 // ======================================================================

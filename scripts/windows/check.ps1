@@ -1,11 +1,16 @@
 # ========================================================================
 # Script Name : check.ps1
 # Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / test / e2e)
-# Usage       : ./check.ps1
+# Usage       : ./check.ps1 [-Coverage]
 # Requires    : PowerShell 7.0+, Node.js (npm), WebView2 Runtime (E2E)
+#               -Coverage 時は cargo-llvm-cov と llvm-tools-preview も必要
 # ========================================================================
 
 #requires -Version 7.0
+
+param(
+    [switch]$Coverage
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,6 +21,8 @@ Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
     . (Join-Path $PSScriptRoot '..\common\cargo.ps1')
     . (Join-Path $PSScriptRoot '..\common\npm.ps1')
+
+    $runCoverage = $Coverage -or ($env:CLIP_REFINER_COVERAGE -eq '1')
 
     Write-Host '品質チェックを実行しています...'
     Write-Host ''
@@ -41,9 +48,21 @@ Invoke-ScriptMain {
     Invoke-JavaScriptLintCheck
     Write-Host ''
 
-    Write-Host 'テストを実行中...'
-    Invoke-CargoTest -IncludeDocTests
-    Write-Host ''
+    if ($runCoverage) {
+        Write-Host 'カバレッジ付きテストを実行中...'
+        Invoke-CargoLlvmCov
+        Write-Host ''
+
+        Write-Host 'doctests を実行中 (カバレッジ対象外)...'
+        cargo test --doc --features $script:CargoTestFeatures
+        Assert-LastExitCode -CommandLabel 'cargo test --doc'
+        Write-Host ''
+    }
+    else {
+        Write-Host 'テストを実行中...'
+        Invoke-CargoTest -IncludeDocTests
+        Write-Host ''
+    }
 
     if ($env:CLIP_REFINER_SKIP_E2E -eq '1') {
         Write-Host 'note: WebView E2E をスキップしました (CLIP_REFINER_SKIP_E2E=1)'

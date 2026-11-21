@@ -1,6 +1,6 @@
 //! OS クリップボード本文 I/O の単一所有者
 //!
-//! 常駐時はワーカースレッドが 1 インスタンスだけ保持する。
+//! 常駐時はワーカースレッドが 1 インスタンスだけ保持する
 //! 変更検知 (`clipboard_win::raw::seq_num` / `AddClipboardFormatListener`) は
 //! `OpenClipboard` を伴わない別経路であり、本文読み書きはこの型に集約する
 
@@ -11,7 +11,7 @@ use super::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 // ======================================================================
 /// ワーカー (またはワンショット) が保持する OS クリップボード接続
 ///
-/// `arboard::Clipboard` を包み、プロセス内で同時に複数生成しない運用を型で示す。
+/// `arboard::Clipboard` を包み、プロセス内で同時に複数生成しない運用を型で示す
 /// 画像取得では `CF_DIB` 系と通常画像で `OpenClipboard` 経路を排他する
 pub struct OwnedClipboard {
     inner: arboard::Clipboard,

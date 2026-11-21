@@ -1,7 +1,6 @@
 //! ポータブル更新の差し替えヘルパー
 
 use super::args::Args;
-
 use crate::platform;
 
 use anyhow::{Result, bail};

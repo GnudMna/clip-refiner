@@ -34,7 +34,7 @@ pub(crate) fn parse_semver(value: &str) -> Result<Version, semver::Error> {
 mod tests {
     use super::{parse_semver, strip_version_prefix};
 
-    /// タグ先頭の `v` を除去できること
+    /// タグ先頭の `v` を除去できるようにすること
     #[test]
     fn strip_version_prefix_removes_leading_v() {
         assert_eq!(strip_version_prefix("v0.13.1"), "0.13.1");
@@ -42,7 +42,7 @@ mod tests {
         assert_eq!(strip_version_prefix("V1.0.0"), "1.0.0");
     }
 
-    /// `SemVer` パースが `v` 付きを受け付けること
+    /// `SemVer` パースが `v` 付きを受け付けるようにすること
     #[test]
     fn parse_semver_accepts_v_prefix() {
         let version = parse_semver("v1.2.3").expect("semver");

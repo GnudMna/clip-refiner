@@ -1,7 +1,7 @@
 //! ワーカーコマンド経路の統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{ClipboardHarness, MonitorMode};
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // テスト

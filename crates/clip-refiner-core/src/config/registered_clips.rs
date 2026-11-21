@@ -7,7 +7,6 @@ use super::paths::get_config_dir;
 use super::permissions::restrict_private_file_permissions;
 use super::registered_images::migrate_plain_image_to_encrypted;
 use super::types::RegisteredClip;
-
 use crate::consts;
 use crate::security::{
     SecretString, decrypt_bytes, encrypt_bytes, format_public_snippet, is_within_clipboard_limit,
@@ -307,10 +306,9 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::security::encrypt_bytes;
 
-    /// 暗号化ファイルの往復で平文 JSON がディスクに残らないこと
+    /// 暗号化ファイルの往復で平文 JSON がディスクに残らないようにすること
     #[test]
     fn save_and_load_do_not_persist_plaintext() {
         crate::test_helpers::with_temp_config_dir(|| {
@@ -366,7 +364,7 @@ mod tests {
         });
     }
 
-    /// `Debug` が暗号文バイト列を展開しないこと
+    /// `Debug` が暗号文バイト列を展開しないようにすること
     #[test]
     fn registered_clip_debug_masks_ciphertext() {
         crate::test_helpers::with_temp_config_dir(|| {

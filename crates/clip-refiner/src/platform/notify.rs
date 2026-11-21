@@ -208,7 +208,7 @@ mod tests {
         );
     }
 
-    /// 埋め込み ICO が空でないであるようにすること
+    /// 埋め込み ICO が空でないようにすること
     #[test]
     fn registry_icon_bytes_not_empty() {
         assert!(!REGISTRY_ICON_BYTES.is_empty());
@@ -224,7 +224,7 @@ mod tests {
         );
     }
 
-    /// `REG_EXPAND_SZ` の型が正しいであるようにすること
+    /// `REG_EXPAND_SZ` の型が正しいとなるようにすること
     #[test]
     fn to_reg_expand_sz_uses_expand_sz_type() {
         assert_eq!(to_reg_expand_sz("ClipRefiner").vtype, REG_EXPAND_SZ);

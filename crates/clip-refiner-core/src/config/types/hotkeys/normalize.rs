@@ -5,7 +5,6 @@ use std::collections::hash_map::Entry;
 
 use super::fix::{HotkeyFix, HotkeyFixKind, favorite_slot_field_key};
 use super::settings::HotkeySettings;
-
 use crate::consts;
 use crate::hotkey_binding::{ParsedHotkey, parse_hotkey_binding};
 

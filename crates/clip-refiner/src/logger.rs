@@ -226,9 +226,9 @@ mod tests {
     use std::sync::atomic::{AtomicU8, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use chrono::NaiveDate;
-
     use super::*;
+
+    use chrono::NaiveDate;
 
     /// テスト用の一時ディレクトリを作成する
     fn temp_log_dir(label: &str) -> PathBuf {
@@ -290,7 +290,7 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    /// ローカル日付が変わると新しいログファイルへ切り替えること
+    /// ローカル日付が変わると新しいログファイルへ切り替えるようにすること
     #[test]
     fn local_daily_appender_rotates_on_date_change() {
         let base = temp_log_dir("rotate");

@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 use super::super::clipboard_monitor::{self, ClipboardObserveResult, EVENT_POLL_MS, POLL_TICK_MS};
 use super::super::state::AppState;
 use super::clipboard_seq;
-
 use crate::config::MonitorMode;
 use crate::refiner::{OwnedClipboard, RefineContext, TextClipboard};
 
@@ -92,7 +91,7 @@ impl MonitorLoopState {
     /// コマンド待ちのタイムアウトを計算する
     ///
     /// 監視が停止中の場合は短い間隔で再確認する。Event / 連続記録でリスナが稼働中のときは
-    /// 設定外部変更検知用の長間隔にし、`ClipboardChanged` で起床する。
+    /// 設定外部変更検知用の長間隔にし、`ClipboardChanged` で起床する
     /// リスナ未使用時はシーケンストークンの短周期 peek にフォールバックする
     ///
     /// # Arguments

@@ -16,12 +16,6 @@ use super::geometry::{
 use super::ipc::{dispatch_settings_ipc, parse_settings_ipc_message};
 use super::regex_preview::RegexPreviewResponse;
 use super::snapshot::SettingsSnapshot;
-
-use assets::{
-    CLOSE_FROM_OS_SCRIPT, FLUSH_PENDING_APPLY_SCRIPT, assemble_settings_html,
-    log_unparsed_settings_ipc,
-};
-
 use crate::consts;
 use crate::platform::update::{UpdateApplyUiResponse, UpdateCheckUiResponse};
 use crate::tray::menu::create_window_icon;
@@ -30,6 +24,10 @@ use crate::tray::selector::{
 };
 use crate::tray::state::{AppEvent, AppState};
 use crate::user_error::titles;
+use assets::{
+    CLOSE_FROM_OS_SCRIPT, FLUSH_PENDING_APPLY_SCRIPT, assemble_settings_html,
+    log_unparsed_settings_ipc,
+};
 
 use anyhow::{Context, Result};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
@@ -369,10 +367,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::SettingsWindow;
-
     use crate::tray::state::test_app_state;
 
-    /// 空シェルは非表示でウィンドウ ID もなく、未生成時の操作が no-op であること
+    /// 空シェルは非表示でウィンドウ ID もなく、未生成時の操作が no-op となるようにすること
     #[test]
     fn empty_shell_lifecycle_is_safe() {
         let state = Arc::new(test_app_state());

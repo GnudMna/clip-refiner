@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 
 use super::paths::get_config_dir;
 use super::permissions::restrict_private_file_permissions;
-use crate::platform::dpapi;
+use crate::native::dpapi;
 use crate::security::{CIPHER_KEY_LEN, generate_cipher_key};
 
 use anyhow::{Context, Result};

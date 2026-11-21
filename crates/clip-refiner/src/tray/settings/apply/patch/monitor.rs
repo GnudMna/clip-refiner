@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-
 use crate::config::MonitorMode;
 use crate::tray::event::update_monitor_mode;
 use crate::tray::menu::TrayMenu;
@@ -51,7 +50,6 @@ pub(super) fn apply_monitor_patch(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::consts;
     use crate::test_helpers::TrayTestContext;
 
@@ -179,7 +177,7 @@ mod tests {
         assert!(!ctx.menu().interval.custom_item.is_checked());
     }
 
-    /// プリセット外の周期パッチでカスタム項目がチェックされること
+    /// プリセット外の周期パッチでカスタム項目がチェックされるようにすること
     #[test]
     fn interval_ms_patch_marks_custom_item() {
         let ctx = TrayTestContext::new();

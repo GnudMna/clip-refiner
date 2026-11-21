@@ -360,7 +360,7 @@ mod tests {
         assert!(parsed.is_success());
     }
 
-    /// 正規表現上書きがコンテキストへ適用されること
+    /// 正規表現上書きがコンテキストへ適用されるようにすること
     #[test]
     fn regex_override_applies_to_context() {
         let override_settings = OneshotRegexOverride {

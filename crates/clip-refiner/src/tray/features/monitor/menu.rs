@@ -1,6 +1,5 @@
-use crate::tray::menu::{IntervalMenu, MonitorMenu, TrayMenu};
-
 use crate::config::MonitorMode;
+use crate::tray::menu::{IntervalMenu, MonitorMenu, TrayMenu};
 
 use anyhow::{Context, Result};
 use tray_icon::menu::{CheckMenuItem, PredefinedMenuItem, Submenu};

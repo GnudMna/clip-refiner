@@ -74,8 +74,8 @@ pub(crate) fn validate_declared_download_size(expected_size: u64) -> Result<(), 
 
 /// URL からファイルへダウンロードし、サイズと SHA-256 を検証する
 ///
-/// 期待サイズ超過または絶対上限超過の時点で読み取りを打ち切る。
-/// 検証に失敗した場合は保存済みファイルを削除する。
+/// 期待サイズ超過または絶対上限超過の時点で読み取りを打ち切る
+/// 検証に失敗した場合は保存済みファイルを削除する
 /// ビルド埋め込みキーがあれば `Authorization: Bearer` を付与する
 ///
 /// # Arguments
@@ -305,7 +305,7 @@ mod tests {
         Ok(to_hex(&hasher.finalize()))
     }
 
-    /// GitHub 形式の `sha256:` 付き digest を正規化できること
+    /// GitHub 形式の `sha256:` 付き digest を正規化できるようにすること
     #[test]
     fn parse_asset_digest_accepts_github_prefix() {
         let hex = "a".repeat(SHA256_HEX_LEN);
@@ -313,7 +313,7 @@ mod tests {
         assert_eq!(parsed, hex);
     }
 
-    /// 素の16進と大文字プレフィックスを正規化できること
+    /// 素の16進と大文字プレフィックスを正規化できるようにすること
     #[test]
     fn parse_asset_digest_normalizes_hex_case() {
         let upper = "B".repeat(SHA256_HEX_LEN);
@@ -340,7 +340,7 @@ mod tests {
         assert!(validate_declared_download_size(MAX_UPDATE_DOWNLOAD_BYTES + 1).is_err());
     }
 
-    /// 上限ちょうどの入力はコピーできること
+    /// 上限ちょうどの入力はコピーできるようにすること
     #[test]
     fn copy_and_hash_limited_accepts_exact_cap() {
         let payload = b"exact-cap-payload";
@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(to_hex(&hasher.finalize()), to_hex(&Sha256::digest(payload)));
     }
 
-    /// 上限を超える応答は書き込み前に打ち切ること
+    /// 上限を超える応答は書き込み前に打ち切るようにすること
     #[test]
     fn copy_and_hash_limited_aborts_before_writing_overflow() {
         let payload = b"0123456789";
@@ -370,7 +370,7 @@ mod tests {
         assert!(out.is_empty());
     }
 
-    /// 複数チャンクでも累積が上限を超えた時点で打ち切ること
+    /// 複数チャンクでも累積が上限を超えた時点で打ち切るようにすること
     #[test]
     fn copy_and_hash_limited_aborts_after_partial_write() {
         // 1 回の `read` で最大 `chunk` バイトだけ返す Reader

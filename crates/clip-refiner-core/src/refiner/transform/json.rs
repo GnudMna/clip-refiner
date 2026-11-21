@@ -244,4 +244,35 @@ mod tests {
         assert!(output.contains("- 2"));
         assert!(output.contains("- 3"));
     }
+
+    /// 既に Pretty な JSON は借用のまま返すようにすること
+    #[test]
+    fn test_format_json_already_pretty_returns_borrowed() {
+        let input = "{\n  \"a\": 1\n}";
+        let output = format_json(input);
+        assert!(matches!(output, Cow::Borrowed(_)));
+        assert_eq!(output.as_ref(), input);
+    }
+
+    /// パーサ上限超過の入力は整形をスキップすること
+    #[test]
+    fn test_format_json_skips_oversized_input() {
+        use crate::consts::MAX_PARSER_INPUT_BYTES;
+
+        let input = "a".repeat(MAX_PARSER_INPUT_BYTES + 1);
+        let output = format_json(&input);
+        assert!(matches!(output, Cow::Borrowed(_)));
+        assert_eq!(output.len(), input.len());
+    }
+
+    /// パーサ上限超過の入力は YAML 変換をスキップすること
+    #[test]
+    fn test_json_to_yaml_skips_oversized_input() {
+        use crate::consts::MAX_PARSER_INPUT_BYTES;
+
+        let input = "a".repeat(MAX_PARSER_INPUT_BYTES + 1);
+        let output = json_to_yaml(&input);
+        assert!(matches!(output, Cow::Borrowed(_)));
+        assert_eq!(output.len(), input.len());
+    }
 }

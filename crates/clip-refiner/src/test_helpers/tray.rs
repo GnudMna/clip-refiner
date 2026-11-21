@@ -3,12 +3,11 @@
 use std::sync::Arc;
 use std::sync::mpsc;
 
+use super::worker::{stub_worker, test_app_state_arc, test_tray_menu};
 use crate::config::AppConfig;
 use crate::tray::menu::TrayMenu;
 use crate::tray::state::AppState;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-use super::worker::{stub_worker, test_app_state_arc, test_tray_menu};
 
 // ======================================================================
 // テストコンテキスト

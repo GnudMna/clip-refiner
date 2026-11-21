@@ -6,10 +6,9 @@ use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
     embed_clip_selector_assets,
 };
+use crate::consts;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, ClipsEvent, SelectorEvent};
-
-use crate::consts;
 
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowId};
@@ -321,10 +320,9 @@ pub fn init_clip_selector(proxy: &EventLoopProxy<AppEvent>) -> ClipSelectorWindo
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::tray::state::test_app_state;
 
-    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` / `dispose` が no-op であること
+    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` / `dispose` が no-op となるようにすること
     #[test]
     fn empty_shell_lifecycle_is_safe() {
         let state = test_app_state();

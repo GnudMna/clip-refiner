@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-use crate::tray::menu::{CategoryGroup, RefineMenu, TrayMenu};
-
 use crate::config::HotkeySettings;
 use crate::refiner::{RefineCategory, RefineMode};
+use crate::tray::menu::{CategoryGroup, RefineMenu, TrayMenu};
 use crate::tray::state::{AppState, LockExt};
 
 use anyhow::{Context, Result};

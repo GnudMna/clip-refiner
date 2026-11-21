@@ -25,9 +25,6 @@ mod pipeline;
 pub mod text_clipboard;
 mod transform;
 
-pub use owned_clipboard::OwnedClipboard;
-pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
-
 pub use clipboard::process_clipboard_pipeline_io;
 pub use clipboard::{
     ClipboardProcessError, ClipboardProcessOutcome, apply_pipeline_to_text, process_clipboard,
@@ -37,5 +34,7 @@ pub use context::RefineContext;
 pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
+pub use owned_clipboard::OwnedClipboard;
 pub use pipeline::{apply_text_pipeline, split_pipeline};
+pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 pub use transform::regex::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace};

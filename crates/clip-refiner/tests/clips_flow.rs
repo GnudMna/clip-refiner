@@ -1,7 +1,7 @@
 //! 登録クリップのワーカー経路統合テスト
 
-use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner_core::RefineMode;
 
 // ======================================================================
 // テスト
