@@ -156,25 +156,28 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard>(
 ) {
     let pre_text = clipboard.get_text().ok();
     let result = match process_clipboard_pipeline_io(clipboard, pipeline, refine_ctx) {
-        Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            if let Some(ref pre) = pre_text {
-                state.clipboard_session().record_undo_source(pre);
+        Ok(outcome) => {
+            match &outcome {
+                ClipboardProcessOutcome::Processed(processed) => {
+                    if let Some(ref pre) = pre_text {
+                        state.clipboard_session().record_undo_source(pre);
+                    }
+                    state
+                        .clipboard_session()
+                        .record_processing_success(processed);
+                }
+                ClipboardProcessOutcome::ImageProcessed { .. } => {
+                    if let Some(ref pre) = pre_text {
+                        state.clipboard_session().record_undo_source(pre);
+                        state
+                            .clipboard_session()
+                            .record_image_processing_success(pre);
+                    }
+                }
+                ClipboardProcessOutcome::Unchanged => {}
             }
-            state
-                .clipboard_session()
-                .record_processing_success(&processed);
-            OneshotProcessResult::Processed
+            OneshotProcessResult::from_outcome(&outcome)
         }
-        Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
-            if let Some(ref pre) = pre_text {
-                state.clipboard_session().record_undo_source(pre);
-                state
-                    .clipboard_session()
-                    .record_image_processing_success(pre);
-            }
-            OneshotProcessResult::ImageProcessed { width, height }
-        }
-        Ok(ClipboardProcessOutcome::Unchanged) => OneshotProcessResult::Unchanged,
         Err(e) => OneshotProcessResult::from_process_error(&e),
     };
 

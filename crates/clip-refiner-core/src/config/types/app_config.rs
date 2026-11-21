@@ -42,9 +42,9 @@ pub struct AppConfig {
     /// 設定ファイルのスキーマバージョン
     #[serde(default = "default_config_version")]
     pub version: u32,
-    /// 最後に使用した(または常駐時に使用する)加工モード
+    /// 最後に使用した(または常駐時に使用する)変換モード
     pub mode: RefineMode,
-    /// 監視時に順に適用する加工モードの連鎖 (空の場合は `mode` のみを使用)
+    /// 監視時に順に適用する変換モードの連鎖 (空の場合は `mode` のみを使用)
     #[serde(default)]
     pub pipeline: Vec<RefineMode>,
     /// 監視周期(ミリ秒)。ポーリング方式の場合に使用される。
@@ -389,7 +389,7 @@ impl AppConfig {
         true
     }
 
-    /// 監視時に適用する加工モード列を返す
+    /// 監視時に適用する変換モード列を返す
     ///
     /// `pipeline` が空の場合は `mode` のみ、それ以外は `pipeline` をそのまま返す
     ///
@@ -397,7 +397,7 @@ impl AppConfig {
     /// * `self` - 参照元の設定
     ///
     /// # Returns
-    /// * `Vec<RefineMode>` - 適用する加工モード列
+    /// * `Vec<RefineMode>` - 適用する変換モード列
     pub fn effective_pipeline(&self) -> Vec<RefineMode> {
         if self.pipeline.is_empty() {
             vec![self.mode]
@@ -458,7 +458,7 @@ impl AppConfig {
     ///
     /// # Arguments
     /// * `self` - 参照元の設定
-    /// * `mode` - 判定対象の加工モード
+    /// * `mode` - 判定対象の変換モード
     ///
     /// # Returns
     /// * `bool` - お気に入り登録済みの場合は `true`
@@ -470,7 +470,7 @@ impl AppConfig {
     ///
     /// # Arguments
     /// * `self` - 更新対象の設定
-    /// * `mode` - 切り替え対象の加工モード
+    /// * `mode` - 切り替え対象の変換モード
     ///
     /// # Returns
     /// * `FavoriteToggleResult` - 追加、削除、上限到達のいずれか
@@ -490,7 +490,7 @@ impl AppConfig {
     ///
     /// # Arguments
     /// * `self` - 更新対象の設定
-    /// * `mode` - 移動対象の加工モード
+    /// * `mode` - 移動対象の変換モード
     /// * `direction` - 移動方向
     ///
     /// # Returns

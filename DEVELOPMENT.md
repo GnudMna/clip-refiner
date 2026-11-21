@@ -113,6 +113,35 @@ winget install WiXToolset.WiXToolset
 
 `-SkipExtract` でデータベース検証のみに省略できる。`build-msi.ps1 -SkipVerify` でビルド後検証をスキップできる。
 
+### ポータブル ZIP
+
+インストール不要の配布物 (実行ファイル + `portable` マーカー) を作成できる。第三者ライセンス文書の生成に `cargo-about` が必要 (`-SkipNotices` で省略可)。
+
+```powershell
+cargo install cargo-about --locked --features cli
+
+./scripts/windows/build-portable.ps1
+```
+
+出力先:
+
+| 種類 | パス |
+| :--- | :--- |
+| 配布フォルダ | `target/portable/clip-refiner-{version}-{host-triple}-portable/` |
+| ZIP | `target/portable/clip-refiner-{version}-{host-triple}-portable.zip` |
+
+同梱内容: `ClipRefiner.exe` / `portable` / `LICENSE` / `THIRD_PARTY_NOTICES` / `PORTABLE.txt`
+
+| オプション | 効果 |
+| :--- | :--- |
+| `-SkipBuild` | 既存の `target/release/ClipRefiner.exe` を使う |
+| `-SkipZip` | フォルダのみ作成し ZIP を作らない |
+| `-SkipNotices` | `THIRD_PARTY_NOTICES` を再生成しない (既存があれば同梱) |
+
+ポータブルモードの挙動は [CONFIG.md のポータブルモード](CONFIG.md#ポータブルモード) を参照。
+
+再実行時に既存配布フォルダ内の `ClipRefiner.exe` が起動中だと置き換えに失敗する。トレイから終了してから再実行すること。PowerShell 7 (`pwsh`) で実行すること (Windows PowerShell 5.1 では `#requires` により失敗する)。実行ファイルの探索は `$ProjectRoot\target` (または `CARGO_TARGET_DIR`) を使い、`cargo metadata` の JSON は日本語パス化け回避のため使わない。
+
 ---
 
 ## 開発・テスト
@@ -179,6 +208,7 @@ assert_eq!(output, "hello world");
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止・`config.toml` 永続化往復 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
+| `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・API 404 含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
 | `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
 | `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
 | `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
@@ -195,6 +225,10 @@ OCR / 画面キャプチャの直接テストは統合テストではなく、�
 | `platform/screen_capture/capture.rs` | 空矩形拒否、BGRA→RGBA 変換、仮想画面境界、左上小領域の実キャプチャ |
 | `platform/ocr/recognize.rs` | 空画像拒否、RGBA→BGRA 変換、`SoftwareBitmap` 生成、単色画像でのパイプライン完走 (エンジン未導入時は初期化失敗を許容) |
 | `platform/ocr/prepare.rs` / `normalize.rs` | 小画像拡大・最近傍補間・日本語スペース除去 |
+| `platform/ocr_overlay/overlay_window.rs` | 生成・表示・非表示、マウスメッセージ注入による範囲確定、Escape キャンセル、枠色ピクセル |
+| `platform/ocr_overlay/layered.rs` | 選択範囲の透明化、暗転復元、透明穴+枠色のプレビュー画素 |
+| `platform/ocr_overlay/geometry.rs` | 矩形正規化、仮想デスクトップ座標変換、`LPARAM` 往復 |
+| `tray/ocr/capture.rs` | 擬似表示トグル、`OcrJobGate` 世代破棄・スロット待ち後破棄 |
 
 core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で検証する。
 
@@ -211,11 +245,11 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | 層 | 手段 | カバー範囲 |
 | :--- | :--- | :--- |
 | JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
-| Rust IPC / 組み立て | `settings_flow` / `settings/window.rs` / `settings/geometry.rs` / `selector/{window,quick,clip}.rs` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み |
-| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、登録クリップの空表示・検索 (設定 / クイック / 登録クリップ)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
-| 手動スモーク | 下記チェックリスト | トレイ / ホットキー / OCR 範囲ドラッグ / 外部エディタなど OS 連携 |
+| Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `selector/{window,quick,clip}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
+| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・画像サムネ/ホバー、クイックのお気に入り順 (設定 / クイック / 登録クリップ)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
+| OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
-OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクルは `platform/ocr_overlay/overlay_window.rs` の Rust テスト (`overlay_lifecycle_create_show_hide`) で固定し、範囲ドラッグの見た目だけ手動で確認する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
+OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクル・ドラッグ確定・枠描画は上記 Rust テストで回帰検知する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
 
 ### WebView E2E (Playwright)
 
@@ -230,15 +264,18 @@ npm run test:e2e
 
 ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。
 
-### 設定 / セレクター 手動スモーク (縮小)
+### 手動確認が残る範囲
 
-リリース前、またはトレイ・ホットキー・OCR・外部連携を触った変更のあと確認する。所要の目安は 3〜5 分。WebView 内のタブ表示・入力・Escape 閉じるは E2E でカバー済みのため、ここでは OS 連携を主に見る。
+上記の自動テストで、かつての手動スモーク (設定 / セレクター / OCR ドラッグ / 画像プレビュー / お気に入り並び) はカバー済み。次だけは OS / 実機依存のため自動化していない。
 
-1. トレイ → **設定** が開く。ヘッダーの **config.toml** で既定エディタが開く
-2. `Alt+Shift+S` / `Alt+Shift+T` で各セレクターが開き、矢印キー / Enter で選択できる
-3. 設定の「お気に入り」変更後、クイックセレクターを開き直すと並びが反映される
-4. 画面 OCR ホットキーでオーバーレイが出て、範囲ドラッグの見た目が崩れていない
-5. 登録クリップに画像がある場合、セレクターのサムネイル / ホバープレビューが崩れていない
+| 項目 | 理由 |
+| :--- | :--- |
+| トレイアイコンの実クリックでメニューが開くこと | OS シェルのトレイ UI。メニュー ID → イベント経路はユニットで検証 |
+| 既定エディタの実ウィンドウ表示 | `open_config_file` は起動引数をキャプチャテスト済み。実エディタ UI は環境依存 |
+| グローバルホットキーの実キー押下 | OS 登録は `platform_flow`、合成イベントは `hotkey/tests`。他アプリとの競合は実機のみ |
+| トースト通知の見た目 | 文言組み立てはユニット済み。OS トースト描画は環境依存 |
+| 連続記録のフォアグラウンド貼り付け (`SendInput`) | 注入ロジックはユニット済み。アクティブウィンドウへの実貼り付けは実機のみ |
+| アプリ更新の `msiexec` / 差し替えヘルパー実起動 | `update_flow` はモック bridge で確認〜検証〜展開まで固定。外部プロセス起動と再起動後の実フォルダ差し替えは実機のみ |
 
 表示中の設定ウィンドウへの外部 `config.toml` 反映バナーは E2E (`settings.spec.ts`) でカバー済み。
 
@@ -248,7 +285,7 @@ npm run test:e2e
 
 | モジュール | 所在 | 内容 |
 | :--------- | :--- | :--- |
-| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `SettingsTestContext` / `with_persistence` など) |
+| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`, `update` モック bridge など) |
 | `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
 
 アプリ側の `test_helpers` は core のヘルパーを re-export する。設定ディレクトリを触るテストは `with_temp_config_dir` で一時ディレクトリへ切り替える。
@@ -309,7 +346,18 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 
 `clipboard_text`, `history_len`, `history_entries`, `continuous_record_len`, `continuous_record_entries`, `registered_clip_count`, `registered_clip_text`, `take_undo_source`, `matches_last_written`, `with_config_mut` など。
 
-新しい統合テストを追加するときは、既存の `*_flow.rs` に近い経路かどうかでファイルを選び、監視とワーカーの両方にまたがるケースは `ClipboardHarness` で往復検証する。設定ウィンドウの IPC とパッチ適用は `SettingsTestContext` を使う。
+新しい統合テストを追加するときは、既存の `*_flow.rs` に近い経路かどうかでファイルを選び、監視とワーカーの両方にまたがるケースは `ClipboardHarness` で往復検証する。トレイメニュー / メニューイベントは `TrayTestContext`、設定ウィンドウの IPC とパッチ適用は `SettingsTestContext` を使う。
+
+#### `TrayTestContext`
+
+`AppState`・`TrayMenu`・スタブ `ClipboardWorkerHandle` を束ねたトレイ単体テスト用ヘルパー。メニューイベントやパッチ適用など、メニューとワーカーが揃う経路向け。メニュー構築前に設定を変えたいときは `with_config`、履歴投入など状態を先に用意するときは `from_state` を使う。メニューだけ必要なら `test_tray_menu`、ワーカーだけなら `stub_worker` も利用できる。
+
+```rust
+use clip_refiner::test_helpers::TrayTestContext;
+
+let ctx = TrayTestContext::with_config(|c| c.history_enabled = true);
+assert!(ctx.menu().history.enabled_item.is_checked());
+```
 
 #### `SettingsTestContext`
 
@@ -416,8 +464,9 @@ UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refine
 
 | ツール | 役割 |
 | :----- | :--- |
-| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。純粋ロジック (`*_logic.js` / `selector-common.js` など) は Node の `module` を許可し、IIFE 連結・HTML 順読み込みの DOM 側ファイルは `no-undef` 等を緩和 |
+| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。設定 UI の DOM 側は ESM (`import`/`export`) として解析する。純粋ロジック (`*_logic.js` / `selector-common.js` など) とセレクター DOM (`quick_selector.js` / `clip_selector.js`) は従来どおり script + 緩和ルール |
 | [Prettier](https://prettier.io/) | JavaScript の整形 (タブ幅 4、シングルクォート) |
+| [esbuild](https://esbuild.github.io/) | 設定 UI の ESM を IIFE バンドル (`settings.bundle.js`) にまとめる |
 
 初回または `package.json` 更新後:
 
@@ -428,15 +477,16 @@ npm ci
 個別実行:
 
 ```powershell
-npm run lint          # ESLint
-npm run lint:fix      # ESLint (自動修正)
-npm run format:check  # Prettier 整形チェック
-npm run format        # Prettier 整形適用
+npm run build:settings-ui  # 設定 UI バンドル再生成
+npm run lint               # ESLint
+npm run lint:fix           # ESLint (自動修正)
+npm run format:check       # Prettier 整形チェック
+npm run format             # Prettier 整形適用
 ```
 
 設定ファイル: [`package.json`](package.json), [`eslint.config.js`](eslint.config.js), [`.prettierrc.json`](.prettierrc.json)
 
-設定画面の JavaScript は Rust 側で 1 つの IIFE に連結する (`tray/settings/window.rs`)。連結後の共有バインディングは ESLint 単体では解決できないため、`shared.js` / `html_builders.js` / `ipc_apply.js` / `confirm_dialog.js` / `regex_feedback.js` / `monitor_ui.js` / `panels.js` / `events.js` / `main.js` では `no-undef` 等を無効化している。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
+設定画面の JavaScript は ESM (`import`/`export`) に分割し、`npm run build:settings-ui` (esbuild) で `src/ui/settings/settings.bundle.js` へ IIFE バンドルする。Rust (`tray/settings/window/assets.rs`) は生成物を `include_str!` で埋め込むため、`cargo build` 単体では Node.js を要求しない (バンドルはリポジトリにコミットする)。`check.ps1` の JS チェック前にバンドルを再生成する。共有ミュータブル状態は `ctx.js` の `ctx` オブジェクトに集約する。`escapeHtml` / `highlightText` および信頼済み HTML 組み立て関数の戻り値のみ `innerHTML` 代入を許可する。
 
 ### スクリプト構成
 
@@ -446,7 +496,7 @@ npm run format        # Prettier 整形適用
 | :---------------- | :--- |
 | `assert.ps1` | 外部コマンドの終了コード検証 (`Assert-LastExitCode`) |
 | `cargo.ps1` | `cargo fmt` / `clippy` / `test` のラッパー |
-| `npm.ps1` | `npm ci` / ESLint / Prettier のラッパー |
+| `npm.ps1` | `npm ci` / 設定 UI バンドル / ESLint / Prettier のラッパー |
 | `cargo-deny-check.ps1` | `cargo deny check` |
 | `wix.ps1` | `cargo-wix` / WiX Toolset v3 の存在確認 |
 | `verify-msi.ps1` | MSI メタデータ・展開内容の検証ロジック |
@@ -461,7 +511,7 @@ npm run format        # Prettier 整形適用
 | `format.ps1` | rustfmt + Prettier 整形 |
 | `test.ps1` / `clippy.ps1` | 個別の Cargo コマンド |
 | `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
-| `build.ps1` / `build-msi.ps1` | ビルド・MSI 作成 |
+| `build.ps1` / `build-msi.ps1` / `build-portable.ps1` | ビルド・MSI / ポータブル ZIP 作成 |
 | `verify-msi.ps1` | MSI 検証の CLI ラッパー |
 | `release.ps1` | リリース手順一括実行 |
 | `install-hooks.ps1` / `uninstall-hooks.ps1` | Git フック管理 |
@@ -532,7 +582,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 
 | 種別 | 名前 | 説明 |
 | :--- | :--- | :--- |
-| モジュール | `refiner` | 加工モードとテキスト / クリップボード加工 |
+| モジュール | `refiner` | 変換モードとテキスト / クリップボード加工 |
 | モジュール | `config` | 設定型と `config.toml` 永続化 |
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
@@ -542,7 +592,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `NotificationSettings`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
 | 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告 |
-| 設定 | `get_config_dir`, `open_config_file`, `disk_config_modified_time` | 設定ディレクトリ・ファイル操作 |
+| 設定 | `get_config_dir`, `is_portable_mode`, `open_config_file`, `disk_config_modified_time` | 設定ディレクトリ・ファイル操作 |
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
@@ -606,14 +656,15 @@ clip-refiner/
 │   │   ├── src/
 │   │   │   ├── bootstrap.rs # 常駐 / ワンショット起動分岐
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC
-│   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
-│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC など)
+│   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ・WebView2・アプリ更新)
+│   │   │   │   └── update/  # gh-release-bridge 経由の確認 / digest 検証 / MSI・ポータブル適用
+│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
-│   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event)
+│   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event、`update.rs` 含む)
 │   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期
 │   │   │   │   ├── event/       # イベントループ制御・ルーティング
 │   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView
-│   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc, apply/, snapshot, geometry など)
+│   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc/, window/, apply/, snapshot など)
 │   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ・OS リスナ
 │   │   │   │   └── ...
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
@@ -623,7 +674,8 @@ clip-refiner/
 │       └── src/
 │           ├── config/
 │           ├── platform/    # DPAPI・クリップボード画像など GUI 非依存の OS 連携
-│           ├── refiner/     # 加工モード・パイプライン・`OwnedClipboard`
+│           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
+│           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
 │           └── test_helpers/ # コア単体テスト用
 ├── assets/
@@ -637,7 +689,7 @@ clip-refiner/
 └── wix/
 ```
 
-`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
+`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`platform/update/` は gh-release-bridge の version API・アセットダウンロード・`digest` (`sha256:<hex>`) 検証・MSI / ポータブル ZIP 適用を担う (利用者向けは [CONFIG.md のアプリの更新](CONFIG.md#アプリの更新))。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
 
 セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
 
@@ -682,37 +734,54 @@ clip-refiner/
 | `history` | 履歴メニュー (有効化・クリア・過去項目の選択) |
 | `record` | 連続記録 |
 | `notification` | 通知設定 |
-| `app_control` | 終了・一時停止・設定ウィンドウ・監視再開 |
+| `update` | 更新確認・適用 (`platform/update/` をバックグラウンド起動。トレイ / 設定 UI 共通) |
+| `app_control` | 終了・一時停止・設定ウィンドウ・更新を確認・監視再開 |
 
 設定ウィンドウ (`src/ui/settings/`) は次のファイルに分割している。
 
 | ファイル | 責務 |
 | :------- | :--- |
-| `main.js` | エントリ (初期化・IPC 受信) |
+| `main.js` | バンドルエントリ (初期化・IPC 受信) |
+| `ctx.js` | 共有ミュータブル状態 (`ctx`) |
 | `panels.js` | タブ描画 (DOM) |
 | `events.js` | 入力イベント (DOM) |
-| `shared.js` | 共有状態・件数入力・パネルキャッシュ・サーバー主導フィールド同期 (DOM) |
+| `shared.js` | 件数入力・パネルキャッシュ・サーバー主導フィールド同期 (DOM) |
 | `html_builders.js` | タブ定義・パネル / カード / モード選択などの HTML 組み立て |
 | `ipc_apply.js` | IPC 送信・設定パッチ debounce・適用フィードバック |
 | `confirm_dialog.js` | 確認ダイアログ |
 | `regex_feedback.js` | 正規表現プレビューの DOM 連携 |
 | `monitor_ui.js` | 監視バナー・加工パイプライン一覧の同期 |
-| `shared_logic.js` | 件数クランプ・パイプライン正規化・通知パッチ組み立て・スナップショット再描画判定 (DOM 非依存) |
-| `panels_logic.js` | サイドバー / クリップ行 / パイプライン操作・クリック委譲 (DOM 非依存) |
-| `settings_patch.js` | パッチ組み立て (DOM 非依存) |
-| `regex_preview.js` | プレビュー表示ロジック (DOM 非依存) |
+| `shared_logic.js` | 件数クランプ・パイプライン正規化・通知パッチ組み立て・スナップショット再描画判定 (DOM 非依存 / CJS) |
+| `panels_logic.js` | サイドバー / クリップ行 / パイプライン操作・クリック委譲 (DOM 非依存 / CJS) |
+| `settings_patch.js` | パッチ組み立て (DOM 非依存 / CJS) |
+| `regex_preview.js` | プレビュー表示ロジック (DOM 非依存 / CJS) |
+| `settings.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:settings-ui` で再生成) |
 
-`shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window.rs`) で `assemble_settings_js` が上記順にインライン結合し、組み立て結果にシェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー) に分割されている。
+`shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー) に分割されている。
 
 | モジュール (`tray/settings/`) | 責務 |
 | :---------------------------- | :--- |
 | `model` | `SettingsWritable` / `SettingsPatch` (マクロ定義による読み書き項目の一元化) |
 | `snapshot` | `SettingsSnapshot`, `SettingsLimits` (初期表示 JSON と UI 上限) |
-| `ipc` | WebView IPC メッセージの解析と適用待ちキュー |
+| `ipc/` | WebView IPC: `message` (解析) / `queue` (適用待ちマージ) / `dispatch` (イベント送信) |
 | `apply/` | パッチ適用のオーケストレーション (`patch/` でドメイン別、`feedback` でエラー通知) |
 | `regex_preview` | 正規表現プレビュー IPC 応答 (`REGEX_PREVIEW_SAMPLE` を使用) |
 | `geometry` | 設定ウィンドウのサイズ・位置 (`settings-window.json` の読み書き) |
-| `window` | WebView の組み立てと表示制御 |
+| `window/` | WebView の組み立てと表示制御。`assets` (HTML/JS 埋め込み) / `events` (`AppEvent` 処理・更新 UI 通知) |
+
+### アプリ更新 (`platform/update/`)
+
+トレイ「更新を確認…」と設定「一般」タブは `tray/features/update.rs` から同じ確認・適用経路を呼ぶ。同時実行は `settings_pending` の更新オペレーション排他で 1 本に制限する。
+
+| モジュール | 責務 |
+| :--------- | :--- |
+| `check` | gh-release-bridge version API の取得と SemVer / アセット選択 (アーキテクチャ不一致はエラー) |
+| `verify` | ダウンロードと `digest` (`sha256:<hex>`) / サイズ検証 |
+| `apply` | MSI なら `msiexec`、ポータブル ZIP なら展開後に差し替えヘルパーを起動 |
+| `replace` | `--apply-portable-update` ヘルパー (旧 PID 待機 → 実行フォルダへコピー → 新版起動。`data\` は保持) |
+| `types` | `AvailableUpdate` / UI 応答型など |
+
+統合テストは `update_flow.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
 
 ---
 
@@ -788,7 +857,7 @@ flowchart TB
 
 ### UI の遅延生成
 
-クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成し、非表示になった時点で破棄する (アイドル時の RSS 削減)。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `AppEvent::DisposeOcrOverlay` を経由する。ライフサイクルは `selector/{quick,clip}.rs`、`settings/window.rs`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
+クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成し、非表示になった時点で破棄する (アイドル時の RSS 削減)。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `AppEvent::DisposeOcrOverlay` を経由する。ライフサイクルは `selector/{quick,clip}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
 
 ### 通信の要点
 
@@ -811,8 +880,11 @@ flowchart TB
 | 層 | モジュール | 責務 |
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
+| **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
+| **platform** | `platform/update/` | 更新確認・digest 検証・MSI / ポータブル適用 (通知は結果に応じて呼び出し元が送る) |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
 | **features** | `tray/features/notification/` | トレイメニュー「通知」の構築・クリック処理 |
+| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / トーストへの結果反映 |
 
 - エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使う (`NotificationSettings.enabled` を経由しない)
 - 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
@@ -840,7 +912,7 @@ flowchart TB
 | 変数 | 用途 |
 | :--- | :--- |
 | `RUST_LOG` | ログレベル (例: `debug`, `clip_refiner=trace`) |
-| `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E 向け。未設定時は `%APPDATA%\ClipRefiner`) |
+| `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`) |
 | `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |
 | `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき JS ロジックテストをスキップ |
 | `CLIP_REFINER_SKIP_E2E` | `1` のとき Playwright E2E をスキップ (`check.ps1` / pre-push) |
@@ -907,10 +979,11 @@ git checkout -b release/v0.14.0
 
 1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
 2. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
-3. トレイ・ホットキー・OCR・外部連携を触ったリリースでは [設定 / セレクター 手動スモーク (縮小)](#設定--セレクター-手動スモーク-縮小) を実施する
+3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](#手動確認が残る範囲) に該当する変更だけ実機確認する (旧手動スモークチェックリストは自動化済み)
 4. `release.ps1` を実行する (または同等の手順でタグ付けと MSI 作成)
 5. `git push -u origin release/v{version}` でリモートへ反映する
 6. Gitea 上で `v{version}` タグを付与する
+7. GitHub Release へ MSI / ポータブル ZIP をアップロードしたあと、[gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) の version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返すことを確認する。アプリ更新は digest 必須で、ダウンロード後にサイズと SHA-256 を検証する (`platform/update/`)。ポータブル適用は展開後に新しい `ClipRefiner.exe --apply-portable-update` が旧プロセス終了を待って実行フォルダへコピーし再起動する (`data\` は保持)
 
 ---
 

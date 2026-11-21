@@ -2,12 +2,18 @@
 // 設定画面 IPC 送信・パッチ debounce
 // ======================================================================
 
+import { ctx } from './ctx.js';
+import { validateRegexSettings } from './regex_feedback.js';
+
+import SettingsPatch from './settings_patch.js';
+import SettingsSharedLogic from './shared_logic.js';
+
 /**
  * WebView IPC に生メッセージを送信する
  *
  * @param {string} message
  */
-function postIpc(message) {
+export function postIpc(message) {
     window.ipc.postMessage(message);
 }
 
@@ -16,7 +22,7 @@ function postIpc(message) {
  *
  * @param {Record<string, unknown>} envelope
  */
-function postIpcEnvelope(envelope) {
+export function postIpcEnvelope(envelope) {
     postIpc(JSON.stringify(envelope));
 }
 
@@ -25,17 +31,17 @@ function postIpcEnvelope(envelope) {
  *
  * @param {{ ok?: boolean, message?: string, field?: string }} [feedback]
  */
-function showApplyFeedback(feedback) {
+export function showApplyFeedback(feedback) {
     const el = document.getElementById('apply-feedback');
     if (!el) {
         return;
     }
-    clearTimeout(applyFeedbackTimer);
+    clearTimeout(ctx.applyFeedbackTimer);
     const ok = feedback?.ok !== false;
     el.hidden = false;
     el.textContent = feedback?.message || (ok ? '設定を保存しました' : '設定の適用に失敗しました');
     el.className = 'apply-feedback apply-feedback--' + (ok ? 'ok' : 'error');
-    applyFeedbackTimer = setTimeout(
+    ctx.applyFeedbackTimer = setTimeout(
         () => {
             el.hidden = true;
         },
@@ -47,14 +53,14 @@ function showApplyFeedback(feedback) {
  * 保留中パッチの無効な正規表現設定を除去する
  */
 function stripInvalidPendingRegex() {
-    if (pendingPatch.regex === undefined) {
+    if (ctx.pendingPatch.regex === undefined) {
         return;
     }
-    const validation = validateRegexSettings(pendingPatch.regex);
+    const validation = validateRegexSettings(ctx.pendingPatch.regex);
     if (validation.valid) {
         return;
     }
-    delete pendingPatch.regex;
+    delete ctx.pendingPatch.regex;
     showApplyFeedback({
         ok: false,
         field: 'regex',
@@ -65,34 +71,34 @@ function stripInvalidPendingRegex() {
 /**
  * デバウンス中の設定パッチを即時送信する
  */
-function flushPendingApply() {
-    if (applyTimer !== null) {
-        clearTimeout(applyTimer);
-        applyTimer = null;
+export function flushPendingApply() {
+    if (ctx.applyTimer !== null) {
+        clearTimeout(ctx.applyTimer);
+        ctx.applyTimer = null;
     }
     stripInvalidPendingRegex();
-    if (Object.keys(pendingPatch).length > 0) {
-        postIpcEnvelope({ type: 'apply', patch: pendingPatch });
-        pendingPatch = {};
+    if (Object.keys(ctx.pendingPatch).length > 0) {
+        postIpcEnvelope({ type: 'apply', patch: ctx.pendingPatch });
+        ctx.pendingPatch = {};
     }
 }
 
 /** 保留パッチをフラッシュして設定ウィンドウを閉じる */
-function closeWindow() {
-    if (applyTimer !== null) {
-        clearTimeout(applyTimer);
-        applyTimer = null;
+export function closeWindow() {
+    if (ctx.applyTimer !== null) {
+        clearTimeout(ctx.applyTimer);
+        ctx.applyTimer = null;
     }
     stripInvalidPendingRegex();
-    const messages = SettingsSharedLogic.collectCloseWindowIpcMessages(pendingPatch);
-    pendingPatch = {};
+    const messages = SettingsSharedLogic.collectCloseWindowIpcMessages(ctx.pendingPatch);
+    ctx.pendingPatch = {};
     for (const message of messages) {
         postIpcEnvelope(message);
     }
 }
 
 /** `config.toml` を OS の既定エディタで開く */
-function openConfigFile() {
+export function openConfigFile() {
     postIpcEnvelope({ type: 'open-config' });
 }
 
@@ -112,17 +118,17 @@ function mergePatch(target, patch) {
  *
  * @param {Record<string, unknown>} patch
  */
-function scheduleApply(patch) {
-    mergePatch(pendingPatch, patch);
-    clearTimeout(applyTimer);
-    applyTimer = setTimeout(() => {
+export function scheduleApply(patch) {
+    mergePatch(ctx.pendingPatch, patch);
+    clearTimeout(ctx.applyTimer);
+    ctx.applyTimer = setTimeout(() => {
         stripInvalidPendingRegex();
-        if (Object.keys(pendingPatch).length === 0) {
-            applyTimer = null;
+        if (Object.keys(ctx.pendingPatch).length === 0) {
+            ctx.applyTimer = null;
             return;
         }
-        postIpcEnvelope({ type: 'apply', patch: pendingPatch });
-        pendingPatch = {};
-        applyTimer = null;
+        postIpcEnvelope({ type: 'apply', patch: ctx.pendingPatch });
+        ctx.pendingPatch = {};
+        ctx.applyTimer = null;
     }, 200);
 }

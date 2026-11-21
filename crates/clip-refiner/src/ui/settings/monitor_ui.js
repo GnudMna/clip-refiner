@@ -2,21 +2,19 @@
 // 設定画面 監視・パイプライン UI 同期
 // ======================================================================
 
-/**
- * 指定モードが画像を出力するかどうか
- *
- * @param {string} modeId
- * @returns {boolean}
- */
-function modeProducesImage(modeId) {
-    const mode = state.modes.find((entry) => entry.id === modeId);
-    return mode?.producesImage === true;
-}
+import { ctx } from './ctx.js';
+import { escapeHtml, modeLabel } from './html_builders.js';
+import { scheduleApply } from './ipc_apply.js';
+import { maxPipelineLength } from './shared.js';
+
+import SettingsSharedLogic from './shared_logic.js';
 
 /** 画像出力モード ID の集合を返す */
 function imageModeIds() {
     return new Set(
-        (state.modes || []).filter((entry) => entry.producesImage === true).map((entry) => entry.id)
+        (ctx.state.modes || [])
+            .filter((entry) => entry.producesImage === true)
+            .map((entry) => entry.id)
     );
 }
 
@@ -37,18 +35,18 @@ function normalizePipeline(pipeline) {
  *
  * @param {string[]} pipeline
  */
-function applyPipelineChange(pipeline) {
+export function applyPipelineChange(pipeline) {
     const normalized = normalizePipeline(pipeline);
-    state.pipeline = normalized;
+    ctx.state.pipeline = normalized;
     scheduleApply({ pipeline: normalized });
     updateMonitorPipelineUi();
 }
 
 /** 監視一時停止バナーの表示状態を同期する */
-function syncMonitorPauseBanner() {
+export function syncMonitorPauseBanner() {
     const banner = document.getElementById('monitor-pause-banner');
     if (banner) {
-        banner.hidden = !state.isPaused;
+        banner.hidden = !ctx.state.isPaused;
     }
 }
 
@@ -56,7 +54,7 @@ function syncMonitorPauseBanner() {
 function syncMonitorContinuousRecordBanner() {
     const banner = document.getElementById('monitor-record-banner');
     if (banner) {
-        banner.hidden = !state.continuousRecordEnabled;
+        banner.hidden = !ctx.state.continuousRecordEnabled;
     }
 }
 
@@ -64,7 +62,7 @@ function syncMonitorContinuousRecordBanner() {
 function syncMonitorProcessingSection() {
     const section = document.getElementById('monitor-processing-section');
     if (section) {
-        section.classList.toggle('is-disabled', state.continuousRecordEnabled);
+        section.classList.toggle('is-disabled', ctx.state.continuousRecordEnabled);
     }
 }
 
@@ -72,22 +70,22 @@ function syncMonitorProcessingSection() {
 function syncRecordActiveBanner() {
     const banner = document.getElementById('record-active-banner');
     if (banner) {
-        banner.hidden = !state.continuousRecordEnabled;
+        banner.hidden = !ctx.state.continuousRecordEnabled;
     }
 }
 
 /** 連続記録関連 UI を一括同期する */
-function syncContinuousRecordUi() {
+export function syncContinuousRecordUi() {
     syncMonitorContinuousRecordBanner();
     syncMonitorProcessingSection();
     syncRecordActiveBanner();
 }
 
 /** イベント監視時はポーリング間隔セクションを無効表示にする */
-function syncMonitorIntervalSection() {
+export function syncMonitorIntervalSection() {
     const section = document.getElementById('interval-section');
     if (section) {
-        section.classList.toggle('disabled', state.monitorMode === 'Event');
+        section.classList.toggle('disabled', ctx.state.monitorMode === 'Event');
     }
 }
 
@@ -96,8 +94,8 @@ function syncMonitorIntervalSection() {
  *
  * @returns {string}
  */
-function buildPipelineInnerHtml() {
-    const pipeline = state.pipeline || [];
+export function buildPipelineInnerHtml() {
+    const pipeline = ctx.state.pipeline || [];
     if (pipeline.length === 0) {
         return '<div class="empty-hint">パイプラインは未設定です (デフォルトモードのみ適用)</div>';
     }

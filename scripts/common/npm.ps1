@@ -131,6 +131,7 @@ function Invoke-JavaScriptLintCheck {
     [CmdletBinding()]
     param()
 
+    Invoke-NpmScript -Name 'build:settings-ui'
     Invoke-NpmScript -Name 'lint'
     Invoke-NpmScript -Name 'format:check'
 }

@@ -179,6 +179,69 @@ function test_clip_register_button_state() {
     });
 }
 
+/** バイト数表示を単位付きで整形できること */
+function test_format_bytes() {
+    assert.equal(SettingsPanelsLogic.formatBytes(512), '512 B');
+    assert.equal(SettingsPanelsLogic.formatBytes(2048), '2.0 KB');
+    assert.equal(SettingsPanelsLogic.formatBytes(2 * 1024 * 1024), '2.0 MB');
+    assert.equal(SettingsPanelsLogic.formatBytes(-1), '');
+    assert.equal(SettingsPanelsLogic.formatBytes(undefined), '');
+}
+
+/** 更新ステータス HTML を状態ごとに組み立てられること */
+function test_render_update_status_html() {
+    const escapeHtml = (text) =>
+        String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+    const empty = SettingsPanelsLogic.renderUpdateStatusHtml(null, false, escapeHtml);
+    assert.ok(empty.includes('更新を確認'));
+
+    const upToDate = SettingsPanelsLogic.renderUpdateStatusHtml(
+        { status: 'up-to-date', latestVersion: '0.13.1' },
+        false,
+        escapeHtml
+    );
+    assert.ok(upToDate.includes('最新版です (v0.13.1)'));
+
+    const available = SettingsPanelsLogic.renderUpdateStatusHtml(
+        {
+            status: 'available',
+            latestVersion: '0.14.0',
+            size: 2048,
+        },
+        false,
+        escapeHtml
+    );
+    assert.ok(available.includes('v0.14.0 が利用可能です'));
+    assert.ok(available.includes('2.0 KB'));
+    assert.ok(available.includes('apply-update-btn'));
+    assert.ok(!available.includes(' disabled'));
+
+    const busyAvailable = SettingsPanelsLogic.renderUpdateStatusHtml(
+        {
+            status: 'available',
+            latestVersion: '0.14.0',
+            size: 100,
+        },
+        true,
+        escapeHtml
+    );
+    assert.ok(busyAvailable.includes('適用中...'));
+    assert.ok(busyAvailable.includes(' disabled'));
+
+    const errorHtml = SettingsPanelsLogic.renderUpdateStatusHtml(
+        { status: 'error', message: '失敗 <msg>' },
+        false,
+        escapeHtml
+    );
+    assert.ok(errorHtml.includes('失敗 &lt;msg&gt;'));
+    assert.ok(!errorHtml.includes('失敗 <msg>'));
+}
+
 const tests = [
     test_apply_pipeline_action,
     test_append_pipeline_mode,
@@ -189,6 +252,8 @@ const tests = [
     test_favorite_slot_display,
     test_resolve_content_click_action,
     test_clip_register_button_state,
+    test_format_bytes,
+    test_render_update_status_html,
 ];
 
 for (const test of tests) {

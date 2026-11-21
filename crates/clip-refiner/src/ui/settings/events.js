@@ -2,6 +2,33 @@
 // 設定画面 イベントバインド
 // ======================================================================
 
+import { showConfirmDialog } from './confirm_dialog.js';
+import { ctx } from './ctx.js';
+import { postIpcEnvelope, openConfigFile, scheduleApply, showApplyFeedback } from './ipc_apply.js';
+import {
+    applyPipelineChange,
+    syncContinuousRecordUi,
+    syncMonitorIntervalSection,
+    syncMonitorPauseBanner,
+} from './monitor_ui.js';
+import {
+    readRegexFromDom,
+    scheduleRegexFeedback,
+    updateRegexFeedback,
+    validateRegexSettings,
+} from './regex_feedback.js';
+import {
+    commitLimitInput,
+    historyLimitBounds,
+    intervalMsBounds,
+    maxPipelineLength,
+    recordLimitBounds,
+    setClipRegisterPending,
+} from './shared.js';
+
+import SettingsPanelsLogic from './panels_logic.js';
+import SettingsSharedLogic from './shared_logic.js';
+
 /**
  * 加工パイプライン行の上下移動・削除ボタンを処理する
  *
@@ -16,7 +43,7 @@ function handlePipelineAction(button) {
         action = 'down';
     }
 
-    const next = SettingsPanelsLogic.applyPipelineAction(state.pipeline || [], index, action);
+    const next = SettingsPanelsLogic.applyPipelineAction(ctx.state.pipeline || [], index, action);
     if (!next) {
         return;
     }
@@ -78,26 +105,26 @@ function handleContentClick(event) {
 }
 
 /** コンテンツ領域へのクリック委譲を一度だけバインドする */
-function bindContentDelegation() {
-    if (contentDelegationBound) {
+export function bindContentDelegation() {
+    if (ctx.contentDelegationBound) {
         return;
     }
     document.getElementById('content')?.addEventListener('click', handleContentClick);
-    contentDelegationBound = true;
+    ctx.contentDelegationBound = true;
 }
 
 /** 監視タブのフォームイベントをバインドする */
-function bindMonitorEvents() {
+export function bindMonitorEvents() {
     document.getElementById('monitor-paused')?.addEventListener('change', (event) => {
-        state.isPaused = event.target.checked;
+        ctx.state.isPaused = event.target.checked;
         scheduleApply({ isPaused: event.target.checked });
         syncMonitorPauseBanner();
     });
 
     document.querySelectorAll('input[name="monitorMode"]').forEach((input) => {
         input.addEventListener('change', () => {
-            state.monitorMode = input.value;
-            scheduleApply({ monitorMode: state.monitorMode });
+            ctx.state.monitorMode = input.value;
+            scheduleApply({ monitorMode: ctx.state.monitorMode });
             syncMonitorIntervalSection();
         });
     });
@@ -123,7 +150,7 @@ function bindMonitorEvents() {
         const select = document.getElementById('pipeline-add-mode');
         const modeId = select.value;
         const next = SettingsPanelsLogic.appendPipelineMode(
-            state.pipeline || [],
+            ctx.state.pipeline || [],
             modeId,
             maxPipelineLength()
         );
@@ -139,7 +166,7 @@ function bindMonitorEvents() {
 }
 
 /** 通知タブのフォームイベントをバインドする */
-function bindNotificationEvents() {
+export function bindNotificationEvents() {
     /** DOM の通知設定を読み取りパッチをスケジュールする */
     function applyNotifications() {
         const fieldStates = {};
@@ -156,19 +183,19 @@ function bindNotificationEvents() {
 
     for (const [elementId, key] of SettingsSharedLogic.NOTIFICATION_FIELD_MAP) {
         document.getElementById(elementId)?.addEventListener('change', (event) => {
-            state.notificationSettings[key] = event.target.checked;
+            ctx.state.notificationSettings[key] = event.target.checked;
             applyNotifications();
         });
     }
 }
 
 /** 履歴・連続記録タブのフォームイベントをバインドする */
-function bindHistoryEvents() {
+export function bindHistoryEvents() {
     document.getElementById('history-enabled')?.addEventListener('change', (event) => {
         scheduleApply({ historyEnabled: event.target.checked });
     });
     document.getElementById('record-enabled')?.addEventListener('change', (event) => {
-        state.continuousRecordEnabled = event.target.checked;
+        ctx.state.continuousRecordEnabled = event.target.checked;
         scheduleApply({ continuousRecordEnabled: event.target.checked });
         syncContinuousRecordUi();
     });
@@ -210,7 +237,7 @@ function bindHistoryEvents() {
 }
 
 /** 正規表現タブのフォームイベントをバインドする */
-function bindRegexEvents() {
+export function bindRegexEvents() {
     /** DOM の正規表現設定を検証し、有効ならパッチをスケジュールする */
     function applyRegex() {
         const settings = readRegexFromDom();
@@ -238,7 +265,7 @@ function bindRegexEvents() {
 }
 
 /** ショートカットタブのイベントをバインドする */
-function bindShortcutsEvents() {
+export function bindShortcutsEvents() {
     document.getElementById('shortcuts-open-config-btn')?.addEventListener('click', openConfigFile);
 
     /** DOM からホットキーパッチを組み立てて適用する */
@@ -265,7 +292,7 @@ function bindShortcutsEvents() {
             }
         }
 
-        const favoriteModes = state.favoriteModes || [];
+        const favoriteModes = ctx.state.favoriteModes || [];
         const favoriteSlotBindings = [];
         for (let index = 0; index < favoriteModes.length; index += 1) {
             const element = document.getElementById('hotkey-favorite-slot-' + index);
@@ -295,7 +322,7 @@ function bindShortcutsEvents() {
             fixedFieldStates,
             favoriteSlotBindings
         );
-        state.hotkeys = Object.assign({}, state.hotkeys || {}, hotkeys);
+        ctx.state.hotkeys = Object.assign({}, ctx.state.hotkeys || {}, hotkeys);
         scheduleApply({ hotkeys });
     }
 
@@ -311,7 +338,7 @@ function bindShortcutsEvents() {
 }
 
 /** お気に入りタブのイベントをバインドする */
-function bindFavoriteEvents() {
+export function bindFavoriteEvents() {
     document.getElementById('favorite-add-btn')?.addEventListener('click', () => {
         const select = document.getElementById('favorite-add-mode');
         const modeId = select.value;
@@ -323,16 +350,57 @@ function bindFavoriteEvents() {
 }
 
 /** 一般タブのイベントをバインドする */
-function bindGeneralEvents() {
+export function bindGeneralEvents() {
     document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
         scheduleApply({ launchAtLogin: event.target.checked });
+    });
+    document.getElementById('check-update-btn')?.addEventListener('click', () => {
+        if (ctx.updateBusy) {
+            return;
+        }
+        ctx.updateBusy = true;
+        ctx.updateStatus = null;
+        const checkBtn = document.getElementById('check-update-btn');
+        if (checkBtn) {
+            checkBtn.disabled = true;
+            checkBtn.textContent = '確認中...';
+        }
+        const applyBtn = document.getElementById('apply-update-btn');
+        if (applyBtn) {
+            applyBtn.disabled = true;
+        }
+        const status = document.getElementById('update-status');
+        if (status) {
+            status.textContent = '更新を確認しています...';
+        }
+        postIpcEnvelope({ type: 'check-update' });
+    });
+    document.getElementById('apply-update-btn')?.addEventListener('click', () => {
+        if (ctx.updateBusy) {
+            return;
+        }
+        ctx.updateBusy = true;
+        const checkBtn = document.getElementById('check-update-btn');
+        if (checkBtn) {
+            checkBtn.disabled = true;
+        }
+        const applyBtn = document.getElementById('apply-update-btn');
+        if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.textContent = '適用中...';
+        }
+        const status = document.getElementById('update-status');
+        if (status) {
+            status.textContent = 'ダウンロードして適用しています...';
+        }
+        postIpcEnvelope({ type: 'apply-update' });
     });
 }
 
 /** 登録クリップタブのイベントをバインドする */
-function bindClipEvents() {
+export function bindClipEvents() {
     document.getElementById('clip-register-btn')?.addEventListener('click', () => {
-        if (clipRegisterPending) {
+        if (ctx.clipRegisterPending) {
             return;
         }
         setClipRegisterPending(true);
@@ -341,8 +409,8 @@ function bindClipEvents() {
 }
 
 /** アクティブタブに応じたパネルイベントをバインドする */
-function bindActivePanelEvents() {
-    switch (activeTab) {
+export function bindActivePanelEvents() {
+    switch (ctx.activeTab) {
         case 'monitor':
             bindMonitorEvents();
             break;

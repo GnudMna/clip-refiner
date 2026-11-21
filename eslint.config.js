@@ -8,7 +8,12 @@ const globals = require('globals');
 /** @type {import('eslint').Linter.Config[]} */
 module.exports = [
     {
-        ignores: ['node_modules/**', 'e2e/**'],
+        ignores: [
+            'node_modules/**',
+            'target/**',
+            'e2e/**',
+            'crates/clip-refiner/src/ui/settings/settings.bundle.js',
+        ],
     },
     eslint.configs.recommended,
     eslintConfigPrettier,
@@ -23,10 +28,20 @@ module.exports = [
         },
     },
     {
+        files: ['scripts/**/*.mjs'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
         files: ['crates/clip-refiner/src/ui/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
-            sourceType: 'script',
+            sourceType: 'module',
             globals: {
                 ...globals.browser,
             },
@@ -74,25 +89,7 @@ module.exports = [
         },
     },
     {
-        // Rust 側で 1 つの IIFE に連結するため、ファイル間の共有バインディングは ESLint 単体では解決できない
-        files: [
-            'crates/clip-refiner/src/ui/settings/shared.js',
-            'crates/clip-refiner/src/ui/settings/html_builders.js',
-            'crates/clip-refiner/src/ui/settings/ipc_apply.js',
-            'crates/clip-refiner/src/ui/settings/confirm_dialog.js',
-            'crates/clip-refiner/src/ui/settings/regex_feedback.js',
-            'crates/clip-refiner/src/ui/settings/monitor_ui.js',
-            'crates/clip-refiner/src/ui/settings/panels.js',
-            'crates/clip-refiner/src/ui/settings/events.js',
-            'crates/clip-refiner/src/ui/settings/main.js',
-        ],
-        rules: {
-            'no-undef': 'off',
-            'no-unused-vars': 'off',
-            'no-redeclare': 'off',
-        },
-    },
-    {
+        // Node テストと esbuild の両方から読み込む純粋ロジック (CJS dual export)
         files: [
             'crates/clip-refiner/src/ui/settings/settings_patch.js',
             'crates/clip-refiner/src/ui/settings/shared_logic.js',
@@ -103,6 +100,7 @@ module.exports = [
             'crates/clip-refiner/src/ui/clip_selector_logic.js',
         ],
         languageOptions: {
+            sourceType: 'script',
             globals: {
                 module: 'readonly',
             },
@@ -114,6 +112,9 @@ module.exports = [
             'crates/clip-refiner/src/ui/quick_selector.js',
             'crates/clip-refiner/src/ui/clip_selector.js',
         ],
+        languageOptions: {
+            sourceType: 'script',
+        },
         rules: {
             'no-undef': 'off',
             'no-unused-vars': 'off',

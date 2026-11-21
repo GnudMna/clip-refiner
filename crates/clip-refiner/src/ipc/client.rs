@@ -15,7 +15,10 @@ use crate::refiner::{RefineContext, RefineMode};
 
 use single_instance::SingleInstance;
 use windows::Win32::Foundation::HANDLE;
-use windows::Win32::System::Pipes::{PeekNamedPipe, WaitNamedPipeW};
+use windows::Win32::System::Pipes::PeekNamedPipe;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+use windows::Win32::System::Pipes::WaitNamedPipeW;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 use windows::core::PCWSTR;
 
 // ======================================================================
@@ -86,7 +89,7 @@ pub fn is_resident_running() -> bool {
 /// 常駐プロセスへワンショット加工を委譲する
 ///
 /// # Arguments
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - CLI 側で解決済みの加工コンテキスト
 ///
 /// # Returns
@@ -105,7 +108,7 @@ pub fn process_via_resident(
 ///
 /// # Arguments
 /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - CLI 側で解決済みの加工コンテキスト
 ///
 /// # Returns
@@ -149,6 +152,7 @@ pub(crate) fn process_via_pipe(
 ///
 /// # Errors
 /// 接続・送受信・プロトコルエラーのいずれか
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn send_raw_line_to_pipe(
     pipe_name: &str,
     line: &str,
@@ -175,6 +179,7 @@ pub(crate) fn send_raw_line_to_pipe(
 ///
 /// # Returns
 /// * `bool` - タイムアウト前に待受を検知できた場合は `true`
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn wait_for_named_pipe(pipe_name: &str, timeout: Duration) -> bool {
     let mut name: Vec<u16> = pipe_name.encode_utf16().collect();
     name.push(0);

@@ -1,91 +1,39 @@
+//! 設定編集用 `WebView` ウィンドウ
+//!
+//! HTML/JS 組み立ては `assets`、`AppEvent` 処理は `events` に分離する
+
+mod assets;
+mod events;
+
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use super::apply::{
-    SettingsApplyFeedback, SettingsWindowCommand, handle_settings_window_command,
-    should_notify_apply_error_via_desktop,
-};
+use super::apply::{SettingsApplyFeedback, should_notify_apply_error_via_desktop};
 use super::geometry::{
     apply_geometry_to_builder, apply_saved_position, load_settings_window_geometry,
     save_settings_window_geometry,
 };
-use super::ipc::{SettingsPatch, dispatch_settings_ipc, parse_settings_ipc_message};
+use super::ipc::{dispatch_settings_ipc, parse_settings_ipc_message};
 use super::regex_preview::RegexPreviewResponse;
 use super::snapshot::SettingsSnapshot;
 
+use assets::{
+    CLOSE_FROM_OS_SCRIPT, FLUSH_PENDING_APPLY_SCRIPT, assemble_settings_html,
+    log_unparsed_settings_ipc,
+};
+
 use crate::consts;
-use crate::tray::menu::{TrayMenu, create_window_icon, icon::app_icon_png_data_url};
+use crate::platform::update::{UpdateApplyUiResponse, UpdateCheckUiResponse};
+use crate::tray::menu::create_window_icon;
 use crate::tray::selector::{
-    QuickSelectorWindow, WebSelectorWindow, WebViewWindowOptions, json_parse_call_script,
-    settings_load_script,
+    WebSelectorWindow, WebViewWindowOptions, json_parse_call_script, settings_load_script,
 };
 use crate::tray::state::{AppEvent, AppState};
-use crate::tray::worker::ClipboardWorkerHandle;
 use crate::user_error::titles;
 
 use anyhow::{Context, Result};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowBuilder, WindowId};
-
-// ======================================================================
-// HTML 組み立て
-// ======================================================================
-const SETTINGS_CSS_IMPORT: &str = r#"@import url("settings.css");"#;
-const SETTINGS_JS_TAG: &str = r#"<script src="settings.js"></script>"#;
-const SETTINGS_ICON_PLACEHOLDER: &str = "__APP_ICON_SRC__";
-const FLUSH_PENDING_APPLY_SCRIPT: &str =
-    "typeof flushPendingApply==='function'&&flushPendingApply();";
-/// OS の閉じる操作から呼ぶ JS (未公開時は no-op)
-const CLOSE_FROM_OS_SCRIPT: &str = "typeof window.closeWindow==='function'&&window.closeWindow();";
-const IPC_LOG_PREVIEW_MAX_LEN: usize = 200;
-
-/// 解釈に失敗した IPC メッセージを警告ログへ出力する
-fn log_unparsed_settings_ipc(msg: &str) {
-    let preview = if msg.len() > IPC_LOG_PREVIEW_MAX_LEN {
-        format!("{}...", &msg[..IPC_LOG_PREVIEW_MAX_LEN])
-    } else {
-        msg.to_string()
-    };
-    crate::log_warn!("設定 IPC メッセージの解釈に失敗: {}", preview);
-}
-
-/// 設定ウィンドウ用 JavaScript を分割ファイルから組み立てる
-fn assemble_settings_js() -> String {
-    const FRAGMENTS: &[&str] = &[
-        include_str!("../../ui/settings/regex_preview.js"),
-        include_str!("../../ui/settings/settings_patch.js"),
-        include_str!("../../ui/settings/shared_logic.js"),
-        include_str!("../../ui/settings/panels_logic.js"),
-        include_str!("../../ui/settings/shared.js"),
-        include_str!("../../ui/settings/html_builders.js"),
-        include_str!("../../ui/settings/ipc_apply.js"),
-        include_str!("../../ui/settings/confirm_dialog.js"),
-        include_str!("../../ui/settings/regex_feedback.js"),
-        include_str!("../../ui/settings/monitor_ui.js"),
-        include_str!("../../ui/settings/panels.js"),
-        include_str!("../../ui/settings/events.js"),
-        include_str!("../../ui/settings/main.js"),
-    ];
-    format!(
-        "(function () {{\n'use strict';\n{}\n}})();",
-        FRAGMENTS.join("\n")
-    )
-}
-
-/// 設定ウィンドウ HTML 内のアセットをインライン展開する
-fn embed_settings_assets(html: &str) -> String {
-    let css = include_str!("../../ui/settings.css");
-    let js = assemble_settings_js();
-
-    html.replace(SETTINGS_CSS_IMPORT, css)
-        .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
-        .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url())
-}
-
-/// 設定ウィンドウ用 HTML を組み立てる
-fn assemble_settings_html() -> String {
-    embed_settings_assets(include_str!("../../ui/settings.html"))
-}
 
 // ======================================================================
 // 設定ウィンドウ
@@ -166,8 +114,7 @@ impl SettingsWindow {
     /// * `snapshot_json` - 設定スナップショット JSON
     pub fn show(&self, event_loop: &EventLoopWindowTarget<AppEvent>, snapshot_json: &str) {
         if let Err(err) = self.ensure_created(event_loop) {
-            crate::log_warn!("設定ウィンドウの初期化に失敗: {err:#}");
-            crate::platform::show_notification("設定", "ウィンドウの初期化に失敗しました");
+            crate::user_error::notify_webview_window_init_failure("設定", &err);
             return;
         }
         let inner = self.inner.borrow();
@@ -284,6 +231,34 @@ impl SettingsWindow {
         }
     }
 
+    /// 更新確認結果を JavaScript へ通知する
+    pub(crate) fn notify_update_check(&self, response: &UpdateCheckUiResponse) {
+        if !self.is_visible() {
+            return;
+        }
+        let Ok(json) = serde_json::to_string(response) else {
+            return;
+        };
+        let script = json_parse_call_script("onUpdateCheck", &json);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.evaluate_script(&script);
+        }
+    }
+
+    /// 更新適用結果を JavaScript へ通知する
+    pub(crate) fn notify_update_apply(&self, response: &UpdateApplyUiResponse) {
+        if !self.is_visible() {
+            return;
+        }
+        let Ok(json) = serde_json::to_string(response) else {
+            return;
+        };
+        let script = json_parse_call_script("onUpdateApply", &json);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.evaluate_script(&script);
+        }
+    }
+
     /// 設定ウィンドウを非表示にし、`WebView` を破棄する
     ///
     /// # Arguments
@@ -333,80 +308,6 @@ impl SettingsWindow {
     /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
     pub fn id(&self) -> Option<WindowId> {
         self.inner.borrow().as_ref().map(WebSelectorWindow::id)
-    }
-
-    /// 設定ウィンドウ関連の `AppEvent` を処理する
-    pub(crate) fn handle_event(
-        &self,
-        event: AppEvent,
-        event_loop: &EventLoopWindowTarget<AppEvent>,
-        state: &Arc<AppState>,
-        menu: &TrayMenu,
-        quick_selector: Option<&QuickSelectorWindow>,
-        clipboard_worker: &ClipboardWorkerHandle,
-    ) {
-        match event {
-            AppEvent::ShowSettingsWindow => open_settings_window(event_loop, state, self),
-            AppEvent::HideSettingsWindow => self.hide(),
-            AppEvent::SettingsApplyPatch => {
-                if let Some(json) = state.settings_pending().take_patch() {
-                    match serde_json::from_str::<SettingsPatch>(&json) {
-                        Ok(patch) => handle_settings_window_command(
-                            SettingsWindowCommand::Apply(Box::new(patch)),
-                            state,
-                            menu,
-                            self,
-                            quick_selector,
-                            clipboard_worker,
-                        ),
-                        Err(err) => {
-                            crate::log_warn!("設定パッチの JSON 解釈に失敗: {:?}", err);
-                            self.notify_apply_feedback(&SettingsApplyFeedback::error(
-                                None,
-                                "設定の適用に失敗しました",
-                            ));
-                        }
-                    }
-                }
-            }
-            AppEvent::SettingsClearHistory => {
-                handle_settings_window_command(
-                    SettingsWindowCommand::ClearHistory,
-                    state,
-                    menu,
-                    self,
-                    quick_selector,
-                    clipboard_worker,
-                );
-            }
-            AppEvent::SettingsClearContinuousRecord => {
-                handle_settings_window_command(
-                    SettingsWindowCommand::ClearContinuousRecord,
-                    state,
-                    menu,
-                    self,
-                    quick_selector,
-                    clipboard_worker,
-                );
-            }
-            AppEvent::SettingsOpenConfigFile => {
-                handle_settings_window_command(
-                    SettingsWindowCommand::OpenConfigFile,
-                    state,
-                    menu,
-                    self,
-                    quick_selector,
-                    clipboard_worker,
-                );
-            }
-            AppEvent::SettingsRegexPreview => {
-                if let Some(request) = state.settings_pending().take_regex_preview_request() {
-                    let response = RegexPreviewResponse::from_request(&request);
-                    self.notify_regex_preview(&response);
-                }
-            }
-            _ => {}
-        }
     }
 }
 
@@ -467,9 +368,7 @@ pub(crate) fn open_settings_window(
 mod tests {
     use std::sync::Arc;
 
-    use super::{
-        CLOSE_FROM_OS_SCRIPT, SettingsWindow, assemble_settings_html, assemble_settings_js,
-    };
+    use super::SettingsWindow;
 
     use crate::tray::state::test_app_state;
 
@@ -488,103 +387,5 @@ mod tests {
         settings.hide();
         assert!(!settings.is_visible());
         assert!(settings.id().is_none());
-    }
-
-    /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれるようにすること
-    #[test]
-    fn assembled_settings_js_includes_regex_preview_stale_guard() {
-        let js = assemble_settings_js();
-        assert!(js.contains("resolveRegexPreviewResponse"));
-        assert!(js.contains("pendingRegexPreviewRequest"));
-        assert!(js.contains("action: 'stale'"));
-    }
-
-    /// 設定 UI JavaScript に責務分割後の DOM モジュールが含まれるようにすること
-    #[test]
-    fn assembled_settings_js_includes_split_dom_modules() {
-        let js = assemble_settings_js();
-        assert!(js.contains("グローバルホットキーを編集する"));
-        assert!(js.contains("function scheduleApply"));
-        assert!(js.contains("function bindConfirmDialog"));
-        assert!(js.contains("function handleRegexPreview"));
-        assert!(js.contains("function updateMonitorPipelineUi"));
-        assert!(js.contains("function panelWrap"));
-    }
-
-    /// 設定 UI JavaScript に共有純粋ロジックが含まれるようにすること
-    #[test]
-    fn assembled_settings_js_includes_shared_logic() {
-        let js = assemble_settings_js();
-        assert!(js.contains("SettingsSharedLogic"));
-        assert!(js.contains("SettingsPanelsLogic"));
-        assert!(js.contains("buildNotificationSettingsPatch"));
-        assert!(js.contains("normalizePipeline"));
-        assert!(js.contains("shouldFullRenderOnLoad"));
-        assert!(js.contains("collectCloseWindowIpcMessages"));
-        assert!(js.contains("resolveShortcutsDiffUpdate"));
-        assert!(js.contains("shouldCloseSettingsOnEscape"));
-        assert!(js.contains("applyPipelineAction"));
-        assert!(js.contains("resolveContentClickAction"));
-    }
-
-    /// OS の閉じる操作向けに `window.closeWindow` が公開されるようにすること
-    #[test]
-    fn assembled_settings_js_exposes_close_window_on_window() {
-        let js = assemble_settings_js();
-        assert!(js.contains("window.closeWindow = closeWindow"));
-        assert!(js.contains("collectCloseWindowIpcMessages"));
-        assert_eq!(
-            CLOSE_FROM_OS_SCRIPT,
-            "typeof window.closeWindow==='function'&&window.closeWindow();"
-        );
-    }
-
-    /// 組み立て HTML にシェル必須 DOM と全タブ定義が含まれるようにすること
-    #[test]
-    fn assembled_settings_html_includes_shell_and_tabs() {
-        let html = assemble_settings_html();
-        for marker in [
-            r#"id="app""#,
-            r#"id="sidebar""#,
-            r#"id="content""#,
-            r#"id="open-config-btn""#,
-            r#"id="close-btn""#,
-            r#"id="apply-feedback""#,
-            r#"id="confirm-dialog""#,
-        ] {
-            assert!(
-                html.contains(marker),
-                "組み立て HTML に {marker} が含まれること"
-            );
-        }
-
-        let js = assemble_settings_js();
-        for tab_id in [
-            "general",
-            "favorites",
-            "regex",
-            "history",
-            "clips",
-            "monitor",
-            "notifications",
-            "shortcuts",
-        ] {
-            let marker = format!("id: '{tab_id}'");
-            assert!(
-                js.contains(&marker),
-                "組み立て JS にタブ {tab_id} が含まれること"
-            );
-        }
-    }
-
-    /// CSS / JS がインライン展開され外部参照が残らないようにすること
-    #[test]
-    fn assembled_settings_html_inlines_assets() {
-        let html = assemble_settings_html();
-        assert!(!html.contains(r#"@import url("settings.css")"#));
-        assert!(!html.contains(r#"<script src="settings.js"></script>"#));
-        assert!(!html.contains("__APP_ICON_SRC__"));
-        assert!(html.contains("<script>"));
-        assert!(html.contains("SettingsSharedLogic"));
     }
 }

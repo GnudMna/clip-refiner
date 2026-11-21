@@ -124,7 +124,7 @@ pub enum OneshotIpcRequest {
         /// クライアント側リクエスト ID
         #[serde(rename = "requestId")]
         request_id: String,
-        /// 適用する加工モード列
+        /// 適用する変換モード列
         pipeline: Vec<RefineMode>,
         /// 正規表現設定 (CLI 側で解決済み)
         #[serde(default)]
@@ -245,6 +245,7 @@ impl OneshotIpcResponse {
     ///
     /// # Returns
     /// * `bool` - `Error` 以外なら `true`
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     pub fn is_success(&self) -> bool {
         !matches!(self.status, OneshotIpcStatus::Error)
     }
@@ -253,7 +254,7 @@ impl OneshotIpcResponse {
 /// パイプラインとコンテキストから IPC 要求を組み立てる
 ///
 /// # Arguments
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - CLI 側で解決済みの加工コンテキスト
 /// * `request_id` - リクエスト ID
 ///

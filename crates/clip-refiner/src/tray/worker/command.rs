@@ -17,7 +17,7 @@ pub enum ClipboardCommand {
     ProcessMode(RefineMode),
     /// CLI ワンショット要求を監視エコー回避つきで加工する
     ProcessOneshotPipeline {
-        /// 適用する加工モード列
+        /// 適用する変換モード列
         pipeline: Vec<RefineMode>,
         /// CLI 側で解決済みの加工コンテキスト
         refine_ctx: RefineContext,

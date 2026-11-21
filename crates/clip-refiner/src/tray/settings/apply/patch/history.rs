@@ -42,35 +42,32 @@ pub(super) fn apply_history_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     use crate::consts;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
+    use crate::test_helpers::TrayTestContext;
 
     /// 履歴件数パッチが `normalize` でクランプされるようにすること
     #[test]
     fn history_limit_patch_clamps_to_max() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             history_limit: Some(999),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_history_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_history_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
         assert_eq!(
-            state.with_config(|c| c.history_limit),
+            ctx.state().with_config(|c| c.history_limit),
             consts::MAX_HISTORY_LIMIT
         );
         assert!(config_dirty);

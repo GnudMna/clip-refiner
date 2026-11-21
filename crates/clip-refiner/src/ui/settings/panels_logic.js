@@ -263,6 +263,83 @@ var SettingsPanelsLogic = (function () {
         };
     }
 
+    /**
+     * バイト数を読みやすい文字列にする
+     *
+     * @param {number|undefined|null} bytes
+     * @returns {string}
+     */
+    function formatBytes(bytes) {
+        const value = Number(bytes);
+        if (!Number.isFinite(value) || value < 0) {
+            return '';
+        }
+        if (value < 1024) {
+            return value + ' B';
+        }
+        if (value < 1024 * 1024) {
+            return (value / 1024).toFixed(1) + ' KB';
+        }
+        return (value / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    /**
+     * 更新ステータス表示 HTML を組み立てる
+     *
+     * @param {Record<string, unknown>|null|undefined} status
+     * @param {boolean} updateBusy
+     * @param {(text: string) => string} escapeHtml
+     * @returns {string}
+     */
+    function renderUpdateStatusHtml(status, updateBusy, escapeHtml) {
+        if (!status || typeof status !== 'object') {
+            return '<p id="update-status" class="hint">「更新を確認」で最新版を調べます</p>';
+        }
+
+        const kind = status.status;
+        if (kind === 'up-to-date') {
+            return (
+                '<p id="update-status" class="hint">最新版です (v' +
+                escapeHtml(String(status.latestVersion ?? '')) +
+                ')</p>'
+            );
+        }
+        if (kind === 'available') {
+            const sizeLabel = formatBytes(status.size);
+            const sizeHtml = sizeLabel ? ' / ' + escapeHtml(sizeLabel) : '';
+            return (
+                '' +
+                '<p id="update-status" class="hint">v' +
+                escapeHtml(String(status.latestVersion ?? '')) +
+                ' が利用可能です' +
+                sizeHtml +
+                '</p>' +
+                '<div class="update-actions">' +
+                '<button type="button" id="apply-update-btn" class="primary-btn"' +
+                (updateBusy ? ' disabled' : '') +
+                '>' +
+                (updateBusy ? '適用中...' : 'ダウンロードして適用') +
+                '</button>' +
+                '</div>'
+            );
+        }
+        if (kind === 'msi-started' || kind === 'portable-extracted') {
+            return (
+                '<p id="update-status" class="hint">' +
+                escapeHtml(String(status.message ?? '')) +
+                '</p>'
+            );
+        }
+        if (kind === 'error' || kind === 'busy') {
+            return (
+                '<p id="update-status" class="hint">' +
+                escapeHtml(String(status.message ?? '更新処理に失敗しました')) +
+                '</p>'
+            );
+        }
+        return '<p id="update-status" class="hint"></p>';
+    }
+
     return {
         applyPipelineAction,
         appendPipelineMode,
@@ -273,6 +350,8 @@ var SettingsPanelsLogic = (function () {
         favoriteSlotDisplay,
         resolveContentClickAction,
         clipRegisterButtonState,
+        formatBytes,
+        renderUpdateStatusHtml,
     };
 })();
 

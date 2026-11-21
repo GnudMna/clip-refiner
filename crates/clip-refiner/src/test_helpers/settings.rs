@@ -11,6 +11,8 @@ use crate::tray::settings::test_support::{
 use crate::tray::state::{AppState, test_app_state, test_app_state_with_persistence};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
+use super::worker::{stub_worker, test_tray_menu};
+
 use clip_refiner_core::test_helpers::with_temp_config_dir;
 
 // ======================================================================
@@ -67,8 +69,8 @@ impl SettingsTestContext {
     }
 
     fn from_state(state: Arc<AppState>) -> Self {
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, rx) = test_worker(&state);
+        let menu = test_tray_menu(&state);
+        let (worker, rx) = stub_worker(&state);
         Self {
             state,
             menu,
@@ -184,12 +186,4 @@ impl SettingsTestContext {
         self.apply_patch(&patch);
         true
     }
-}
-
-fn test_worker(
-    state: &Arc<AppState>,
-) -> (Arc<ClipboardWorkerHandle>, mpsc::Receiver<ClipboardCommand>) {
-    let (tx, rx) = mpsc::channel();
-    let worker = ClipboardWorkerHandle::for_test(Arc::clone(state), tx);
-    (worker, rx)
 }

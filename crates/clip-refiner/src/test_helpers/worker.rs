@@ -57,11 +57,14 @@ pub fn stub_worker(
 /// テスト用トレイメニューを構築する
 ///
 /// # Arguments
-/// * `state` - 共有アプリケーション状態
+/// * `state` - アプリケーション状態
 ///
 /// # Returns
 /// * `TrayMenu` - 構築されたテスト用トレイメニュー
-pub fn test_tray_menu(state: &Arc<AppState>) -> TrayMenu {
+///
+/// # Panics
+/// メニュー構築に失敗した場合
+pub fn test_tray_menu(state: &AppState) -> TrayMenu {
     TrayMenu::build(state).expect("テスト用トレイメニューの構築に失敗")
 }
 

@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter, EnumMessage, EnumProperty, EnumString, IntoStaticStr};
+use strum::{Display, EnumIter, EnumMessage, EnumString, IntoStaticStr};
 
 // ======================================================================
-// 加工モード定義
+// 変換モード定義
 // ======================================================================
 /// クリップボードのテキストを加工する各モードの定義
 ///
 /// 各バリアントは特定のテキスト加工処理(エンコード、デコード、整形、変換など)に対応している
 /// `strum` マクロを使用して UI 表示用のラベルを保持している
-/// カテゴリへの所属は各バリアントの `#[strum(props(category = "..."))]` で定義する
+/// カテゴリへの所属は `RefineMode::category` の網羅的 `match` で定義する
 #[derive(
     Copy,
     Clone,
@@ -20,7 +20,6 @@ use strum::{Display, EnumIter, EnumMessage, EnumProperty, EnumString, IntoStatic
     Deserialize,
     EnumIter,
     EnumMessage,
-    EnumProperty,
     EnumString,
     IntoStaticStr,
     Display,
@@ -28,136 +27,130 @@ use strum::{Display, EnumIter, EnumMessage, EnumProperty, EnumString, IntoStatic
 #[strum(serialize_all = "kebab-case")]
 pub enum RefineMode {
     /// URLエンコードを行う
-    #[strum(message = "URLエンコード", props(category = "UrlActions"))]
+    #[strum(message = "URLエンコード")]
     UrlEncode,
     /// URLデコードを行う。失敗した場合は元のテキストを維持する
-    #[strum(message = "URLデコード", props(category = "UrlActions"))]
+    #[strum(message = "URLデコード")]
     UrlDecode,
     /// URLから utm_ で始まる計測用パラメータを削除する
-    #[strum(message = "UTM除去", props(category = "UrlActions"))]
+    #[strum(message = "UTM除去")]
     RemoveUtm,
     /// パスからベースネームを抽出する
-    #[strum(message = "ベースネーム抽出", props(category = "Path"))]
+    #[strum(message = "ベースネーム抽出")]
     ExtractBasename,
     /// パスからベースネームを抽出しダブルクォーテーションで囲む
-    #[strum(message = "ベースネーム抽出(引用符付)", props(category = "Path"))]
+    #[strum(message = "ベースネーム抽出(引用符付)")]
     ExtractBasenameQuoted,
     /// パスの前後にダブルクォーテーションを付与する
-    #[strum(message = "引用符を付与", props(category = "Path"))]
+    #[strum(message = "引用符を付与")]
     AddPathQuotes,
     /// パスの前後にあるダブルクォーテーションを削除する
-    #[strum(message = "引用符を削除", props(category = "Path"))]
+    #[strum(message = "引用符を削除")]
     RemovePathQuotes,
     /// パスのバックスラッシュをスラッシュに変換する
-    #[strum(message = "スラッシュ区切りに変換", props(category = "Path"))]
+    #[strum(message = "スラッシュ区切りに変換")]
     PathToSlash,
     /// パスのスラッシュをバックスラッシュに変換する
-    #[strum(message = "バックスラッシュ区切りに変換", props(category = "Path"))]
+    #[strum(message = "バックスラッシュ区切りに変換")]
     PathToBackslash,
     /// 行単位で昇順に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[strum(message = "昇順で並び替え", props(category = "LineActions"))]
+    #[strum(message = "昇順で並び替え")]
     SortLinesAsc,
     /// 行単位で降順に並び替える。CSVの場合は各行をレコードとして認識してソートする
-    #[strum(message = "降順で並び替え", props(category = "LineActions"))]
+    #[strum(message = "降順で並び替え")]
     SortLinesDesc,
     /// 空行を削除する
-    #[strum(message = "空行削除", props(category = "LineActions"))]
+    #[strum(message = "空行削除")]
     RemoveEmptyLines,
     /// 重複行を削除する
-    #[strum(message = "重複行削除", props(category = "LineActions"))]
+    #[strum(message = "重複行削除")]
     RemoveDuplicateLines,
     /// テキスト全体の前後にある空白および改行を削除する
-    #[strum(message = "全体をトリム", props(category = "Trim"))]
+    #[strum(message = "全体をトリム")]
     Trim,
     /// 行ごとに前後の空白を削除する
-    #[strum(message = "行単位でトリム", props(category = "Trim"))]
+    #[strum(message = "行単位でトリム")]
     TrimLines,
     /// 文字列をバックスラッシュでエスケープする
-    #[strum(message = "エスケープ", props(category = "Escape"))]
+    #[strum(message = "エスケープ")]
     Escape,
     /// 文字列のエスケープを解除する
-    #[strum(message = "アンエスケープ", props(category = "Escape"))]
+    #[strum(message = "アンエスケープ")]
     Unescape,
     /// 正規表現のメタ文字をエスケープする
-    #[strum(message = "正規表現エスケープ", props(category = "Escape"))]
+    #[strum(message = "正規表現エスケープ")]
     RegexEscape,
     /// 正規表現のエスケープを解除する
-    #[strum(message = "正規表現アンエスケープ", props(category = "Escape"))]
+    #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
     /// 正規表現に一致する部分を置換文字列へ変換する (`config.toml` の `regex` 設定を使用)
-    #[strum(message = "正規表現置換", props(category = "Regex"))]
+    #[strum(message = "正規表現置換")]
     RegexReplace,
     /// 正規表現に一致する部分を行単位で抽出する
-    #[strum(message = "正規表現抽出", props(category = "Regex"))]
+    #[strum(message = "正規表現抽出")]
     RegexExtract,
     /// 正規表現に一致する部分を削除する
-    #[strum(message = "正規表現削除", props(category = "Regex"))]
+    #[strum(message = "正規表現削除")]
     RegexDelete,
     /// 正規表現で分割し改行で結合する
-    #[strum(message = "正規表現分割", props(category = "Regex"))]
+    #[strum(message = "正規表現分割")]
     RegexSplit,
     /// JSON形式をインデント整形する(キーの順序はパース時に不定となる)
-    #[strum(message = "JSON整形(キー順序不同)", props(category = "JsonFormat"))]
+    #[strum(message = "JSON整形(キー順序不同)")]
     JsonFormat,
     /// JSON形式をインデント整形する(元のキー順序を維持する)
-    #[strum(message = "JSON整形(キー順序保持)", props(category = "JsonFormat"))]
+    #[strum(message = "JSON整形(キー順序保持)")]
     JsonFormatPreserveOrder,
     /// YAML形式をJSON形式へ変換する
-    #[strum(message = "YAML→JSON(キー順序不同)", props(category = "ToJson"))]
+    #[strum(message = "YAML→JSON(キー順序不同)")]
     YamlToJson,
     /// YAML形式をJSON形式へ変換する(元のキー順序を維持する)
-    #[strum(message = "YAML→JSON(キー順序保持)", props(category = "ToJson"))]
+    #[strum(message = "YAML→JSON(キー順序保持)")]
     YamlToJsonPreserveOrder,
     /// JSON形式をYAML形式へ変換する
-    #[strum(message = "JSON→YAML(キー順序不同)", props(category = "ToYaml"))]
+    #[strum(message = "JSON→YAML(キー順序不同)")]
     JsonToYaml,
     /// JSON形式をYAML形式へ変換する(元のキー順序を維持する)
-    #[strum(message = "JSON→YAML(キー順序保持)", props(category = "ToYaml"))]
+    #[strum(message = "JSON→YAML(キー順序保持)")]
     JsonToYamlPreserveOrder,
     /// `Markdown形式のテキストをHTML形式へ変換する`
-    #[strum(message = "Markdown→HTML", props(category = "Markdown"))]
+    #[strum(message = "Markdown→HTML")]
     MarkdownToHtml,
     /// `ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する`
-    #[strum(message = "Excel→Markdown", props(category = "Excel"))]
+    #[strum(message = "Excel→Markdown")]
     ExcelToMarkdown,
     /// `Markdown形式の表をExcel(TSV)形式へ変換する`
-    #[strum(message = "Markdown→Excel", props(category = "Excel"))]
+    #[strum(message = "Markdown→Excel")]
     MarkdownToExcel,
     /// Excelでコピーしたセルの描画ビットマップをクリップボードの画像として保存する
-    #[strum(message = "Excel→画像", props(category = "Excel"))]
+    #[strum(message = "Excel→画像")]
     ExcelToImage,
     /// Unixタイムスタンプを日時文字列へ変換する
-    #[strum(
-        message = "Unixタイムスタンプ→日時文字列",
-        props(category = "Datetime")
-    )]
+    #[strum(message = "Unixタイムスタンプ→日時文字列")]
     TimestampToDatetime,
     /// 日時文字列をUnixタイムスタンプへ変換する
-    #[strum(
-        message = "日時文字列→Unixタイムスタンプ",
-        props(category = "Datetime")
-    )]
+    #[strum(message = "日時文字列→Unixタイムスタンプ")]
     DatetimeToTimestamp,
     /// 数値に対して3桁ごとのカンマを付与する(例: 1000 -> 1,000)
-    #[strum(message = "カンマ追加", props(category = "Number"))]
+    #[strum(message = "カンマ追加")]
     AddComma,
     /// 数値からカンマを削除する(例: 1,000 -> 1000)
-    #[strum(message = "カンマ除去", props(category = "Number"))]
+    #[strum(message = "カンマ除去")]
     RemoveComma,
     /// 識別子を `camelCase` へ変換する
-    #[strum(message = "camelCaseへ変換", props(category = "Case"))]
+    #[strum(message = "camelCaseへ変換")]
     ToCamelCase,
     /// 識別子を `snake_case` へ変換する
-    #[strum(message = "snake_caseへ変換", props(category = "Case"))]
+    #[strum(message = "snake_caseへ変換")]
     ToSnakeCase,
     /// 識別子を `PascalCase` へ変換する
-    #[strum(message = "PascalCaseへ変換", props(category = "Case"))]
+    #[strum(message = "PascalCaseへ変換")]
     ToPascalCase,
     /// 識別子を `kebab-case` へ変換する
-    #[strum(message = "kebab-caseへ変換", props(category = "Case"))]
+    #[strum(message = "kebab-caseへ変換")]
     ToKebabCase,
     /// 識別子を `SCREAMING_SNAKE_CASE` へ変換する
-    #[strum(message = "SCREAMING_SNAKE_CASEへ変換", props(category = "Case"))]
+    #[strum(message = "SCREAMING_SNAKE_CASEへ変換")]
     ToScreamingSnakeCase,
 }
 
@@ -166,7 +159,7 @@ pub enum RefineMode {
 // ======================================================================
 /// トレイメニューの階層化に使用されるカテゴリ
 ///
-/// 多くの加工モードを整理するために、関連するモードをグループ化する
+/// 多くの変換モードを整理するために、関連するモードをグループ化する
 #[derive(
     Debug, PartialEq, Eq, Clone, Copy, Hash, EnumIter, EnumMessage, EnumString, IntoStaticStr,
 )]

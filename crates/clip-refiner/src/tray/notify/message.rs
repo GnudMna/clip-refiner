@@ -80,7 +80,7 @@ const NOTIFICATION_SNIPPET_MAX_CHARS: usize = 50;
 ///
 /// # Arguments
 /// * `settings` - 通知設定
-/// * `pipeline` - 実行された加工モード列
+/// * `pipeline` - 実行された変換モード列
 /// * `processed` - 加工後のテキスト
 ///
 /// # Returns
@@ -111,7 +111,7 @@ pub(crate) fn format_process_notification_body(
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態 (通知設定の参照用)
-/// * `pipeline` - 実行された加工モード列
+/// * `pipeline` - 実行された変換モード列
 /// * `processed` - 加工後のテキスト
 pub fn show_process_notification(state: &Arc<AppState>, pipeline: &[RefineMode], processed: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
@@ -127,7 +127,7 @@ pub fn show_process_notification(state: &Arc<AppState>, pipeline: &[RefineMode],
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態 (通知設定の参照用)
-/// * `mode` - 実行された加工モード
+/// * `mode` - 実行された変換モード
 /// * `width` - 加工後画像の幅 (ピクセル)
 /// * `height` - 加工後画像の高さ (ピクセル)
 pub fn show_image_process_notification(

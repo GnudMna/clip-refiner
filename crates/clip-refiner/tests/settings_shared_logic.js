@@ -264,11 +264,16 @@ function test_settings_shell_has_required_ids() {
 
 /** 組み立て JS に全タブ定義が含まれることを検証できること */
 function test_settings_js_defines_all_tabs() {
-    const js = SettingsSharedLogic.SETTINGS_TAB_IDS.map((tabId) => "id: '" + tabId + "'").join(
-        '\n'
-    );
-    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs(js), true);
+    const singleQuoted = SettingsSharedLogic.SETTINGS_TAB_IDS.map(
+        (tabId) => "id: '" + tabId + "'"
+    ).join('\n');
+    const doubleQuoted = SettingsSharedLogic.SETTINGS_TAB_IDS.map(
+        (tabId) => 'id: "' + tabId + '"'
+    ).join('\n');
+    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs(singleQuoted), true);
+    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs(doubleQuoted), true);
     assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs("id: 'general'"), false);
+    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs('id: "general"'), false);
 }
 
 const tests = [

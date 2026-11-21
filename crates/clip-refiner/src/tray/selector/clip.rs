@@ -167,8 +167,7 @@ impl ClipSelectorWindow {
     /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn show(&self, event_loop: &EventLoopWindowTarget<AppEvent>, clips_json: &str) {
         if let Err(err) = self.ensure_created(event_loop) {
-            crate::log_warn!("登録クリップセレクターの初期化に失敗: {err:#}");
-            crate::platform::show_notification("登録クリップ", "ウィンドウの初期化に失敗しました");
+            crate::user_error::notify_webview_window_init_failure("登録クリップ", &err);
             return;
         }
         let script = clip_selector_focus_script(clips_json);

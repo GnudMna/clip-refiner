@@ -83,13 +83,13 @@ impl From<ClipboardIoError> for ClipboardProcessError {
     }
 }
 
-/// テキストに加工モードを適用する
+/// テキストに変換モードを適用する
 ///
 /// クリップボード I/O は行わない
 ///
 /// # Arguments
 /// * `text` - 加工前のテキスト
-/// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `mode` - 適用する変換モード (`RefineMode`)
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
@@ -111,7 +111,7 @@ pub(crate) fn apply_refinement_to_text(
 ///
 /// # Arguments
 /// * `text` - 加工前のテキスト
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
@@ -150,7 +150,7 @@ pub fn apply_pipeline_to_text(
 ///
 /// # Arguments
 /// * `clipboard` - テキスト・画像クリップボード実装 (`OwnedClipboard` など)
-/// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `mode` - 適用する変換モード (`RefineMode`)
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
@@ -174,7 +174,7 @@ pub fn process_clipboard<C: TextClipboard + ImageClipboard>(
 ///
 /// # Arguments
 /// * `clipboard` - テキスト・画像クリップボード実装 (`OwnedClipboard` など)
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
@@ -196,7 +196,7 @@ pub fn process_clipboard_pipeline<C: TextClipboard + ImageClipboard>(
 ///
 /// # Arguments
 /// * `clipboard` - テキストクリップボード実装
-/// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `mode` - 適用する変換モード (`RefineMode`)
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns
@@ -305,7 +305,7 @@ fn is_excel_tsv(text: &str) -> bool {
 ///
 /// # Arguments
 /// * `clipboard` - テキスト・画像クリップボード実装
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - 設定依存の加工パラメータ
 ///
 /// # Returns

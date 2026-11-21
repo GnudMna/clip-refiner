@@ -73,27 +73,25 @@ pub(super) fn apply_system_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
+    use crate::test_helpers::TrayTestContext;
 
     /// 一時停止パッチが `AppConfig` とトレイメニューへ反映されるようにすること
     #[test]
     fn pause_patch_updates_config_and_menu() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             is_paused: Some(true),
             ..SettingsPatch::default()
         };
 
         let mut config_dirty = false;
-        assert!(!apply_system_patch(&patch, &state, &menu, &mut config_dirty).force_refresh);
-        assert!(state.with_config(|c| c.is_paused));
-        assert!(menu.pause_item.is_checked());
+        assert!(
+            !apply_system_patch(&patch, ctx.state(), ctx.menu(), &mut config_dirty).force_refresh
+        );
+        assert!(ctx.state().with_config(|c| c.is_paused));
+        assert!(ctx.menu().pause_item.is_checked());
         assert!(config_dirty);
     }
 }

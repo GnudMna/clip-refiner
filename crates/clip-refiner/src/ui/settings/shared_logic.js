@@ -370,11 +370,15 @@ var SettingsSharedLogic = (function () {
     /**
      * 組み立て済み設定 JS に全タブ ID が含まれるか検証する
      *
+     * esbuild バンドルはダブルクォート、ソース連結はシングルクォートの場合がある
+     *
      * @param {string} js
      * @returns {boolean}
      */
     function settingsJsDefinesAllTabs(js) {
-        return SETTINGS_TAB_IDS.every((tabId) => js.includes("id: '" + tabId + "'"));
+        return SETTINGS_TAB_IDS.every(
+            (tabId) => js.includes("id: '" + tabId + "'") || js.includes('id: "' + tabId + '"')
+        );
     }
 
     return {

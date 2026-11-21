@@ -16,6 +16,12 @@ mod js_runner;
 mod platform;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+mod update;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+mod tray;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 mod worker;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
@@ -27,10 +33,22 @@ pub use harness::ClipboardHarness;
 pub use js_runner::run_js_test_script;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub use platform::{assert_test_hotkeys_register, query_autostart_enabled};
+pub use platform::{
+    assert_test_hotkeys_register, query_autostart_enabled, query_webview2_runtime_available,
+};
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub use update::{
+    AvailableUpdate, MockReleaseBridge, UpdateApplyOutcome, UpdateCheckOutcome, UpdatePackageKind,
+    apply_update_for_test, build_portable_zip_fixture, check_update_at, sha256_hex,
+    version_api_json,
+};
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use settings::SettingsTestContext;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub use tray::TrayTestContext;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};

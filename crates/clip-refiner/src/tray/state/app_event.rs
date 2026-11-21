@@ -7,9 +7,9 @@ use crate::refiner::RefineMode;
 /// アプリケーション内で発生するカスタムユーザーイベント
 #[derive(Debug, Clone, Copy)]
 pub enum AppEvent {
-    /// クリップボード加工モードの変更要求
+    /// クリップボード変換モードの変更要求
     RequestModeChange(RefineMode),
-    /// クイックセレクター (加工モード選択) の非表示要求
+    /// クイックセレクター (変換モード選択) の非表示要求
     HideQuickSelector,
     /// 登録クリップセレクターの非表示要求
     HideClipSelector,
@@ -59,6 +59,16 @@ pub enum AppEvent {
     SettingsOpenConfigFile,
     /// 設定ウィンドウからの正規表現プレビュー要求
     SettingsRegexPreview,
+    /// 設定ウィンドウからの更新確認要求
+    SettingsCheckUpdate,
+    /// 設定ウィンドウからの更新適用要求
+    SettingsApplyUpdate,
+    /// トレイメニューからの更新確認要求
+    TrayCheckUpdate,
+    /// バックグラウンドの更新確認が完了した
+    UpdateCheckFinished,
+    /// バックグラウンドの更新適用が完了した
+    UpdateApplyFinished,
     /// 設定ウィンドウの表示内容を最新化する
     RefreshSettingsWindow,
     /// OCR オーバーレイを破棄してアイドル RSS を回収する

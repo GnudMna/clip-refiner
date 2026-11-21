@@ -50,39 +50,36 @@ pub(super) fn apply_monitor_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     use crate::consts;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
+    use crate::test_helpers::TrayTestContext;
 
     /// 監視周期パッチが `normalize` で下限へクランプされるようにすること
     #[test]
     fn interval_ms_patch_clamps_below_min() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             interval_ms: Some(10),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_monitor_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
         assert_eq!(
-            state.with_config(|c| c.interval_ms),
+            ctx.state().with_config(|c| c.interval_ms),
             consts::MIN_INTERVAL_MS
         );
         assert_eq!(
-            state.monitor_snapshot().interval_ms,
+            ctx.state().monitor_snapshot().interval_ms,
             consts::MIN_INTERVAL_MS
         );
         assert!(config_dirty);
@@ -91,28 +88,28 @@ mod tests {
     /// 監視周期パッチが `normalize` で上限へクランプされるようにすること
     #[test]
     fn interval_ms_patch_clamps_above_max() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             interval_ms: Some(999_999),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_monitor_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
         assert_eq!(
-            state.with_config(|c| c.interval_ms),
+            ctx.state().with_config(|c| c.interval_ms),
             consts::MAX_INTERVAL_MS
         );
         assert_eq!(
-            state.monitor_snapshot().interval_ms,
+            ctx.state().monitor_snapshot().interval_ms,
             consts::MAX_INTERVAL_MS
         );
         assert!(config_dirty);
@@ -121,85 +118,92 @@ mod tests {
     /// イベント監視への切替と同時の周期パッチでは周期をスキップすること
     #[test]
     fn monitor_patch_skips_interval_when_switching_to_event() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let default_interval = state.with_config(|c| c.interval_ms);
+        let ctx = TrayTestContext::new();
+        let default_interval = ctx.state().with_config(|c| c.interval_ms);
         let patch = SettingsPatch {
             monitor_mode: Some(MonitorMode::Event),
             interval_ms: Some(500),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_monitor_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
-        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Event);
-        assert_eq!(state.with_config(|c| c.interval_ms), default_interval);
+        assert_eq!(
+            ctx.state().with_config(|c| c.monitor_mode),
+            MonitorMode::Event
+        );
+        assert_eq!(ctx.state().with_config(|c| c.interval_ms), default_interval);
     }
 
     /// ポーリングへの切替と同時の周期パッチでは周期を反映すること
     #[test]
     fn monitor_patch_applies_interval_when_switching_to_polling() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Event);
         let patch = SettingsPatch {
             monitor_mode: Some(MonitorMode::Polling),
             interval_ms: Some(500),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_monitor_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
-        assert_eq!(state.with_config(|c| c.monitor_mode), MonitorMode::Polling);
-        assert_eq!(state.with_config(|c| c.interval_ms), 500);
+        assert_eq!(
+            ctx.state().with_config(|c| c.monitor_mode),
+            MonitorMode::Polling
+        );
+        assert_eq!(ctx.state().with_config(|c| c.interval_ms), 500);
         assert!(config_dirty);
         assert!(
-            menu.interval
+            ctx.menu()
+                .interval
                 .items
                 .iter()
                 .any(|(item, ms)| *ms == 500 && item.is_checked())
         );
-        assert!(!menu.interval.custom_item.is_checked());
+        assert!(!ctx.menu().interval.custom_item.is_checked());
     }
 
     /// プリセット外の周期パッチでカスタム項目がチェックされること
     #[test]
     fn interval_ms_patch_marks_custom_item() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             interval_ms: Some(750),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(&patch, &state, &menu, &mut outcome, &mut config_dirty);
+        apply_monitor_patch(
+            &patch,
+            ctx.state(),
+            ctx.menu(),
+            &mut outcome,
+            &mut config_dirty,
+        );
 
-        assert_eq!(state.with_config(|c| c.interval_ms), 750);
-        assert!(menu.interval.custom_item.is_checked());
-        assert!(menu.interval.custom_item.text().contains("750"));
+        assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
+        assert!(ctx.menu().interval.custom_item.is_checked());
+        assert!(ctx.menu().interval.custom_item.text().contains("750"));
         assert!(
-            menu.interval
+            ctx.menu()
+                .interval
                 .items
                 .iter()
                 .all(|(item, _)| !item.is_checked())

@@ -6,6 +6,31 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-26
+
+### Added
+
+- アプリ更新: トレイ「更新を確認…」と設定「一般」タブから [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) 経由で最新リリースを確認し、MSI は `msiexec` 起動、ポータブルは ZIP 展開後に差し替えヘルパー (`--apply-portable-update`) で実行フォルダへ自動適用して再起動する (`data\` は保持。失敗時のみ手動差し替え案内)
+- アプリ更新の統合テスト (`update_flow`): ローカル HTTP のモック bridge で version API → ダウンロード → サイズ / SHA-256 検証 → ポータブル ZIP 展開 (および MSI 検証まで) を固定する。digest 欠落・ハッシュ / サイズ不一致・API 404 もカバーする
+- ポータブルモード: 実行ファイルと同じフォルダに `portable` マーカーを置くと、設定・ログ・登録クリップを `<exe>\data\` へ保存する。FAT / exFAT など ACL 非対応ボリュームでは DACL 設定失敗を警告のみとし起動・保存を継続する
+- ポータブル配布物作成スクリプト `scripts/windows/build-portable.ps1` (`ClipRefiner.exe` + `portable` + ライセンス類を `target/portable/` へ出力)
+- WebView2 Runtime 未導入時の案内: 起動時にデスクトップ通知で不足を伝え、設定 / セレクター表示失敗時は導入ページを既定ブラウザで開く (監視・ホットキー・ワンショットは継続利用可)
+
+### Security
+
+- アプリ更新: gh-release-bridge の version API アセットに含まれる `digest` (`sha256:<hex>`) を必須とし、ダウンロード後にサイズと SHA-256 を検証してから MSI / ポータブル ZIP を適用するようにした。digest 欠落や不一致時は適用しない
+
+### Changed
+
+- 肥大モジュールを分割した: `refiner/transform/regex/` (キャッシュ / マッチタイムアウト / 実行パス / プレビュー)、`tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、`tray/settings/window/` (アセット組み立て / イベント処理)。公開 API と挙動は変更なし
+- 設定 UI の JavaScript を ESM (`import`/`export`) 化し、esbuild で `settings.bundle.js` へ IIFE バンドルするようにした。Rust は生成物を埋め込み、DOM 側は ESLint でファイル間参照を解決できる。共有状態は `ctx.js` に集約。`flushPendingApply` の OS 呼び出しも `window.` 付きに揃えた
+- トレイメニュー・設定 UI・ドキュメントの用語を「変換モード」に統一した (文書・コメントの旧称「加工モード」。カテゴリ名の「日時変換」等はそのまま)
+- 機密マスキングが**表示置換のみ**であること (クリップボード本体・履歴復元・登録クリップコピーは対象外) を設定 UI のヒントと README / CONFIG で明示した
+- アプリ更新のアセット選択で、CPU アーキテクチャ不一致時に先頭候補へフォールバックせずエラーにするようにした
+- トレイ単体テストの共通初期化を `TrayTestContext` に集約し、メニューイベント経路の重複を削減した
+- OCR オーバーレイ / トレイメニュー経路の手動スモークを Rust 自動テストへ移行し、手動確認範囲をトレイ実クリック・ホットキー競合・トースト見た目・`SendInput` 実貼り付け・更新の外部プロセス起動に縮小した
+- ドキュメント (README / CONFIG / DEVELOPMENT) をアプリ更新・ポータブル差し替え・モジュール分割に合わせて更新した
+
 ## [0.13.1] - 2026-07-18
 
 ### Security
@@ -194,11 +219,11 @@
 ### Added
 
 - 画面 OCR を macOS (Apple Vision) / Linux (Tesseract) で利用可能に (`Alt+Shift+O`、WebView オーバーレイ。Linux は `xcap` による領域キャプチャ)
-- `excel-to-image` 加工モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
+- `excel-to-image` 変換モードを macOS / Linux でも利用可能に (Windows 専用の `CF_DIB` フォールバックは Windows のみ)
 - ライブラリ API: `config` モジュールの公開、加工パイプライン API (`apply_text_pipeline`, `apply_pipeline_to_text`, `split_pipeline`)、クレートルート re-export、`RefineContext::with_regex`
 - `clip-refiner-core` クレートで加工ロジックと設定型を GUI 非依存に分離 (`crates/` 配下)
 - feature `app` (デフォルト) でトレイ UI / CLI をオプション化。ライブラリ利用は `default-features = false` または core 直接依存
-- [CONFIG.md](CONFIG.md) を追加し、設定リファレンス・加工モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例を README から分離
+- [CONFIG.md](CONFIG.md) を追加し、設定リファレンス・変換モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例を README から分離
 - [CHANGELOG.md](CHANGELOG.md) を追加 (Keep a Changelog 形式)
 - [DEVELOPMENT.md](DEVELOPMENT.md) にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
 
@@ -206,7 +231,7 @@
 
 - ワークスペースを `crates/clip-refiner` と `crates/clip-refiner-core` に再構成 (ルートは virtual manifest)
 - README を概要・クイックスタート中心に簡素化
-- プラットフォーム別の加工モード制限を廃止 (`RefineMode::is_supported_on_current_platform` / `normalize_platform_modes` を除去)
+- プラットフォーム別の変換モード制限を廃止 (`RefineMode::is_supported_on_current_platform` / `normalize_platform_modes` を除去)
 - 設定 `version` がアプリより新しい場合、全項目のデフォルト化ではなく `version` を現行スキーマへクランプして既存値を保持
 - クリップボードワーカー初期化失敗時に UI へ通知し、自動復旧を試みるように変更
 - OCR 前処理 (小画像の拡大・日本語空白除去) を共通化
@@ -241,7 +266,7 @@
 - 加工パイプライン (`pipeline`、最大 10 段のモード連鎖)
 - 画面 OCR (Windows のみ、`Alt+Shift+O` で範囲選択)
 - ケース変換モード 5 種 (`to-camel-case` など)
-- `excel-to-image` 加工モード (Windows のみ)
+- `excel-to-image` 変換モード (Windows のみ)
 
 ### Changed
 
@@ -251,7 +276,7 @@
 ### Fixed
 
 - トレイ操作時のお気に入り連携とサブメニュー選択でデッドロックが起きる問題
-- 非対応 OS の UI に Windows 専用加工モードが表示される問題
+- 非対応 OS の UI に Windows 専用変換モードが表示される問題
 
 ## [0.7.1] - 2026-06-27
 
@@ -272,8 +297,8 @@
 ### Added
 
 - 登録クリップ (よく使うテキストの保存・ホットキー / セレクタからコピー)
-- 正規表現加工モード 4 種 (`regex-replace` / `regex-extract` / `regex-delete` / `regex-split`)
-- `markdown-to-excel` 加工モード
+- 正規表現変換モード 4 種 (`regex-replace` / `regex-extract` / `regex-delete` / `regex-split`)
+- `markdown-to-excel` 変換モード
 - 設定スキーマのバージョン移行 (`config/migrate.rs`)
 - Linux (deb) / macOS (DMG) インストーラー生成スクリプト
 - 初回起動時に説明コメント付き `config.toml` を自動生成
@@ -368,7 +393,7 @@
 
 ### Added
 
-- `path-to-slash` / `path-to-backslash` 加工モード
+- `path-to-slash` / `path-to-backslash` 変換モード
 - 通知の種類 (モード変更 / 結果 / 一時停止) を個別に ON/OFF 可能に
 
 ### Changed
@@ -381,8 +406,8 @@
 
 - クイックセレクター (`Alt+Shift+S`、コマンドパレット風 UI)
 - グローバルホットキー (一時停止・終了・セレクター表示など)
-- パス編集系加工モード (`extract-basename` など)
-- `sort-lines-desc` 加工モード
+- パス編集系変換モード (`extract-basename` など)
+- `sort-lines-desc` 変換モード
 
 ### Changed
 
@@ -409,14 +434,14 @@
 ### Added
 
 - イベント方式のクリップボード監視 (Windows / macOS。ポーリングとの切り替え可能)
-- `markdown-to-html` 加工モード
+- `markdown-to-html` 変換モード
 
 ## [0.1.1] - 2026-01-24
 
 ### Added
 
 - YAML ↔ JSON 変換 (キー順序保持版を含む)
-- `trim-lines` 加工モード
+- `trim-lines` 変換モード
 - キー順序保持版 JSON 整形 (`json-format-preserve-order`)
 - 設定の自動保存と、読み込み失敗時の通知
 
@@ -441,7 +466,7 @@
 
 ### Changed
 
-- トレイメニューで加工モードを切り替えた際、直ちにクリップボードへ変換を適用
+- トレイメニューで変換モードを切り替えた際、直ちにクリップボードへ変換を適用
 - Windows 実行ファイルへバージョン・説明などのプロパティを埋め込み
 
 ## [0.0.1] - 2026-01-20
@@ -452,7 +477,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...develop
+[0.14.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...v0.14.0
 [0.13.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...v0.13.1
 [0.13.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...v0.13.0
 [0.12.6]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...v0.12.6

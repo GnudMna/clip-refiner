@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use std::str::FromStr;
 
 use super::defs::{RefineCategory, RefineMode};
 
-use strum::{EnumMessage, EnumProperty, IntoEnumIterator};
+use strum::{EnumMessage, IntoEnumIterator};
 
 // ======================================================================
 // メタデータ取得
@@ -65,9 +64,7 @@ impl RefineMode {
     /// 所属するカテゴリを取得する
     ///
     /// トレイメニューの階層構築に利用される
-    ///
-    /// # Panics
-    /// バリアントに `category` 属性が未定義、または値が不正な場合
+    /// 新モード追加時は本 `match` への追加がコンパイルを要求する
     ///
     /// # Arguments
     /// * `self` - この `RefineMode`
@@ -75,11 +72,40 @@ impl RefineMode {
     /// # Returns
     /// * `RefineCategory` - モードが属するカテゴリ
     pub fn category(self) -> RefineCategory {
-        let name = self
-            .get_str("category")
-            .unwrap_or_else(|| panic!("RefineMode::{self:?} に category 属性が未定義"));
-        RefineCategory::from_str(name)
-            .unwrap_or_else(|_| panic!("RefineMode::{self:?} の category={name:?} が不正"))
+        match self {
+            Self::UrlEncode | Self::UrlDecode | Self::RemoveUtm => RefineCategory::UrlActions,
+            Self::ExtractBasename
+            | Self::ExtractBasenameQuoted
+            | Self::AddPathQuotes
+            | Self::RemovePathQuotes
+            | Self::PathToSlash
+            | Self::PathToBackslash => RefineCategory::Path,
+            Self::SortLinesAsc
+            | Self::SortLinesDesc
+            | Self::RemoveEmptyLines
+            | Self::RemoveDuplicateLines => RefineCategory::LineActions,
+            Self::Trim | Self::TrimLines => RefineCategory::Trim,
+            Self::Escape | Self::Unescape | Self::RegexEscape | Self::RegexUnescape => {
+                RefineCategory::Escape
+            }
+            Self::RegexReplace | Self::RegexExtract | Self::RegexDelete | Self::RegexSplit => {
+                RefineCategory::Regex
+            }
+            Self::JsonFormat | Self::JsonFormatPreserveOrder => RefineCategory::JsonFormat,
+            Self::YamlToJson | Self::YamlToJsonPreserveOrder => RefineCategory::ToJson,
+            Self::JsonToYaml | Self::JsonToYamlPreserveOrder => RefineCategory::ToYaml,
+            Self::MarkdownToHtml => RefineCategory::Markdown,
+            Self::ExcelToMarkdown | Self::MarkdownToExcel | Self::ExcelToImage => {
+                RefineCategory::Excel
+            }
+            Self::TimestampToDatetime | Self::DatetimeToTimestamp => RefineCategory::Datetime,
+            Self::AddComma | Self::RemoveComma => RefineCategory::Number,
+            Self::ToCamelCase
+            | Self::ToSnakeCase
+            | Self::ToPascalCase
+            | Self::ToKebabCase
+            | Self::ToScreamingSnakeCase => RefineCategory::Case,
+        }
     }
 
     /// 画像をクリップボードへ書き込むモードかどうか
@@ -150,7 +176,7 @@ impl RefineMode {
     /// 加工パイプラインの表示用ラベルを生成する
     ///
     /// # Arguments
-    /// * `pipeline` - 適用順の加工モード列
+    /// * `pipeline` - 適用順の変換モード列
     ///
     /// # Returns
     /// * `String` - モード名を ` → ` で連結した文字列
@@ -172,7 +198,7 @@ mod tests {
 
     use std::str::FromStr;
 
-    use strum::{EnumProperty, IntoEnumIterator};
+    use strum::IntoEnumIterator;
 
     /// `RefineMode` のラベルとカテゴリが期待どおりであようにすること
     #[test]
@@ -233,13 +259,16 @@ mod tests {
         }
     }
 
-    /// 全 `RefineMode` に category 属性が定義されていようにすること
+    /// 全 `RefineMode` がカテゴリを返し `Normal` に属さないようにすること
+    ///
+    /// 網羅 `match` により未定義バリアントはコンパイルエラーになる。ここは回帰用の実行時確認
     #[test]
-    fn test_all_refine_modes_have_category_property() {
+    fn test_all_refine_modes_have_non_normal_category() {
         for mode in RefineMode::iter() {
-            assert!(
-                mode.get_str("category").is_some(),
-                "{mode:?} に category 属性がありません"
+            assert_ne!(
+                mode.category(),
+                RefineCategory::Normal,
+                "{mode:?} は Normal カテゴリに属してはならない"
             );
         }
     }

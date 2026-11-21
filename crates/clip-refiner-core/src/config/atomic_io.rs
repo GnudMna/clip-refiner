@@ -68,30 +68,21 @@ fn write_temp_file(tmp_path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 /// 一時ファイルを最終パスへ置き換える
 ///
-/// Windows では既存ファイルへの `rename` 上書きができないため、
-/// 既存ファイルがある場合は `.prev` 経由の 2 段階リネームを使う
+/// Windows では `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` で上書きし、
+/// 旧 `.prev` 退避方式のような「最終パスが瞬間的に存在しない」隙間を作らない
 fn replace_file(tmp: &Path, dest: &Path) -> io::Result<()> {
-    if !dest.exists() {
-        return rename_or_cleanup(tmp, dest);
+    #[cfg(windows)]
+    {
+        replace_file_windows(tmp, dest)
     }
-
-    let backup = sibling_with_suffix(dest, ".prev")?;
-    let _ = fs::remove_file(&backup);
-    fs::rename(dest, &backup)?;
-    match fs::rename(tmp, dest) {
-        Ok(()) => {
-            let _ = fs::remove_file(&backup);
-            Ok(())
-        }
-        Err(err) => {
-            let _ = fs::rename(&backup, dest);
-            let _ = fs::remove_file(tmp);
-            Err(err)
-        }
+    #[cfg(not(windows))]
+    {
+        rename_or_cleanup(tmp, dest)
     }
 }
 
 /// リネームし、失敗時は一時ファイルを削除する
+#[cfg(not(windows))]
 fn rename_or_cleanup(tmp: &Path, dest: &Path) -> io::Result<()> {
     match fs::rename(tmp, dest) {
         Ok(()) => Ok(()),
@@ -100,6 +91,50 @@ fn rename_or_cleanup(tmp: &Path, dest: &Path) -> io::Result<()> {
             Err(err)
         }
     }
+}
+
+/// Windows 向けの上書きリネーム
+#[cfg(windows)]
+fn replace_file_windows(tmp: &Path, dest: &Path) -> io::Result<()> {
+    use windows::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    use windows::core::PCWSTR;
+
+    let tmp_wide = path_to_wide(tmp)?;
+    let dest_wide = path_to_wide(dest)?;
+    let result = unsafe {
+        MoveFileExW(
+            PCWSTR(tmp_wide.as_ptr()),
+            PCWSTR(dest_wide.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(tmp);
+            Err(io::Error::other(format!(
+                "MoveFileExW による置き換えに失敗: {err}"
+            )))
+        }
+    }
+}
+
+/// `Path` を NUL 終端の UTF-16 へ変換する
+#[cfg(windows)]
+fn path_to_wide(path: &Path) -> io::Result<Vec<u16>> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    if wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "パスに NUL 文字が含まれています",
+        ));
+    }
+    wide.push(0);
+    Ok(wide)
 }
 
 // ======================================================================
@@ -141,6 +176,28 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).expect("読み取り"), "new\n");
         assert!(!dir.join("config.toml.tmp").exists());
         assert!(!dir.join("config.toml.prev").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 置き換え中も最終パスが読み取り可能であること
+    ///
+    /// 旧実装の `.prev` 退避では `rename(dest, .prev)` と `rename(tmp, dest)` の間に
+    /// 最終パスが消える隙間があり、並行読取が `ENOENT` になることがあった
+    #[test]
+    fn write_bytes_atomically_keeps_destination_readable_during_replace() {
+        let dir = unique_temp_dir("atomic-readable");
+        let path = dir.join("config.toml");
+        fs::write(&path, "old\n").expect("初期書き込み");
+
+        for i in 0..200 {
+            write_text_atomically(&path, &format!("new-{i}\n")).expect("原子的置き換え");
+            let content = fs::read_to_string(&path).expect("置き換え直後も読める");
+            assert!(
+                content.starts_with("new-"),
+                "置き換え後の内容が読めること: {content}"
+            );
+        }
 
         let _ = fs::remove_dir_all(&dir);
     }

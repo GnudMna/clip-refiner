@@ -71,11 +71,15 @@ pub struct SettingsSnapshot {
     /// 設定ウィンドウで読み書きする項目
     #[serde(flatten)]
     pub writable: SettingsWritable,
+    /// アプリバージョン (Cargo パッケージ版)
+    pub app_version: &'static str,
+    /// ポータブルモードで動作しているか
+    pub portable_mode: bool,
     /// 正規表現プレビュー用サンプル文字列 (`REGEX_PREVIEW_SAMPLE` と同一)
     pub regex_preview_sample: &'static str,
     /// お気に入り変換モード (登録順)
     pub favorite_modes: Vec<RefineMode>,
-    /// 加工モード一覧 (クイックセレクタと同形式)
+    /// 変換モード一覧 (クイックセレクタと同形式)
     pub modes: serde_json::Value,
     /// 登録クリップ一覧
     pub clips: serde_json::Value,
@@ -101,6 +105,8 @@ impl SettingsSnapshot {
 
         Self {
             writable: SettingsWritable::from_config(config),
+            app_version: env!("CARGO_PKG_VERSION"),
+            portable_mode: crate::config::is_portable_mode(),
             regex_preview_sample: REGEX_PREVIEW_SAMPLE,
             favorite_modes: config.favorite_modes.clone(),
             modes,
@@ -202,6 +208,8 @@ mod tests {
         assert_eq!(json["limits"]["intervalMinMs"], consts::MIN_INTERVAL_MS);
         assert_eq!(json["limits"]["intervalMaxMs"], consts::MAX_INTERVAL_MS);
         assert_eq!(json["regexPreviewSample"], REGEX_PREVIEW_SAMPLE);
+        assert_eq!(json["appVersion"], env!("CARGO_PKG_VERSION"));
+        assert!(json["portableMode"].is_boolean());
         assert_eq!(json["hotkeys"]["quickSelector"], "Alt+Shift+S");
         assert!(json["hotkeys"]["favoriteModeSlots"].is_array());
         assert!(json["notificationSettings"].get("notify_mode").is_none());

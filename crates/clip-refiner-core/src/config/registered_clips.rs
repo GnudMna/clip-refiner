@@ -102,7 +102,9 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     }
     write_bytes_atomically(&path, &encrypted)
         .with_context(|| format!("登録クリップファイルの書き込みに失敗: {}", path.display()))?;
-    restrict_private_file_permissions(&path)?;
+    if let Err(e) = restrict_private_file_permissions(&path) {
+        tracing::warn!("登録クリップファイルのパーミッション設定に失敗: {:?}", e);
+    }
     Ok(())
 }
 

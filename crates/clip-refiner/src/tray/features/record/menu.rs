@@ -148,29 +148,29 @@ mod tests {
         assert_eq!(label, format!("1. {SENSITIVE_SNIPPET_LABEL}"));
     }
 
-    fn build_menu_and_state() -> (TrayMenu, std::sync::Arc<AppState>) {
-        let state = std::sync::Arc::new(crate::tray::state::test_app_state());
-        state.with_config_mut(|c| c.continuous_record_enabled = true);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        (menu, state)
+    fn build_menu_and_state() -> crate::test_helpers::TrayTestContext {
+        crate::test_helpers::TrayTestContext::with_config(|c| {
+            c.continuous_record_enabled = true;
+        })
     }
 
     /// `refresh_continuous_record` が記録件数分のレコードを構築すること
     #[test]
     fn refresh_continuous_record_builds_records_for_entries() {
-        let (menu, state) = build_menu_and_state();
-        state.enqueue_continuous_record("first entry");
-        state.enqueue_continuous_record("second entry");
+        let ctx = build_menu_and_state();
+        ctx.state().enqueue_continuous_record("first entry");
+        ctx.state().enqueue_continuous_record("second entry");
 
-        menu.refresh_continuous_record(&state)
+        ctx.menu()
+            .refresh_continuous_record(ctx.state())
             .expect("連続記録メニューの更新に失敗");
 
-        let records = menu.continuous_record.records.lock_ignore_poison();
+        let records = ctx.menu().continuous_record.records.lock_ignore_poison();
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].1, 0);
         assert_eq!(records[1].1, 1);
         assert_eq!(
-            state
+            ctx.state()
                 .clipboard_session()
                 .get_continuous_record_entry(0)
                 .as_ref()
@@ -182,16 +182,18 @@ mod tests {
     /// 記録クリア後の `refresh_continuous_record` でレコードが空になるようにすること
     #[test]
     fn refresh_continuous_record_clears_records_when_empty() {
-        let (menu, state) = build_menu_and_state();
-        state.enqueue_continuous_record("only");
-        menu.refresh_continuous_record(&state)
+        let ctx = build_menu_and_state();
+        ctx.state().enqueue_continuous_record("only");
+        ctx.menu()
+            .refresh_continuous_record(ctx.state())
             .expect("連続記録メニューの更新に失敗");
 
-        state.clipboard_session().clear_continuous_record();
-        menu.refresh_continuous_record(&state)
+        ctx.state().clipboard_session().clear_continuous_record();
+        ctx.menu()
+            .refresh_continuous_record(ctx.state())
             .expect("連続記録メニューの更新に失敗");
 
-        let records = menu.continuous_record.records.lock_ignore_poison();
+        let records = ctx.menu().continuous_record.records.lock_ignore_poison();
         assert!(records.is_empty());
     }
 }

@@ -112,6 +112,18 @@ impl LayeredOverlay {
         self.presenter
             .present(hwnd, self.width, self.height, &self.bgra)
     }
+
+    /// テスト用にオーバーレイ幅を返す
+    #[cfg(test)]
+    pub(crate) fn width_for_test(&self) -> u32 {
+        self.width
+    }
+
+    /// テスト用に BGRA バッファを返す
+    #[cfg(test)]
+    pub(crate) fn bgra_for_test(&self) -> &[u8] {
+        &self.bgra
+    }
 }
 
 impl Drop for LayeredPresenter {
@@ -402,5 +414,35 @@ mod tests {
             },
         );
         assert_eq!(bgra[4 * 4 + 4 + 3], DIM_ALPHA);
+    }
+
+    /// 選択プレビューが透明穴と枠色を同時に描画すること
+    #[test]
+    fn selection_preview_draws_transparent_hole_and_border() {
+        const W: u32 = 16;
+        const H: u32 = 16;
+        let dim_row = build_dim_row(W);
+        let mut bgra = vec![0u8; (W * H * 4) as usize];
+        fill_dim_layer(&mut bgra, &dim_row, H);
+
+        let selection = SelectionRect {
+            x: 4,
+            y: 4,
+            width: 8,
+            height: 8,
+        };
+        clear_rect(&mut bgra, W, H, selection);
+        draw_border(&mut bgra, W, H, selection);
+
+        // 選択範囲の内側 (BORDER_WIDTH=2 より内側) は透明
+        let inner_offset = ((6 * W + 6) * 4) as usize;
+        assert_eq!(&bgra[inner_offset..inner_offset + 4], &[0, 0, 0, 0]);
+
+        // 枠の左上角は BORDER_PIXEL
+        let corner_offset = ((4 * W + 4) * 4) as usize;
+        assert_eq!(&bgra[corner_offset..corner_offset + 4], &BORDER_PIXEL);
+
+        // 選択外は暗転のまま
+        assert_eq!(bgra[3], DIM_ALPHA);
     }
 }

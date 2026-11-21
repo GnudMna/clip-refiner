@@ -2,12 +2,14 @@
 // 設定画面 確認ダイアログ
 // ======================================================================
 
+import { ctx } from './ctx.js';
+
 /**
  * 確認ダイアログを表示する
  *
  * @param {{ message: string, confirmLabel?: string, onConfirm?: () => void }} options
  */
-function showConfirmDialog(options) {
+export function showConfirmDialog(options) {
     const dialog = document.getElementById('confirm-dialog');
     const messageEl = document.getElementById('confirm-dialog-message');
     const okBtn = document.getElementById('confirm-dialog-ok');
@@ -17,22 +19,22 @@ function showConfirmDialog(options) {
 
     messageEl.textContent = options.message;
     okBtn.textContent = options.confirmLabel || '確認';
-    confirmDialogOnConfirm = options.onConfirm || null;
+    ctx.confirmDialogOnConfirm = options.onConfirm || null;
     dialog.hidden = false;
     okBtn.focus();
 }
 
 /** 確認ダイアログを非表示にする */
-function hideConfirmDialog() {
+export function hideConfirmDialog() {
     const dialog = document.getElementById('confirm-dialog');
     if (dialog) {
         dialog.hidden = true;
     }
-    confirmDialogOnConfirm = null;
+    ctx.confirmDialogOnConfirm = null;
 }
 
 /** 確認ダイアログのボタン・Escape キーをバインドする */
-function bindConfirmDialog() {
+export function bindConfirmDialog() {
     const dialog = document.getElementById('confirm-dialog');
     const okBtn = document.getElementById('confirm-dialog-ok');
     if (!dialog || !okBtn) {
@@ -40,7 +42,7 @@ function bindConfirmDialog() {
     }
 
     okBtn.addEventListener('click', () => {
-        const onConfirm = confirmDialogOnConfirm;
+        const onConfirm = ctx.confirmDialogOnConfirm;
         hideConfirmDialog();
         onConfirm?.();
     });

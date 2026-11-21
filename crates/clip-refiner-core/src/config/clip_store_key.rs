@@ -113,6 +113,8 @@ fn write_key_file(path: &PathBuf, key: &[u8; CIPHER_KEY_LEN]) -> Result<()> {
     let protected = dpapi::protect(key)?;
     fs::write(path, protected)
         .with_context(|| format!("登録クリップ暗号化鍵の書き込みに失敗: {}", path.display()))?;
-    restrict_private_file_permissions(path)?;
+    if let Err(e) = restrict_private_file_permissions(path) {
+        tracing::warn!("登録クリップ暗号化鍵のパーミッション設定に失敗: {:?}", e);
+    }
     Ok(())
 }

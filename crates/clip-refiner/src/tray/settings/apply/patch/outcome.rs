@@ -2,6 +2,7 @@
 // パッチ適用結果
 // ======================================================================
 /// 部分更新パッチの適用結果
+#[derive(Default)]
 #[allow(clippy::struct_excessive_bools)]
 pub(super) struct PatchApplyOutcome {
     pub(super) monitor_mode_changed: bool,

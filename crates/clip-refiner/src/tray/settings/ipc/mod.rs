@@ -1,273 +1,32 @@
-use std::sync::Arc;
+//! 設定ウィンドウからの JSON IPC 解釈・キュー投入・イベント送信
 
-use super::model::deep_merge_json_values;
+mod dispatch;
+mod message;
+mod queue;
 
 pub(crate) use super::model::SettingsPatch;
-
-use crate::config::{FavoriteMoveDirection, RegexSettings};
-use crate::refiner::RefineMode;
-use crate::tray::dispatch;
-use crate::tray::state::{AppEvent, AppState, RegexPreviewRequest};
-use crate::user_error;
-
-use serde::Deserialize;
-use tao::event_loop::EventLoopProxy;
-
-// ======================================================================
-// IPC メッセージ
-// ======================================================================
-/// 設定ウィンドウから送られる JSON IPC メッセージ
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
-enum SettingsIpcMessage {
-    /// ウィンドウを閉じる
-    Close,
-    /// 設定ファイルを既定アプリで開く
-    OpenConfig,
-    /// 設定の一部を適用する
-    Apply {
-        /// 部分更新パッチ
-        patch: Box<SettingsPatch>,
-    },
-    /// 履歴を全削除する
-    ClearHistory,
-    /// 連続記録を全削除する
-    ClearRecord,
-    /// 登録クリップをクリップボードへコピーする
-    ClipCopy {
-        /// 登録クリップのインデックス
-        index: usize,
-    },
-    /// 登録クリップを削除する
-    ClipDelete {
-        /// 登録クリップのインデックス
-        index: usize,
-    },
-    /// クリップボード内容を登録クリップとして追加する
-    ClipRegister,
-    /// お気に入り変換モードの登録状態を切り替える
-    FavoriteToggle {
-        /// 対象の変換モード
-        mode: RefineMode,
-    },
-    /// お気に入り変換モードの表示順を変更する
-    FavoriteMove {
-        /// 対象の変換モード
-        mode: RefineMode,
-        /// 移動方向 (`up` / `down`)
-        direction: IpcFavoriteMoveDirection,
-    },
-    /// 正規表現置換のプレビューを要求する
-    RegexPreview {
-        /// クライアント側リクエスト ID
-        #[serde(rename = "requestId")]
-        request_id: u64,
-        /// プレビュー対象の正規表現設定
-        settings: RegexSettings,
-    },
-}
-
-/// IPC 向けお気に入り移動方向
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum IpcFavoriteMoveDirection {
-    /// 上へ移動
-    Up,
-    /// 下へ移動
-    Down,
-}
-
-impl From<IpcFavoriteMoveDirection> for FavoriteMoveDirection {
-    fn from(direction: IpcFavoriteMoveDirection) -> Self {
-        match direction {
-            IpcFavoriteMoveDirection::Up => Self::Up,
-            IpcFavoriteMoveDirection::Down => Self::Down,
-        }
-    }
-}
-
-impl From<SettingsIpcMessage> for SettingsIpcAction {
-    fn from(message: SettingsIpcMessage) -> Self {
-        match message {
-            SettingsIpcMessage::Close => Self::Close,
-            SettingsIpcMessage::OpenConfig => Self::OpenConfigFile,
-            SettingsIpcMessage::Apply { patch } => Self::Apply(patch),
-            SettingsIpcMessage::ClearHistory => Self::ClearHistory,
-            SettingsIpcMessage::ClearRecord => Self::ClearContinuousRecord,
-            SettingsIpcMessage::ClipCopy { index } => Self::ClipCopy(index),
-            SettingsIpcMessage::ClipDelete { index } => Self::ClipDelete(index),
-            SettingsIpcMessage::ClipRegister => Self::ClipRegister,
-            SettingsIpcMessage::FavoriteToggle { mode } => Self::FavoriteToggle(mode),
-            SettingsIpcMessage::FavoriteMove { mode, direction } => {
-                Self::FavoriteMove(mode, direction.into())
-            }
-            SettingsIpcMessage::RegexPreview {
-                request_id,
-                settings,
-            } => Self::RegexPreview(request_id, settings),
-        }
-    }
-}
-
-// ======================================================================
-// IPC アクション
-// ======================================================================
-/// 設定ウィンドウから送られる IPC メッセージの種別
-#[derive(Debug, Clone)]
-pub(crate) enum SettingsIpcAction {
-    /// ウィンドウを閉じる
-    Close,
-    /// 設定ファイルを既定アプリで開く
-    OpenConfigFile,
-    /// 設定の一部を適用する
-    Apply(Box<SettingsPatch>),
-    /// 履歴を全削除する
-    ClearHistory,
-    /// 連続記録を全削除する
-    ClearContinuousRecord,
-    /// 登録クリップをクリップボードへコピーする
-    ClipCopy(usize),
-    /// 登録クリップを削除する
-    ClipDelete(usize),
-    /// クリップボード内容を登録クリップとして追加する
-    ClipRegister,
-    /// お気に入り変換モードの登録状態を切り替える
-    FavoriteToggle(RefineMode),
-    /// お気に入り変換モードの表示順を変更する
-    FavoriteMove(RefineMode, FavoriteMoveDirection),
-    /// 正規表現置換のプレビューを要求する
-    RegexPreview(u64, RegexSettings),
-}
-
-/// 適用待ちキューへ部分更新 JSON を原子的にマージして格納する
-///
-/// マージに失敗した場合は既存キューを保持し、`false` を返す
+pub(crate) use dispatch::dispatch_settings_ipc;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub(crate) fn enqueue_settings_patch_json(state: &Arc<AppState>, patch_json: &str) -> bool {
-    let mut guard = state.settings_pending().patch_mut();
-    let merged_json = if let Some(existing) = guard.as_ref() {
-        match merge_settings_patch_json_strings(existing, patch_json) {
-            Some(merged) => merged,
-            None => return false,
-        }
-    } else {
-        // 単体投入でも不正 JSON は受け付けない
-        let parsed: serde_json::Value = match serde_json::from_str(patch_json) {
-            Ok(value) => value,
-            Err(_) => return false,
-        };
-        if !parsed.is_object() {
-            return false;
-        }
-        match serde_json::to_string(&parsed) {
-            Ok(json) => json,
-            Err(_) => return false,
-        }
-    };
-    *guard = Some(merged_json);
-    true
-}
-
-/// 適用待ちキューへ部分更新を原子的にマージして格納する
-///
-/// マージに失敗した場合は既存キューを保持し、`false` を返す
-pub(crate) fn enqueue_settings_patch(state: &Arc<AppState>, patch: &SettingsPatch) -> bool {
-    let Ok(incoming_json) = serde_json::to_string(patch) else {
-        return false;
-    };
-
-    let mut guard = state.settings_pending().patch_mut();
-    let merged_json = if let Some(existing) = guard.as_ref() {
-        match merge_settings_patch_json_strings(existing, &incoming_json) {
-            Some(merged) => merged,
-            None => return false,
-        }
-    } else {
-        incoming_json
-    };
-    *guard = Some(merged_json);
-    true
-}
-
-/// 2 つの部分更新 JSON 文字列を深くマージする
-fn merge_settings_patch_json_strings(existing: &str, incoming: &str) -> Option<String> {
-    let mut base = serde_json::from_str::<serde_json::Value>(existing).ok()?;
-    let incoming_value = serde_json::from_str::<serde_json::Value>(incoming).ok()?;
-    deep_merge_json_values(&mut base, &incoming_value);
-    serde_json::to_string(&base).ok()
-}
-
-/// IPC メッセージ文字列 (JSON) を解釈する
-pub(crate) fn parse_settings_ipc_message(msg: &str) -> Option<SettingsIpcAction> {
-    serde_json::from_str::<SettingsIpcMessage>(msg)
-        .ok()
-        .map(SettingsIpcAction::from)
-}
-
-/// IPC アクションを `AppEvent` へ変換して送信する
-///
-/// 設定ウィンドウ内で完結する操作 (`Apply` / データ削除 / 設定ファイル起動) は
-/// 専用の `AppEvent` としてイベントループへ送り、`user_event` 側の共通ハンドラへ委譲する
-pub(crate) fn dispatch_settings_ipc(
-    proxy: &EventLoopProxy<AppEvent>,
-    state: &Arc<AppState>,
-    action: SettingsIpcAction,
-) {
-    match action {
-        SettingsIpcAction::Close => {
-            dispatch::send_app_event(proxy, AppEvent::HideSettingsWindow);
-        }
-        SettingsIpcAction::OpenConfigFile => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsOpenConfigFile);
-        }
-        SettingsIpcAction::Apply(patch) => {
-            if enqueue_settings_patch(state, &patch) {
-                dispatch::send_app_event(proxy, AppEvent::SettingsApplyPatch);
-            } else {
-                user_error::settings_patch_enqueue_failure().notify();
-            }
-        }
-        SettingsIpcAction::ClearHistory => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsClearHistory);
-        }
-        SettingsIpcAction::ClearContinuousRecord => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsClearContinuousRecord);
-        }
-        SettingsIpcAction::ClipCopy(index) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipCopy(index));
-        }
-        SettingsIpcAction::ClipDelete(index) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipDelete(index));
-        }
-        SettingsIpcAction::ClipRegister => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipRegister);
-        }
-        SettingsIpcAction::FavoriteToggle(mode) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestFavoriteToggle(mode));
-        }
-        SettingsIpcAction::FavoriteMove(mode, direction) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestFavoriteMove(mode, direction));
-        }
-        SettingsIpcAction::RegexPreview(request_id, settings) => {
-            state
-                .settings_pending()
-                .set_regex_preview_request(RegexPreviewRequest {
-                    request_id,
-                    settings,
-                });
-            dispatch::send_app_event(proxy, AppEvent::SettingsRegexPreview);
-        }
-    }
-}
+pub(crate) use message::SettingsIpcAction;
+pub(crate) use message::parse_settings_ipc_message;
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use queue::{enqueue_settings_patch, enqueue_settings_patch_json};
 
 // ======================================================================
 // テスト
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Arc;
 
-    use crate::config::NotificationSettings;
+    use super::queue::merge_settings_patch_json_strings;
+    use super::{
+        SettingsIpcAction, SettingsPatch, enqueue_settings_patch, enqueue_settings_patch_json,
+        parse_settings_ipc_message,
+    };
+
+    use crate::config::{FavoriteMoveDirection, NotificationSettings};
+    use crate::refiner::RefineMode;
 
     /// JSON エンベロープ形式の `apply` を解釈できるようにすること
     #[test]
@@ -580,6 +339,19 @@ mod tests {
         assert_eq!(settings.replacement, "X");
         assert!(!settings.case_insensitive);
         assert!(settings.multiline);
+    }
+
+    /// `check-update` / `apply-update` メッセージを解釈できるようにすること
+    #[test]
+    fn parse_ipc_update_messages() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"check-update"}"#),
+            Some(SettingsIpcAction::CheckUpdate)
+        ));
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"apply-update"}"#),
+            Some(SettingsIpcAction::ApplyUpdate)
+        ));
     }
 
     /// JS から送る `apply` JSON をキュー投入から取り出しまで往復できるようにすること

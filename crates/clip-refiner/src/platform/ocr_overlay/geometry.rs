@@ -23,6 +23,16 @@ pub(crate) fn lparam_y(lparam: LPARAM) -> i32 {
     i32::from(u16::try_from(high).unwrap_or(0))
 }
 
+/// クライアント座標からマウスメッセージ用 `LPARAM` を組み立てる
+///
+/// `lparam_x` / `lparam_y` と同じく下位 16 bit を座標として扱う
+#[cfg(test)]
+pub(crate) fn make_lparam(x: i32, y: i32) -> LPARAM {
+    let low = x.cast_unsigned() & 0xFFFF;
+    let high = y.cast_unsigned() & 0xFFFF;
+    LPARAM(isize::try_from((high << 16) | low).unwrap_or(0))
+}
+
 /// 2点から正規化した選択矩形を作る
 pub(crate) fn normalize_rect(start: (i32, i32), end: (i32, i32)) -> SelectionRect {
     let x1 = start.0.min(end.0);
@@ -128,5 +138,13 @@ mod tests {
         assert_eq!(rect.y, 250);
         assert_eq!(rect.width, 300);
         assert_eq!(rect.height, 400);
+    }
+
+    /// `make_lparam` と `lparam_x` / `lparam_y` が往復できるようにすること
+    #[test]
+    fn make_lparam_roundtrips_coordinates() {
+        let lparam = make_lparam(12, 34);
+        assert_eq!(lparam_x(lparam), 12);
+        assert_eq!(lparam_y(lparam), 34);
     }
 }

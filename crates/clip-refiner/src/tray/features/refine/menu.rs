@@ -197,7 +197,7 @@ impl RefineMenu {
     /// お気に入りサブメニューの内容を再構築する
     ///
     /// # Arguments
-    /// * `active_modes` - 有効な加工モード集合
+    /// * `active_modes` - 有効な変換モード集合
     /// * `favorite_modes` - お気に入り登録済みモード
     /// * `hotkeys` - ホットキー設定
     ///

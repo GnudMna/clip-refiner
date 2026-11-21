@@ -51,7 +51,7 @@ fn polling_skips_own_write_back_echo_once() {
     assert_eq!(harness.clipboard_text(), "hello");
 }
 
-/// 設定の加工モード変更が次の監視加工に反映されるようにすること
+/// 設定の変換モード変更が次の監視加工に反映されるようにすること
 #[test]
 fn monitor_applies_updated_mode_from_snapshot() {
     let mut harness = ClipboardHarness::with_text("a%2Fb").with_mode(RefineMode::UrlDecode);

@@ -15,7 +15,7 @@ use tao::event_loop::EventLoopProxy;
 // ======================================================================
 /// セレクター系 UI ウィンドウの束
 pub struct SelectorUi {
-    /// 加工モード選択用クイックセレクター
+    /// 変換モード選択用クイックセレクター
     pub quick: QuickSelectorWindow,
     /// 登録クリップ選択用セレクター
     pub clip: ClipSelectorWindow,

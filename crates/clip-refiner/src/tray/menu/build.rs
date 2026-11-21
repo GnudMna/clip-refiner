@@ -44,6 +44,7 @@ impl TrayMenu {
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
+        let check_update_item = MenuItem::new("更新を確認…", true, None);
         let open_settings_window_item = MenuItem::new("設定を開く", true, None);
         let retry_clipboard_worker_item = MenuItem::new("クリップボード監視を再開", true, None);
         retry_clipboard_worker_item.set_enabled(false);
@@ -52,7 +53,7 @@ impl TrayMenu {
         // メインメニューの組み立て
         // クリップボード加工: 変換モード / 監視 / 登録クリップ
         // 補助機能: 履歴 / 連続記録 / 通知
-        // 設定: 設定ウィンドウ
+        // 設定: 更新確認 / 設定ウィンドウ
         // 操作: 監視再開 / 一時停止 / 終了
         let tray_menu = Menu::new();
         tray_menu
@@ -67,6 +68,7 @@ impl TrayMenu {
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &check_update_item as &dyn tray_icon::menu::IsMenuItem,
                 &open_settings_window_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &retry_clipboard_worker_item as &dyn tray_icon::menu::IsMenuItem,
@@ -95,6 +97,7 @@ impl TrayMenu {
             continuous_record,
             clips,
             notification,
+            check_update_item,
             open_settings_window_item,
             retry_clipboard_worker_item,
         };

@@ -24,8 +24,18 @@ pub fn assert_test_hotkeys_register() {
 ///
 /// # Returns
 /// * `bool` - Run キーに登録されている場合は `true`
+#[must_use]
 pub fn query_autostart_enabled() -> bool {
     crate::platform::autostart::is_enabled()
+}
+
+/// 現在の環境で `WebView2` Runtime が検出できるかどうかを返す
+///
+/// # Returns
+/// * `bool` - レジストリ上 Runtime が利用可能な場合は `true`
+#[must_use]
+pub fn query_webview2_runtime_available() -> bool {
+    crate::platform::webview2::is_runtime_available()
 }
 
 /// 本番デフォルトや他アプリと衝突しにくい F キー割り当てを返す

@@ -17,9 +17,11 @@ mod unknown_keys;
 
 pub use crate::consts::CONFIG_VERSION;
 pub use crate::error::ConfigError;
+#[cfg(any(test, debug_assertions))]
+pub use paths::{begin_capture_open_path_for_test, take_captured_open_path_for_test};
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub use paths::{clear_test_config_dir, set_test_config_dir};
-pub use paths::{get_config_dir, open_config_file};
+pub use paths::{get_config_dir, is_portable_mode, open_config_file};
 pub use persistence::{
     ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
     disk_config_modified_time,

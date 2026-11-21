@@ -137,36 +137,18 @@ pub(super) fn refresh_plan_after_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::mpsc;
-
     use super::*;
 
     use super::super::feedback::should_notify_apply_error_via_desktop;
 
     use crate::config::NotificationSettings;
     use crate::refiner::RefineMode;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
-    use crate::tray::worker::ClipboardWorkerHandle;
-
-    fn with_test_worker(
-        state: &Arc<AppState>,
-    ) -> (
-        Arc<ClipboardWorkerHandle>,
-        mpsc::Receiver<crate::tray::worker::ClipboardCommand>,
-    ) {
-        let (tx, rx) = mpsc::channel();
-        let worker = ClipboardWorkerHandle::for_test(Arc::clone(state), tx);
-        (worker, rx)
-    }
+    use crate::test_helpers::TrayTestContext;
 
     /// `apply_settings_patch_without_ui` が IPC 相当の変更を一括反映すること
     #[test]
     fn apply_without_ui_updates_config_from_merged_patch() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, _rx) = with_test_worker(&state);
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             interval_ms: Some(2_000),
             history_enabled: Some(true),
@@ -174,21 +156,19 @@ mod tests {
         };
 
         assert!(
-            apply_settings_patch_without_ui(&patch, &state, &menu, None, &worker)
+            apply_settings_patch_without_ui(&patch, ctx.state(), ctx.menu(), None, ctx.worker(),)
                 .refresh
                 .is_none()
         );
-        assert_eq!(state.with_config(|c| c.interval_ms), 2_000);
-        assert!(state.with_config(|c| c.history_enabled));
-        assert!(menu.history.enabled_item.is_checked());
+        assert_eq!(ctx.state().with_config(|c| c.interval_ms), 2_000);
+        assert!(ctx.state().with_config(|c| c.history_enabled));
+        assert!(ctx.menu().history.enabled_item.is_checked());
     }
 
     /// ウィンドウ非表示後の無効な正規表現パッチがフォールバック通知対象であるようにすること
     #[test]
     fn invalid_regex_feedback_targets_desktop_fallback_after_hide() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, _rx) = with_test_worker(&state);
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             regex: Some(crate::config::RegexSettings {
                 pattern: "[unclosed".to_string(),
@@ -197,7 +177,8 @@ mod tests {
             ..SettingsPatch::default()
         };
 
-        let result = apply_settings_patch_without_ui(&patch, &state, &menu, None, &worker);
+        let result =
+            apply_settings_patch_without_ui(&patch, ctx.state(), ctx.menu(), None, ctx.worker());
         let feedback = result
             .feedback
             .expect("無効パターンでエラーフィードバックが返ること");

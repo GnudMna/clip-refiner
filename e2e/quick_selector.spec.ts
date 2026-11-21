@@ -26,6 +26,26 @@ test.describe('クイックセレクター WebView', () => {
     await expect(first.locator('.favorite-button.is-favorite')).toBeVisible();
   });
 
+  test('矢印キーで選択行が移動し Enter で閉じる', async ({ page }) => {
+    const items = page.locator('#results .item');
+    await expect(items.first()).toBeVisible();
+    await page.locator('#input').click();
+    // 起動時は現在モード行が選択されていることがある
+    await page.keyboard.press('Home');
+    await expect(items.nth(0)).toHaveClass(/selected/);
+
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(1)).toHaveClass(/selected/);
+    await expect(items.nth(0)).not.toHaveClass(/selected/);
+
+    const closed = page.waitForEvent('close', { timeout: 15_000 });
+    await Promise.all([
+      closed,
+      page.keyboard.press('Enter').catch(() => undefined),
+    ]);
+    expect(page.isClosed()).toBe(true);
+  });
+
   test('Escape でセレクターが閉じる', async ({ page }) => {
     await expect(page.locator('#container')).toBeVisible();
     const closed = page.waitForEvent('close', { timeout: 15_000 });
@@ -35,5 +55,20 @@ test.describe('クイックセレクター WebView', () => {
       page.keyboard.press('Escape').catch(() => undefined),
     ]);
     expect(page.isClosed()).toBe(true);
+  });
+});
+
+test.describe('クイックセレクター お気に入り並び', () => {
+  test.use({
+    e2eWindow: 'quick',
+    harnessOptions: { favoriteModes: ['UrlDecode', 'Trim'] },
+  });
+
+  test('config のお気に入り順が先頭行に反映される', async ({ page }) => {
+    const first = page.locator('#results .item').first();
+    await expect(first).toBeVisible();
+    // UrlDecode が favoriteIndex 0
+    await expect(first).toContainText('URLデコード');
+    await expect(first.locator('.favorite-button.is-favorite')).toBeVisible();
   });
 });

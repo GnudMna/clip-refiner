@@ -1,4 +1,4 @@
-import { test, expect, readConfigToml, writeConfigToml } from './fixtures';
+import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml } from './fixtures';
 
 test.use({ e2eWindow: 'settings' });
 
@@ -8,6 +8,11 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#sidebar .nav-btn[data-tab="general"]')).toBeVisible();
     await expect(page.locator('#sidebar .nav-btn[data-tab="shortcuts"]')).toBeVisible();
     await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
+  });
+
+  test('ヘッダーに config.toml を開くボタンがある', async ({ page }) => {
+    await expect(page.locator('#open-config-btn')).toBeVisible();
+    await expect(page.locator('#open-config-btn')).toContainText(/config\.toml/);
   });
 
   test('監視タブで周期入力ができる', async ({ page }) => {
@@ -67,6 +72,19 @@ test.describe('設定 WebView', () => {
   test('ショートカットタブに入力欄がある', async ({ page }) => {
     await page.locator('#sidebar .nav-btn[data-tab="shortcuts"]').click();
     await expect(page.locator('#hotkey-quick-selector')).toBeVisible();
+  });
+
+  test('お気に入りの並べ替えが config.toml に保存される', async ({ page, configDir }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="favorites"]').click();
+    await expect(page.locator('.favorite-up[data-mode="UrlDecode"]')).toBeVisible();
+
+    expect(parseFavoriteModes(readConfigToml(configDir))).toEqual(['Trim', 'UrlDecode']);
+
+    await page.locator('.favorite-up[data-mode="UrlDecode"]').click();
+
+    await expect
+      .poll(() => parseFavoriteModes(readConfigToml(configDir)), { timeout: 10_000 })
+      .toEqual(['UrlDecode', 'Trim']);
   });
 
   test('閉じるボタンで設定ウィンドウが閉じる', async ({ page }) => {

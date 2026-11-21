@@ -2,6 +2,23 @@
 // 設定画面 描画・Rust 連携エントリ
 // ======================================================================
 
+import { bindConfirmDialog } from './confirm_dialog.js';
+import { ctx } from './ctx.js';
+import { bindActivePanelEvents, bindContentDelegation } from './events.js';
+import { closeWindow, flushPendingApply, openConfigFile, showApplyFeedback } from './ipc_apply.js';
+import { PANEL_RENDERERS, ensureSidebar } from './panels.js';
+import { handleRegexPreview, readRegexFromDom } from './regex_feedback.js';
+import {
+    invalidateAllPanels,
+    invalidatePanel,
+    isContentEditing,
+    showActivePanel,
+    syncHotkeyInputsFromState,
+    syncServerFields,
+} from './shared.js';
+
+import SettingsSharedLogic from './shared_logic.js';
+
 /**
  * 指定タブのパネル HTML を生成する (escapeHtml 等でサニタイズ済み)
  *
@@ -21,32 +38,32 @@ function resolvePanelInnerHtml(tabId) {
 function renderActivePanel(force = false) {
     bindContentDelegation();
     const content = document.getElementById('content');
-    const panelId = 'panel-' + activeTab;
+    const panelId = 'panel-' + ctx.activeTab;
 
-    if (!force && renderedPanels.has(activeTab)) {
+    if (!force && ctx.renderedPanels.has(ctx.activeTab)) {
         showActivePanel();
         return;
     }
 
     const existing = document.getElementById(panelId);
     if (existing) {
-        existing.outerHTML = resolvePanelInnerHtml(activeTab);
+        existing.outerHTML = resolvePanelInnerHtml(ctx.activeTab);
     } else {
-        content.insertAdjacentHTML('beforeend', resolvePanelInnerHtml(activeTab));
+        content.insertAdjacentHTML('beforeend', resolvePanelInnerHtml(ctx.activeTab));
     }
 
-    if (!boundPanels.has(activeTab)) {
+    if (!ctx.boundPanels.has(ctx.activeTab)) {
         bindActivePanelEvents();
-        boundPanels.add(activeTab);
+        ctx.boundPanels.add(ctx.activeTab);
     }
 
-    renderedPanels.add(activeTab);
+    ctx.renderedPanels.add(ctx.activeTab);
     showActivePanel();
 }
 
 /** アクティブタブのパネルを破棄して再描画する */
 function refreshActivePanel() {
-    invalidatePanel(activeTab);
+    invalidatePanel(ctx.activeTab);
     renderActivePanel(true);
 }
 
@@ -55,7 +72,7 @@ function refreshActivePanel() {
  *
  * @param {boolean} [forcePanel=false]
  */
-function render(forcePanel = false) {
+export function render(forcePanel = false) {
     ensureSidebar();
     renderActivePanel(forcePanel);
 }
@@ -69,7 +86,7 @@ function render(forcePanel = false) {
 window.loadSettings = function loadSettings(snapshot, options) {
     const opts = options || {};
     const wasEditing = isContentEditing();
-    const editingTab = wasEditing ? activeTab : null;
+    const editingTab = wasEditing ? ctx.activeTab : null;
 
     if (editingTab === 'regex' && !opts.externalSync) {
         snapshot = Object.assign({}, snapshot, {
@@ -77,7 +94,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
         });
     }
 
-    state = snapshot;
+    ctx.state = snapshot;
 
     if (opts.externalSync) {
         showApplyFeedback({
@@ -86,23 +103,28 @@ window.loadSettings = function loadSettings(snapshot, options) {
         });
     }
 
-    if (clipRegisterPending && activeTab !== 'clips') {
-        clipRegisterPending = false;
+    if (ctx.clipRegisterPending && ctx.activeTab !== 'clips') {
+        ctx.clipRegisterPending = false;
         ensureSidebar();
         syncServerFields();
         return;
     }
 
     if (
-        SettingsSharedLogic.shouldFullRenderOnLoad(opts, wasEditing, activeTab, clipRegisterPending)
+        SettingsSharedLogic.shouldFullRenderOnLoad(
+            opts,
+            wasEditing,
+            ctx.activeTab,
+            ctx.clipRegisterPending
+        )
     ) {
-        clipRegisterPending = false;
+        ctx.clipRegisterPending = false;
         invalidateAllPanels();
         render(true);
         return;
     }
 
-    clipRegisterPending = false;
+    ctx.clipRegisterPending = false;
     ensureSidebar();
     syncServerFields();
 };
@@ -113,12 +135,12 @@ window.loadSettings = function loadSettings(snapshot, options) {
  * @param {Array<Record<string, unknown>>} clips
  */
 window.updateClips = function updateClips(clips) {
-    if (!state) {
+    if (!ctx.state) {
         return;
     }
-    state.clips = clips;
-    clipRegisterPending = false;
-    if (activeTab === 'clips') {
+    ctx.state.clips = clips;
+    ctx.clipRegisterPending = false;
+    if (ctx.activeTab === 'clips') {
         refreshActivePanel();
     }
 };
@@ -129,23 +151,24 @@ window.updateClips = function updateClips(clips) {
  * @param {{ favoriteModes?: string[], hotkeys?: Record<string, unknown>, shortcuts?: Array<{ binding: string, label: string }> }} payload
  */
 window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payload) {
-    if (!state) {
+    if (!ctx.state) {
         return;
     }
-    const previousFavoriteCount = (state.favoriteModes || []).length;
+    const previousFavoriteCount = (ctx.state.favoriteModes || []).length;
     const nextFavoriteModes = payload.favoriteModes || [];
     const wasEditingShortcuts =
-        activeTab === 'shortcuts' && document.activeElement?.classList?.contains('shortcut-input');
+        ctx.activeTab === 'shortcuts' &&
+        document.activeElement?.classList?.contains('shortcut-input');
 
-    state.favoriteModes = nextFavoriteModes;
+    ctx.state.favoriteModes = nextFavoriteModes;
     if (payload.hotkeys) {
-        state.hotkeys = payload.hotkeys;
+        ctx.state.hotkeys = payload.hotkeys;
     }
-    state.shortcuts = payload.shortcuts || [];
+    ctx.state.shortcuts = payload.shortcuts || [];
 
-    if (activeTab === 'favorites') {
+    if (ctx.activeTab === 'favorites') {
         refreshActivePanel();
-    } else if (activeTab === 'shortcuts') {
+    } else if (ctx.activeTab === 'shortcuts') {
         const action = SettingsSharedLogic.resolveShortcutsDiffUpdate({
             wasEditingShortcuts,
             previousFavoriteCount,
@@ -194,6 +217,36 @@ window.onApplyFeedback = showApplyFeedback;
  * @type {typeof handleRegexPreview}
  */
 window.onRegexPreview = handleRegexPreview;
+
+/**
+ * 更新確認 IPC 応答を処理する
+ *
+ * Rust から `window.onUpdateCheck(payload)` として呼び出す
+ *
+ * @param {Record<string, unknown>} payload
+ */
+window.onUpdateCheck = function onUpdateCheck(payload) {
+    ctx.updateBusy = false;
+    ctx.updateStatus = payload || null;
+    if (ctx.activeTab === 'general') {
+        refreshActivePanel();
+    }
+};
+
+/**
+ * 更新適用 IPC 応答を処理する
+ *
+ * Rust から `window.onUpdateApply(payload)` として呼び出す
+ *
+ * @param {Record<string, unknown>} payload
+ */
+window.onUpdateApply = function onUpdateApply(payload) {
+    ctx.updateBusy = false;
+    ctx.updateStatus = payload || null;
+    if (ctx.activeTab === 'general') {
+        refreshActivePanel();
+    }
+};
 
 bindConfirmDialog();
 document.getElementById('open-config-btn').addEventListener('click', openConfigFile);

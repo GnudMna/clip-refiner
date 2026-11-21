@@ -1,5 +1,5 @@
 #[cfg(any(test, debug_assertions))]
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -15,6 +15,10 @@ use crate::error::ConfigError;
 #[cfg(any(test, debug_assertions))]
 thread_local! {
     static TEST_CONFIG_DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    /// 既定アプリ起動を抑止してパスを記録するかどうか
+    static OPEN_PATH_CAPTURE_ENABLED: Cell<bool> = const { Cell::new(false) };
+    /// キャプチャ中に開こうとしたパス
+    static CAPTURED_OPEN_PATH: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 // ======================================================================
@@ -25,7 +29,8 @@ thread_local! {
 /// 優先順位:
 /// 1. 環境変数 `CLIP_REFINER_CONFIG_DIR` (非空のとき)
 /// 2. テスト用上書き (`set_test_config_dir`, debug/test のみ)
-/// 3. `%APPDATA%` 配下の `ClipRefiner`
+/// 3. ポータブルモード (実行ファイル隣に `portable` があるとき `<exe_dir>/data`)
+/// 4. `%APPDATA%` 配下の `ClipRefiner`
 ///
 /// # Returns
 /// * `Result<PathBuf>` - 設定ディレクトリのパス
@@ -42,7 +47,30 @@ pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
         return Ok(dir);
     }
 
+    if let Some(dir) = portable_config_dir() {
+        return Ok(dir);
+    }
+
     Ok(config_base_dir()?.join(consts::APP_NAME))
+}
+
+/// 現在の解決結果がポータブルモード由来かどうかを返す
+///
+/// 環境変数またはテスト用上書きが有効なときは `false`
+///
+/// # Returns
+/// * `bool` - ポータブルの `data` ディレクトリを使うとき `true`
+pub fn is_portable_mode() -> bool {
+    if env_config_dir_override().is_some() {
+        return false;
+    }
+
+    #[cfg(any(test, debug_assertions))]
+    if test_config_dir_override().is_some() {
+        return false;
+    }
+
+    portable_config_dir().is_some()
 }
 
 /// 環境変数 `CLIP_REFINER_CONFIG_DIR` による上書き先を返す
@@ -52,6 +80,30 @@ fn env_config_dir_override() -> Option<PathBuf> {
         return None;
     }
     Some(PathBuf::from(value))
+}
+
+/// 実行ファイル隣のポータブル設定ディレクトリを返す
+fn portable_config_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    portable_config_dir_for_exe_dir(exe_dir)
+}
+
+/// 実行ファイルディレクトリからポータブル設定ディレクトリを解決する
+///
+/// マーカーファイル `portable` があるときのみ `Some(<exe_dir>/data)` を返す
+///
+/// # Arguments
+/// * `exe_dir` - 実行ファイルが置かれているディレクトリ
+///
+/// # Returns
+/// * `Option<PathBuf>` - ポータブル時の設定ディレクトリ。非ポータブルなら `None`
+fn portable_config_dir_for_exe_dir(exe_dir: &Path) -> Option<PathBuf> {
+    let marker = exe_dir.join(consts::PORTABLE_MARKER_FILE);
+    if !marker.is_file() {
+        return None;
+    }
+    Some(exe_dir.join(consts::PORTABLE_DATA_DIR_NAME))
 }
 
 /// 設定ディレクトリ基底パス (`%APPDATA%`) を返す
@@ -94,12 +146,14 @@ fn test_config_dir_override() -> Option<PathBuf> {
 /// * `Result<PathBuf>` - `config.toml` の完全なパス
 ///
 /// # Errors
-/// 設定ディレクトリの作成またはパーミッション設定に失敗した場合
+/// 設定ディレクトリの作成に失敗した場合
 pub fn get_config_file_path() -> Result<PathBuf, ConfigError> {
     let config_dir = get_config_dir()?;
     fs::create_dir_all(&config_dir).map_err(ConfigError::CreateDir)?;
-    restrict_private_dir_permissions(&config_dir)
-        .map_err(|e| ConfigError::DirPermissions(e.to_string()))?;
+    // FAT / exFAT など ACL 非対応ボリュームでは失敗しうる (ポータブル USB 向けに継続)
+    if let Err(e) = restrict_private_dir_permissions(&config_dir) {
+        tracing::warn!("設定ディレクトリのパーミッション設定に失敗: {:?}", e);
+    }
     Ok(config_dir.join("config.toml"))
 }
 
@@ -138,8 +192,33 @@ pub fn open_config_file() -> Result<(), ConfigError> {
     open_path_in_default_application(&path)
 }
 
+/// テスト時に既定アプリ起動を抑止し、開こうとしたパスの記録を開始する
+///
+/// [`take_captured_open_path_for_test`] で記録を取得して終了する
+#[cfg(any(test, debug_assertions))]
+pub fn begin_capture_open_path_for_test() {
+    CAPTURED_OPEN_PATH.with(|cell| *cell.borrow_mut() = None);
+    OPEN_PATH_CAPTURE_ENABLED.with(|cell| cell.set(true));
+}
+
+/// 記録した起動対象パスを取り出し、キャプチャを終了する
+///
+/// # Returns
+/// * `Option<PathBuf>` - キャプチャ中に開こうとしたパス。未起動なら `None`
+#[cfg(any(test, debug_assertions))]
+pub fn take_captured_open_path_for_test() -> Option<PathBuf> {
+    OPEN_PATH_CAPTURE_ENABLED.with(|cell| cell.set(false));
+    CAPTURED_OPEN_PATH.with(|cell| cell.borrow_mut().take())
+}
+
 /// パスを既定アプリケーションで開く
 fn open_path_in_default_application(path: &Path) -> Result<(), ConfigError> {
+    #[cfg(any(test, debug_assertions))]
+    if OPEN_PATH_CAPTURE_ENABLED.with(Cell::get) {
+        CAPTURED_OPEN_PATH.with(|cell| *cell.borrow_mut() = Some(path.to_path_buf()));
+        return Ok(());
+    }
+
     let path_str = path.to_str().ok_or(ConfigError::InvalidPath)?;
 
     std::process::Command::new("cmd")
@@ -217,6 +296,87 @@ mod tests {
                 fs::remove_file(&path).expect("remove config");
             }
             assert_eq!(config_file_modified_time().expect("mtime"), None);
+        });
+    }
+
+    /// マーカー `portable` があるとき実行ファイル隣の `data` を返すこと
+    #[test]
+    fn portable_config_dir_uses_data_when_marker_exists() {
+        let exe_dir = std::env::temp_dir().join(format!(
+            "clip-refiner-portable-marker-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&exe_dir);
+        fs::create_dir_all(&exe_dir).expect("create exe dir");
+        fs::write(exe_dir.join(consts::PORTABLE_MARKER_FILE), b"").expect("write marker");
+
+        let resolved = portable_config_dir_for_exe_dir(&exe_dir);
+        let _ = fs::remove_dir_all(&exe_dir);
+
+        assert_eq!(resolved, Some(exe_dir.join(consts::PORTABLE_DATA_DIR_NAME)));
+    }
+
+    /// マーカーが無いときはポータブル設定ディレクトリを返さないこと
+    #[test]
+    fn portable_config_dir_none_without_marker() {
+        let exe_dir =
+            std::env::temp_dir().join(format!("clip-refiner-portable-none-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&exe_dir);
+        fs::create_dir_all(&exe_dir).expect("create exe dir");
+
+        let resolved = portable_config_dir_for_exe_dir(&exe_dir);
+        let _ = fs::remove_dir_all(&exe_dir);
+
+        assert_eq!(resolved, None);
+    }
+
+    /// マーカーがディレクトリのときはポータブルとみなさないこと
+    #[test]
+    fn portable_config_dir_none_when_marker_is_directory() {
+        let exe_dir = std::env::temp_dir().join(format!(
+            "clip-refiner-portable-dir-marker-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&exe_dir);
+        fs::create_dir_all(&exe_dir).expect("create exe dir");
+        fs::create_dir_all(exe_dir.join(consts::PORTABLE_MARKER_FILE)).expect("create dir marker");
+
+        let resolved = portable_config_dir_for_exe_dir(&exe_dir);
+        let _ = fs::remove_dir_all(&exe_dir);
+
+        assert_eq!(resolved, None);
+    }
+
+    /// 環境変数上書き中は `is_portable_mode` が偽になること
+    #[test]
+    fn is_portable_mode_false_with_env_override() {
+        let dir =
+            std::env::temp_dir().join(format!("clip-refiner-portable-env-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        // SAFETY: テストプロセス内でのみ環境変数を一時変更する
+        unsafe {
+            std::env::set_var(consts::ENV_CONFIG_DIR, &dir);
+        }
+        let portable = is_portable_mode();
+        unsafe {
+            std::env::remove_var(consts::ENV_CONFIG_DIR);
+        }
+        let _ = fs::remove_dir_all(&dir);
+        assert!(!portable);
+    }
+
+    /// `open_config_file` がキャプチャ時に実プロセスを起動せずパスを記録すること
+    #[test]
+    fn open_config_file_captures_path_without_spawning() {
+        with_temp_config_dir(|| {
+            let expected = get_config_file_path().expect("get_config_file_path");
+            fs::write(&expected, b"version = 2\n").expect("write config");
+
+            begin_capture_open_path_for_test();
+            open_config_file().expect("open_config_file");
+            let opened = take_captured_open_path_for_test();
+
+            assert_eq!(opened.as_deref(), Some(expected.as_path()));
         });
     }
 }

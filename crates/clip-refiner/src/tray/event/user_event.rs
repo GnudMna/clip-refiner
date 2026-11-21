@@ -2,6 +2,9 @@ use std::time::Instant;
 
 use super::super::dispatch;
 use super::super::e2e;
+use super::super::features::{
+    handle_update_apply_finished, handle_update_check_finished, start_update_check,
+};
 use super::super::hotkey::{HotkeyEventContext, notify_registration_failures};
 use super::super::settings::{
     refresh_settings_clips, refresh_settings_favorites_and_shortcuts, refresh_settings_window,
@@ -15,7 +18,10 @@ use super::{
     reload_config_with_notification, toggle_favorite_mode, update_refine,
 };
 use crate::config::{AppConfig, FavoriteMoveDirection};
+use crate::platform::update::UpdateCheckSource;
 use crate::refiner::RefineMode;
+
+use tao::event_loop::ControlFlow;
 
 // ======================================================================
 // ユーザーイベント処理
@@ -78,7 +84,20 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         | AppEvent::SettingsClearHistory
         | AppEvent::SettingsClearContinuousRecord
         | AppEvent::SettingsOpenConfigFile
-        | AppEvent::SettingsRegexPreview => handle_settings_window_event(ctx, event),
+        | AppEvent::SettingsRegexPreview
+        | AppEvent::SettingsCheckUpdate
+        | AppEvent::SettingsApplyUpdate => handle_settings_window_event(ctx, event),
+        AppEvent::TrayCheckUpdate => {
+            let _ = start_update_check(ctx.state, UpdateCheckSource::Tray, Some(ctx.settings));
+        }
+        AppEvent::UpdateCheckFinished => {
+            handle_update_check_finished(ctx.state, ctx.settings);
+        }
+        AppEvent::UpdateApplyFinished => {
+            if handle_update_apply_finished(ctx.state, ctx.settings) {
+                *ctx.control_flow = ControlFlow::Exit;
+            }
+        }
         AppEvent::Hotkey(hotkey_event) => handle_hotkey_event(ctx, hotkey_event),
     }
 }
@@ -264,19 +283,17 @@ fn reload_hotkeys(ctx: &mut AppEventContext<'_>) {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::sync::mpsc;
     use std::time::Instant;
 
     use super::super::context::AppEventContext;
     use super::handle_user_event;
 
     use crate::config::HotkeySettings;
+    use crate::test_helpers::{stub_worker, test_app_state_arc, test_tray_menu};
     use crate::tray::hotkey::HotkeyHandler;
-    use crate::tray::menu::TrayMenu;
     use crate::tray::selector::SelectorUi;
     use crate::tray::settings::SettingsWindow;
-    use crate::tray::state::{AppEvent, test_app_state};
-    use crate::tray::worker::ClipboardWorkerHandle;
+    use crate::tray::state::AppEvent;
 
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tao::platform::windows::EventLoopBuilderExtWindows;
@@ -289,10 +306,9 @@ mod tests {
         let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
             .with_any_thread(true)
             .build();
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (tx, _) = mpsc::channel();
-        let clipboard_worker = Arc::new(ClipboardWorkerHandle::for_test(Arc::clone(&state), tx));
+        let state = test_app_state_arc();
+        let menu = test_tray_menu(&state);
+        let (clipboard_worker, _) = stub_worker(&state);
         let selectors = SelectorUi::new(&state.proxy, Arc::clone(&clipboard_worker));
         let settings = SettingsWindow::new_shell(state.proxy.clone(), Arc::clone(&state));
 

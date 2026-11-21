@@ -81,7 +81,7 @@ pub fn start_oneshot_ipc_for_test(
 ///
 /// # Arguments
 /// * `pipe_name` - 接続先パイプ名
-/// * `pipeline` - 適用する加工モード列
+/// * `pipeline` - 適用する変換モード列
 /// * `ctx` - 加工コンテキスト
 ///
 /// # Returns

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::config::{self, AppConfig};
@@ -11,7 +12,7 @@ use crate::tray::{self, E2eWindow};
 use crate::user_error::fatal_startup;
 use crate::{log_error, log_info, log_warn};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
@@ -30,6 +31,10 @@ pub fn run() -> Result<()> {
     setup_console();
 
     let args = Args::parse();
+    if args.apply_portable_update {
+        return run_portable_update_helper(&args);
+    }
+
     if args.e2e_window.is_some() {
         tray::e2e::activate();
     }
@@ -104,7 +109,7 @@ struct Args {
     /// 実行モードの指定(ワンショット実行用)
     #[arg(short = 'm', long = "mode", value_parser = parse_refine_mode)]
     mode: Option<RefineMode>,
-    /// ワンショットで順に適用する加工モード列 (`--mode` より優先)
+    /// ワンショットで順に適用する変換モード列 (`--mode` より優先)
     #[arg(long = "pipeline", value_parser = parse_refine_mode, num_args = 1..)]
     pipeline: Vec<RefineMode>,
     /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
@@ -123,9 +128,54 @@ struct Args {
     #[arg(
         long = "e2e-window",
         value_enum,
-        conflicts_with_all = ["mode", "pipeline"]
+        conflicts_with_all = ["mode", "pipeline", "apply_portable_update"]
     )]
     e2e_window: Option<E2eWindow>,
+    /// ポータブル更新の差し替えヘルパー (内部用)
+    #[arg(
+        long = "apply-portable-update",
+        hide = true,
+        conflicts_with_all = ["mode", "pipeline", "e2e_window"]
+    )]
+    apply_portable_update: bool,
+    /// 差し替え前に終了を待つ旧プロセス PID (内部用)
+    #[arg(long = "wait-pid", hide = true, requires = "apply_portable_update")]
+    wait_pid: Option<u32>,
+    /// 差し替え先ディレクトリ (内部用)
+    #[arg(long = "install-dir", hide = true, requires = "apply_portable_update")]
+    install_dir: Option<PathBuf>,
+    /// 差し替え後に削除する一時ディレクトリ (内部用)
+    #[arg(long = "cleanup-dir", hide = true, requires = "apply_portable_update")]
+    cleanup_dir: Option<PathBuf>,
+}
+
+// ======================================================================
+// ポータブル差し替えヘルパー
+// ======================================================================
+/// ポータブル更新の差し替えヘルパーを実行する
+///
+/// ログ初期化や多重起動防止を行わず、ファイル差し替えだけを担当する
+///
+/// # Arguments
+/// * `args` - CLI 引数
+///
+/// # Returns
+/// * `Result<()>` - 差し替え成功時 `Ok(())`
+fn run_portable_update_helper(args: &Args) -> Result<()> {
+    let Some(wait_pid) = args.wait_pid else {
+        bail!("--apply-portable-update には --wait-pid が必要です");
+    };
+    let Some(install_dir) = args.install_dir.clone() else {
+        bail!("--apply-portable-update には --install-dir が必要です");
+    };
+
+    platform::init_notifications();
+    if let Err(message) =
+        platform::update::run_portable_replace(wait_pid, &install_dir, args.cleanup_dir.as_deref())
+    {
+        bail!(message);
+    }
+    Ok(())
 }
 
 // ======================================================================
@@ -189,6 +239,14 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     logger::cleanup_on_startup(&log_dir);
 
     log_info!("アプリケーションを起動しました");
+    if config::is_portable_mode() {
+        log_info!(
+            "ポータブルモード: 設定ディレクトリ = {}",
+            config_dir.display()
+        );
+    } else {
+        log_info!("設定ディレクトリ = {}", config_dir.display());
+    }
 
     Ok(guard)
 }
@@ -358,9 +416,9 @@ fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
     }
 }
 
-/// CLI 引数の加工モード名 (kebab-case) を `RefineMode` へ変換する
+/// CLI 引数の変換モード名 (kebab-case) を `RefineMode` へ変換する
 fn parse_refine_mode(value: &str) -> Result<RefineMode, String> {
-    RefineMode::from_str(value).map_err(|_| format!("'{value}' は有効な加工モードではありません"))
+    RefineMode::from_str(value).map_err(|_| format!("'{value}' は有効な変換モードではありません"))
 }
 
 // ======================================================================
@@ -394,6 +452,10 @@ mod tests {
             regex_case_insensitive: false,
             regex_multiline: false,
             e2e_window: None,
+            apply_portable_update: false,
+            wait_pid: None,
+            install_dir: None,
+            cleanup_dir: None,
         }
     }
 

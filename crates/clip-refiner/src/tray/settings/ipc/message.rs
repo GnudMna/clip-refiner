@@ -1,0 +1,149 @@
+use super::super::model::SettingsPatch;
+
+use crate::config::{FavoriteMoveDirection, RegexSettings};
+use crate::refiner::RefineMode;
+
+use serde::Deserialize;
+
+// ======================================================================
+// IPC メッセージ
+// ======================================================================
+/// 設定ウィンドウから送られる JSON IPC メッセージ
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+enum SettingsIpcMessage {
+    /// ウィンドウを閉じる
+    Close,
+    /// 設定ファイルを既定アプリで開く
+    OpenConfig,
+    /// 設定の一部を適用する
+    Apply {
+        /// 部分更新パッチ
+        patch: Box<SettingsPatch>,
+    },
+    /// 履歴を全削除する
+    ClearHistory,
+    /// 連続記録を全削除する
+    ClearRecord,
+    /// 登録クリップをクリップボードへコピーする
+    ClipCopy {
+        /// 登録クリップのインデックス
+        index: usize,
+    },
+    /// 登録クリップを削除する
+    ClipDelete {
+        /// 登録クリップのインデックス
+        index: usize,
+    },
+    /// クリップボード内容を登録クリップとして追加する
+    ClipRegister,
+    /// お気に入り変換モードの登録状態を切り替える
+    FavoriteToggle {
+        /// 対象の変換モード
+        mode: RefineMode,
+    },
+    /// お気に入り変換モードの表示順を変更する
+    FavoriteMove {
+        /// 対象の変換モード
+        mode: RefineMode,
+        /// 移動方向 (`up` / `down`)
+        direction: IpcFavoriteMoveDirection,
+    },
+    /// 正規表現置換のプレビューを要求する
+    RegexPreview {
+        /// クライアント側リクエスト ID
+        #[serde(rename = "requestId")]
+        request_id: u64,
+        /// プレビュー対象の正規表現設定
+        settings: RegexSettings,
+    },
+    /// アプリ更新を確認する
+    CheckUpdate,
+    /// 確認済みの更新をダウンロードして適用する
+    ApplyUpdate,
+}
+
+/// IPC 向けお気に入り移動方向
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum IpcFavoriteMoveDirection {
+    /// 上へ移動
+    Up,
+    /// 下へ移動
+    Down,
+}
+
+impl From<IpcFavoriteMoveDirection> for FavoriteMoveDirection {
+    fn from(direction: IpcFavoriteMoveDirection) -> Self {
+        match direction {
+            IpcFavoriteMoveDirection::Up => Self::Up,
+            IpcFavoriteMoveDirection::Down => Self::Down,
+        }
+    }
+}
+
+// ======================================================================
+// IPC アクション
+// ======================================================================
+/// 設定ウィンドウから送られる IPC メッセージの種別
+#[derive(Debug, Clone)]
+pub(crate) enum SettingsIpcAction {
+    /// ウィンドウを閉じる
+    Close,
+    /// 設定ファイルを既定アプリで開く
+    OpenConfigFile,
+    /// 設定の一部を適用する
+    Apply(Box<SettingsPatch>),
+    /// 履歴を全削除する
+    ClearHistory,
+    /// 連続記録を全削除する
+    ClearContinuousRecord,
+    /// 登録クリップをクリップボードへコピーする
+    ClipCopy(usize),
+    /// 登録クリップを削除する
+    ClipDelete(usize),
+    /// クリップボード内容を登録クリップとして追加する
+    ClipRegister,
+    /// お気に入り変換モードの登録状態を切り替える
+    FavoriteToggle(RefineMode),
+    /// お気に入り変換モードの表示順を変更する
+    FavoriteMove(RefineMode, FavoriteMoveDirection),
+    /// 正規表現置換のプレビューを要求する
+    RegexPreview(u64, RegexSettings),
+    /// アプリ更新を確認する
+    CheckUpdate,
+    /// 確認済みの更新をダウンロードして適用する
+    ApplyUpdate,
+}
+
+impl From<SettingsIpcMessage> for SettingsIpcAction {
+    fn from(message: SettingsIpcMessage) -> Self {
+        match message {
+            SettingsIpcMessage::Close => Self::Close,
+            SettingsIpcMessage::OpenConfig => Self::OpenConfigFile,
+            SettingsIpcMessage::Apply { patch } => Self::Apply(patch),
+            SettingsIpcMessage::ClearHistory => Self::ClearHistory,
+            SettingsIpcMessage::ClearRecord => Self::ClearContinuousRecord,
+            SettingsIpcMessage::ClipCopy { index } => Self::ClipCopy(index),
+            SettingsIpcMessage::ClipDelete { index } => Self::ClipDelete(index),
+            SettingsIpcMessage::ClipRegister => Self::ClipRegister,
+            SettingsIpcMessage::FavoriteToggle { mode } => Self::FavoriteToggle(mode),
+            SettingsIpcMessage::FavoriteMove { mode, direction } => {
+                Self::FavoriteMove(mode, direction.into())
+            }
+            SettingsIpcMessage::RegexPreview {
+                request_id,
+                settings,
+            } => Self::RegexPreview(request_id, settings),
+            SettingsIpcMessage::CheckUpdate => Self::CheckUpdate,
+            SettingsIpcMessage::ApplyUpdate => Self::ApplyUpdate,
+        }
+    }
+}
+
+/// IPC メッセージ文字列 (JSON) を解釈する
+pub(crate) fn parse_settings_ipc_message(msg: &str) -> Option<SettingsIpcAction> {
+    serde_json::from_str::<SettingsIpcMessage>(msg)
+        .ok()
+        .map(SettingsIpcAction::from)
+}

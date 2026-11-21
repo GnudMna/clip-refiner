@@ -653,6 +653,19 @@ body {
     border-color: #4a9af0;
 }
 
+.update-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+#check-update-btn:disabled,
+#apply-update-btn:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
 .danger-btn {
     border-color: rgba(255, 107, 107, 0.45);
     background: var(--danger-soft);

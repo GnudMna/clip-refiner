@@ -219,6 +219,66 @@ pub fn fatal_startup(context: &str, err: &anyhow::Error) -> UserNotification {
     )
 }
 
+/// 起動時の `WebView2` Runtime 未導入案内を組み立てる
+///
+/// # Returns
+/// * `UserNotification` - 監視は利用可能である旨を含む案内
+#[must_use]
+pub fn webview2_runtime_missing_startup() -> UserNotification {
+    UserNotification::static_message(
+        titles::WEBVIEW2,
+        "設定・セレクター表示に WebView2 Runtime が必要です。トレイから開くと導入ページへ案内します。監視・ホットキー・ワンショットは利用できます",
+    )
+}
+
+/// `WebView` ウィンドウ初期化失敗を通知し、未導入なら導入ページを開く
+///
+/// # Arguments
+/// * `ui_label` - 失敗した UI の表示名 (例: `設定`)
+/// * `err` - 初期化失敗の原因
+pub fn notify_webview_window_init_failure(ui_label: &'static str, err: &anyhow::Error) {
+    let guide = crate::platform::webview2::should_guide_runtime_install(err);
+    let notification = if guide {
+        webview2_runtime_missing_on_open(ui_label)
+    } else {
+        webview_window_generic_failure(ui_label)
+    };
+    notification.notify_with_debug(err);
+
+    if guide && let Err(open_err) = crate::platform::webview2::open_download_page_once() {
+        crate::log_warn!("WebView2 導入ページのオープンに失敗: {open_err:#}");
+    }
+}
+
+/// `WebView` 表示失敗時の Runtime 未導入案内を組み立てる
+///
+/// # Arguments
+/// * `ui_label` - 失敗した UI の表示名
+///
+/// # Returns
+/// * `UserNotification` - 導入ページを開く旨の案内
+#[must_use]
+pub fn webview2_runtime_missing_on_open(ui_label: &str) -> UserNotification {
+    UserNotification::new(
+        titles::WEBVIEW2,
+        format!(
+            "{ui_label}の表示に WebView2 Runtime が必要です。導入ページを開きます。導入後にアプリを再起動してください"
+        ),
+    )
+}
+
+/// `WebView` ウィンドウ初期化の一般失敗案内を組み立てる
+///
+/// # Arguments
+/// * `ui_label` - 失敗した UI の表示名
+///
+/// # Returns
+/// * `UserNotification` - 一般的な初期化失敗案内
+#[must_use]
+pub fn webview_window_generic_failure(ui_label: &'static str) -> UserNotification {
+    UserNotification::static_message(ui_label, "ウィンドウの初期化に失敗しました")
+}
+
 /// 通知本文の最大文字数に合わせて切り詰める
 ///
 /// # Arguments
@@ -251,6 +311,8 @@ pub mod titles {
     pub const REGISTERED_CLIP: &str = "登録クリップ";
     pub const SETTINGS: &str = "設定エラー";
     pub const STARTUP: &str = "起動エラー";
+    pub const UPDATE: &str = "アップデート";
+    pub const WEBVIEW2: &str = "WebView2 が必要です";
     pub const WORKER: &str = "クリップボードエラー";
 }
 
@@ -311,5 +373,62 @@ mod tests {
             notification.body(),
             "クリップボードが空のため登録できません"
         );
+    }
+
+    /// 起動時の `WebView2` 案内が監視継続を伝えること
+    #[test]
+    fn webview2_runtime_missing_startup_mentions_monitor_still_works() {
+        let notification = webview2_runtime_missing_startup();
+        assert_eq!(notification.title(), titles::WEBVIEW2);
+        assert!(notification.body().contains("監視"));
+        assert!(notification.body().contains("WebView2"));
+    }
+
+    /// 表示失敗時の `WebView2` 案内が UI 名と再起動を含むこと
+    #[test]
+    fn webview2_runtime_missing_on_open_includes_ui_label() {
+        let notification = webview2_runtime_missing_on_open("設定");
+        assert_eq!(notification.title(), titles::WEBVIEW2);
+        assert!(notification.body().contains("設定"));
+        assert!(notification.body().contains("再起動"));
+    }
+
+    /// `WebView` 一般失敗は UI 名をタイトルに使うこと
+    #[test]
+    fn webview_window_generic_failure_uses_ui_label_as_title() {
+        let notification = webview_window_generic_failure("クイックセレクター");
+        assert_eq!(notification.title(), "クイックセレクター");
+        assert!(notification.body().contains("初期化に失敗"));
+    }
+
+    /// Runtime 未導入時は導入ページを開き、一般失敗では開かないこと
+    #[test]
+    fn notify_webview_window_init_failure_opens_download_only_when_guiding() {
+        use crate::platform::webview2::{
+            DOWNLOAD_PAGE_URL, begin_capture_open_url_for_test,
+            reset_download_page_opened_for_test, set_runtime_available_for_test,
+            take_captured_open_url_for_test,
+        };
+
+        set_runtime_available_for_test(Some(false));
+        reset_download_page_opened_for_test();
+        begin_capture_open_url_for_test();
+        notify_webview_window_init_failure("設定", &anyhow::anyhow!("build failed"));
+        assert_eq!(
+            take_captured_open_url_for_test().as_deref(),
+            Some(DOWNLOAD_PAGE_URL)
+        );
+
+        set_runtime_available_for_test(Some(true));
+        reset_download_page_opened_for_test();
+        begin_capture_open_url_for_test();
+        notify_webview_window_init_failure(
+            "設定",
+            &anyhow::anyhow!("WebView2 データディレクトリの作成に失敗"),
+        );
+        assert!(take_captured_open_url_for_test().is_none());
+
+        set_runtime_available_for_test(None);
+        reset_download_page_opened_for_test();
     }
 }

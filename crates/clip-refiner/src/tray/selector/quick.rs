@@ -22,7 +22,7 @@ use tao::window::{Window, WindowId};
 /// クイックセレクターから送られる IPC メッセージの種別
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum QuickSelectorIpcAction {
-    /// 加工モードが選択された
+    /// 変換モードが選択された
     SelectMode(RefineMode),
     /// お気に入り登録状態を切り替える
     ToggleFavorite(RefineMode),
@@ -81,7 +81,7 @@ pub(crate) fn quick_selector_refresh_script(current_mode: RefineMode, modes_json
 // ======================================================================
 // クイックセレクターウィンドウ構造体
 // ======================================================================
-/// 加工モード選択用クイックセレクター (コマンドパレット風 UI) を管理する構造体
+/// 変換モード選択用クイックセレクター (コマンドパレット風 UI) を管理する構造体
 ///
 /// `WebView` は初回表示時に生成し、非表示時に破棄してアイドル RSS を抑える
 pub struct QuickSelectorWindow {
@@ -190,13 +190,13 @@ impl QuickSelectorWindow {
 // ウィンドウ操作
 // ======================================================================
 impl QuickSelectorWindow {
-    /// クイックセレクターを表示し、現在の加工モードを反映させる
+    /// クイックセレクターを表示し、現在の変換モードを反映させる
     ///
     /// 未生成なら `WebView` を遅延生成する。表示時に検索フォームへフォーカスし、現在モードをハイライトする
     ///
     /// # Arguments
     /// * `event_loop` - 遅延生成用のイベントループ
-    /// * `current_mode` - 現在アプリケーションで選択されている加工モード
+    /// * `current_mode` - 現在アプリケーションで選択されている変換モード
     /// * `modes_json` - モード一覧 JSON
     pub fn show(
         &self,
@@ -205,11 +205,7 @@ impl QuickSelectorWindow {
         modes_json: &str,
     ) {
         if let Err(err) = self.ensure_created(event_loop) {
-            crate::log_warn!("クイックセレクターの初期化に失敗: {err:#}");
-            crate::platform::show_notification(
-                "クイックセレクター",
-                "ウィンドウの初期化に失敗しました",
-            );
+            crate::user_error::notify_webview_window_init_failure("クイックセレクター", &err);
             return;
         }
         let script = quick_selector_focus_script(current_mode, modes_json);
@@ -224,7 +220,7 @@ impl QuickSelectorWindow {
     ///
     /// # Arguments
     /// * `modes_json` - モード一覧 JSON
-    /// * `current_mode` - 現在選択されている加工モード
+    /// * `current_mode` - 現在選択されている変換モード
     pub fn refresh_modes(&self, modes_json: &str, current_mode: RefineMode) {
         let inner = self.inner.borrow();
         let Some(inner) = inner.as_ref() else {

@@ -136,29 +136,27 @@ mod tests {
         assert_eq!(label, SENSITIVE_SNIPPET_LABEL);
     }
 
-    fn build_menu_and_state() -> (TrayMenu, std::sync::Arc<AppState>) {
-        let state = std::sync::Arc::new(crate::tray::state::test_app_state());
-        state.with_config_mut(|c| c.history_enabled = true);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        (menu, state)
+    fn build_menu_and_state() -> crate::test_helpers::TrayTestContext {
+        crate::test_helpers::TrayTestContext::with_config(|c| c.history_enabled = true)
     }
 
     /// `refresh_history` が履歴件数分のレコードを構築すること
     #[test]
     fn refresh_history_builds_records_for_entries() {
-        let (menu, state) = build_menu_and_state();
-        state.add_to_history("first entry");
-        state.add_to_history("second entry");
+        let ctx = build_menu_and_state();
+        ctx.state().add_to_history("first entry");
+        ctx.state().add_to_history("second entry");
 
-        menu.refresh_history(&state)
+        ctx.menu()
+            .refresh_history(ctx.state())
             .expect("履歴メニューの更新に失敗");
 
-        let records = menu.history.records.lock_ignore_poison();
+        let records = ctx.menu().history.records.lock_ignore_poison();
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].1, 0);
         assert_eq!(records[1].1, 1);
         assert_eq!(
-            state
+            ctx.state()
                 .clipboard_session()
                 .get_history_entry(0)
                 .as_ref()
@@ -170,16 +168,18 @@ mod tests {
     /// 履歴クリア後の `refresh_history` でレコードが空になるようにすること
     #[test]
     fn refresh_history_clears_records_when_history_empty() {
-        let (menu, state) = build_menu_and_state();
-        state.add_to_history("only");
-        menu.refresh_history(&state)
+        let ctx = build_menu_and_state();
+        ctx.state().add_to_history("only");
+        ctx.menu()
+            .refresh_history(ctx.state())
             .expect("履歴メニューの更新に失敗");
 
-        state.clipboard_session().clear_history();
-        menu.refresh_history(&state)
+        ctx.state().clipboard_session().clear_history();
+        ctx.menu()
+            .refresh_history(ctx.state())
             .expect("履歴メニューの更新に失敗");
 
-        let records = menu.history.records.lock_ignore_poison();
+        let records = ctx.menu().history.records.lock_ignore_poison();
         assert!(records.is_empty());
     }
 }

@@ -36,7 +36,9 @@ pub fn registered_images_dir() -> Result<PathBuf> {
     let dir = get_config_dir()?.join(REGISTERED_IMAGES_DIR);
     if !dir.exists() {
         fs::create_dir_all(&dir).context("登録画像ディレクトリの作成に失敗しました")?;
-        restrict_private_dir_permissions(&dir)?;
+        if let Err(e) = restrict_private_dir_permissions(&dir) {
+            tracing::warn!("登録画像ディレクトリのパーミッション設定に失敗: {:?}", e);
+        }
     }
     Ok(dir)
 }
@@ -74,7 +76,9 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
     let path = registered_images_dir()?.join(&filename);
     if !path.exists() {
         fs::write(&path, &encrypted).context("登録画像ファイルの書き込みに失敗しました")?;
-        restrict_private_file_permissions(&path)?;
+        if let Err(e) = restrict_private_file_permissions(&path) {
+            tracing::warn!("登録画像ファイルのパーミッション設定に失敗: {:?}", e);
+        }
     }
 
     Ok(filename)
@@ -156,7 +160,9 @@ pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<Strin
     let new_path = registered_images_dir()?.join(&filename);
     if !new_path.exists() {
         fs::write(&new_path, &encrypted).context("登録画像の暗号化保存に失敗しました")?;
-        restrict_private_file_permissions(&new_path)?;
+        if let Err(e) = restrict_private_file_permissions(&new_path) {
+            tracing::warn!("登録画像ファイルのパーミッション設定に失敗: {:?}", e);
+        }
     }
     let _ = fs::remove_file(path);
     Ok(filename)

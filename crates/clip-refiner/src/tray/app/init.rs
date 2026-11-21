@@ -63,6 +63,9 @@ impl App {
         } else {
             bump_monitor_generation(&state);
         }
+        if !crate::tray::e2e::is_active() {
+            crate::platform::webview2::notify_missing_runtime_on_startup();
+        }
 
         Ok(Self {
             state,

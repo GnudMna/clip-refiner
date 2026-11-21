@@ -21,11 +21,22 @@ pub const ONESHOT_IPC_PIPE_NAME: &str = r"\\.\pipe\com.y_hirata.clip-refiner.one
 
 /// 設定ディレクトリ上書き用の環境変数名
 ///
-/// 設定時は `%APPDATA%\ClipRefiner` の代わりに指定パスを使う (E2E / テスト向け)
+/// 設定時は既定の設定ディレクトリ (`%APPDATA%\ClipRefiner` またはポータブルの `data`) の代わりに指定パスを使う
 pub const ENV_CONFIG_DIR: &str = "CLIP_REFINER_CONFIG_DIR";
 
 /// `WebView2` CDP ポート指定用の環境変数名 (E2E 専用)
 pub const ENV_E2E_CDP_PORT: &str = "CLIP_REFINER_E2E_CDP_PORT";
+
+/// ポータブルモード有効化用のマーカーファイル名
+///
+/// 実行ファイルと同じディレクトリにこの名前のファイルがあると、設定・ログを
+/// 実行ファイル隣の [`PORTABLE_DATA_DIR_NAME`] 配下へ保存する
+pub const PORTABLE_MARKER_FILE: &str = "portable";
+
+/// ポータブルモード時の設定データディレクトリ名
+///
+/// 実行ファイルと同じディレクトリ配下に作成する
+pub const PORTABLE_DATA_DIR_NAME: &str = "data";
 
 // ======================================================================
 // 設定
@@ -80,7 +91,9 @@ pub const REGEX_MATCH_MAX_IN_FLIGHT: usize = 2;
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;
 
-/// 機密情報と判定した場合の通知・メニュー表示用ラベル
+/// 機密情報と判定した場合の通知・メニュー・プレビュー表示用ラベル
+///
+/// 表示置換のみ。クリップボード本体や履歴復元・登録クリップコピー時の本文は書き換えない
 pub const SENSITIVE_SNIPPET_LABEL: &str = "[機密情報のため非表示]";
 
 /// クイックセレクター表示のデフォルトホットキー

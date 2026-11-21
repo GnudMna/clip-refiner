@@ -37,6 +37,9 @@ pub(crate) fn handle_app_control(
         bump_monitor_generation(state);
         let _ = state.proxy.send_event(AppEvent::RefreshSettingsWindow);
         true
+    } else if id == menu.check_update_item.id() {
+        let _ = state.proxy.send_event(AppEvent::TrayCheckUpdate);
+        true
     } else if id == menu.open_settings_window_item.id() {
         let _ = state
             .proxy
@@ -57,24 +60,49 @@ pub(crate) fn handle_app_control(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
+    use crate::test_helpers::TrayTestContext;
 
     use tao::event_loop::ControlFlow;
 
     /// 監視再開メニューで `RestartClipboardWorker` をキューすること
     #[test]
     fn handle_app_control_retry_sends_restart_event() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let mut control_flow = ControlFlow::Wait;
 
-        let id = menu.retry_clipboard_worker_item.id();
-        let handled = handle_app_control(id, &menu, &state, &mut control_flow);
+        let id = ctx.menu().retry_clipboard_worker_item.id();
+        let handled = handle_app_control(id, ctx.menu(), ctx.state(), &mut control_flow);
+
+        assert!(handled);
+        assert!(matches!(control_flow, ControlFlow::Wait));
+    }
+
+    /// 設定メニューで処理が完了しイベントループを終了しないこと
+    ///
+    /// テスト用 `AppState` は `EventLoop` を保持しないため、`ShowSettingsWindow` の
+    /// 受信は検証できない。メニュー ID 照合と `ControlFlow` 維持を固定する
+    #[test]
+    fn handle_app_control_open_settings_keeps_event_loop() {
+        let ctx = TrayTestContext::new();
+        let mut control_flow = ControlFlow::Wait;
+
+        let id = ctx.menu().open_settings_window_item.id();
+        let handled = handle_app_control(id, ctx.menu(), ctx.state(), &mut control_flow);
+
+        assert!(handled);
+        assert!(matches!(control_flow, ControlFlow::Wait));
+    }
+
+    /// 更新確認メニューで処理が完了しイベントループを終了しないこと
+    #[test]
+    fn handle_app_control_check_update_keeps_event_loop() {
+        let ctx = TrayTestContext::new();
+        let mut control_flow = ControlFlow::Wait;
+
+        let id = ctx.menu().check_update_item.id();
+        let handled = handle_app_control(id, ctx.menu(), ctx.state(), &mut control_flow);
 
         assert!(handled);
         assert!(matches!(control_flow, ControlFlow::Wait));

@@ -7,6 +7,10 @@ import path from 'node:path';
 
 const READY_MARKER = 'E2E_READY';
 
+/** 1x1 透明 PNG (サムネ / ホバープレビュー用) */
+export const TINY_PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 /**
  * E2E 用 ClipRefiner.exe の既定パスを解決する
  */
@@ -19,8 +23,14 @@ function defaultExePath(): string {
 
 export type E2eWindow = 'settings' | 'quick' | 'clip';
 
+export type HarnessOptions = {
+  /** `config.toml` の `favorite_modes` (PascalCase)。未指定時は Trim → UrlDecode */
+  favoriteModes?: string[];
+};
+
 type HarnessFixtures = {
   e2eWindow: E2eWindow;
+  harnessOptions: HarnessOptions;
   harness: RunningHarness;
   page: Page;
   configDir: string;
@@ -64,8 +74,10 @@ async function findFreePort(): Promise<number> {
  *
  * ホットキーは本番デフォルト (`consts::DEFAULT_HOTKEY_*`) に合わせる
  */
-function prepareConfigDir(): string {
+function prepareConfigDir(options: HarnessOptions = {}): string {
   const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-refiner-e2e-'));
+  const favoriteModes = options.favoriteModes ?? ['Trim', 'UrlDecode'];
+  const favoriteModesToml = favoriteModes.map((mode) => `"${mode}"`).join(', ');
   const configToml = `# ClipRefiner E2E fixture
 version = 2
 interval_ms = 1000
@@ -76,7 +88,7 @@ history_enabled = true
 history_limit = 10
 continuous_record_enabled = false
 continuous_record_limit = 10
-favorite_modes = ["Trim", "UrlDecode"]
+favorite_modes = [${favoriteModesToml}]
 
 [regex]
 pattern = "foo"
@@ -154,7 +166,10 @@ async function connectWithRetry(port: number, timeoutMs: number): Promise<Browse
 /**
  * ClipRefiner E2E ハーネスを起動し Playwright Page を返す
  */
-export async function startHarness(window: E2eWindow): Promise<RunningHarness> {
+export async function startHarness(
+  window: E2eWindow,
+  options: HarnessOptions = {},
+): Promise<RunningHarness> {
   const exe = process.env.CLIP_REFINER_E2E_EXE || defaultExePath();
   if (!fs.existsSync(exe)) {
     throw new Error(
@@ -163,7 +178,7 @@ export async function startHarness(window: E2eWindow): Promise<RunningHarness> {
   }
 
   const port = await findFreePort();
-  const configDir = prepareConfigDir();
+  const configDir = prepareConfigDir(options);
   const child = spawn(
     exe,
     ['--e2e-window', window],
@@ -229,9 +244,19 @@ export async function stopHarness(harness: RunningHarness): Promise<void> {
 
 /**
  * 一時設定ディレクトリの `config.toml` を読む
+ *
+ * 原子置換の瞬間にファイルが無い場合は空文字を返し、`expect.poll` 側で再試行させる
  */
 export function readConfigToml(configDir: string): string {
-  return fs.readFileSync(path.join(configDir, 'config.toml'), 'utf8');
+  try {
+    return fs.readFileSync(path.join(configDir, 'config.toml'), 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return '';
+    }
+    throw err;
+  }
 }
 
 /**
@@ -241,10 +266,22 @@ export function writeConfigToml(configDir: string, contents: string): void {
   fs.writeFileSync(path.join(configDir, 'config.toml'), contents, 'utf8');
 }
 
+/**
+ * `favorite_modes = [...]` 行からモード ID 配列を取り出す
+ */
+export function parseFavoriteModes(configToml: string): string[] {
+  const match = configToml.match(/favorite_modes\s*=\s*\[([^\]]*)\]/);
+  if (!match) {
+    return [];
+  }
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+}
+
 export const test = base.extend<HarnessFixtures>({
   e2eWindow: ['settings', { option: true }],
-  harness: async ({ e2eWindow }, use) => {
-    const harness = await startHarness(e2eWindow);
+  harnessOptions: [{}, { option: true }],
+  harness: async ({ e2eWindow, harnessOptions }, use) => {
+    const harness = await startHarness(e2eWindow, harnessOptions);
     try {
       await use(harness);
     } finally {

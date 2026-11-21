@@ -19,7 +19,7 @@ test-helpers = []
 [dependencies]
 anyhow = "1.0.103"
 arboard = "3.6.1"
-base64 = "0.22.1"
+base64 = "0.23.0"
 blake3 = "1.8.5"
 chacha20poly1305 = "0.11.0"
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -45,6 +45,7 @@ windows = { version = "0.62.2", features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
     "Win32_System_Threading",
 ] }
 

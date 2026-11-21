@@ -6,7 +6,7 @@ use crate::security::ContentFingerprint;
 ///
 /// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
-    /// 監視時に適用する加工モード列
+    /// 監視時に適用する変換モード列
     pub pipeline: Vec<RefineMode>,
     /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,

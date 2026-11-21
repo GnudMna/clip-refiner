@@ -15,7 +15,7 @@ use tray_icon::{
 pub struct CategoryGroup {
     /// カテゴリ用のサブメニューインスタンス
     pub submenu: Submenu,
-    /// サブメニュー内に配置されるメニュー項目と加工モードのペア
+    /// サブメニュー内に配置されるメニュー項目と変換モードのペア
     pub items: Vec<(CheckMenuItem, RefineMode)>,
     /// このグループが属するカテゴリ
     pub category: RefineCategory,
@@ -156,6 +156,8 @@ pub struct TrayMenu {
     pub clips: ClipsMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
+    /// 更新を確認する項目
+    pub check_update_item: MenuItem,
     /// 設定ウィンドウを開く項目
     pub open_settings_window_item: MenuItem,
     /// 停止したクリップボードワーカーを再起動する項目

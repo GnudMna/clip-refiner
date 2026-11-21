@@ -6,10 +6,11 @@ use super::*;
 
 use crate::config::HotkeySettings;
 use crate::refiner::RefineMode;
+use crate::test_helpers::{stub_worker, test_app_state_arc, test_tray_menu};
 use crate::tray::menu::TrayMenu;
 use crate::tray::ocr::{OcrCaptureWindow, init_ocr_capture};
 use crate::tray::selector::{ClipSelectorWindow, QuickSelectorWindow};
-use crate::tray::state::{AppState, test_app_state};
+use crate::tray::state::AppState;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 use global_hotkey::HotKeyState;
@@ -32,10 +33,9 @@ struct HotkeyTestContext {
 
 impl HotkeyTestContext {
     fn new() -> Self {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (tx, _) = mpsc::channel();
-        let clipboard_worker = ClipboardWorkerHandle::for_test(Arc::clone(&state), tx);
+        let state = test_app_state_arc();
+        let menu = test_tray_menu(&state);
+        let (clipboard_worker, _) = stub_worker(&state);
 
         Self {
             state,

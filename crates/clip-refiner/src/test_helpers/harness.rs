@@ -41,13 +41,13 @@ impl ClipboardHarness {
         }
     }
 
-    /// 加工モードを設定する
+    /// 変換モードを設定する
     ///
     /// # Arguments
-    /// * `mode` - 適用する加工モード (`RefineMode`)
+    /// * `mode` - 適用する変換モード (`RefineMode`)
     ///
     /// # Returns
-    /// * `Self` - 加工モードを設定した `self`
+    /// * `Self` - 変換モードを設定した `self`
     #[must_use]
     pub fn with_mode(self, mode: RefineMode) -> Self {
         self.set_mode(mode);
@@ -110,7 +110,7 @@ impl ClipboardHarness {
     /// 監視時に適用する加工パイプラインを設定する
     ///
     /// # Arguments
-    /// * `pipeline` - 監視時に適用する加工モード列
+    /// * `pipeline` - 監視時に適用する変換モード列
     ///
     /// # Returns
     /// * `Self` - パイプラインを設定した `self`
@@ -120,10 +120,10 @@ impl ClipboardHarness {
         self
     }
 
-    /// 加工モードを変更する
+    /// 変換モードを変更する
     ///
     /// # Arguments
-    /// * `mode` - 適用する加工モード (`RefineMode`)
+    /// * `mode` - 適用する変換モード (`RefineMode`)
     pub fn set_mode(&self, mode: RefineMode) {
         self.state.with_config_mut(|c| c.mode = mode);
     }
@@ -318,7 +318,7 @@ impl ClipboardHarness {
     /// ワーカーへ送られる `ProcessMode` コマンドを処理する
     ///
     /// # Arguments
-    /// * `mode` - 適用する加工モード (`RefineMode`)
+    /// * `mode` - 適用する変換モード (`RefineMode`)
     pub fn process_mode(&mut self, mode: RefineMode) {
         self.refine_ctx.regex = self.state.with_config(|c| c.regex.clone());
         handle_command(
@@ -332,7 +332,7 @@ impl ClipboardHarness {
     /// ワーカーへ送られる `ProcessOneshotPipeline` コマンドを処理する
     ///
     /// # Arguments
-    /// * `pipeline` - 適用する加工モード列
+    /// * `pipeline` - 適用する変換モード列
     /// * `ctx` - 加工コンテキスト
     ///
     /// # Returns

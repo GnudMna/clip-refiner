@@ -123,7 +123,7 @@ interval_ms = 1000
             "regex.pattern の説明コメントがない: {content}"
         );
         assert!(
-            content.contains("# 正規表現加工モード用のパターンと置換文字列"),
+            content.contains("# 正規表現変換モード用のパターンと置換文字列"),
             "regex セクション見出しがない: {content}"
         );
         assert!(content.contains("[regex]"));

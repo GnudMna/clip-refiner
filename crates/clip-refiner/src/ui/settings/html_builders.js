@@ -2,8 +2,12 @@
 // 設定画面 HTML 組み立てヘルパー
 // ======================================================================
 
+import { ctx } from './ctx.js';
+
+import SettingsSharedLogic from './shared_logic.js';
+
 /** @type {Array<{ id: string, label: string, description: string }>} */
-const TABS = [
+export const TABS = [
     {
         id: 'general',
         label: '一般',
@@ -52,7 +56,7 @@ const TABS = [
  * @param {string} text
  * @returns {string}
  */
-function escapeHtml(text) {
+export function escapeHtml(text) {
     return SettingsSharedLogic.escapeHtml(text);
 }
 
@@ -62,7 +66,7 @@ function escapeHtml(text) {
  * @param {string} tabId
  * @returns {{ id: string, label: string, description: string }}
  */
-function tabMeta(tabId) {
+export function tabMeta(tabId) {
     return TABS.find((tab) => tab.id === tabId) || TABS[0];
 }
 
@@ -73,9 +77,9 @@ function tabMeta(tabId) {
  * @param {string} bodyHtml
  * @returns {string}
  */
-function panelWrap(tabId, bodyHtml) {
+export function panelWrap(tabId, bodyHtml) {
     const tab = tabMeta(tabId);
-    const activeClass = tabId === activeTab ? ' active' : '';
+    const activeClass = tabId === ctx.activeTab ? ' active' : '';
     return (
         '' +
         '<div class="panel' +
@@ -103,7 +107,7 @@ function panelWrap(tabId, bodyHtml) {
  * @param {string} bodyHtml
  * @returns {string}
  */
-function card(title, bodyHtml) {
+export function card(title, bodyHtml) {
     return (
         '' +
         '<section class="card">' +
@@ -126,7 +130,7 @@ function card(title, bodyHtml) {
  * @param {string} [description]
  * @returns {string}
  */
-function optionCheckbox(id, checked, label, description) {
+export function optionCheckbox(id, checked, label, description) {
     const descHtml = description
         ? '<span class="option-desc">' + escapeHtml(description) + '</span>'
         : '';
@@ -153,7 +157,7 @@ function optionCheckbox(id, checked, label, description) {
  * @param {string} tableHtml
  * @returns {string}
  */
-function wrappedTable(tableHtml) {
+export function wrappedTable(tableHtml) {
     return '<div class="list-table-wrap">' + tableHtml + '</div>';
 }
 
@@ -163,8 +167,8 @@ function wrappedTable(tableHtml) {
  * @param {string} modeId
  * @returns {string}
  */
-function modeLabel(modeId) {
-    const mode = state.modes.find((entry) => entry.id === modeId);
+export function modeLabel(modeId) {
+    const mode = ctx.state.modes.find((entry) => entry.id === modeId);
     return mode ? mode.label : modeId;
 }
 
@@ -174,9 +178,9 @@ function modeLabel(modeId) {
  * @param {string} selectedId
  * @returns {string}
  */
-function buildModeOptions(selectedId) {
+export function buildModeOptions(selectedId) {
     const categories = [];
-    for (const mode of state.modes) {
+    for (const mode of ctx.state.modes) {
         if (!categories.includes(mode.category)) {
             categories.push(mode.category);
         }
@@ -184,7 +188,7 @@ function buildModeOptions(selectedId) {
     let html = '';
     for (const category of categories) {
         html += '<optgroup label="' + escapeHtml(category) + '">';
-        for (const mode of state.modes.filter((entry) => entry.category === category)) {
+        for (const mode of ctx.state.modes.filter((entry) => entry.category === category)) {
             const selected = mode.id === selectedId ? ' selected' : '';
             html +=
                 '<option value="' +

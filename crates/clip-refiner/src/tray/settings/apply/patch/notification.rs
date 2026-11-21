@@ -57,19 +57,15 @@ pub(super) fn apply_notification_patch(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     use crate::config::NotificationSettings;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
+    use crate::test_helpers::TrayTestContext;
 
     /// 通知設定パッチが `AppConfig` とトレイメニューへ反映されるようにすること
     #[test]
     fn notification_patch_updates_config_and_menu() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = TrayTestContext::new();
         let mut notification_settings = NotificationSettings::default();
         notification_settings.enabled = true;
         notification_settings.notify_process = false;
@@ -86,9 +82,9 @@ mod tests {
         };
 
         let mut config_dirty = false;
-        apply_notification_patch(&patch, &state, &menu, &mut config_dirty);
+        apply_notification_patch(&patch, ctx.state(), ctx.menu(), &mut config_dirty);
 
-        let ns = state.with_config(|c| c.notification_settings.clone());
+        let ns = ctx.state().with_config(|c| c.notification_settings.clone());
         assert!(ns.enabled);
         assert!(!ns.notify_process);
         assert!(ns.notify_pause);
@@ -98,15 +94,30 @@ mod tests {
         assert!(ns.notify_favorites);
         assert!(!ns.notify_continuous_record);
         assert!(ns.notify_result);
-        assert!(menu.notification.enabled_item.is_checked());
-        assert!(!menu.notification.notify_process_item.is_checked());
-        assert!(menu.notification.notify_pause_item.is_checked());
-        assert!(!menu.notification.notify_history_restore_item.is_checked());
-        assert!(menu.notification.notify_ocr_item.is_checked());
-        assert!(!menu.notification.notify_registered_clip_item.is_checked());
-        assert!(menu.notification.notify_favorites_item.is_checked());
-        assert!(!menu.notification.notify_continuous_record_item.is_checked());
-        assert!(menu.notification.notify_result_item.is_checked());
+        assert!(ctx.menu().notification.enabled_item.is_checked());
+        assert!(!ctx.menu().notification.notify_process_item.is_checked());
+        assert!(ctx.menu().notification.notify_pause_item.is_checked());
+        assert!(
+            !ctx.menu()
+                .notification
+                .notify_history_restore_item
+                .is_checked()
+        );
+        assert!(ctx.menu().notification.notify_ocr_item.is_checked());
+        assert!(
+            !ctx.menu()
+                .notification
+                .notify_registered_clip_item
+                .is_checked()
+        );
+        assert!(ctx.menu().notification.notify_favorites_item.is_checked());
+        assert!(
+            !ctx.menu()
+                .notification
+                .notify_continuous_record_item
+                .is_checked()
+        );
+        assert!(ctx.menu().notification.notify_result_item.is_checked());
         assert!(config_dirty);
     }
 }

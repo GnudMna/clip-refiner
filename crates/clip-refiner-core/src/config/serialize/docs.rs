@@ -2,8 +2,8 @@
 // 各項目の説明コメント (テンプレート生成と新規キー挿入で共有)
 // ======================================================================
 pub(crate) const DOC_VERSION: &str = "設定スキーマのバージョン";
-pub(crate) const DOC_MODE: &str = "使用する加工モード (`pipeline` が空の場合に監視で適用)";
-pub(crate) const DOC_PIPELINE: &str = "監視時に順に適用する加工モードの連鎖 (PascalCase の配列。空の場合は `mode` のみ。例: [\"UrlDecode\", \"Trim\"])";
+pub(crate) const DOC_MODE: &str = "使用する変換モード (`pipeline` が空の場合に監視で適用)";
+pub(crate) const DOC_PIPELINE: &str = "監視時に順に適用する変換モードの連鎖 (PascalCase の配列。空の場合は `mode` のみ。例: [\"UrlDecode\", \"Trim\"])";
 pub(crate) const DOC_FAVORITE_MODES: &str =
     "お気に入り変換モード (PascalCase の配列。例: [\"UrlDecode\", \"Trim\"])";
 pub(crate) const DOC_INTERVAL_MS: &str = "クリップボードのポーリング間隔 (ミリ秒、100〜60000)";
@@ -48,7 +48,7 @@ pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_HOTKEYS: &str =
     "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は数秒以内に自動反映)";
-pub(crate) const SECTION_REGEX: &str = "正規表現加工モード用のパターンと置換文字列";
+pub(crate) const SECTION_REGEX: &str = "正規表現変換モード用のパターンと置換文字列";
 
 pub(crate) const SECTION_RULE: &str =
     "# -----------------------------------------------------------------------------";

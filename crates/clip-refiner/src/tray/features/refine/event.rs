@@ -11,9 +11,9 @@ use crate::tray::state::LockExt;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 // ======================================================================
-// 加工モード更新
+// 変換モード更新
 // ======================================================================
-/// 加工モードを更新し、メニューの状態や設定ファイルへ反映させる
+/// 変換モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
 /// 必要に応じてクリップボードワーカーに加工命令を送信する
 ///
@@ -21,7 +21,7 @@ use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 /// * `state` - アプリケーションの共有状態
 /// * `menu` - トレイメニュー構造体
 /// * `clipboard_tx` - クリップボード・ワーカーへの送信チャネル
-/// * `mode` - 設定する新しい加工モード
+/// * `mode` - 設定する新しい変換モード
 pub fn update_refine(
     state: &Arc<AppState>,
     menu: &TrayMenu,
@@ -55,7 +55,7 @@ pub fn update_refine(
 // ======================================================================
 // メニューイベント処理
 // ======================================================================
-/// 加工モードの選択メニューイベントを処理する
+/// 変換モードの選択メニューイベントを処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -101,19 +101,18 @@ pub(crate) fn handle_refine_mode_event(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use crate::refiner::RefineMode;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::{LockExt, test_app_state};
+    use crate::test_helpers::TrayTestContext;
+    use crate::tray::state::LockExt;
 
     /// お気に入りサブメニューの `MenuId` からモードを解決できるようにすること
     #[test]
     fn resolve_favorite_mode_from_menu_id() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| config.favorite_modes = vec![RefineMode::Trim]);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let item_id = menu
+        let ctx = TrayTestContext::with_config(|config| {
+            config.favorite_modes = vec![RefineMode::Trim];
+        });
+        let item_id = ctx
+            .menu()
             .refine
             .favorite_records
             .lock_ignore_poison()
@@ -123,7 +122,8 @@ mod tests {
             .id()
             .clone();
 
-        let resolved = menu
+        let resolved = ctx
+            .menu()
             .refine
             .favorite_records
             .lock_ignore_poison()

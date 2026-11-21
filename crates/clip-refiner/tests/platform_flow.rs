@@ -2,7 +2,9 @@
 
 use clip_refiner::AppConfig;
 use clip_refiner::hotkey_binding::parse_hotkey_binding;
-use clip_refiner::test_helpers::{assert_test_hotkeys_register, query_autostart_enabled};
+use clip_refiner::test_helpers::{
+    assert_test_hotkeys_register, query_autostart_enabled, query_webview2_runtime_available,
+};
 
 // ======================================================================
 // テスト
@@ -54,4 +56,10 @@ fn invalid_hotkey_binding_returns_parse_error() {
 #[test]
 fn autostart_enabled_query_does_not_panic() {
     let _ = query_autostart_enabled();
+}
+
+/// `WebView2` Runtime の検出がパニックしないようにすること
+#[test]
+fn webview2_runtime_query_does_not_panic() {
+    let _ = query_webview2_runtime_available();
 }

@@ -85,6 +85,7 @@ mod tests {
             },
             notification: TrayMenu::build_notification_menu(&NotificationSettings::default())
                 .expect("通知メニューの構築に失敗"),
+            check_update_item: MenuItem::new("更新を確認…", true, None),
             open_settings_window_item: MenuItem::new("設定ウィンドウ", true, None),
             retry_clipboard_worker_item: MenuItem::new("クリップボード監視を再開", true, None),
         };
@@ -158,13 +159,13 @@ mod tests {
     /// 連続記録有効時は変換モードメニューが無効になるようにすること
     #[test]
     fn sync_auto_processing_state_disables_refine_when_continuous_record_enabled() {
-        let state = crate::tray::state::test_app_state();
-        state.with_config_mut(|c| c.continuous_record_enabled = true);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
+            c.continuous_record_enabled = true;
+        });
 
-        assert!(!menu.refine.main_submenu.is_enabled());
+        assert!(!ctx.menu().refine.main_submenu.is_enabled());
         assert_eq!(
-            menu.continuous_record.main_submenu.text(),
+            ctx.menu().continuous_record.main_submenu.text(),
             "連続記録 (自動加工停止)"
         );
     }
@@ -172,11 +173,11 @@ mod tests {
     /// 連続記録無効時は変換モードメニューが有効になるようにすること
     #[test]
     fn sync_auto_processing_state_enables_refine_when_continuous_record_disabled() {
-        let state = crate::tray::state::test_app_state();
-        state.with_config_mut(|c| c.continuous_record_enabled = false);
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
+            c.continuous_record_enabled = false;
+        });
 
-        assert!(menu.refine.main_submenu.is_enabled());
-        assert_eq!(menu.continuous_record.main_submenu.text(), "連続記録");
+        assert!(ctx.menu().refine.main_submenu.is_enabled());
+        assert_eq!(ctx.menu().continuous_record.main_submenu.text(), "連続記録");
     }
 }

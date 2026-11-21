@@ -74,7 +74,7 @@ impl ClipboardWorkerHandle {
     /// トレイ通知は出さず、監視の書き戻しエコー回避だけ行う
     ///
     /// # Arguments
-    /// * `pipeline` - 適用する加工モード列
+    /// * `pipeline` - 適用する変換モード列
     /// * `refine_ctx` - CLI 側で解決済みの加工コンテキスト
     /// * `timeout` - 応答待ち上限
     ///
@@ -236,29 +236,21 @@ impl ClipboardWorkerHandle {
 mod tests {
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
-    use std::sync::mpsc;
     use std::time::Duration;
 
     use super::*;
 
     use crate::refiner::RefineMode;
-    use crate::test_helpers::with_clipboard_worker_spawn_lock;
-    use crate::tray::menu::TrayMenu;
+    use crate::test_helpers::{
+        TrayTestContext, stub_worker, test_app_state_arc, with_clipboard_worker_spawn_lock,
+    };
     use crate::tray::state::test_app_state;
-
-    fn with_stub_worker(
-        state: &Arc<AppState>,
-    ) -> (Arc<ClipboardWorkerHandle>, mpsc::Receiver<ClipboardCommand>) {
-        let (tx, rx) = mpsc::channel();
-        let worker = ClipboardWorkerHandle::for_test(Arc::clone(state), tx);
-        (worker, rx)
-    }
 
     /// ワーカー停止中はコマンドを送信しないであるようにすること
     #[test]
     fn send_skips_command_when_worker_stopped() {
-        let state = Arc::new(test_app_state());
-        let (worker, rx) = with_stub_worker(&state);
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
         state.worker().set_alive(false);
 
         worker.send(ClipboardCommand::ProcessMode(RefineMode::Trim));
@@ -269,27 +261,23 @@ mod tests {
     /// ワーカー停止時は再開メニューを有効化すること
     #[test]
     fn sync_menu_state_enables_retry_when_worker_stopped() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, _) = with_stub_worker(&state);
-        state.worker().set_alive(false);
+        let ctx = TrayTestContext::new();
+        ctx.state().worker().set_alive(false);
 
-        worker.sync_menu_state(&menu);
+        ctx.worker().sync_menu_state(ctx.menu());
 
-        assert!(menu.retry_clipboard_worker_item.is_enabled());
+        assert!(ctx.menu().retry_clipboard_worker_item.is_enabled());
     }
 
     /// ワーカー稼働中は再開メニューを無効化すること
     #[test]
     fn sync_menu_state_disables_retry_when_worker_alive() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, _) = with_stub_worker(&state);
-        state.worker().set_alive(true);
+        let ctx = TrayTestContext::new();
+        ctx.state().worker().set_alive(true);
 
-        worker.sync_menu_state(&menu);
+        ctx.worker().sync_menu_state(ctx.menu());
 
-        assert!(!menu.retry_clipboard_worker_item.is_enabled());
+        assert!(!ctx.menu().retry_clipboard_worker_item.is_enabled());
     }
 
     /// `restart` で監視世代が進むとすること

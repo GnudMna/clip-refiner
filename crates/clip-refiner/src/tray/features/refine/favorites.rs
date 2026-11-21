@@ -134,139 +134,166 @@ pub(crate) fn refresh_quick_selector_modes(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     use crate::config::FavoriteMoveDirection;
     use crate::consts;
     use crate::refiner::RefineMode;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::{LockExt, test_app_state};
+    use crate::test_helpers::TrayTestContext;
+    use crate::tray::state::LockExt;
 
     use strum::IntoEnumIterator;
-
-    fn build_menu(state: &Arc<AppState>) -> TrayMenu {
-        TrayMenu::build(state).expect("テスト用トレイメニューの構築に失敗")
-    }
 
     /// お気に入り登録で設定とメニュー表示が更新されるようにすること
     #[test]
     fn toggle_favorite_mode_adds_to_config_and_menu() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| config.mode = RefineMode::Trim);
-        let menu = build_menu(&state);
+        let ctx = TrayTestContext::with_config(|config| config.mode = RefineMode::Trim);
 
-        toggle_favorite_mode(&state, &menu, None, RefineMode::Trim);
+        toggle_favorite_mode(ctx.state(), ctx.menu(), None, RefineMode::Trim);
 
-        assert!(state.with_config(|config| config.is_favorite_mode(RefineMode::Trim)));
-        let records = menu.refine.favorite_records.lock_ignore_poison();
+        assert!(
+            ctx.state()
+                .with_config(|config| config.is_favorite_mode(RefineMode::Trim))
+        );
+        let records = ctx.menu().refine.favorite_records.lock_ignore_poison();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].1, RefineMode::Trim);
-        assert!(!menu.refine.add_favorite_item.is_enabled());
-        assert!(menu.refine.remove_favorite_item.is_enabled());
+        assert!(!ctx.menu().refine.add_favorite_item.is_enabled());
+        assert!(ctx.menu().refine.remove_favorite_item.is_enabled());
     }
 
     /// お気に入り解除で設定とメニュー表示が更新されるようにすること
     #[test]
     fn toggle_favorite_mode_removes_from_config_and_menu() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| {
+        let ctx = TrayTestContext::with_config(|config| {
             config.mode = RefineMode::Trim;
             config.favorite_modes = vec![RefineMode::Trim];
         });
-        let menu = build_menu(&state);
 
-        toggle_favorite_mode(&state, &menu, None, RefineMode::Trim);
+        toggle_favorite_mode(ctx.state(), ctx.menu(), None, RefineMode::Trim);
 
-        assert!(!state.with_config(|config| config.is_favorite_mode(RefineMode::Trim)));
-        assert!(menu.refine.favorite_records.lock_ignore_poison().is_empty());
-        assert!(menu.refine.add_favorite_item.is_enabled());
-        assert!(!menu.refine.remove_favorite_item.is_enabled());
+        assert!(
+            !ctx.state()
+                .with_config(|config| config.is_favorite_mode(RefineMode::Trim))
+        );
+        assert!(
+            ctx.menu()
+                .refine
+                .favorite_records
+                .lock_ignore_poison()
+                .is_empty()
+        );
+        assert!(ctx.menu().refine.add_favorite_item.is_enabled());
+        assert!(!ctx.menu().refine.remove_favorite_item.is_enabled());
     }
 
     /// 上限到達時は設定を変更せず登録項目を無効のままにすること
     #[test]
     fn toggle_favorite_mode_respects_limit() {
-        let state = Arc::new(test_app_state());
         let favorites: Vec<_> = RefineMode::iter()
             .take(consts::MAX_FAVORITE_MODES)
             .collect();
         let extra = RefineMode::iter()
             .find(|mode| !favorites.contains(mode))
             .expect("未登録モードが存在する");
-        state.with_config_mut(|config| {
+        let favorites_for_assert = favorites.clone();
+        let ctx = TrayTestContext::with_config(|config| {
             config.mode = extra;
-            config.favorite_modes = favorites.clone();
+            config.favorite_modes = favorites;
         });
-        let menu = build_menu(&state);
 
-        toggle_favorite_mode(&state, &menu, None, extra);
+        toggle_favorite_mode(ctx.state(), ctx.menu(), None, extra);
 
         assert_eq!(
-            state.with_config(|config| config.favorite_modes.clone()),
-            favorites
+            ctx.state()
+                .with_config(|config| config.favorite_modes.clone()),
+            favorites_for_assert
         );
-        assert!(!menu.refine.add_favorite_item.is_enabled());
+        assert!(!ctx.menu().refine.add_favorite_item.is_enabled());
     }
 
     /// 表示順変更が設定とお気に入りサブメニューへ反映されるようにすること
     #[test]
     fn move_favorite_mode_updates_order() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| {
+        let ctx = TrayTestContext::with_config(|config| {
             config.favorite_modes = vec![RefineMode::Trim, RefineMode::UrlDecode];
         });
-        let menu = build_menu(&state);
 
         move_favorite_mode(
-            &state,
-            &menu,
+            ctx.state(),
+            ctx.menu(),
             None,
             RefineMode::UrlDecode,
             FavoriteMoveDirection::Up,
         );
 
         assert_eq!(
-            state.with_config(|config| config.favorite_modes.clone()),
+            ctx.state()
+                .with_config(|config| config.favorite_modes.clone()),
             vec![RefineMode::UrlDecode, RefineMode::Trim]
         );
-        let records = menu.refine.favorite_records.lock_ignore_poison();
+        let records = ctx.menu().refine.favorite_records.lock_ignore_poison();
         assert_eq!(
             records.iter().map(|(_, mode)| *mode).collect::<Vec<_>>(),
             vec![RefineMode::UrlDecode, RefineMode::Trim]
+        );
+
+        // クイックセレクター再オープン時と同じ JSON 経路で favoriteIndex が入れ替わること
+        let modes_json = ctx.state().with_config(AppConfig::modes_to_json_list);
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&modes_json).expect("modes_to_json_list が JSON");
+        let url_decode = parsed
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("UrlDecode"))
+            .expect("UrlDecode");
+        let trim = parsed
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("Trim"))
+            .expect("Trim");
+        assert_eq!(
+            url_decode
+                .get("favoriteIndex")
+                .and_then(serde_json::Value::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            trim.get("favoriteIndex")
+                .and_then(serde_json::Value::as_u64),
+            Some(1)
         );
     }
 
     /// トレイメニューの登録項目からお気に入りを追加できるようにすること
     #[test]
     fn handle_favorites_event_adds_current_mode() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| config.mode = RefineMode::JsonFormat);
-        let menu = build_menu(&state);
+        let ctx = TrayTestContext::with_config(|config| config.mode = RefineMode::JsonFormat);
 
         assert!(handle_favorites_event(
-            menu.refine.add_favorite_item.id(),
-            &menu,
-            &state,
+            ctx.menu().refine.add_favorite_item.id(),
+            ctx.menu(),
+            ctx.state(),
             None,
         ));
-        assert!(state.with_config(|config| config.is_favorite_mode(RefineMode::JsonFormat)));
+        assert!(
+            ctx.state()
+                .with_config(|config| config.is_favorite_mode(RefineMode::JsonFormat))
+        );
     }
 
     /// 未登録モードの解除操作は no-op であるようにすること
     #[test]
     fn handle_favorites_event_remove_skips_unregistered_mode() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|config| config.mode = RefineMode::Trim);
-        let menu = build_menu(&state);
+        let ctx = TrayTestContext::with_config(|config| config.mode = RefineMode::Trim);
 
         assert!(handle_favorites_event(
-            menu.refine.remove_favorite_item.id(),
-            &menu,
-            &state,
+            ctx.menu().refine.remove_favorite_item.id(),
+            ctx.menu(),
+            ctx.state(),
             None,
         ));
-        assert!(!state.with_config(|config| config.is_favorite_mode(RefineMode::Trim)));
+        assert!(
+            !ctx.state()
+                .with_config(|config| config.is_favorite_mode(RefineMode::Trim))
+        );
     }
 }

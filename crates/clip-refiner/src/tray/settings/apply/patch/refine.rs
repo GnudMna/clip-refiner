@@ -13,7 +13,7 @@ use crate::tray::worker::ClipboardWorkerHandle;
 // ======================================================================
 // 加工パッチ
 // ======================================================================
-/// 加工モードとパイプラインのパッチを適用する
+/// 変換モードとパイプラインのパッチを適用する
 pub(super) fn apply_refine_patch(
     patch: &SettingsPatch,
     state: &Arc<AppState>,
@@ -74,104 +74,77 @@ fn sync_refine_menu_checks(state: &Arc<AppState>, menu: &TrayMenu) {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::mpsc;
-
     use super::*;
 
     use crate::refiner::RefineMode;
-    use crate::tray::menu::TrayMenu;
-    use crate::tray::state::test_app_state;
-    use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
-
-    fn with_test_worker(
-        state: &Arc<AppState>,
-    ) -> (Arc<ClipboardWorkerHandle>, mpsc::Receiver<ClipboardCommand>) {
-        let (tx, rx) = mpsc::channel();
-        let worker = ClipboardWorkerHandle::for_test(Arc::clone(state), tx);
-        (worker, rx)
-    }
+    use crate::test_helpers::{ClipboardCommand, TrayTestContext};
 
     /// パイプライン非空時のデフォルトモード変更が `mode` のみ更新しパイプラインを保持すること
     #[test]
     fn default_mode_patch_updates_config_when_pipeline_active() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| {
+        let ctx = TrayTestContext::with_config(|c| {
             c.pipeline = vec![RefineMode::Trim, RefineMode::TrimLines];
             c.mode = RefineMode::Trim;
         });
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, rx) = with_test_worker(&state);
         let patch = SettingsPatch {
             mode: Some(RefineMode::UrlDecode),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
         apply_refine_patch(
             &patch,
-            &state,
-            &menu,
+            ctx.state(),
+            ctx.menu(),
             None,
-            &worker,
+            ctx.worker(),
             &mut outcome,
             &mut config_dirty,
         );
 
         assert_eq!(
-            state.with_config(|c| c.pipeline.clone()),
+            ctx.state().with_config(|c| c.pipeline.clone()),
             vec![RefineMode::Trim, RefineMode::TrimLines]
         );
-        assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlDecode);
+        assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::UrlDecode);
         assert_eq!(
-            state.with_config(crate::config::AppConfig::effective_pipeline),
+            ctx.state()
+                .with_config(crate::config::AppConfig::effective_pipeline),
             vec![RefineMode::Trim, RefineMode::TrimLines]
         );
         assert!(config_dirty);
         assert!(!outcome.mode_changed);
         assert!(!outcome.pipeline_changed);
-        assert!(rx.try_recv().is_err());
+        ctx.assert_no_command();
     }
 
     /// パイプライン空時のデフォルトモード変更が `update_refine` 経由で反映されるようにすること
     #[test]
     fn default_mode_patch_uses_update_refine_when_pipeline_empty() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, rx) = with_test_worker(&state);
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             mode: Some(RefineMode::UrlDecode),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
         apply_refine_patch(
             &patch,
-            &state,
-            &menu,
+            ctx.state(),
+            ctx.menu(),
             None,
-            &worker,
+            ctx.worker(),
             &mut outcome,
             &mut config_dirty,
         );
 
-        assert!(state.with_config(|c| c.pipeline.is_empty()));
-        assert_eq!(state.with_config(|c| c.mode), RefineMode::UrlDecode);
+        assert!(ctx.state().with_config(|c| c.pipeline.is_empty()));
+        assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::UrlDecode);
         assert!(outcome.mode_changed);
-        match rx.try_recv() {
-            Ok(ClipboardCommand::ProcessMode(mode)) => assert_eq!(mode, RefineMode::UrlDecode),
+        match ctx.recv_command() {
+            ClipboardCommand::ProcessMode(mode) => assert_eq!(mode, RefineMode::UrlDecode),
             other => panic!("ProcessMode コマンドが送信されること: {other:?}"),
         }
     }
@@ -179,36 +152,29 @@ mod tests {
     /// パイプライン変更が設定とメニューへ反映されるようにすること
     #[test]
     fn pipeline_patch_updates_config_and_menu() {
-        let state = Arc::new(test_app_state());
-        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
-        let (worker, _rx) = with_test_worker(&state);
+        let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             pipeline: Some(vec![RefineMode::Trim, RefineMode::TrimLines]),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome {
-            monitor_mode_changed: false,
-            bump_monitor: false,
-            mode_changed: false,
-            pipeline_changed: false,
-        };
+        let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
         apply_refine_patch(
             &patch,
-            &state,
-            &menu,
+            ctx.state(),
+            ctx.menu(),
             None,
-            &worker,
+            ctx.worker(),
             &mut outcome,
             &mut config_dirty,
         );
 
         assert_eq!(
-            state.with_config(|c| c.pipeline.clone()),
+            ctx.state().with_config(|c| c.pipeline.clone()),
             vec![RefineMode::Trim, RefineMode::TrimLines]
         );
-        assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
+        assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::Trim);
         assert!(config_dirty);
         assert!(outcome.pipeline_changed);
     }

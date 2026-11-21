@@ -2,18 +2,25 @@
 // 設定画面 正規表現プレビュー (DOM 連携)
 // ======================================================================
 
+import { ctx } from './ctx.js';
+import { postIpcEnvelope } from './ipc_apply.js';
+import { maxRegexPatternBytes } from './shared.js';
+
+import RegexPreview from './regex_preview.js';
+
 /**
  * 正規表現タブの DOM から現在の設定を読み取る
  *
  * @returns {import('./regex_preview').RegexSettings}
  */
-function readRegexFromDom() {
+export function readRegexFromDom() {
     return {
-        pattern: document.getElementById('regex-pattern')?.value ?? state.regex.pattern,
-        replacement: document.getElementById('regex-replacement')?.value ?? state.regex.replacement,
+        pattern: document.getElementById('regex-pattern')?.value ?? ctx.state.regex.pattern,
+        replacement:
+            document.getElementById('regex-replacement')?.value ?? ctx.state.regex.replacement,
         caseInsensitive:
-            document.getElementById('regex-ci')?.checked ?? state.regex.caseInsensitive,
-        multiline: document.getElementById('regex-ml')?.checked ?? state.regex.multiline,
+            document.getElementById('regex-ci')?.checked ?? ctx.state.regex.caseInsensitive,
+        multiline: document.getElementById('regex-ml')?.checked ?? ctx.state.regex.multiline,
     };
 }
 
@@ -23,8 +30,12 @@ function readRegexFromDom() {
  * @param {import('./regex_preview').RegexSettings} settings
  * @returns {import('./regex_preview').RegexValidationResult}
  */
-function validateRegexSettings(settings) {
-    return RegexPreview.validateRegexSettings(settings, lastRegexPreview, maxRegexPatternBytes());
+export function validateRegexSettings(settings) {
+    return RegexPreview.validateRegexSettings(
+        settings,
+        ctx.lastRegexPreview,
+        maxRegexPatternBytes()
+    );
 }
 
 /**
@@ -32,10 +43,10 @@ function validateRegexSettings(settings) {
  *
  * @param {import('./regex_preview').RegexSettings} settings
  */
-function requestRegexPreview(settings) {
-    const requestId = ++regexPreviewRequestId;
-    latestRegexPreviewId = requestId;
-    pendingRegexPreviewRequest = {
+export function requestRegexPreview(settings) {
+    const requestId = ++ctx.regexPreviewRequestId;
+    ctx.latestRegexPreviewId = requestId;
+    ctx.pendingRegexPreviewRequest = {
         requestId,
         settings: RegexPreview.copyRegexSettings(settings),
     };
@@ -62,7 +73,7 @@ function requestRegexPreview(settings) {
  *
  * @param {import('./regex_preview').RegexPreviewPayload} payload
  */
-function handleRegexPreview(payload) {
+export function handleRegexPreview(payload) {
     const statusEl = document.getElementById('regex-status');
     const previewEl = document.getElementById('regex-preview-result');
     const patternField = document.getElementById('regex-pattern')?.closest('.field');
@@ -72,8 +83,8 @@ function handleRegexPreview(payload) {
 
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload,
-        latestRequestId: latestRegexPreviewId,
-        pendingRequest: pendingRegexPreviewRequest,
+        latestRequestId: ctx.latestRegexPreviewId,
+        pendingRequest: ctx.pendingRegexPreviewRequest,
         domSettings: readRegexFromDom(),
     });
 
@@ -85,7 +96,7 @@ function handleRegexPreview(payload) {
         return;
     }
 
-    lastRegexPreview = result.lastRegexPreview;
+    ctx.lastRegexPreview = result.lastRegexPreview;
     const ui = result.ui;
     statusEl.textContent = ui.statusMessage;
     statusEl.className = ui.statusClass;
@@ -99,12 +110,12 @@ function handleRegexPreview(payload) {
 }
 
 /** DOM の正規表現設定でプレビューを即時更新する */
-function updateRegexFeedback() {
+export function updateRegexFeedback() {
     requestRegexPreview(readRegexFromDom());
 }
 
 /** 正規表現プレビュー更新をデバウンスする */
-function scheduleRegexFeedback() {
-    clearTimeout(regexFeedbackTimer);
-    regexFeedbackTimer = setTimeout(updateRegexFeedback, 150);
+export function scheduleRegexFeedback() {
+    clearTimeout(ctx.regexFeedbackTimer);
+    ctx.regexFeedbackTimer = setTimeout(updateRegexFeedback, 150);
 }
