@@ -1,0 +1,25 @@
+第三者ソフトウェアに関する表示
+================================
+
+ClipRefiner には以下の第三者ソフトウェア (オープンソース等) が含まれます。
+各コンポーネントはそれぞれのライセンス条件に従って提供されています。
+
+ClipRefiner 本体の利用条件は LICENSE を参照してください。
+Copyright (c) Yuto Hirata. All Rights Reserved.
+
+--------------------------------------------------------------------------------
+
+{{#each licenses}}
+{{name}}
+
+使用しているコンポーネント:
+{{#each used_by}}
+  - {{crate.name}} {{crate.version}}{{#if crate.repository}} <{{crate.repository}}>{{else}} <https://crates.io/crates/{{crate.name}}>{{/if}}
+{{/each}}
+
+ライセンス全文:
+{{{text}}}
+
+--------------------------------------------------------------------------------
+
+{{/each}}

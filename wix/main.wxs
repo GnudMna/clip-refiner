@@ -6,6 +6,7 @@
   ブランド画像: wix/Banner.bmp (493x58), wix/Dialog.bmp (493x312, 左装飾+右白)
                 scripts/windows/generate-wix-assets.ps1 で再生成可能
   ライセンス:   wix/Eula.rtf (同意画面、LICENSE から生成)
+  同梱文書:     THIRD_PARTY_NOTICES (scripts/common/generate-third-party-notices.* で生成)
 -->
 
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
@@ -45,6 +46,11 @@
                     <Component Id='License' Guid='A8C3E1F2-4B5D-4E6A-9C1F-2D5E6A9B0C4E'>
                         <File Id='LicenseFile' Name='LICENSE' DiskId='1' Source='LICENSE'/>
                         <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='license' Type='integer' Value='1' KeyPath='yes'/>
+                    </Component>
+
+                    <Component Id='ThirdPartyNotices' Guid='F3A8C2E1-6D4B-4A9F-8E2C-1B5D7A0E3F6C'>
+                        <File Id='ThirdPartyNoticesFile' Name='THIRD_PARTY_NOTICES' DiskId='1' Source='THIRD_PARTY_NOTICES'/>
+                        <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='third_party_notices' Type='integer' Value='1' KeyPath='yes'/>
                     </Component>
 
                     <Directory Id='Bin' Name='bin'>
@@ -115,6 +121,7 @@
 
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='License'/>
+            <ComponentRef Id='ThirdPartyNotices'/>
             <ComponentRef Id='StartMenuShortcut'/>
 
             <Feature

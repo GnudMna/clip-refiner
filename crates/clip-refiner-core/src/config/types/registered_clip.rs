@@ -72,16 +72,35 @@ pub enum ResolvedClip {
 // 登録クリップの追加
 // ======================================================================
 /// 登録クリップの追加に失敗した理由
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum AddRegisteredClipError {
     /// 空文字または空白のみ
+    #[error("登録クリップが空です")]
     Empty,
     /// クリップボード上限を超える
+    #[error("登録クリップのサイズが上限を超えています")]
     TooLarge,
     /// 登録件数の上限に達している
+    #[error("登録クリップの件数が上限に達しています")]
     LimitReached,
     /// 登録画像のサイズまたはピクセル数が上限を超える
+    #[error("登録画像のサイズが上限を超えています")]
     ImageTooLarge,
     /// 登録画像の形式または内容が不正
+    #[error("登録画像の形式が不正です")]
     ImageInvalid,
+}
+
+impl AddRegisteredClipError {
+    /// ユーザー向けのエラーメッセージを返す
+    #[must_use]
+    pub fn user_message(&self) -> &'static str {
+        match self {
+            Self::Empty => "登録クリップが空です",
+            Self::TooLarge => "登録クリップのサイズが上限を超えています",
+            Self::LimitReached => "登録クリップの件数が上限に達しています",
+            Self::ImageTooLarge => "登録画像のサイズが上限を超えています",
+            Self::ImageInvalid => "登録画像の形式が不正です",
+        }
+    }
 }

@@ -6,11 +6,12 @@ use std::time::{Duration, Instant, SystemTime};
 
 use super::super::dispatch;
 use super::super::history::EncryptedHistoryStore;
+use super::super::history::EncryptedRecordStore;
 use super::app_event::AppEvent;
 use super::lock_ext::{LockExt, RwLockExt};
 use super::monitor_snapshot::{MonitorSnapshot, ProcessedState};
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ConfigLoadFallback};
 use crate::security::{SecretString, secret_from};
 
 use tao::event_loop::EventLoopProxy;
@@ -36,6 +37,8 @@ pub struct AppState {
     undo_text: Mutex<Option<SecretString>>,
     /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
     history_store: Mutex<EncryptedHistoryStore>,
+    /// 暗号化された連続記録 (セッション限定、メモリ内のみ)
+    continuous_record_store: Mutex<EncryptedRecordStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
     /// 設定をディスクへ保存するかどうか
@@ -53,23 +56,30 @@ impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
     ///
     /// # Returns
-    /// * `Result<Self>` - 新しく生成された `AppState` インスタンス
-    pub fn new(proxy: EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
-        let config = AppConfig::load();
+    /// * `Result<(Self, Option<ConfigLoadFallback>)>` - 生成された `AppState` と、設定読み込み失敗時のフォールバック理由
+    pub fn new(
+        proxy: EventLoopProxy<AppEvent>,
+    ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>)> {
+        let load_outcome = AppConfig::load();
+        let config = load_outcome.config;
         let disk_mtime = crate::config::disk_config_modified_time().ok().flatten();
-        Ok(Self {
-            config: RwLock::new(config),
-            worker_alive: AtomicBool::new(false),
-            worker_recovery_pending: AtomicBool::new(false),
-            monitor_generation: AtomicU64::new(0),
-            processed_state: Mutex::new(ProcessedState::default()),
-            undo_text: Mutex::new(None),
-            history_store: Mutex::new(EncryptedHistoryStore::new()?),
-            proxy,
-            persist_config: true,
-            config_disk_mtime: Mutex::new(disk_mtime),
-            config_save_grace_until: Mutex::new(None),
-        })
+        Ok((
+            Self {
+                config: RwLock::new(config),
+                worker_alive: AtomicBool::new(false),
+                worker_recovery_pending: AtomicBool::new(false),
+                monitor_generation: AtomicU64::new(0),
+                processed_state: Mutex::new(ProcessedState::default()),
+                undo_text: Mutex::new(None),
+                history_store: Mutex::new(EncryptedHistoryStore::new()?),
+                continuous_record_store: Mutex::new(EncryptedRecordStore::new()?),
+                proxy,
+                persist_config: true,
+                config_disk_mtime: Mutex::new(disk_mtime),
+                config_save_grace_until: Mutex::new(None),
+            },
+            load_outcome.fallback,
+        ))
     }
 
     /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
@@ -174,6 +184,7 @@ impl AppState {
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
             history_enabled: config.history_enabled,
+            continuous_record_enabled: config.continuous_record_enabled,
             regex_settings: config.regex.clone(),
         })
     }
@@ -213,8 +224,9 @@ impl AppState {
     /// 履歴復元など、外部からクリップボードへ設定した本文を記録する
     pub fn record_clipboard_set(&self, text: &str) {
         self.with_processed_state(|ps| {
-            ps.last_written = None;
-            ps.last_seen = crate::security::ContentFingerprint::from_text(text);
+            let fp = crate::security::ContentFingerprint::from_text(text);
+            ps.last_written = Some(fp);
+            ps.last_seen = fp;
         });
     }
 
@@ -272,6 +284,78 @@ impl AppState {
 
         dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
     }
+
+    /// 連続記録の件数を返す
+    pub fn continuous_record_len(&self) -> usize {
+        self.continuous_record_store.lock_ignore_poison().len()
+    }
+
+    /// 指定インデックスの連続記録を復号して取得する
+    ///
+    /// # Arguments
+    /// * `index` - 連続記録キュー内のインデックス (0 が先頭)
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
+    pub fn get_continuous_record_entry(&self, index: usize) -> Option<SecretString> {
+        self.continuous_record_store
+            .lock_ignore_poison()
+            .entry_at(index)
+    }
+
+    /// 連続記録をクリアする
+    pub fn clear_continuous_record(&self) {
+        self.continuous_record_store.lock_ignore_poison().clear();
+    }
+
+    /// 連続記録に新しいテキストをキューへ積む
+    ///
+    /// 空文字やトリム後に空になる文字列は無視される
+    /// 同一内容でも末尾へ追加し、上限超過時は先頭から破棄する
+    /// 追加完了後、UIスレッドへ連続記録更新イベントを通知する
+    pub fn enqueue_continuous_record(&self, text: impl AsRef<str>) {
+        let text = text.as_ref();
+        if text.trim().is_empty() {
+            return;
+        }
+
+        let limit = self.with_config(|c| c.continuous_record_limit);
+        self.continuous_record_store
+            .lock_ignore_poison()
+            .enqueue(text, limit);
+
+        dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+    }
+
+    /// 連続記録キュー先頭を取り出す
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
+    pub fn discharge_continuous_record_front(&self) -> Option<SecretString> {
+        let discharged = self
+            .continuous_record_store
+            .lock_ignore_poison()
+            .discharge_front();
+        if discharged.is_some() {
+            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+        }
+        discharged
+    }
+
+    /// 連続記録キューから指定位置のエントリを取り出す
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 排出した本文。範囲外の場合は `None`
+    pub fn discharge_continuous_record_at(&self, index: usize) -> Option<SecretString> {
+        let discharged = self
+            .continuous_record_store
+            .lock_ignore_poison()
+            .discharge_at(index);
+        if discharged.is_some() {
+            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+        }
+        discharged
+    }
 }
 
 // ======================================================================
@@ -285,15 +369,11 @@ pub(crate) fn test_app_state() -> AppState {
     use crate::refiner::RefineMode;
 
     use tao::event_loop::EventLoopBuilder;
-    #[cfg(windows)]
     use tao::platform::windows::EventLoopBuilderExtWindows;
 
-    #[cfg(windows)]
     let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
         .with_any_thread(true)
         .build();
-    #[cfg(not(windows))]
-    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
 
     let config = AppConfig {
         mode: RefineMode::Trim,
@@ -309,6 +389,9 @@ pub(crate) fn test_app_state() -> AppState {
         undo_text: Mutex::new(None),
         history_store: Mutex::new(
             EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗"),
+        ),
+        continuous_record_store: Mutex::new(
+            EncryptedRecordStore::new().expect("テスト用連続記録ストアの生成に失敗"),
         ),
         proxy: event_loop.create_proxy(),
         persist_config: false,

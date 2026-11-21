@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::config::{self, AppConfig};
 use crate::consts;
 use crate::logger;
@@ -15,6 +17,7 @@ use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
 // ======================================================================
 // エントリポイント
@@ -34,7 +37,6 @@ pub fn run() -> Result<()> {
         }
     };
 
-    #[cfg(windows)]
     platform::init_notifications();
 
     let args = Args::parse();
@@ -87,10 +89,10 @@ fn run_application(args: &Args) -> Result<()> {
 )]
 struct Args {
     /// 実行モードの指定(ワンショット実行用)
-    #[arg(short = 'm', long = "mode", value_enum)]
+    #[arg(short = 'm', long = "mode", value_parser = parse_refine_mode)]
     mode: Option<RefineMode>,
     /// ワンショットで順に適用する加工モード列 (`--mode` より優先)
-    #[arg(long = "pipeline", value_enum, num_args = 1..)]
+    #[arg(long = "pipeline", value_parser = parse_refine_mode, num_args = 1..)]
     pipeline: Vec<RefineMode>,
     /// 正規表現パターン (`config.toml` の `regex.pattern` を上書き)
     #[arg(long = "regex-pattern")]
@@ -114,10 +116,6 @@ struct Args {
 /// これにより、コンソール(`cmd.exe` や `PowerShell`)から `cargo run` などで起動した場合に、
 /// アプリケーションからの標準出力がコンソール上に表示される
 fn setup_console() {
-    #[cfg(windows)]
-    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-    #[cfg(windows)]
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
     }
@@ -216,7 +214,12 @@ fn ensure_single_instance() -> Result<SingleInstance> {
 fn run_once(args: &Args) -> Result<()> {
     let pipeline = resolve_oneshot_pipeline(args)?;
     log_info!("ワンショットモードで実行: {:?}", pipeline);
-    let config = AppConfig::load();
+    let load_outcome = AppConfig::load();
+    if let Some(ref fallback) = load_outcome.fallback {
+        log_warn!("{}", fallback.user_message());
+        eprintln!("警告: {}", fallback.user_message());
+    }
+    let config = load_outcome.config;
     let ctx = build_refinement_context(&config, args);
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
@@ -275,6 +278,11 @@ fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
     } else {
         Ok(args.pipeline.clone())
     }
+}
+
+/// CLI 引数の加工モード名 (kebab-case) を `RefineMode` へ変換する
+fn parse_refine_mode(value: &str) -> Result<RefineMode, String> {
+    RefineMode::from_str(value).map_err(|_| format!("'{value}' は有効な加工モードではありません"))
 }
 
 // ======================================================================

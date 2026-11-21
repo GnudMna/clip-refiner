@@ -1,17 +1,11 @@
 //! Win32 レイヤードウィンドウによる画面範囲選択オーバーレイ
 
-mod geometry;
-mod layered;
-mod types;
-mod wndproc;
-
-pub(crate) use types::OverlayCompleteFn;
-
 use std::ptr;
 
-use layered::LayeredOverlay;
-use types::{DragSelection, OVERLAY_CLASS_NAME};
-use wndproc::{OverlayState, hide_overlay, register_overlay_class};
+use super::geometry;
+use super::layered::LayeredOverlay;
+use super::types::{DragSelection, OVERLAY_CLASS_NAME, OverlayCompleteFn};
+use super::wndproc::{OverlayState, hide_overlay, register_overlay_class};
 
 use crate::platform::screen_capture::virtual_screen_bounds;
 

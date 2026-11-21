@@ -16,6 +16,9 @@ use toml_edit::DocumentMut;
 /// 既存の TOML を維持しながら `AppConfig` を書き出す
 ///
 /// 既存ファイルがない、または解析できない場合は説明コメント付きの新規フォーマットを生成する
+///
+/// # Errors
+/// ドキュメント更新または新規 TOML 生成に失敗した場合
 pub fn config_to_toml(config: &AppConfig, existing: Option<&str>) -> Result<String> {
     if let Some(content) = existing
         && let Ok(mut doc) = content.parse::<DocumentMut>()

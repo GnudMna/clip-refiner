@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MonitorMode {
     /// 一定間隔でクリップボードの内容を確認するポーリング方式
-    /// すべてのプラットフォームで動作する基本的な監視モード
     #[default]
     Polling,
     /// OSの変更トークンを監視する方式

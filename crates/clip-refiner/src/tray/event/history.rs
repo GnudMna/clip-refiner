@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::state::{AppState, LockExt};
@@ -25,6 +26,7 @@ pub(super) fn handle_history_event(
         let enabled = menu.history.enabled_item.is_checked();
         state.with_config_mut(|c| c.history_enabled = enabled);
         state.save_config();
+        bump_monitor_generation(state);
         if let Err(err) = menu.refresh_history(state) {
             dispatch::log_menu_operation_error("履歴メニューの更新", err);
         }

@@ -1,5 +1,6 @@
 //! クリップボード操作と監視を単一スレッドで処理するワーカー
 
+mod clipboard_seq;
 mod command;
 mod handle;
 mod handlers;
@@ -13,7 +14,6 @@ use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_gener
 
 pub(crate) use handlers::handle_command;
 
-use super::clipboard_change::ChangeWatcher;
 use super::dispatch;
 use super::state::{AppEvent, AppState};
 
@@ -48,12 +48,11 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerReady);
     }
 
-    let watcher = ChangeWatcher::new();
     let mut monitor = MonitorLoopState::new();
     let mut last_config_poll = Instant::now();
 
     loop {
-        sync_monitor_generation(&mut monitor, &mut clipboard, state, &watcher);
+        sync_monitor_generation(&mut monitor, &mut clipboard, state);
 
         if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
             last_config_poll = Instant::now();
@@ -62,7 +61,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
             }
         }
 
-        let timeout = monitor.recv_timeout(state, &watcher);
+        let timeout = monitor.recv_timeout(state);
         let should_exit = match rx.recv_timeout(timeout) {
             Ok(ClipboardCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => true,
             Ok(cmd) => {
@@ -76,7 +75,7 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         }
 
         if should_run_monitor_tick(state, &monitor) {
-            monitor.tick(&mut clipboard, state, &watcher);
+            monitor.tick(&mut clipboard, state);
         }
     }
 
@@ -102,8 +101,8 @@ mod tests {
 
     use crate::config::MonitorMode;
     use crate::refiner::RefineContext;
-    use crate::tray::clipboard_change::ChangeWatcher;
     use crate::tray::state::test_app_state;
+    use crate::tray::worker::clipboard_seq;
 
     fn active_monitor(generation: u64) -> MonitorLoopState {
         let mut monitor = MonitorLoopState::new();
@@ -166,11 +165,7 @@ mod tests {
         state.monitor_generation.store(1, Ordering::SeqCst);
 
         let monitor = active_monitor(1);
-        let watcher = ChangeWatcher::new();
-        assert_eq!(
-            monitor.recv_timeout(&state, &watcher),
-            Duration::from_millis(100)
-        );
+        assert_eq!(monitor.recv_timeout(&state), Duration::from_millis(100));
     }
 
     /// 設定が Polling の場合は実効監視モードも Polling であること
@@ -179,9 +174,8 @@ mod tests {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Polling);
 
-        let watcher = ChangeWatcher::new();
         assert_eq!(
-            MonitorLoopState::effective_mode(&watcher, &state),
+            MonitorLoopState::effective_mode(&state),
             MonitorMode::Polling
         );
     }
@@ -192,10 +186,9 @@ mod tests {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
 
-        let watcher = ChangeWatcher::new();
-        let effective = MonitorLoopState::effective_mode(&watcher, &state);
+        let effective = MonitorLoopState::effective_mode(&state);
 
-        if watcher.is_supported() {
+        if clipboard_seq::supports_event_monitor() {
             assert_eq!(effective, MonitorMode::Event);
         } else {
             assert_eq!(effective, MonitorMode::Polling);

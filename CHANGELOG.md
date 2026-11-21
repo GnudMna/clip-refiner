@@ -6,6 +6,27 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-04
+
+### Added
+
+- クリップボード連続記録 (`continuous_record_enabled`、トレイ「連続記録 → 連続記録を有効にする」/`Alt+Shift+C`): 履歴とは独立した FIFO キュー。コピーで元テキストを末尾へ積み、連続記録 ON 時の `Ctrl+V` 貼り付けでキュー先頭をクリップボードへ載せてから通常の貼り付けを行う。トレイメニューから指定項目を取り出すこともできる。キューはメモリ上のみ暗号化保持
+- MSI パッケージへの `THIRD_PARTY_NOTICES` 同梱 (OSS 依存の帰属・ライセンス全文)
+
+### Changed
+
+- **対応 OS を Windows のみに統一** (Linux / macOS のビルド・パッケージ・OCR・クリップボード監視を廃止)
+- Windows 専用化に伴い、クロスプラットフォーム用の `#[cfg]`・スタブ・`windows` 子モジュール名を整理
+- OS 連携を `platform/` 配下へ集約 (`autostart`、通知、OCR、画面キャプチャなど)
+- デスクトップ通知を WinRT トースト (`notify.rs`) に統一
+- 開発時の依存関係監査に `cargo-deny` を導入 ([DEVELOPMENT.md](DEVELOPMENT.md#サプライチェーン監査-cargo-deny))
+
+### Removed
+
+- **Linux 対応を廃止** (deb パッケージ、X11 クリップボード監視、Tesseract OCR、XDG autostart など)
+- **macOS 対応を廃止** (DMG、Apple Vision OCR、LaunchAgent、WebView OCR オーバーレイなど)
+- 未使用の `notify-rust` 依存と公開 API `config::home_dir`
+
 ## [0.10.0] - 2026-07-02
 
 ### Added
@@ -269,7 +290,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...develop
+[0.11.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...v0.11.0
 [0.10.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.9.0...v0.10.0
 [0.9.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.8.0...v0.9.0
 [0.8.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.7.1...v0.8.0

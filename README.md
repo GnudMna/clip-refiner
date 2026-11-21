@@ -5,18 +5,16 @@
 <h1>ClipRefiner</h1>
 
 <p>
-  <strong>クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工するデスクトップツール</strong>
+  <strong>クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工する Windows 向けデスクトップツール</strong>
 </p>
 
 <p>
   <img src="https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHJvbGU9ImltZyI%2BPHRpdGxlPldpbmRvd3M8L3RpdGxlPjxwYXRoIGQ9Ik0zIDEyLjVWNi44bDgtMS4xdjYuOEgzem05LTcuMyAxMC0xLjR2OC43SDEyVjUuMnpNMyAxMy41aDh2NS43bC04LTEuMnYtNC41em05IDBoMTB2OC42bC0xMC0xLjR2LTcuMnoiLz48L3N2Zz4%3D&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS">
-  <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux">
   <img src="https://img.shields.io/badge/License-All%20Rights%20Reserved-F59E0B?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiIHJvbGU9ImltZyI%2BPHRpdGxlPkNvcHlyaWdodDwvdGl0bGU%2BPHBhdGggZD0iTTEyIDJhMTAgMTAgMCAxIDAgMCAyMCAxMCAxMCAwIDAgMCAwLTIwem0wIDJhOCA4IDAgMSAxIDAgMTYgOCA4IDAgMCAxIDAtMTZ6bS0xIDQuNWMtMi4yIDAtMy41IDEuNi0zLjUgMy41czEuMyAzLjUgMy41IDMuNWMxLjEgMCAyLS41IDIuNi0xLjJsLTEuMi0xLjJjLS40LjUtMSAuOC0xLjYuOC0xLjIgMC0yLS45LTItMnMuOC0yIDItMmMuNiAwIDEuMS4yIDEuNS42bDEuMi0xLjJjLS43LS43LTEuNy0xLjEtMi45LTEuMXoiLz48L3N2Zz4%3D&logoColor=white" alt="License">
 </p>
 
 <p>
-  <sub>42 種類の加工モード &middot; 加工パイプライン &middot; お気に入り &middot; 画面 OCR &middot; 暗号化履歴 &middot; 機密情報マスキング</sub>
+  <sub>42 種類の加工モード &middot; 加工パイプライン &middot; お気に入り &middot; 画面 OCR &middot; 暗号化履歴 &middot; 連続記録 &middot; 機密情報マスキング</sub>
 </p>
 
 </div>
@@ -39,8 +37,7 @@
 **監視モード (常駐):** 引数なしで起動するとシステムトレイに常駐し、クリップボードの変更を自動加工する。
 
 ```bash
-./ClipRefiner.exe          # Windows
-./ClipRefiner              # macOS / Linux
+./ClipRefiner.exe
 ```
 
 **ワンショット:** `--mode` (`-m`) で 1 回だけ加工して終了。複数段は `--pipeline` を使う。
@@ -65,6 +62,7 @@
 | **登録クリップ** | よく使うテキスト・画像を暗号化保存し即コピー (`Alt+Shift+T`) |
 | **お気に入り変換** | よく使うモードを専用ホットキー (最大 20 件) で即切替 |
 | **画面 OCR** | 範囲選択して OS 標準 OCR でクリップボードへ (`Alt+Shift+O`) |
+| **連続記録** | コピーした元テキストを FIFO キューへ蓄積し、`Ctrl+V` やメニューから順に取り出し (`Alt+Shift+C`) |
 | **正規表現モード** | `config.toml` の `[regex]` で置換・抽出・削除・分割 |
 | **履歴** | 加工結果をメモリ上のみ暗号化保持 (オプション) |
 | **加工の取り消し** | 直近 1 件を元テキストへ復元 (`Alt+Shift+Z`) |
@@ -76,7 +74,7 @@
 
 ### 監視モード
 
-トレイアイコンの右クリックメニューから加工モード・監視方式・履歴などを操作する。`config.toml` の `pipeline` で複数モードを連鎖適用できる。監視方式 (`Polling` / `Event`) の違いは [CONFIG.md](CONFIG.md#監視方式-monitor_mode) を参照。
+トレイアイコンの右クリックメニューから加工モード・監視方式・履歴・連続記録などを操作する。`config.toml` の `pipeline` で複数モードを連鎖適用できる。監視方式 (`Polling` / `Event`) の違いは [CONFIG.md](CONFIG.md#監視方式-monitor_mode) を参照。連続記録の詳細は [CONFIG.md の連続記録](CONFIG.md#連続記録) を参照。
 
 ### ワンショットモード
 
@@ -103,7 +101,7 @@
 
 ### システムトレイ
 
-変換モード・監視方式/周期・履歴・登録クリップ・通知・設定の開閉・再読み込み・一時停止・終了などを提供する。メニュー項目の詳細は [CONFIG.md の UI 操作](CONFIG.md#ui-操作) を参照。
+変換モード・監視方式/周期・履歴・連続記録・登録クリップ・通知・設定の開閉・再読み込み・一時停止・終了などを提供する。メニュー項目の詳細は [CONFIG.md の UI 操作](CONFIG.md#ui-操作) を参照。
 
 ### クイックセレクタ / 登録クリップセレクタ
 
@@ -115,7 +113,7 @@
 
 ### 画面 OCR
 
-`Alt+Shift+O` で全画面オーバーレイを表示し、ドラッグで範囲選択。OS 標準 OCR で認識したテキストをクリップボードへ書き込む。Linux では Tesseract と日本語言語パックが必要。詳細は [CONFIG.md の画面 OCR](CONFIG.md#画面-ocr) を参照。
+`Alt+Shift+O` で全画面オーバーレイを表示し、ドラッグで範囲選択。OS 標準 OCR で認識したテキストをクリップボードへ書き込む。詳細は [CONFIG.md の画面 OCR](CONFIG.md#画面-ocr) を参照。
 
 ---
 
@@ -129,6 +127,7 @@
 | `Alt+Shift+T` | 登録クリップセレクタ |
 | `Alt+Shift+O` | 画面 OCR |
 | `Alt+Shift+P` | 監視の一時停止 / 再開 |
+| `Alt+Shift+C` | 連続記録の有効 / 無効 |
 | `Alt+Shift+Z` | 加工の取り消し |
 | `Alt+Shift+N` | 通知 ON/OFF |
 | `Alt+Shift+Q` | 終了 |
@@ -138,27 +137,27 @@
 
 ---
 
-## 履歴・セキュリティ
+## 履歴・連続記録・セキュリティ
 
-履歴機能はトレイ「履歴」から有効化できる (デフォルト無効)。加工結果を最大 `history_limit` 件 (既定 10) 保持し、トレイから呼び出せる。
+**履歴**はトレイ「履歴」から有効化できる (デフォルト無効)。加工結果を最大 `history_limit` 件 (既定 10) 保持し、トレイから呼び出せる。
 
-履歴・登録クリップ・加工取り消し用テキストは**ディスクへ書かず**、メモリ上で ChaCha20-Poly1305 暗号化して保持する。通知や履歴ラベルでは機密らしい内容を自動マスクする。多層的な保護の詳細と利用上の注意は [CONFIG.md のセキュリティ](CONFIG.md#クリップボード履歴のセキュリティ) を参照。
+**連続記録**は履歴とは別の FIFO キュー。トレイ「連続記録」または `Alt+Shift+C` で有効化し、監視時にコピーした元テキストを加工せず蓄積する。連続記録 ON 時の `Ctrl+V` でキュー先頭をクリップボードへ載せてから貼り付ける。詳細は [CONFIG.md の連続記録](CONFIG.md#連続記録) を参照。
+
+履歴・連続記録・登録クリップ・加工取り消し用テキストは**ディスクへ書かず**、メモリ上で ChaCha20-Poly1305 暗号化して保持する。通知や履歴ラベルでは機密らしい内容を自動マスクする。多層的な保護の詳細と利用上の注意は [CONFIG.md のセキュリティ](CONFIG.md#クリップボード履歴のセキュリティ) を参照。
 
 ---
 
 ## インストール
 
-リリース済みパッケージがある場合:
+リリース済みパッケージがある場合 (対応 OS は **Windows のみ**):
 
 | プラットフォーム | 方法 |
 | :--------------- | :--- |
-| **Windows** | MSI を実行 (per-user、管理者権限不要) |
-| **macOS** | DMG から `ClipRefiner.app` を Applications へ |
-| **Linux** | `sudo dpkg -i clip-refiner_{version}-1_{arch}.deb` |
+| **Windows** | MSI を実行 (per-user、管理者権限不要。`THIRD_PARTY_NOTICES` を同梱) |
 
 ソースからのビルド・パッケージ作成は [DEVELOPMENT.md](DEVELOPMENT.md) を参照。実行ファイル単体のポータブル利用も可能 (設定はユーザの設定ディレクトリへ保存)。
 
-**ログイン時の自動起動:** トレイ「ログイン時に起動」から切替 (Windows: レジストリ Run、macOS: LaunchAgent、Linux: XDG autostart)。実行ファイルを移動した場合は一度オフにしてから再度オンにする。
+**ログイン時の自動起動:** トレイ「ログイン時に起動」から切替 (レジストリ Run キー)。実行ファイルを移動した場合は一度オフにしてから再度オンにする。
 
 ---
 
@@ -167,7 +166,6 @@
 | プラットフォーム | パス |
 | :--------------- | :--- |
 | **Windows** | `%APPDATA%\ClipRefiner\config.toml` |
-| **Linux / macOS** | `~/.config/clip-refiner/config.toml` |
 
 設定項目・加工パイプライン・監視方式・処理上限・ログの場所・加工モード一覧・使用例は **[CONFIG.md](CONFIG.md)** を参照。
 

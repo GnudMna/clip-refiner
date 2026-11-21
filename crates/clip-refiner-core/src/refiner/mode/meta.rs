@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use super::defs::{RefineCategory, RefineMode};
 
-use clap::ValueEnum;
 use strum::{EnumMessage, EnumProperty, IntoEnumIterator};
 
 // ======================================================================
@@ -112,9 +111,7 @@ impl RefineMode {
                     "id": m,
                     "label": m.label(),
                     "category": m.category().label(),
-                    "value": m.to_possible_value()
-                        .map(|v| v.get_name().to_string())
-                        .unwrap_or_default(),
+                    "value": m.to_string(),
                     "favorite": favorite,
                 });
                 if let Some(index) = favorite_index.get(m) {
@@ -148,6 +145,8 @@ impl RefineMode {
 #[cfg(test)]
 mod tests {
     use super::super::defs::{RefineCategory, RefineMode};
+
+    use std::str::FromStr;
 
     use strum::{EnumProperty, IntoEnumIterator};
 
@@ -274,6 +273,11 @@ mod tests {
             Some(0)
         );
 
+        assert_eq!(
+            url_decode.get("value").and_then(|v| v.as_str()),
+            Some("url-decode")
+        );
+
         let trim = parsed
             .iter()
             .find(|item| item.get("id").and_then(|v| v.as_str()) == Some("Trim"))
@@ -295,6 +299,16 @@ mod tests {
             Some(false)
         );
         assert!(json_format.get("favoriteIndex").is_none());
+    }
+
+    /// kebab-case の CLI 名を `FromStr` で解析できること
+    #[test]
+    fn test_refine_mode_from_cli_name() {
+        assert_eq!(
+            RefineMode::from_str("url-decode").expect("parse"),
+            RefineMode::UrlDecode
+        );
+        assert_eq!(RefineMode::JsonFormat.to_string(), "json-format");
     }
 
     /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すこと

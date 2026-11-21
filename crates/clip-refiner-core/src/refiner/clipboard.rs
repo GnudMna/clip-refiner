@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::context::RefineContext;
 use super::mode::RefineMode;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
-use super::text_clipboard::{ImageClipboard, TextClipboard};
+use super::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 
 use crate::security::{is_within_clipboard_limit, is_within_parser_limit};
 
@@ -34,22 +34,28 @@ pub enum ClipboardProcessOutcome {
 }
 
 /// クリップボード加工の失敗理由
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ClipboardProcessError {
     /// クリップボードが空、またはテキスト形式ではない
+    #[error("クリップボードにテキストがありません")]
     NoText,
     /// クリップボード本文が処理上限を超えている
+    #[error("クリップボードのテキストが大きすぎます")]
     TextTooLarge,
     /// クリップボードの読み取りに失敗
+    #[error("クリップボードの読み取りに失敗しました")]
     ReadFailed(String),
     /// クリップボードへの書き込みに失敗
+    #[error("クリップボードへの書き込みに失敗しました")]
     WriteFailed(String),
     /// クリップボードに Excel の描画画像がない
+    #[error("クリップボードに Excel の描画画像がありません")]
     NoImage,
 }
 
 impl ClipboardProcessError {
     /// ユーザー向けのエラーメッセージを返す
+    #[must_use]
     pub fn user_message(&self) -> &str {
         match self {
             Self::NoText => "クリップボードにテキストがありません",
@@ -57,6 +63,16 @@ impl ClipboardProcessError {
             Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
             Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
             Self::NoImage => "クリップボードに Excel の描画画像がありません",
+        }
+    }
+}
+
+impl From<ClipboardIoError> for ClipboardProcessError {
+    fn from(err: ClipboardIoError) -> Self {
+        match err {
+            ClipboardIoError::ReadFailed(detail) => Self::ReadFailed(detail),
+            ClipboardIoError::WriteFailed(detail) => Self::WriteFailed(detail),
+            ClipboardIoError::ImageUnavailable => Self::NoImage,
         }
     }
 }
@@ -96,6 +112,9 @@ pub(crate) fn apply_refinement_to_text(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
+///
+/// # Errors
+/// テキストが空、またはサイズ上限を超えている場合
 pub fn apply_pipeline_to_text(
     text: &str,
     pipeline: &[RefineMode],
@@ -132,6 +151,9 @@ pub fn apply_pipeline_to_text(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+///
+/// # Errors
+/// クリップボード I/O 失敗、空テキスト、サイズ上限超過のいずれか
 pub fn process_clipboard(
     clipboard: &mut arboard::Clipboard,
     mode: RefineMode,
@@ -153,6 +175,9 @@ pub fn process_clipboard(
 /// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
 /// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
 /// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+///
+/// # Errors
+/// クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
 pub fn process_clipboard_pipeline(
     clipboard: &mut arboard::Clipboard,
     pipeline: &[RefineMode],
@@ -188,15 +213,11 @@ pub(crate) fn process_text_clipboard_pipeline<C: TextClipboard>(
     pipeline: &[RefineMode],
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    let text = clipboard
-        .get_text()
-        .map_err(ClipboardProcessError::ReadFailed)?;
+    let text = clipboard.get_text()?;
 
     match apply_pipeline_to_text(&text, pipeline, ctx)? {
         ClipboardProcessOutcome::Processed(result) => {
-            clipboard
-                .set_text(result.clone())
-                .map_err(ClipboardProcessError::WriteFailed)?;
+            clipboard.set_text(result.clone())?;
             Ok(ClipboardProcessOutcome::Processed(result))
         }
         ClipboardProcessOutcome::Unchanged | ClipboardProcessOutcome::ImageProcessed { .. } => {
@@ -228,9 +249,7 @@ pub(crate) fn process_image_clipboard<C: TextClipboard + ImageClipboard>(
         Err(()) => return Ok(ClipboardProcessOutcome::Unchanged),
     };
 
-    clipboard
-        .set_image(width, height, rgba)
-        .map_err(ClipboardProcessError::WriteFailed)?;
+    clipboard.set_image(width, height, rgba)?;
 
     Ok(ClipboardProcessOutcome::ImageProcessed { width, height })
 }
@@ -290,6 +309,9 @@ pub(crate) fn process_clipboard_io<C: TextClipboard + ImageClipboard>(
 }
 
 /// テキスト・画像クリップボード実装に対して加工パイプラインを適用する
+///
+/// # Errors
+/// パイプラインが空、クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
 pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
     pipeline: &[RefineMode],
@@ -302,20 +324,19 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
     let (text_modes, image_tail) = split_pipeline(pipeline);
 
     if text_modes.is_empty() {
-        return process_image_clipboard(clipboard, image_tail.expect("画像モードが存在する"), ctx);
+        let Some(image_mode) = image_tail else {
+            return Err(ClipboardProcessError::NoText);
+        };
+        return process_image_clipboard(clipboard, image_mode, ctx);
     }
 
-    let text = clipboard
-        .get_text()
-        .map_err(ClipboardProcessError::ReadFailed)?;
+    let text = clipboard.get_text()?;
 
     let text_outcome = apply_pipeline_to_text(&text, pipeline, ctx)?;
 
     match text_outcome {
         ClipboardProcessOutcome::Processed(result) => {
-            clipboard
-                .set_text(result.clone())
-                .map_err(ClipboardProcessError::WriteFailed)?;
+            clipboard.set_text(result.clone())?;
             if let Some(image_mode) = image_tail {
                 return process_image_clipboard(clipboard, image_mode, ctx);
             }

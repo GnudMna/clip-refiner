@@ -24,7 +24,7 @@ mod pipeline;
 pub mod text_clipboard;
 mod transform;
 
-pub use text_clipboard::{ImageClipboard, TextClipboard};
+pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 
 pub use clipboard::process_clipboard_pipeline_io;
 pub use clipboard::{

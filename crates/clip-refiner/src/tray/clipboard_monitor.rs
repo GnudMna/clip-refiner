@@ -94,6 +94,10 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
     event_driven: bool,
     ctx: &RefineContext,
 ) -> bool {
+    if snap.continuous_record_enabled {
+        return handle_continuous_record_update(clipboard, state, snap, event_driven);
+    }
+
     let text = match clipboard.get_text() {
         Ok(text) => text,
         Err(_) if snap.produces_image() => String::new(),
@@ -152,6 +156,50 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
     }
 
     updated
+}
+
+/// 連続記録モードでクリップボードの内容更新を検知し、元テキストを履歴へ記録する
+///
+/// 加工は行わず、クリップボードへの書き戻しや通知も発生しない
+///
+/// # Arguments
+/// * `clipboard` - クリップボード操作用のインスタンス
+/// * `state` - アプリケーションの共有状態
+/// * `snap` - ループ先頭で取得済みの設定スナップショット
+/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
+///
+/// # Returns
+/// * `bool` - 常に `false` (クリップボードは更新しない)
+fn handle_continuous_record_update<C: TextClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    _snap: &MonitorSnapshot,
+    event_driven: bool,
+) -> bool {
+    let Ok(text) = clipboard.get_text() else {
+        return false;
+    };
+
+    if text.is_empty() {
+        return false;
+    }
+
+    let should_process =
+        state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
+
+    if !should_process {
+        return false;
+    }
+
+    if !is_within_clipboard_limit(&text) {
+        crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
+        state.record_clipboard_observed(&text);
+        return false;
+    }
+
+    state.record_clipboard_observed(&text);
+    state.enqueue_continuous_record(&text);
+    false
 }
 
 /// 加工結果に応じて共有状態と履歴を更新する
@@ -245,6 +293,14 @@ mod tests {
             .collect()
     }
 
+    fn collect_continuous_record(
+        state: &std::sync::Arc<crate::tray::state::AppState>,
+    ) -> Vec<String> {
+        (0..state.continuous_record_len())
+            .filter_map(|i| state.get_continuous_record_entry(i).map(|s| s.to_string()))
+            .collect()
+    }
+
     /// ポーリング時は新しいテキストを加工対象とすること
     #[test]
     fn polling_processes_new_text() {
@@ -331,12 +387,17 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 
-    fn test_snapshot(pipeline: Vec<RefineMode>, history_enabled: bool) -> MonitorSnapshot {
+    fn test_snapshot(
+        pipeline: Vec<RefineMode>,
+        history_enabled: bool,
+        continuous_record_enabled: bool,
+    ) -> MonitorSnapshot {
         MonitorSnapshot {
             pipeline,
             interval_ms: 1000,
             is_paused: false,
             history_enabled,
+            continuous_record_enabled,
             regex_settings: RegexSettings::default(),
         }
     }
@@ -345,7 +406,7 @@ mod tests {
     #[test]
     fn record_outcome_processed_updates_state_and_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(vec![RefineMode::Trim], true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Ok(ClipboardProcessOutcome::Processed("trimmed".to_string()));
 
         assert!(record_clipboard_outcome(
@@ -369,7 +430,7 @@ mod tests {
     #[test]
     fn record_outcome_unchanged_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(vec![RefineMode::Trim], true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Ok(ClipboardProcessOutcome::Unchanged);
 
         assert!(!record_clipboard_outcome(
@@ -389,7 +450,7 @@ mod tests {
     #[test]
     fn record_outcome_skips_history_when_disabled() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(vec![RefineMode::Trim], false);
+        let snap = test_snapshot(vec![RefineMode::Trim], false, false);
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
         record_clipboard_outcome(&state, &snap, &outcome, "x");
@@ -400,7 +461,7 @@ mod tests {
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(vec![RefineMode::Trim], true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Err(ClipboardProcessError::NoText);
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
@@ -414,11 +475,36 @@ mod tests {
     #[test]
     fn record_outcome_read_error_observes_and_adds_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let snap = test_snapshot(vec![RefineMode::Trim], true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
 
         assert_eq!(collect_history(&state), vec!["source".to_string()]);
+    }
+
+    /// 連続記録モードでは元テキストを加工せず履歴へ記録すること
+    #[test]
+    fn continuous_record_stores_observed_text_without_processing() {
+        use crate::test_helpers::InMemoryTextClipboard;
+
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        let snap = test_snapshot(vec![RefineMode::Trim], true, true);
+        let mut clipboard = InMemoryTextClipboard::with_text("  raw  ");
+
+        assert!(!handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            false,
+            &RefineContext::default(),
+        ));
+        assert_eq!(clipboard.text(), "  raw  ");
+        assert_eq!(
+            collect_continuous_record(&state),
+            vec!["  raw  ".to_string()]
+        );
+        assert_eq!(collect_history(&state), Vec::<String>::new());
     }
 }

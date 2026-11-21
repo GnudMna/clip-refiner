@@ -19,8 +19,7 @@ pub struct ClipboardImage {
 // ======================================================================
 /// クリップボード上の Excel 描画ビットマップ (`CF_DIB` / `CF_DIBV5`) を RGBA へ変換する
 ///
-/// `arboard::Clipboard::get_image` が取得できない場合の Windows 向けフォールバック
-#[cfg(windows)]
+/// `arboard::Clipboard::get_image` が取得できない場合のフォールバック
 pub(crate) fn read_dib_image() -> Option<ClipboardImage> {
     use clipboard_win::{Clipboard, formats, is_format_avail, raw};
 
@@ -39,15 +38,9 @@ pub(crate) fn read_dib_image() -> Option<ClipboardImage> {
     decode_dib_to_rgba(&mut data)
 }
 
-#[cfg(not(windows))]
-pub(crate) fn read_dib_image() -> Option<ClipboardImage> {
-    None
-}
-
 // ======================================================================
 // プライベート関数
 // ======================================================================
-#[cfg(windows)]
 fn decode_dib_to_rgba(data: &mut [u8]) -> Option<ClipboardImage> {
     use std::io::Cursor;
 
@@ -74,7 +67,6 @@ fn decode_dib_to_rgba(data: &mut [u8]) -> Option<ClipboardImage> {
 ///
 /// Chrome / Excel 等が alpha 付き 32bit DIB を `BI_RGB` で載せるケースへの対応
 /// (`arboard` の Windows 実装と同様)
-#[cfg(windows)]
 fn tweak_dibv5_header(dib: &mut [u8]) {
     const BI_RGB: u32 = 0;
     const BI_BITFIELDS: u32 = 3;

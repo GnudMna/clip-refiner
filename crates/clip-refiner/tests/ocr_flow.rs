@@ -21,11 +21,11 @@ fn ocr_set_text_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "  hello  ");
 }
 
-/// OCR 結果は加工書き戻しではなく外部設定として記録されること
+/// OCR 結果は外部設定として1回分のエコーとして記録されること
 #[test]
-fn ocr_set_text_does_not_mark_write_back() {
+fn ocr_set_text_marks_echo_for_one_monitor_tick() {
     let mut harness = ClipboardHarness::with_text("old");
 
     harness.set_ocr_text("ocr-output");
-    assert!(!harness.matches_last_written("ocr-output"));
+    assert!(harness.matches_last_written("ocr-output"));
 }

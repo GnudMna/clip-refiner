@@ -365,6 +365,32 @@ fn handle_menu_event_history_enabled() {
     assert!(state.with_config(|c| c.history_enabled));
 }
 
+/// 連続記録有効化で設定が更新され、現在のクリップボードがキューへ積まれること
+#[test]
+fn handle_menu_event_continuous_record_enabled() {
+    let state = Arc::new(test_app_state());
+    state.with_config_mut(|c| c.continuous_record_enabled = false);
+    let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+    let (worker, rx) = with_test_worker(&state);
+    let mut control_flow = ControlFlow::Wait;
+
+    handle_menu_event(
+        &menu_event(menu.continuous_record.enabled_item.id()),
+        &menu,
+        &state,
+        &worker,
+        None,
+        &mut control_flow,
+    );
+
+    assert!(state.with_config(|c| c.continuous_record_enabled));
+    assert!(menu.continuous_record.enabled_item.is_checked());
+    match rx.try_recv().unwrap() {
+        ClipboardCommand::CatchUpContinuousRecord => {}
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
 /// お気に入り登録メニューで現在モードが登録されること
 #[test]
 fn handle_menu_event_add_favorite_registers_current_mode() {

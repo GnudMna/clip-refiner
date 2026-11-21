@@ -10,14 +10,14 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner = { version = "0.9", default-features = false }
+//! clip-refiner = { version = "0.11.0", default-features = false }
 //! ```
 //!
 //! または [`clip-refiner-core`] を直接依存に追加する
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "0.9" }
+//! clip-refiner-core = { version = "0.11.0" }
 //! ```
 //!
 //! # 単一モードの加工
@@ -37,10 +37,9 @@
 //! ライブラリ API は [`Cargo.toml`] の semver に従う。破壊的変更は CHANGELOG の
 //! **Breaking changes** 節に記載する
 
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
+#[cfg(not(target_os = "windows"))]
+compile_error!("ClipRefiner は Windows 専用です");
 
-#[cfg(feature = "app")]
-mod autostart;
 #[cfg(feature = "app")]
 mod bootstrap;
 #[cfg(feature = "app")]
@@ -60,12 +59,13 @@ pub use clip_refiner_core::hotkey_binding;
 pub use clip_refiner_core::refiner;
 pub use clip_refiner_core::security;
 pub use clip_refiner_core::{
-    AppConfig, CONFIG_VERSION, ClipboardProcessError, ClipboardProcessOutcome, ConfigReloadError,
-    FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings, MonitorMode, NotificationSettings,
-    OrderedValue, RefineCategory, RefineContext, RefineMode, Refiner, RegexSettings, ResolvedClip,
-    apply_pipeline_to_text, apply_text_pipeline, disk_config_modified_time, get_config_dir,
-    is_within_clipboard_limit, is_within_parser_limit, open_config_file, process_clipboard,
-    process_clipboard_pipeline, split_pipeline,
+    AddRegisteredClipError, AppConfig, CONFIG_VERSION, ClipboardIoError, ClipboardProcessError,
+    ClipboardProcessOutcome, ConfigError, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
+    Error, FavoriteMoveDirection, FavoriteToggleResult, HotkeyParseError, HotkeySettings,
+    MonitorMode, NotificationSettings, OrderedValue, RefineCategory, RefineContext, RefineMode,
+    Refiner, RegexSettings, ResolvedClip, apply_pipeline_to_text, apply_text_pipeline,
+    disk_config_modified_time, get_config_dir, is_within_clipboard_limit, is_within_parser_limit,
+    open_config_file, process_clipboard, process_clipboard_pipeline, split_pipeline,
 };
 
 // ======================================================================
@@ -79,6 +79,9 @@ pub use clip_refiner_core::{
 ///
 /// # Returns
 /// * `anyhow::Result<()>` - 正常終了時は `Ok(())`、エラー発生時は `Err` を返す
+///
+/// # Errors
+/// ログ初期化、引数解析、クリップボード初期化、常駐ループのいずれかが失敗した場合
 #[cfg(feature = "app")]
 pub fn run() -> anyhow::Result<()> {
     bootstrap::run()

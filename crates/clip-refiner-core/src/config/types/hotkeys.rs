@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use crate::consts;
-use crate::hotkey_binding::parse_hotkey_binding;
+use crate::hotkey_binding::{ParsedHotkey, parse_hotkey_binding};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +35,9 @@ pub struct HotkeySettings {
     /// 画面範囲選択 OCR の開始
     #[serde(default = "default_hotkey_ocr")]
     pub ocr: String,
+    /// 連続記録の有効・無効切替
+    #[serde(default = "default_hotkey_continuous_record")]
+    pub continuous_record: String,
     /// お気に入り変換モード用ホットキー (登録順インデックスに対応。空文字で無効)
     #[serde(default)]
     pub favorite_mode_slots: Vec<String>,
@@ -47,6 +53,7 @@ impl Default for HotkeySettings {
             undo: default_hotkey_undo(),
             clip_selector: default_hotkey_clip_selector(),
             ocr: default_hotkey_ocr(),
+            continuous_record: default_hotkey_continuous_record(),
             favorite_mode_slots: Vec::new(),
         }
     }
@@ -90,7 +97,66 @@ impl HotkeySettings {
             "clip_selector",
         );
         fix_hotkey_field(&mut self.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr");
+        fix_hotkey_field(
+            &mut self.continuous_record,
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
+            "continuous_record",
+        );
         self.normalize_favorite_mode_slots();
+        self.fix_duplicates();
+    }
+
+    /// 重複するホットキー割り当てを解消する
+    ///
+    /// 固定割り当ては優先順で先勝ちとし、後続はデフォルトへ戻す。
+    /// お気に入りスロットは固定割り当ておよび先に確定したスロットと重複した場合に無効化する
+    pub fn fix_duplicates(&mut self) {
+        let mut used: HashMap<ParsedHotkey, &'static str> = HashMap::new();
+
+        dedupe_fixed_field(
+            &mut self.quick_selector,
+            "quick_selector",
+            consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.notification,
+            "notification",
+            consts::DEFAULT_HOTKEY_NOTIFICATION,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.pause,
+            "pause",
+            consts::DEFAULT_HOTKEY_PAUSE,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.quit,
+            "quit",
+            consts::DEFAULT_HOTKEY_QUIT,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.undo,
+            "undo",
+            consts::DEFAULT_HOTKEY_UNDO,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.clip_selector,
+            "clip_selector",
+            consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
+            &mut used,
+        );
+        dedupe_fixed_field(&mut self.ocr, "ocr", consts::DEFAULT_HOTKEY_OCR, &mut used);
+        dedupe_fixed_field(
+            &mut self.continuous_record,
+            "continuous_record",
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
+            &mut used,
+        );
+        self.fix_duplicate_favorite_slots(&mut used);
     }
 
     /// お気に入りスロット用ホットキー設定を正規化する
@@ -111,6 +177,67 @@ impl HotkeySettings {
                 slot.clear();
             }
         }
+    }
+
+    /// お気に入りスロットを無効化する
+    fn disable_favorite_slot(&mut self, index: usize) {
+        if index >= self.favorite_mode_slots.len() {
+            self.favorite_mode_slots.resize(index + 1, String::new());
+        }
+        self.favorite_mode_slots[index].clear();
+    }
+
+    /// お気に入りスロットの重複を無効化する
+    fn fix_duplicate_favorite_slots(&mut self, used: &mut HashMap<ParsedHotkey, &'static str>) {
+        for index in 0..consts::MAX_FAVORITE_MODES {
+            let Some(binding) = self.favorite_slot_binding(index) else {
+                continue;
+            };
+            let Ok(parsed) = parse_hotkey_binding(&binding) else {
+                continue;
+            };
+            if let Entry::Vacant(entry) = used.entry(parsed) {
+                entry.insert("favorite_mode_slot");
+            } else {
+                tracing::warn!(
+                    "お気に入りスロット {} のホットキー '{binding}' は他の割り当てと重複するため無効化する",
+                    index + 1
+                );
+                self.disable_favorite_slot(index);
+            }
+        }
+    }
+}
+
+/// 固定ホットキー割り当ての重複を解消する
+fn dedupe_fixed_field(
+    field: &mut String,
+    label: &'static str,
+    default: &str,
+    used: &mut HashMap<ParsedHotkey, &'static str>,
+) {
+    let original = field.clone();
+    let mut candidate = original.clone();
+
+    loop {
+        let Ok(parsed) = parse_hotkey_binding(&candidate) else {
+            return;
+        };
+        if let Entry::Vacant(entry) = used.entry(parsed) {
+            *field = candidate;
+            entry.insert(label);
+            return;
+        }
+        if candidate == default {
+            tracing::warn!("ホットキー設定 '{label}' の重複を解消できない (指定値: '{original}')");
+            return;
+        }
+        if let Some(first) = used.get(&parsed) {
+            tracing::warn!(
+                "ホットキー設定 '{label}' が '{first}' と重複するためデフォルト '{default}' に置き換える (指定値: '{original}')"
+            );
+        }
+        candidate = default.to_string();
     }
 }
 
@@ -174,6 +301,11 @@ fn default_hotkey_clip_selector() -> String {
 /// 画面 OCR のデフォルトホットキーを返す
 fn default_hotkey_ocr() -> String {
     consts::DEFAULT_HOTKEY_OCR.to_string()
+}
+
+/// 連続記録切替のデフォルトホットキーを返す
+fn default_hotkey_continuous_record() -> String {
+    consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD.to_string()
 }
 
 /// お気に入りスロットのデフォルトホットキー文字列を返す

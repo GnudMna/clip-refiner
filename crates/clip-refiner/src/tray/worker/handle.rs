@@ -93,6 +93,13 @@ impl ClipboardWorkerHandle {
     }
 }
 
+impl Drop for ClipboardWorkerHandle {
+    fn drop(&mut self) {
+        let tx = self.tx.lock_ignore_poison();
+        let _ = tx.send(ClipboardCommand::Shutdown);
+    }
+}
+
 // ======================================================================
 // テスト
 // ======================================================================

@@ -17,6 +17,9 @@ target/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# 生成物 (リリースビルド時に scripts で生成)
+THIRD_PARTY_NOTICES
+
 # WiX (main.wxs とブランド画像はリポジトリで管理)
 wix/*
 !wix/main.wxs

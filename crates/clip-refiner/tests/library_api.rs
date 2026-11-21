@@ -1,8 +1,9 @@
 //! 公開 API の統合テスト (`clip-refiner` re-export と core 連携)
 
 use clip_refiner::{
-    AppConfig, CONFIG_VERSION, ClipboardProcessError, ClipboardProcessOutcome, RefineContext,
-    RefineMode, Refiner, apply_pipeline_to_text, apply_text_pipeline, is_within_clipboard_limit,
+    AddRegisteredClipError, AppConfig, CONFIG_VERSION, ClipboardProcessError,
+    ClipboardProcessOutcome, ConfigError, Error, HotkeyParseError, RefineContext, RefineMode,
+    Refiner, apply_pipeline_to_text, apply_text_pipeline, is_within_clipboard_limit,
     split_pipeline,
 };
 use clip_refiner_core::consts::MAX_CLIPBOARD_TEXT_BYTES;
@@ -82,4 +83,20 @@ fn clipboard_error_user_messages() {
         ClipboardProcessError::TextTooLarge.user_message(),
         "クリップボードのテキストが大きすぎます"
     );
+}
+
+/// 公開エラー型が `Error` へ変換できること
+#[test]
+fn public_errors_convert_to_crate_error() {
+    let clipboard: Error = ClipboardProcessError::NoText.into();
+    assert!(matches!(clipboard, Error::ClipboardProcess(_)));
+
+    let hotkey: Error = HotkeyParseError::Empty.into();
+    assert!(matches!(hotkey, Error::HotkeyParse(_)));
+
+    let clip: Error = AddRegisteredClipError::LimitReached.into();
+    assert!(matches!(clip, Error::AddRegisteredClip(_)));
+
+    let config: Error = ConfigError::SystemDir.into();
+    assert!(matches!(config, Error::Config(_)));
 }

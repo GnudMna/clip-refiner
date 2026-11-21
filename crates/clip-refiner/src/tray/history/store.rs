@@ -2,23 +2,21 @@
 //!
 //! 起動時に生成した鍵で履歴を暗号化し、プロセス終了時に鍵とデータを破棄する
 
-use crate::security::SecretString;
+use crate::security::{
+    CIPHER_KEY_LEN, ContentFingerprint, SecretString, decrypt_bytes, encrypt_bytes,
+    generate_cipher_key, zeroize_cipher_key,
+};
 
-use anyhow::{Context, Result};
-use chacha20poly1305::aead::{Aead, KeyInit};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use zeroize::Zeroize;
+use anyhow::Result;
 
 // ======================================================================
 // 暗号化エントリ
 // ======================================================================
 /// メモリ上に保持する暗号化済み履歴エントリ
 struct EncryptedEntry {
-    /// 重複判定用のコンテンツハッシュ (平文は保持しない)
-    content_hash: [u8; 32],
-    /// 暗号化に使用したノンス
-    nonce: [u8; 12],
-    /// 暗号化された本文
+    /// 重複判定用のコンテンツ指紋 (平文は保持しない)
+    fingerprint: ContentFingerprint,
+    /// `encrypt_bytes` 形式の暗号文 (`nonce || ciphertext`)
     ciphertext: Vec<u8>,
 }
 
@@ -30,7 +28,7 @@ struct EncryptedEntry {
 /// 起動時に生成した鍵でメモリ内の履歴を暗号化して保持する
 /// プロセス終了とともに鍵・履歴は破棄される (ディスクへは書き込まない)
 pub struct EncryptedHistoryStore {
-    key: [u8; 32],
+    key: [u8; CIPHER_KEY_LEN],
     entries: Vec<EncryptedEntry>,
 }
 
@@ -43,10 +41,8 @@ impl EncryptedHistoryStore {
     /// # Returns
     /// * `Result<Self>` - 空の暗号化履歴ストア。鍵生成に失敗した場合は `Err`
     pub fn new() -> Result<Self> {
-        let mut key = [0u8; 32];
-        getrandom::fill(&mut key).context("履歴暗号化鍵の生成に失敗")?;
         Ok(Self {
-            key,
+            key: generate_cipher_key()?,
             entries: Vec::new(),
         })
     }
@@ -80,7 +76,7 @@ impl EncryptedHistoryStore {
 impl EncryptedHistoryStore {
     /// 履歴を追加する
     ///
-    /// 空文字は無視し、同一内容 (ハッシュ一致) は先頭へ移動する
+    /// 空文字は無視し、同一内容 (指紋一致) は先頭へ移動する
     ///
     /// # Arguments
     /// * `text` - 追加する履歴テキスト
@@ -90,25 +86,24 @@ impl EncryptedHistoryStore {
             return;
         }
 
-        let content_hash = Self::content_hash(text);
+        let fingerprint = ContentFingerprint::from_text(text);
 
         if let Some(pos) = self
             .entries
             .iter()
-            .position(|entry| entry.content_hash == content_hash)
+            .position(|entry| entry.fingerprint == fingerprint)
         {
             self.entries.remove(pos);
         }
 
-        let Some((nonce, ciphertext)) = self.encrypt(text) else {
+        let Some(ciphertext) = self.encrypt(text) else {
             return;
         };
 
         self.entries.insert(
             0,
             EncryptedEntry {
-                content_hash,
-                nonce,
+                fingerprint,
                 ciphertext,
             },
         );
@@ -116,6 +111,86 @@ impl EncryptedHistoryStore {
         if self.entries.len() > limit {
             self.entries.truncate(limit);
         }
+    }
+
+    /// FIFO キューへ末尾に積む (重複許可)
+    ///
+    /// インデックス 0 が先頭 (最も古いエントリ)
+    ///
+    /// # Arguments
+    /// * `text` - 追加するテキスト
+    /// * `limit` - 最大保持数
+    pub fn enqueue(&mut self, text: &str, limit: usize) {
+        if text.trim().is_empty() {
+            return;
+        }
+
+        let fingerprint = ContentFingerprint::from_text(text);
+
+        let Some(ciphertext) = self.encrypt(text) else {
+            return;
+        };
+
+        self.entries.push(EncryptedEntry {
+            fingerprint,
+            ciphertext,
+        });
+
+        if self.entries.len() > limit {
+            let overflow = self.entries.len() - limit;
+            self.entries.drain(0..overflow);
+        }
+    }
+
+    /// キュー先頭を取り出して返す
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
+    pub fn discharge_front(&mut self) -> Option<SecretString> {
+        if self.entries.is_empty() {
+            return None;
+        }
+        let entry = self.entries.remove(0);
+        self.decrypt_entry(&entry).ok()
+    }
+
+    /// 先頭から一致する最初のエントリを取り出す
+    ///
+    /// # Arguments
+    /// * `text` - 排出対象の本文
+    ///
+    /// # Returns
+    /// * `bool` - 一致するエントリを除去できた場合は `true`
+    #[cfg(test)]
+    pub fn discharge_matching(&mut self, text: &str) -> bool {
+        if text.trim().is_empty() {
+            return false;
+        }
+        let target = ContentFingerprint::from_text(text);
+        let Some(pos) = self
+            .entries
+            .iter()
+            .position(|entry| entry.fingerprint == target)
+        else {
+            return false;
+        };
+        self.entries.remove(pos);
+        true
+    }
+
+    /// 指定インデックスのエントリを取り出す
+    ///
+    /// # Arguments
+    /// * `index` - キュー内インデックス (0 が先頭)
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 排出した本文。範囲外の場合は `None`
+    pub fn discharge_at(&mut self, index: usize) -> Option<SecretString> {
+        if index >= self.entries.len() {
+            return None;
+        }
+        let entry = self.entries.remove(index);
+        self.decrypt_entry(&entry).ok()
     }
 
     /// 履歴をすべて削除する
@@ -128,35 +203,19 @@ impl EncryptedHistoryStore {
 // 暗号化ヘルパー
 // ======================================================================
 impl EncryptedHistoryStore {
-    /// コンテンツの重複判定用ハッシュを計算する
-    ///
-    /// # Arguments
-    /// * `text` - ハッシュ対象のテキスト
-    ///
-    /// # Returns
-    /// * `[u8; 32]` - BLAKE3 によるコンテンツハッシュ
-    fn content_hash(text: &str) -> [u8; 32] {
-        *blake3::hash(text.as_bytes()).as_bytes()
-    }
-
     /// 平文を暗号化する
     ///
     /// # Arguments
     /// * `text` - 暗号化対象のテキスト
     ///
     /// # Returns
-    /// * `Option<([u8; 12], Vec<u8>)>` - 成功時は `(nonce, ciphertext)`、失敗時は `None`
-    fn encrypt(&self, text: &str) -> Option<([u8; 12], Vec<u8>)> {
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
-        let mut nonce = [0u8; 12];
-        getrandom::fill(&mut nonce).ok()?;
-        let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), text.as_bytes())
-            .inspect_err(|&e| {
-                crate::log_error!("履歴の暗号化に失敗: {:?}", e);
+    /// * `Option<Vec<u8>>` - 成功時は `encrypt_bytes` 形式の暗号文、失敗時は `None`
+    fn encrypt(&self, text: &str) -> Option<Vec<u8>> {
+        encrypt_bytes(&self.key, text.as_bytes())
+            .inspect_err(|e| {
+                crate::log_error!("履歴の暗号化に失敗: {e:#}");
             })
-            .ok()?;
-        Some((nonce, ciphertext))
+            .ok()
     }
 
     /// 暗号化エントリを復号する
@@ -167,10 +226,8 @@ impl EncryptedHistoryStore {
     /// # Returns
     /// * `Result<SecretString, String>` - 成功時は復号済みテキスト、失敗時はエラーメッセージ
     fn decrypt_entry(&self, entry: &EncryptedEntry) -> Result<SecretString, String> {
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&self.key));
-        let plaintext = cipher
-            .decrypt(Nonce::from_slice(&entry.nonce), entry.ciphertext.as_ref())
-            .map_err(|e| format!("履歴の復号に失敗: {e:?}"))?;
+        let plaintext = decrypt_bytes(&self.key, &entry.ciphertext)
+            .map_err(|e| format!("履歴の復号に失敗: {e:#}"))?;
         String::from_utf8(plaintext)
             .map(SecretString::from)
             .map_err(|e| format!("履歴の UTF-8 変換に失敗: {e:?}"))
@@ -182,7 +239,7 @@ impl EncryptedHistoryStore {
 // ======================================================================
 impl Drop for EncryptedHistoryStore {
     fn drop(&mut self) {
-        self.key.zeroize();
+        zeroize_cipher_key(&mut self.key);
         self.entries.clear();
     }
 }
@@ -248,5 +305,56 @@ mod tests {
         // clear で履歴が空になること
         store.clear();
         assert_eq!(store.len(), 0);
+    }
+
+    /// FIFO キューで積み・排出が正しく動作すること
+    #[test]
+    fn test_enqueue_discharge_fifo_queue() {
+        let mut store = EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗");
+
+        store.enqueue("first", 10);
+        store.enqueue("second", 10);
+        store.enqueue("first", 10);
+
+        assert_eq!(store.len(), 3);
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            store.entry_at(1).as_ref().map(|s| s.as_str()),
+            Some("second")
+        );
+        assert_eq!(
+            store.entry_at(2).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+
+        assert!(store.discharge_matching("second"));
+        assert_eq!(store.len(), 2);
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            store.entry_at(1).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+
+        assert_eq!(
+            store.discharge_front().as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            store.discharge_front().as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert!(store.discharge_front().is_none());
+
+        store.enqueue("only", 10);
+        assert_eq!(
+            store.discharge_at(0).as_ref().map(|s| s.as_str()),
+            Some("only")
+        );
     }
 }

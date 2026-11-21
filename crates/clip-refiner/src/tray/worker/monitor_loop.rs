@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use super::super::clipboard_change::ChangeWatcher;
 use super::super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
 use super::super::state::AppState;
+use super::clipboard_seq;
 
 use crate::config::MonitorMode;
 use crate::refiner::RefineContext;
@@ -53,16 +53,10 @@ impl MonitorLoopState {
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
     /// * `state` - アプリケーションの共有状態
-    /// * `watcher` - クリップボード変更検知用ウォッチャー
-    pub fn reset(
-        &mut self,
-        clipboard: &mut Clipboard,
-        state: &Arc<AppState>,
-        watcher: &ChangeWatcher,
-    ) {
+    pub fn reset(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
         let text = clipboard.get_text().unwrap_or_default();
         state.record_clipboard_observed(&text);
-        self.last_token = watcher.token().unwrap_or(0);
+        self.last_token = clipboard_seq::token().unwrap_or(0);
         self.last_poll_at = Instant::now();
         self.tracked_generation = state.monitor_generation.load(Ordering::SeqCst);
         self.event_fallback_warned = false;
@@ -73,14 +67,13 @@ impl MonitorLoopState {
     /// イベント監視が利用できない場合はポーリング方式にフォールバックする
     ///
     /// # Arguments
-    /// * `watcher` - クリップボード変更検知用ウォッチャー
     /// * `state` - アプリケーションの共有状態
     ///
     /// # Returns
     /// * `MonitorMode` - 実際に使用する監視方式
-    pub fn effective_mode(watcher: &ChangeWatcher, state: &Arc<AppState>) -> MonitorMode {
+    pub fn effective_mode(state: &Arc<AppState>) -> MonitorMode {
         match state.with_config(|c| c.monitor_mode) {
-            MonitorMode::Event if watcher.is_supported() => MonitorMode::Event,
+            MonitorMode::Event if clipboard_seq::supports_event_monitor() => MonitorMode::Event,
             MonitorMode::Event | MonitorMode::Polling => MonitorMode::Polling,
         }
     }
@@ -92,11 +85,10 @@ impl MonitorLoopState {
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
-    /// * `watcher` - クリップボード変更検知用ウォッチャー
     ///
     /// # Returns
     /// * `Duration` - `recv_timeout` に渡す待機時間
-    pub fn recv_timeout(&self, state: &Arc<AppState>, watcher: &ChangeWatcher) -> Duration {
+    pub fn recv_timeout(&self, state: &Arc<AppState>) -> Duration {
         let generation = state.monitor_generation.load(Ordering::SeqCst);
         if state.with_config(|c| c.is_paused)
             || generation == 0
@@ -105,7 +97,7 @@ impl MonitorLoopState {
             return Duration::from_millis(100);
         }
 
-        match Self::effective_mode(watcher, state) {
+        match Self::effective_mode(state) {
             MonitorMode::Polling => {
                 let snap = state.monitor_snapshot();
                 let elapsed =
@@ -125,20 +117,14 @@ impl MonitorLoopState {
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
     /// * `state` - アプリケーションの共有状態
-    /// * `watcher` - クリップボード変更検知用ウォッチャー
-    pub fn tick(
-        &mut self,
-        clipboard: &mut Clipboard,
-        state: &Arc<AppState>,
-        watcher: &ChangeWatcher,
-    ) {
+    pub fn tick(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
         let snap = state.monitor_snapshot();
         if snap.is_paused {
             return;
         }
 
         if state.with_config(|c| c.monitor_mode) == MonitorMode::Event
-            && !watcher.is_supported()
+            && !clipboard_seq::supports_event_monitor()
             && !self.event_fallback_warned
         {
             crate::log_warn!(
@@ -149,9 +135,9 @@ impl MonitorLoopState {
 
         self.refine_ctx.regex = snap.regex_settings.clone();
 
-        match Self::effective_mode(watcher, state) {
+        match Self::effective_mode(state) {
             MonitorMode::Event => {
-                if let Some(token) = watcher.token()
+                if let Some(token) = clipboard_seq::token()
                     && token != self.last_token
                 {
                     self.last_token = token;
@@ -162,19 +148,35 @@ impl MonitorLoopState {
                         true,
                         &self.refine_ctx,
                     ) {
-                        self.last_token = watcher.token().unwrap_or(self.last_token);
+                        self.last_token = clipboard_seq::token().unwrap_or(self.last_token);
                     }
                 }
             }
             MonitorMode::Polling => {
                 if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
-                    clipboard_monitor::handle_clipboard_update(
-                        clipboard,
-                        state,
-                        &snap,
-                        false,
-                        &self.refine_ctx,
-                    );
+                    if snap.continuous_record_enabled {
+                        // 連続記録は同一内容の再コピーでも積むため、変更トークンで検知する
+                        if let Some(token) = clipboard_seq::token()
+                            && token != self.last_token
+                        {
+                            self.last_token = token;
+                            clipboard_monitor::handle_clipboard_update(
+                                clipboard,
+                                state,
+                                &snap,
+                                true,
+                                &self.refine_ctx,
+                            );
+                        }
+                    } else {
+                        clipboard_monitor::handle_clipboard_update(
+                            clipboard,
+                            state,
+                            &snap,
+                            false,
+                            &self.refine_ctx,
+                        );
+                    }
                     self.last_poll_at = Instant::now();
                 }
             }
@@ -209,12 +211,10 @@ pub(super) fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLo
 /// * `monitor` - 監視ループ状態
 /// * `clipboard` - クリップボード操作用のインスタンス
 /// * `state` - アプリケーションの共有状態
-/// * `watcher` - クリップボード変更検知用ウォッチャー
 pub(super) fn sync_monitor_generation(
     monitor: &mut MonitorLoopState,
     clipboard: &mut Clipboard,
     state: &Arc<AppState>,
-    watcher: &ChangeWatcher,
 ) {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
     let paused = state.with_config(|c| c.is_paused);
@@ -225,6 +225,6 @@ pub(super) fn sync_monitor_generation(
     }
 
     if monitor.tracked_generation != generation {
-        monitor.reset(clipboard, state, watcher);
+        monitor.reset(clipboard, state);
     }
 }

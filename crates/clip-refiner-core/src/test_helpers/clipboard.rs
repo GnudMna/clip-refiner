@@ -1,6 +1,4 @@
-#![allow(clippy::missing_panics_doc)]
-
-use crate::refiner::text_clipboard::{ImageClipboard, TextClipboard};
+use crate::refiner::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 
 // ======================================================================
 // インメモリクリップボード
@@ -64,16 +62,16 @@ impl InMemoryTextClipboard {
 }
 
 impl TextClipboard for InMemoryTextClipboard {
-    fn get_text(&mut self) -> Result<String, String> {
+    fn get_text(&mut self) -> Result<String, ClipboardIoError> {
         if self.fail_on_read {
-            return Err("read failed".to_string());
+            return Err(ClipboardIoError::ReadFailed("read failed".to_string()));
         }
         Ok(self.text.clone())
     }
 
-    fn set_text(&mut self, text: String) -> Result<(), String> {
+    fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
         if self.fail_on_write {
-            return Err("write failed".to_string());
+            return Err(ClipboardIoError::WriteFailed("write failed".to_string()));
         }
         self.text = text;
         Ok(())
@@ -81,13 +79,18 @@ impl TextClipboard for InMemoryTextClipboard {
 }
 
 impl ImageClipboard for InMemoryTextClipboard {
-    fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), String> {
+    fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
         self.source_image
             .clone()
-            .ok_or_else(|| "no image".to_string())
+            .ok_or(ClipboardIoError::ImageUnavailable)
     }
 
-    fn set_image(&mut self, width: u32, height: u32, rgba: Vec<u8>) -> Result<(), String> {
+    fn set_image(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
         self.written_image = Some((width, height, rgba));
         Ok(())
     }

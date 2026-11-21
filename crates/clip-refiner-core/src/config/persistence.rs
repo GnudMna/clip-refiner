@@ -10,26 +10,31 @@ use super::registered_clips::{
 use super::serialize::config_to_toml;
 use super::types::{AppConfig, RegisteredClip};
 
-use anyhow::Result;
+use crate::error::ConfigError;
 
 // ======================================================================
 // 設定の永続化
 // ======================================================================
 /// 設定ファイルの再読み込みエラー
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigReloadError {
     /// 設定ファイルパスの取得に失敗
+    #[error("設定ファイルの場所を取得できませんでした: {0}")]
     Path(String),
     /// 設定ファイルが存在しない
+    #[error("設定ファイルが見つかりません")]
     NotFound,
     /// ファイル読み取りに失敗
+    #[error("設定ファイルを読み取れませんでした: {0}")]
     Read(String),
     /// TOML 解析に失敗
+    #[error("設定ファイルの形式が不正です: {0}")]
     Parse(String),
 }
 
 impl ConfigReloadError {
     /// ユーザー向けのエラーメッセージを返す
+    #[must_use]
     pub fn user_message(&self) -> &str {
         match self {
             Self::Path(_) => "設定ファイルの場所を取得できませんでした",
@@ -40,11 +45,55 @@ impl ConfigReloadError {
     }
 }
 
+/// 設定読み込みの結果
+#[derive(Debug, Clone)]
+pub struct ConfigLoadOutcome {
+    /// 読み込んだ設定 (失敗時はデフォルト)
+    pub config: AppConfig,
+    /// デフォルトへフォールバックした場合の理由
+    pub fallback: Option<ConfigLoadFallback>,
+}
+
+/// 設定読み込み失敗時にデフォルトへフォールバックした理由
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigLoadFallback {
+    /// 失敗理由
+    pub error: ConfigReloadError,
+    /// 解析失敗時に `config.toml.bak` を作成できたか
+    pub backup_created: bool,
+}
+
+impl ConfigLoadFallback {
+    /// デスクトップ通知・CLI 向けのメッセージを返す
+    #[must_use]
+    pub fn user_message(&self) -> String {
+        let core = match &self.error {
+            ConfigReloadError::Parse(detail) => {
+                format!("{} ({detail})", self.error.user_message())
+            }
+            _ => self.error.user_message().to_string(),
+        };
+        let suffix = match (&self.error, self.backup_created) {
+            (ConfigReloadError::Parse(_), true) => {
+                "。デフォルト設定で起動します。元ファイルは config.toml.bak に保存しました"
+            }
+            (ConfigReloadError::Parse(_), false) => {
+                "。デフォルト設定で起動します。元ファイルのバックアップに失敗しました"
+            }
+            _ => "。デフォルト設定で起動します",
+        };
+        format!("{core}{suffix}")
+    }
+}
+
 /// ディスク上の設定ファイルの最終更新時刻を取得する
 ///
 /// # Returns
 /// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
-pub fn disk_config_modified_time() -> Result<Option<SystemTime>> {
+///
+/// # Errors
+/// 設定ファイルのメタデータ取得に失敗した場合
+pub fn disk_config_modified_time() -> Result<Option<SystemTime>, ConfigError> {
     config_file_modified_time()
 }
 
@@ -53,36 +102,53 @@ impl AppConfig {
     ///
     /// # Returns
     /// * `Result<PathBuf>` - 設定ファイルの完全なパス
-    fn config_path() -> Result<PathBuf> {
+    fn config_path() -> Result<PathBuf, ConfigError> {
         get_config_file_path()
     }
 
     /// 設定ファイルを読み込む
     ///
     /// 存在しない場合はデフォルト設定を生成し、説明コメント付きの `config.toml` を保存する
-    /// 読み込みや解析に失敗した場合はデフォルト設定を返す
+    /// 読み込みや解析に失敗した場合はデフォルト設定を返し、[`ConfigLoadOutcome::fallback`] に理由を格納する
     /// 解析に失敗した場合は元ファイルを `config.toml.bak` へ退避する
     ///
     /// # Returns
-    /// * `Self` - ファイルから読み込まれた `AppConfig`、またはデフォルトの `AppConfig`
-    pub fn load() -> Self {
+    /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由
+    pub fn load() -> ConfigLoadOutcome {
         let config_path = match Self::config_path() {
             Ok(path) => path,
             Err(e) => {
-                tracing::warn!("設定ファイルパスの取得に失敗: {:?}", e);
-                return Self::default();
+                let fallback = ConfigLoadFallback {
+                    error: ConfigReloadError::Path(e.to_string()),
+                    backup_created: false,
+                };
+                tracing::error!("{}", fallback.user_message());
+                return ConfigLoadOutcome {
+                    config: Self::default(),
+                    fallback: Some(fallback),
+                };
             }
         };
 
         if !config_path.exists() {
-            return Self::create_initial_config(&config_path);
+            return ConfigLoadOutcome {
+                config: Self::create_initial_config(&config_path),
+                fallback: None,
+            };
         }
 
         let content = match fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!("設定ファイルの読み込みに失敗: {:?}", e);
-                return Self::default();
+                let fallback = ConfigLoadFallback {
+                    error: ConfigReloadError::Read(e.to_string()),
+                    backup_created: false,
+                };
+                tracing::error!("{}", fallback.user_message());
+                return ConfigLoadOutcome {
+                    config: Self::default(),
+                    fallback: Some(fallback),
+                };
             }
         };
 
@@ -96,12 +162,22 @@ impl AppConfig {
                 if migrated && let Err(e) = config.save() {
                     tracing::warn!("移行後の設定保存に失敗: {:?}", e);
                 }
-                config
+                ConfigLoadOutcome {
+                    config,
+                    fallback: None,
+                }
             }
             Err(e) => {
-                tracing::warn!("設定ファイルの解析に失敗: {:?}", e);
-                backup_corrupted_config(&config_path);
-                Self::default()
+                let backup_created = backup_corrupted_config(&config_path);
+                let fallback = ConfigLoadFallback {
+                    error: ConfigReloadError::Parse(e.to_string()),
+                    backup_created,
+                };
+                tracing::error!("{}", fallback.user_message());
+                ConfigLoadOutcome {
+                    config: Self::default(),
+                    fallback: Some(fallback),
+                }
             }
         }
     }
@@ -112,6 +188,9 @@ impl AppConfig {
     ///
     /// # Returns
     /// * `Result<(Self, bool, bool), ConfigReloadError>` - 読み込んだ設定、移行実行有無、将来 version のクランプ有無
+    ///
+    /// # Errors
+    /// 設定ファイルが存在しない、読み取り失敗、TOML 解析失敗のいずれか
     pub fn reload_from_disk() -> Result<(Self, bool, bool), ConfigReloadError> {
         let config_path =
             Self::config_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
@@ -141,9 +220,12 @@ impl AppConfig {
     ///
     /// # Returns
     /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す
-    pub fn save(&self) -> Result<()> {
+    ///
+    /// # Errors
+    /// 設定パス取得、登録クリップ保存、TOML 書き出し、パーミッション設定のいずれかに失敗した場合
+    pub fn save(&self) -> Result<(), ConfigError> {
         let config_path = Self::config_path().map_err(|e| {
-            tracing::error!("設定ファイルパスの取得に失敗: {:?}", e);
+            tracing::error!("設定ファイルパスの取得に失敗: {}", e);
             e
         })?;
 
@@ -152,7 +234,7 @@ impl AppConfig {
 
         save_registered_clips(&to_save.clips).map_err(|e| {
             tracing::error!("登録クリップの保存に失敗: {:?}", e);
-            e
+            ConfigError::RegisteredClipsSave(e.to_string())
         })?;
 
         let existing = if config_path.exists() {
@@ -163,12 +245,12 @@ impl AppConfig {
 
         let content = config_to_toml(&to_save, existing.as_deref()).map_err(|e| {
             tracing::error!("設定のシリアライズに失敗: {:?}", e);
-            e
+            ConfigError::Serialize(e.to_string())
         })?;
 
         fs::write(&config_path, content).map_err(|e| {
             tracing::error!("設定ファイルの書き込みに失敗: {:?}", e);
-            e
+            ConfigError::Write(e)
         })?;
 
         if let Err(e) = restrict_private_file_permissions(&config_path) {
@@ -199,7 +281,7 @@ impl AppConfig {
 // プライベート関数
 // ======================================================================
 /// `config.toml` を解析し、レガシー `[[clips]]` を分離して返す
-fn parse_config_toml(content: &str) -> Result<(AppConfig, Vec<RegisteredClip>)> {
+fn parse_config_toml(content: &str) -> anyhow::Result<(AppConfig, Vec<RegisteredClip>)> {
     let value: toml::Value = toml::from_str(content)?;
     let legacy_clips = value
         .get("clips")
@@ -251,7 +333,10 @@ fn notify_newer_config_version_clamped() {
 }
 
 /// 破損した設定ファイルをバックアップする
-fn backup_corrupted_config(config_path: &Path) {
+///
+/// # Returns
+/// * `bool` - バックアップファイルの作成に成功した場合は `true`
+fn backup_corrupted_config(config_path: &Path) -> bool {
     let backup_path = config_path.with_file_name("config.toml.bak");
     match fs::copy(config_path, &backup_path) {
         Ok(_) => {
@@ -262,9 +347,11 @@ fn backup_corrupted_config(config_path: &Path) {
                 "破損した設定をバックアップしました: {}",
                 backup_path.display()
             );
+            true
         }
         Err(e) => {
             tracing::warn!("設定ファイルのバックアップに失敗: {:?}", e);
+            false
         }
     }
 }
@@ -275,6 +362,55 @@ fn backup_corrupted_config(config_path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::config::paths::get_config_file_path;
+
+    /// 破損した `config.toml` はデフォルトへフォールバックし、`.bak` を作成すること
+    #[test]
+    fn load_parse_failure_falls_back_and_creates_backup() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("path");
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("dir");
+            }
+            fs::write(&path, "mode = [[invalid").expect("write");
+
+            let outcome = AppConfig::load();
+            assert!(outcome.fallback.is_some());
+            let fallback = outcome.fallback.expect("fallback");
+            assert!(matches!(fallback.error, ConfigReloadError::Parse(_)));
+            assert!(fallback.backup_created);
+            assert!(path.with_file_name("config.toml.bak").exists());
+            assert_eq!(outcome.config.mode, AppConfig::default().mode);
+        });
+    }
+
+    /// フォールバック理由からユーザー向けメッセージを組み立てられること
+    #[test]
+    fn config_load_fallback_user_message_includes_backup_hint() {
+        let with_backup = ConfigLoadFallback {
+            error: ConfigReloadError::Parse("unexpected key".to_string()),
+            backup_created: true,
+        };
+        let message = with_backup.user_message();
+        assert!(message.contains("形式が不正"));
+        assert!(message.contains("config.toml.bak"));
+
+        let without_backup = ConfigLoadFallback {
+            error: ConfigReloadError::Read("access denied".to_string()),
+            backup_created: false,
+        };
+        assert!(
+            without_backup
+                .user_message()
+                .contains("読み取れませんでした")
+        );
+        assert!(
+            without_backup
+                .user_message()
+                .contains("デフォルト設定で起動")
+        );
+    }
 
     /// `config.toml` の `[[clips]]` は別ファイルへ移行され、TOML から除去されること
     #[test]

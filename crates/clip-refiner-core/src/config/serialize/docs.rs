@@ -10,6 +10,9 @@ pub(crate) const DOC_INTERVAL_MS: &str = "クリップボードのポーリン�
 pub(crate) const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \"Event\")";
 pub(crate) const DOC_IS_PAUSED: &str = "監視を一時停止するかどうか";
 pub(crate) const DOC_HISTORY_ENABLED: &str = "加工履歴の有効・無効";
+pub(crate) const DOC_CONTINUOUS_RECORD_ENABLED: &str =
+    "連続記録モード (監視時は加工せず元テキストを記録)";
+pub(crate) const DOC_CONTINUOUS_RECORD_LIMIT: &str = "連続記録の最大保持件数 (1〜100)";
 pub(crate) const DOC_HISTORY_LIMIT: &str = "履歴の最大保持件数 (1〜100)";
 pub(crate) const DOC_NS_ENABLED: &str = "デスクトップ通知の有効・無効";
 pub(crate) const DOC_NS_NOTIFY_MODE: &str = "モード変更時の通知";
@@ -21,6 +24,7 @@ pub(crate) const DOC_HOTKEY_PAUSE: &str = "監視の一時停止・再開";
 pub(crate) const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
 pub(crate) const DOC_HOTKEY_CLIP_SELECTOR: &str = "登録クリップセレクター表示";
 pub(crate) const DOC_HOTKEY_OCR: &str = "画面範囲選択 OCR";
+pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD: &str = "連続記録の有効・無効切替";
 pub(crate) const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 pub(crate) const DOC_HOTKEY_FAVORITE_SLOTS: &str = "お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / Alt+Shift+F1〜F11。空文字で無効)";
 pub(crate) const DOC_REGEX_PATTERN: &str = "正規表現パターン";
@@ -32,6 +36,7 @@ pub(crate) const DOC_REGEX_MULTILINE: &str = "複数行モード ((?m) 相当)";
 pub(crate) const SECTION_BASIC: &str = "基本";
 pub(crate) const SECTION_MONITOR: &str = "監視";
 pub(crate) const SECTION_HISTORY: &str = "履歴";
+pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_HOTKEYS: &str =
     "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は自動または「設定を再読み込み」で反映)";

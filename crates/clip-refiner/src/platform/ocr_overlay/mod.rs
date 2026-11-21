@@ -1,7 +1,9 @@
 //! 画面範囲選択用のネイティブオーバーレイ
 
-#[cfg(windows)]
-mod windows;
+mod geometry;
+mod layered;
+mod overlay_window;
+mod types;
+mod wndproc;
 
-#[cfg(windows)]
-pub(crate) use windows::OverlayWindow;
+pub(crate) use overlay_window::OverlayWindow;

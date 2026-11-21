@@ -14,10 +14,13 @@ mod serialize;
 mod types;
 
 pub use crate::consts::CONFIG_VERSION;
+pub use crate::error::ConfigError;
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};
-pub use persistence::{ConfigReloadError, disk_config_modified_time};
+pub use persistence::{
+    ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError, disk_config_modified_time,
+};
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
     MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
@@ -204,6 +207,44 @@ history_enabled = true
             hotkeys.quick_selector,
             consts::DEFAULT_HOTKEY_QUICK_SELECTOR
         );
+    }
+
+    /// `fix_duplicates` が固定割り当ての重複をデフォルトへ戻すこと
+    #[test]
+    fn test_hotkey_settings_fix_duplicate_fixed_fields() {
+        let mut hotkeys = HotkeySettings {
+            notification: "Alt+Shift+P".to_string(),
+            pause: "Alt+Shift+P".to_string(),
+            ..HotkeySettings::default()
+        };
+        hotkeys.fix_duplicates();
+        assert_eq!(hotkeys.notification, "Alt+Shift+P");
+        assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
+    }
+
+    /// `fix_duplicates` が固定割り当てと重複するお気に入りスロットを無効化すること
+    #[test]
+    fn test_hotkey_settings_fix_duplicate_favorite_slot() {
+        let mut hotkeys = HotkeySettings {
+            quick_selector: "Alt+Shift+1".to_string(),
+            ..HotkeySettings::default()
+        };
+        hotkeys.fix_duplicates();
+        assert_eq!(hotkeys.quick_selector, "Alt+Shift+1");
+        assert_eq!(hotkeys.favorite_mode_slots, vec![String::new()]);
+        assert!(hotkeys.favorite_slot_binding(0).is_none());
+    }
+
+    /// `fix_duplicates` がお気に入りスロット同士の重複を後勝ちで無効化すること
+    #[test]
+    fn test_hotkey_settings_fix_duplicate_among_favorite_slots() {
+        let mut hotkeys = HotkeySettings {
+            favorite_mode_slots: vec!["Alt+Shift+F10".to_string(), "Alt+Shift+F10".to_string()],
+            ..HotkeySettings::default()
+        };
+        hotkeys.fix_duplicates();
+        assert_eq!(hotkeys.favorite_mode_slots[0], "Alt+Shift+F10");
+        assert!(hotkeys.favorite_mode_slots[1].is_empty());
     }
 
     /// `add_registered_clip` が登録・検証・上限チェックを行うこと

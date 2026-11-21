@@ -7,8 +7,8 @@ use std::sync::Mutex;
 use super::dispatch;
 use super::state::AppState;
 
-use crate::autostart;
 use crate::config::MonitorMode;
+use crate::platform::autostart;
 use crate::refiner::{RefineCategory, RefineMode};
 use crate::tray::state::LockExt;
 
@@ -23,6 +23,7 @@ mod history;
 mod icon;
 mod monitor;
 mod notification;
+mod record;
 mod refine;
 
 pub use icon::create_icon;
@@ -98,6 +99,18 @@ pub struct HistoryMenu {
     pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
 }
 
+/// 連続記録に関連するメニューの構成
+pub struct ContinuousRecordMenu {
+    /// 「連続記録」サブメニュー
+    pub main_submenu: Submenu,
+    /// 連続記録の有効/無効を切り替える項目
+    pub enabled_item: CheckMenuItem,
+    /// 記録を全削除する項目
+    pub clear_item: MenuItem,
+    /// 記録項目 (表示用 ID とストア内インデックス) のリスト
+    pub records: Mutex<Vec<(tray_icon::menu::MenuId, usize)>>,
+}
+
 /// 登録クリップメニューの構成
 pub struct ClipsMenu {
     /// 「登録クリップ」サブメニュー
@@ -140,6 +153,8 @@ pub struct TrayMenu {
     pub interval: IntervalMenu,
     /// クリップボード履歴メニュー
     pub history: HistoryMenu,
+    /// 連続記録メニュー
+    pub continuous_record: ContinuousRecordMenu,
     /// 登録クリップメニュー
     pub clips: ClipsMenu,
     /// 通知設定メニュー
@@ -184,6 +199,8 @@ impl TrayMenu {
         let monitor = Self::build_monitor_menu(config.monitor_mode)?;
         let interval = Self::build_interval_menu(config.interval_ms, config.monitor_mode)?;
         let history = Self::build_history_menu(config.history_enabled)?;
+        let continuous_record =
+            Self::build_continuous_record_menu(config.continuous_record_enabled)?;
         let clips = Self::build_clips_menu(state)?;
         let notification = Self::build_notification_menu(
             config.notification_settings.enabled,
@@ -215,6 +232,7 @@ impl TrayMenu {
                 &clips.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &open_config_item as &dyn tray_icon::menu::IsMenuItem,
@@ -246,6 +264,7 @@ impl TrayMenu {
             monitor,
             interval,
             history,
+            continuous_record,
             clips,
             notification,
             open_config_item,
@@ -304,6 +323,9 @@ impl TrayMenu {
         self.history
             .enabled_item
             .set_checked(config.history_enabled);
+        self.continuous_record
+            .enabled_item
+            .set_checked(config.continuous_record_enabled);
         self.notification
             .enabled_item
             .set_checked(config.notification_settings.enabled);
@@ -320,6 +342,7 @@ impl TrayMenu {
 
         self.refresh_clips(state)?;
         self.refresh_history(state)?;
+        self.refresh_continuous_record(state)?;
 
         Ok(())
     }
@@ -384,6 +407,8 @@ mod tests {
             interval: TrayMenu::build_interval_menu(1000, MonitorMode::Polling)
                 .expect("監視周期メニューの構築に失敗"),
             history: TrayMenu::build_history_menu(false).expect("履歴メニューの構築に失敗"),
+            continuous_record: TrayMenu::build_continuous_record_menu(false)
+                .expect("連続記録メニューの構築に失敗"),
             clips: ClipsMenu {
                 main_submenu: Submenu::new("登録クリップ", true),
                 records: Mutex::new(Vec::new()),

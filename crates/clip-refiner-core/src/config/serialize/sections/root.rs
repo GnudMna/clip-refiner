@@ -1,9 +1,10 @@
 use std::fmt::Write;
 
 use super::super::docs::{
-    DOC_FAVORITE_MODES, DOC_HISTORY_ENABLED, DOC_HISTORY_LIMIT, DOC_INTERVAL_MS, DOC_IS_PAUSED,
-    DOC_MODE, DOC_MONITOR_MODE, DOC_PIPELINE, DOC_VERSION, SECTION_BASIC, SECTION_HISTORY,
-    SECTION_MONITOR,
+    DOC_CONTINUOUS_RECORD_ENABLED, DOC_CONTINUOUS_RECORD_LIMIT, DOC_FAVORITE_MODES,
+    DOC_HISTORY_ENABLED, DOC_HISTORY_LIMIT, DOC_INTERVAL_MS, DOC_IS_PAUSED, DOC_MODE,
+    DOC_MONITOR_MODE, DOC_PIPELINE, DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD,
+    SECTION_HISTORY, SECTION_MONITOR,
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
@@ -56,6 +57,20 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     )?;
     set_table_value(
         root,
+        "continuous_record_enabled",
+        DOC_CONTINUOUS_RECORD_ENABLED,
+        "",
+        &config.continuous_record_enabled,
+    )?;
+    set_table_value(
+        root,
+        "continuous_record_limit",
+        DOC_CONTINUOUS_RECORD_LIMIT,
+        "",
+        &config.continuous_record_limit,
+    )?;
+    set_table_value(
+        root,
         "history_limit",
         DOC_HISTORY_LIMIT,
         "",
@@ -92,6 +107,22 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         &config.monitor_mode,
     )?;
     write_field(out, "", DOC_IS_PAUSED, "is_paused", &config.is_paused)?;
+
+    write_section(out, SECTION_CONTINUOUS_RECORD)?;
+    write_field(
+        out,
+        "",
+        DOC_CONTINUOUS_RECORD_ENABLED,
+        "continuous_record_enabled",
+        &config.continuous_record_enabled,
+    )?;
+    write_field(
+        out,
+        "",
+        DOC_CONTINUOUS_RECORD_LIMIT,
+        "continuous_record_limit",
+        &config.continuous_record_limit,
+    )?;
 
     write_section(out, SECTION_HISTORY)?;
     write_field(

@@ -3,7 +3,6 @@ use super::state::AppEvent;
 
 use anyhow::Result;
 use tao::event_loop::{EventLoop, EventLoopBuilder};
-#[cfg(windows)]
 use tao::platform::windows::EventLoopBuilderExtWindows;
 
 // ======================================================================
@@ -20,7 +19,7 @@ pub fn run_loop() -> Result<()> {
     let event_loop = create_event_loop();
     let proxy = event_loop.create_proxy();
 
-    let mut app = App::new(&event_loop, proxy)?;
+    let mut app = App::new(&event_loop, &proxy)?;
 
     event_loop.run(move |event, _, control_flow| {
         app.handle_event(event, control_flow);
@@ -30,17 +29,14 @@ pub fn run_loop() -> Result<()> {
 // ======================================================================
 // イベントループ作成
 // ======================================================================
-/// 実行プラットフォームに適した設定でイベントループを作成する
+/// Windows 向けの設定でイベントループを作成する
 ///
 /// # Returns
 /// * `EventLoop<AppEvent>` - 生成された `tao` のイベントループ
 fn create_event_loop() -> EventLoop<AppEvent> {
-    #[cfg(windows)]
-    return EventLoopBuilder::<AppEvent>::with_user_event()
+    EventLoopBuilder::<AppEvent>::with_user_event()
         .with_any_thread(true)
-        .build();
-    #[cfg(not(windows))]
-    return EventLoopBuilder::<AppEvent>::with_user_event().build();
+        .build()
 }
 
 // ======================================================================

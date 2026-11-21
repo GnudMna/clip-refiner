@@ -11,6 +11,7 @@ use crate::refiner::{
     ClipboardProcessOutcome, ImageClipboard, RefineContext, TextClipboard,
     process_clipboard_pipeline_io,
 };
+use crate::security::{SecretString, is_within_clipboard_limit};
 
 /// コマンドを処理する
 ///
@@ -58,6 +59,14 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                     platform::show_notification("OCR", "クリップボードにコピーしました");
                 }
             }
+        }
+        ClipboardCommand::DischargeContinuousRecordAt(index) => {
+            set_continuous_record_from_queue(clipboard, state, || {
+                state.discharge_continuous_record_at(index)
+            });
+        }
+        ClipboardCommand::CatchUpContinuousRecord => {
+            catch_up_continuous_record(clipboard, state);
         }
         ClipboardCommand::ProcessMode(mode) => {
             let pre_text = clipboard.get_text().ok();
@@ -115,6 +124,61 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
             register_clip_from_clipboard(clipboard, state);
         }
         ClipboardCommand::Shutdown => {}
+    }
+}
+
+/// 有効化直後に現在のクリップボード内容を連続記録キューへ積む
+fn catch_up_continuous_record<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
+    if !state.with_config(|c| c.continuous_record_enabled) {
+        return;
+    }
+
+    let text = match clipboard.get_text() {
+        Ok(text) => text,
+        Err(e) => {
+            crate::log_error!("クリップボード読み取りエラー: {:?}", e);
+            return;
+        }
+    };
+
+    if text.trim().is_empty() {
+        return;
+    }
+
+    if !is_within_clipboard_limit(&text) {
+        crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
+        state.record_clipboard_observed(&text);
+        return;
+    }
+
+    state.record_clipboard_observed(&text);
+    state.enqueue_continuous_record(&text);
+}
+
+/// 連続記録キューから取り出したテキストをクリップボードへセットする
+fn set_continuous_record_from_queue<C: TextClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    take: impl FnOnce() -> Option<SecretString>,
+) {
+    let Some(text) = take() else {
+        if state.with_config(|c| c.notification_settings.enabled) {
+            platform::show_notification("連続記録", "取り出せる記録がありません");
+        }
+        return;
+    };
+
+    if let Err(e) = clipboard.set_text(text.to_string()) {
+        crate::log_error!("クリップボード設定エラー: {:?}", e);
+        platform::show_notification(
+            "クリップボードエラー",
+            "連続記録からの取り出しに失敗しました",
+        );
+    } else {
+        state.record_clipboard_set(&text);
+        if state.with_config(|c| c.notification_settings.enabled) {
+            platform::show_notification("連続記録", "クリップボードに取り出しました");
+        }
     }
 }
 

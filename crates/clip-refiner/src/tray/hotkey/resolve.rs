@@ -1,6 +1,8 @@
+use super::convert::to_global_hotkey;
 use crate::config::HotkeySettings;
 use crate::consts;
-use crate::hotkey_binding::parse_hotkey_binding;
+
+use clip_refiner_core::hotkey_binding::parse_hotkey_or_default_labeled;
 
 use global_hotkey::hotkey::HotKey;
 
@@ -15,7 +17,7 @@ pub(super) struct ResolvedHotkeys {
     pub quit: HotKey,
     pub undo: HotKey,
     pub clip_selector: HotKey,
-    #[cfg(screen_ocr)]
+    pub continuous_record: HotKey,
     pub ocr: HotKey,
 }
 
@@ -41,37 +43,21 @@ impl ResolvedHotkeys {
                 consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
                 "clip_selector",
             ),
-            #[cfg(screen_ocr)]
+            continuous_record: resolve_hotkey(
+                &hotkeys.continuous_record,
+                consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
+                "continuous_record",
+            ),
             ocr: resolve_hotkey(&hotkeys.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr"),
         }
-    }
-
-    /// 登録済みホットキーを配列として返す
-    pub fn registered_hotkeys(&self) -> Vec<HotKey> {
-        let mut hotkeys = vec![
-            self.quick_selector,
-            self.notification,
-            self.pause,
-            self.quit,
-            self.undo,
-            self.clip_selector,
-        ];
-        #[cfg(screen_ocr)]
-        hotkeys.push(self.ocr);
-        hotkeys
     }
 }
 
 /// 設定値を解析し、失敗時はデフォルトへフォールバックする
 fn resolve_hotkey(binding: &str, default_binding: &str, label: &str) -> HotKey {
-    match parse_hotkey_binding(binding) {
-        Ok(hotkey) => hotkey,
-        Err(e) => {
-            crate::log_warn!(
-                "ホットキー設定 '{label}' の解析に失敗: {e} (指定値: '{binding}')。デフォルト '{default_binding}' を使用"
-            );
-            parse_hotkey_binding(default_binding)
-                .unwrap_or_else(|e| panic!("デフォルトホットキー '{default_binding}' が無効: {e}"))
-        }
-    }
+    to_global_hotkey(parse_hotkey_or_default_labeled(
+        binding,
+        default_binding,
+        label,
+    ))
 }

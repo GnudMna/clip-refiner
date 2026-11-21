@@ -2,21 +2,6 @@
 
 mod normalize;
 mod prepare;
+mod recognize;
 
-#[cfg(windows)]
-mod windows;
-
-#[cfg(target_os = "macos")]
-mod macos;
-
-#[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(windows)]
-pub(crate) use windows::recognize_text;
-
-#[cfg(target_os = "macos")]
-pub(crate) use macos::recognize_text;
-
-#[cfg(target_os = "linux")]
-pub(crate) use linux::recognize_text;
+pub(crate) use recognize::recognize_text;

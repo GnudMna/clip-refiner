@@ -1,5 +1,6 @@
 //! グローバルホットキーの解決・登録・イベント処理
 
+mod convert;
 mod handler;
 mod register;
 mod resolve;
@@ -7,12 +8,36 @@ pub(crate) mod settings;
 
 pub use handler::HotkeyEventContext;
 pub use register::HotkeyHandler;
+pub(crate) use register::{format_registration_failures, notify_registration_failures};
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use super::dispatch;
 use super::state::AppEvent;
 
 use global_hotkey::GlobalHotKeyEvent;
 use tao::event_loop::EventLoopProxy;
+
+// ======================================================================
+// リスナー停止制御
+// ======================================================================
+/// ホットキーイベントリスナースレッドの停止フラグと join ハンドル
+pub(crate) struct HotkeyListenerStop {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Drop for HotkeyListenerStop {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
 
 impl HotkeyHandler {
     /// ホットキーイベントを受信するためのバックグラウンドスレッドを開始する
@@ -21,13 +46,26 @@ impl HotkeyHandler {
     ///
     /// # Arguments
     /// * `proxy` - UIスレッド(イベントループ)へイベントを送信するためのプロキシ
-    pub fn start_event_listener(proxy: EventLoopProxy<AppEvent>) {
-        std::thread::spawn(move || {
+    pub fn start_event_listener(proxy: EventLoopProxy<AppEvent>) -> HotkeyListenerStop {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop);
+        let thread = thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
-            while let Ok(event) = receiver.recv() {
-                dispatch::send_app_event(&proxy, AppEvent::Hotkey(event));
+            while !stop_for_thread.load(Ordering::Relaxed) {
+                let mut had_hotkey_event = false;
+                while let Ok(event) = receiver.try_recv() {
+                    had_hotkey_event = true;
+                    dispatch::send_app_event(&proxy, AppEvent::Hotkey(event));
+                }
+                if !had_hotkey_event {
+                    thread::sleep(Duration::from_millis(100));
+                }
             }
         });
+        HotkeyListenerStop {
+            stop,
+            thread: Some(thread),
+        }
     }
 }
 
@@ -83,7 +121,6 @@ mod tests {
                 menu: &self.menu,
                 quick_selector: None,
                 clip_selector: None,
-                #[cfg(screen_ocr)]
                 ocr_capture: None,
                 control_flow: &mut self.control_flow,
                 last_quick_selector_show: &mut self.last_quick_selector_show,
@@ -103,6 +140,7 @@ mod tests {
             undo: "Alt+Shift+F5".to_string(),
             clip_selector: "Alt+Shift+F6".to_string(),
             ocr: "Alt+Shift+F7".to_string(),
+            continuous_record: "Alt+Shift+F8".to_string(),
             favorite_mode_slots: Vec::new(),
         }
     }
@@ -111,9 +149,11 @@ mod tests {
     ///
     /// グローバルホットキーは OS に残るため 1 テストにまとめる
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn hotkey_event_handling() {
-        let mut handler =
-            HotkeyHandler::new(&test_hotkeys(), &[]).expect("テスト用ホットキーの登録に失敗");
+        let mut handler = HotkeyHandler::new(&test_hotkeys(), &[])
+            .expect("テスト用ホットキーの登録に失敗")
+            .0;
         let mut ctx = HotkeyTestContext::new();
 
         // キー解放は無視
@@ -149,6 +189,18 @@ mod tests {
         );
         assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
         assert!(ctx.menu.notification.enabled_item.is_checked());
+
+        // 連続記録
+        assert!(!ctx.state.with_config(|c| c.continuous_record_enabled));
+        handler.handle_event(
+            GlobalHotKeyEvent {
+                id: handler.continuous_record_hotkey_id(),
+                state: HotKeyState::Pressed,
+            },
+            &mut ctx.ctx(),
+        );
+        assert!(ctx.state.with_config(|c| c.continuous_record_enabled));
+        assert!(ctx.menu.continuous_record.enabled_item.is_checked());
 
         // 取り消し
         let (tx, rx) = mpsc::channel();
@@ -232,6 +284,15 @@ mod tests {
         assert!(ctx.menu.pause_item.is_checked());
     }
 
+    /// `toggle_continuous_record` が設定とメニューを更新すること
+    #[test]
+    fn toggle_continuous_record_updates_state_and_menu() {
+        let mut ctx = HotkeyTestContext::new();
+        HotkeyHandler::toggle_continuous_record(&mut ctx.ctx());
+        assert!(ctx.state.with_config(|c| c.continuous_record_enabled));
+        assert!(ctx.menu.continuous_record.enabled_item.is_checked());
+    }
+
     /// `toggle_notification` が設定とメニューを更新すること
     #[test]
     fn toggle_notification_updates_state_and_menu() {
@@ -252,10 +313,12 @@ mod tests {
             undo: "Alt+Ctrl+F5".to_string(),
             clip_selector: "Alt+Ctrl+F6".to_string(),
             ocr: "Alt+Ctrl+F7".to_string(),
+            continuous_record: "Alt+Ctrl+F8".to_string(),
             favorite_mode_slots: Vec::new(),
         };
-        let mut handler =
-            HotkeyHandler::new(&initial, &[]).expect("テスト用ホットキーの登録に失敗");
+        let mut handler = HotkeyHandler::new(&initial, &[])
+            .expect("テスト用ホットキーの登録に失敗")
+            .0;
         let quit_before = handler.quit_hotkey_id();
 
         let mut updated = initial.clone();
@@ -266,14 +329,11 @@ mod tests {
 
         assert_ne!(handler.quit_hotkey_id(), quit_before);
 
-        #[cfg(screen_ocr)]
-        {
-            let ocr_before = handler.ocr_hotkey_id();
-            updated.ocr = "Alt+Ctrl+F8".to_string();
-            handler
-                .reload(&updated, &[])
-                .expect("OCR ホットキーの再登録に失敗");
-            assert_ne!(handler.ocr_hotkey_id(), ocr_before);
-        }
+        let ocr_before = handler.ocr_hotkey_id();
+        updated.ocr = "Alt+Ctrl+F9".to_string();
+        handler
+            .reload(&updated, &[])
+            .expect("OCR ホットキーの再登録に失敗");
+        assert_ne!(handler.ocr_hotkey_id(), ocr_before);
     }
 }

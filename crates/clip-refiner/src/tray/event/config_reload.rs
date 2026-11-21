@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::super::clip_selector::ClipSelectorWindow;
 use super::super::clipboard_monitor::bump_monitor_generation;
-use super::super::hotkey::HotkeyHandler;
+use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 
@@ -45,8 +45,11 @@ pub fn apply_config_reload(
     let monitor_changed = previous.monitor_mode != loaded.monitor_mode
         || previous.interval_ms != loaded.interval_ms
         || previous.is_paused != loaded.is_paused
-        || previous.effective_pipeline() != loaded.effective_pipeline();
+        || previous.effective_pipeline() != loaded.effective_pipeline()
+        || previous.continuous_record_enabled != loaded.continuous_record_enabled;
     let history_disabled = previous.history_enabled && !loaded.history_enabled;
+    let continuous_record_disabled =
+        previous.continuous_record_enabled && !loaded.continuous_record_enabled;
 
     state.with_config_mut(|config| *config = loaded);
     state.record_config_disk_sync();
@@ -54,18 +57,34 @@ pub fn apply_config_reload(
     menu.sync_from_config(state)
         .map_err(|e| format!("メニュー同期に失敗: {e}"))?;
 
+    let mut change_labels = Vec::new();
+    let mut hotkey_registration_message = None;
+
     if hotkeys_changed || favorite_hotkeys_changed {
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
         let favorite_modes = state.with_config(|c| c.favorite_modes.clone());
-        hotkey_handler
+        let registration_failures = hotkey_handler
             .reload(&hotkeys, &favorite_modes)
             .map_err(|e| format!("ホットキーの再登録に失敗: {e}"))?;
+        change_labels.push("ホットキーを更新");
+        if !registration_failures.is_empty() {
+            change_labels.push("一部ホットキーの登録に失敗");
+            let registration_message = format_registration_failures(&registration_failures);
+            crate::log_warn!("{registration_message}");
+            hotkey_registration_message = Some(registration_message);
+        }
     }
 
     if history_disabled {
         state.clear_history();
         menu.refresh_history(state)
             .map_err(|e| format!("履歴メニュー更新に失敗: {e}"))?;
+    }
+
+    if continuous_record_disabled {
+        state.clear_continuous_record();
+        menu.refresh_continuous_record(state)
+            .map_err(|e| format!("連続記録メニュー更新に失敗: {e}"))?;
     }
 
     if monitor_changed {
@@ -77,10 +96,6 @@ pub fn apply_config_reload(
         clip_selector.refresh_items(&clips_json);
     }
 
-    let mut change_labels = Vec::new();
-    if hotkeys_changed || favorite_hotkeys_changed {
-        change_labels.push("ホットキーを更新");
-    }
     if monitor_changed {
         change_labels.push("監視設定を更新");
     }
@@ -91,7 +106,11 @@ pub fn apply_config_reload(
         change_labels.push("将来 version を現行へ揃え");
     }
 
-    let message = build_reload_message(&change_labels);
+    let mut message = build_reload_message(&change_labels);
+    if let Some(registration_message) = hotkey_registration_message {
+        message.push('\n');
+        message.push_str(&registration_message);
+    }
     crate::log_info!("設定を再読み込みしました: {}", message);
     Ok(ConfigReloadOutcome { message })
 }

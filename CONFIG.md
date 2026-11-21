@@ -1,6 +1,6 @@
 # ClipRefiner 設定リファレンス
 
-ユーザ向けの概要・クイックスタートは [README.md](README.md) を参照してください。ビルドや開発手順は [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。
+ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイックスタートは [README.md](README.md) を参照してください。ビルドや開発手順は [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。
 
 ## 目次
 
@@ -14,6 +14,7 @@
 - [画面 OCR](#画面-ocr)
 - [加工パイプライン (`pipeline`)](#加工パイプライン-pipeline)
 - [監視方式 (`monitor_mode`)](#監視方式-monitor_mode)
+- [連続記録](#連続記録)
 - [クリップボード履歴のセキュリティ](#クリップボード履歴のセキュリティ)
 - [ログイン時の自動起動](#ログイン時の自動起動)
 - [ログ](#ログ)
@@ -27,11 +28,10 @@
 | プラットフォーム | パス |
 | :--------------- | :--- |
 | **Windows** | `%APPDATA%\ClipRefiner\config.toml` |
-| **Linux / macOS** | `~/.config/clip-refiner/config.toml` |
 
-**設定ディレクトリ名:** Windows は `ClipRefiner`、Linux/macOS は `clip-refiner` (OS ごとの慣例に合わせた名称)
+**設定ディレクトリ名:** `ClipRefiner`
 
-設定ファイルの解析に失敗した場合、元ファイルは `config.toml.bak` として退避され、デフォルト設定で起動します。TOML 形式のため `#` でコメントを書けます。初回保存時は各項目の説明コメントが付与され、以降の保存ではユーザーが追記したコメントを維持したまま値のみ更新されます。設定ディレクトリとログファイルは、Unix では所有者専用パーミッション、Windows では現在ユーザー専用 DACL で保護されます。
+設定ファイルの解析に失敗した場合、元ファイルは `config.toml.bak` として退避され、デフォルト設定で起動します。起動時にデスクトップ通知 (常駐モード) または標準エラー出力 (ワンショット) で案内されます。TOML 形式のため `#` でコメントを書けます。初回保存時は各項目の説明コメントが付与され、以降の保存ではユーザーが追記したコメントを維持したまま値のみ更新されます。設定ディレクトリとログファイルは、現在ユーザー専用 DACL で保護されます。
 
 登録クリップの本文・画像は `config.toml` とは別に、同じ設定ディレクトリ内の暗号化ファイル (`registered-clips.dat` / `registered-images/`) へ保存されます。
 
@@ -66,6 +66,8 @@
 | `monitor_mode` | string | `"Polling"` | 監視方式。`"Polling"` または `"Event"` |
 | `is_paused` | bool | `false` | 監視を一時停止するかどうか |
 | `history_enabled` | bool | `false` | 加工履歴の有効・無効 |
+| `continuous_record_enabled` | bool | `false` | 連続記録モード (監視時は加工せず元テキストを記録) |
+| `continuous_record_limit` | number | `10` | 連続記録の最大保持件数 (1〜100) |
 | `history_limit` | number | `10` | 履歴の最大保持件数 (1〜100) |
 | `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 |
 | `notification_settings.notify_mode` | bool | `true` | モード変更時の通知 |
@@ -76,6 +78,7 @@
 | `hotkeys.ocr` | string | `"Alt+Shift+O"` | 画面範囲選択 OCR の開始 |
 | `hotkeys.notification` | string | `"Alt+Shift+N"` | デスクトップ通知の ON/OFF |
 | `hotkeys.pause` | string | `"Alt+Shift+P"` | 監視の一時停止・再開 |
+| `hotkeys.continuous_record` | string | `"Alt+Shift+C"` | 連続記録の有効・無効切替 |
 | `hotkeys.undo` | string | `"Alt+Shift+Z"` | 直近の加工を取り消し |
 | `hotkeys.quit` | string | `"Alt+Shift+Q"` | アプリケーション終了 |
 | `hotkeys.favorite_mode_slots` | array | (空) | お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / F1〜F11。空文字で無効) |
@@ -242,6 +245,7 @@ multiline = false
 | **監視方式** | `ポーリング` / `イベント` を切り替え |
 | **監視周期** | `0.5秒` / `1秒` / `2秒` / `5秒` (イベント方式では無効) |
 | **履歴** | 有効化・クリア、過去の加工結果の呼び出し |
+| **連続記録** | 有効化・クリア、記録済みテキストの取り出し (FIFO) |
 | **登録クリップ** | 登録済み文字列の呼び出し、クリップボードからの新規登録 |
 | **通知** | デスクトップ通知の有効化と内容 (モード変更・クリップボードの内容・一時停止) の個別設定 |
 | **設定を開く / 再読み込み** | `config.toml` の編集、またはディスク上の設定を再起動なしで反映 |
@@ -262,6 +266,15 @@ multiline = false
 - **キー:** `Enter` でコピー、`Del` で削除、`Esc` クリアまたは閉じる
 
 登録クリップは `registered-clips.dat` (暗号化) と `registered-images/` に保存される (`config.toml` には含まれない)。
+
+### 連続記録 (`Alt+Shift+C`)
+
+- **有効化:** トレイ「連続記録 → 連続記録を有効にする」、または `Alt+Shift+C`
+- **記録:** 監視時にコピーした元テキストを加工せずキュー末尾へ追加 (有効化直後は現在のクリップボード内容を先頭に積む)
+- **取り出し:** 連続記録 ON 時の `Ctrl+V` でキュー先頭をクリップボードへ載せてから貼り付け、またはトレイメニューから項目を選択して取り出し (除去)
+- **クリア:** トレイ「連続記録 → 記録をクリア」
+- **上限:** 最大 `continuous_record_limit` 件 (1〜100、デフォルト 10)。超過時は先頭から破棄。同一内容の再コピーでも重複排除せず積む
+- **手動加工:** ホットキーやメニューからの手動加工は従来どおり動作する
 
 ### お気に入り変換モード
 
@@ -286,11 +299,7 @@ favorite_mode_slots = ["", "Alt+Ctrl+J"]  # 2 件目のみカスタム、1 件�
 
 `Alt+Shift+O` で全画面オーバーレイを表示し、ドラッグで範囲選択。確定後にキャプチャと OCR を実行し、結果をクリップボードへ書き込む。`Esc` または再度ホットキーでキャンセル。
 
-| OS | OCR エンジン | 補足 |
-| :--- | :----------- | :--- |
-| **Windows** | `Windows.Media.Ocr` | 日本語言語パック優先。Win32 ネイティブオーバーレイ |
-| **macOS** | Apple Vision | WebView オーバーレイ。macOS 11 以降 |
-| **Linux** | Tesseract | `tesseract-ocr` と `tesseract-ocr-jpn` が必要。X11 推奨 (Wayland は compositor 依存) |
+OCR エンジンは `Windows.Media.Ocr` (日本語言語パック優先)。範囲選択は Win32 ネイティブオーバーレイ。
 
 - **小さい選択範囲:** 短辺が小さい画像は自動拡大してから OCR
 - **日本語の空白:** OCR が挿入する不要スペースを除去 (英単語間は維持)
@@ -324,10 +333,31 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 | 方式 | 説明 |
 | :--- | :--- |
-| `Polling` | 一定間隔 (`interval_ms`) でクリップボードの内容を読み取り、変更を検知。すべてのプラットフォームで動作する基本方式 |
-| `Event` | OS の変更トークン (Windows: シーケンス番号、macOS: `changeCount`、Linux: X11 の CLIPBOARD オーナー / Wayland の data-control 選択イベント) を監視。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷 |
+| `Polling` | 一定間隔 (`interval_ms`) でクリップボードの内容を読み取り、変更を検知する基本方式 |
+| `Event` | Windows のシーケンス番号を監視。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷 |
 
-**Linux での注意:** Wayland では `ext-data-control-v1` または `wlr-data-control-unstable-v1` に対応した compositor (GNOME、KDE、Sway、Hyprland など) で `Event` 方式が利用できます。いずれのバックエンドも利用できない環境では、自動的にポーリングへフォールバックします。
+---
+
+## 連続記録
+
+履歴とは独立した FIFO キュー。トレイ「連続記録 → 連続記録を有効にする」または `Alt+Shift+C` で有効化 (`continuous_record_enabled`、デフォルト無効)。監視時は加工を行わずコピーした元テキストを専用キューへ末尾追加する。最大 `continuous_record_limit` 件 (1〜100、デフォルト 10) を保持し、上限超過時は先頭から破棄する。同一内容の再コピーでも重複排除せず積む。
+
+| 操作 | 動作 |
+| :--- | :--- |
+| コピー (監視) | 元テキストをキュー末尾へ追加 |
+| `Ctrl+V` 貼り付け | 連続記録 ON 時、キュー先頭をクリップボードへ載せてから通常の貼り付けを実行 (キューが空のときは従来どおり) |
+| トレイメニュー項目選択 | 指定位置のエントリをクリップボードへ取り出し (除去) |
+| 有効化直後 | 現在のクリップボード内容をキューへ積む (`CatchUpContinuousRecord`) |
+
+```toml
+continuous_record_enabled = true
+continuous_record_limit = 10
+
+[hotkeys]
+continuous_record = "Alt+Shift+C"
+```
+
+ホットキーやメニューからの手動加工は従来どおり動作する。トレイメニューとホットキーの操作は [UI 操作](#ui-操作) を参照。
 
 ---
 
@@ -335,13 +365,15 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 履歴はトレイ「履歴 → 履歴機能を有効にする」で有効化 (`history_enabled`、デフォルト無効)。最大 `history_limit` 件 (1〜100、デフォルト 10) を保持し、同一内容は最新位置へ移動して重複しない。
 
+連続記録も履歴と同様に**ディスクへ書き込まず**、メモリ上で ChaCha20-Poly1305 暗号化して保持する (プロセス終了で消える)。機能の違いは [連続記録](#連続記録) を参照。
+
 履歴は機密情報を含む可能性があるため、**ディスクへ書き込まない**ことに加え、**メモリ上でも平文を常駐させない**よう多層的に保護している。
 
 | 対策 | 内容 |
 | :--- | :--- |
-| **ディスク非永続化** | ファイル・DB へ書き込まず、プロセス実行中のメモリ上のみ。再起動で履歴は消える |
+| **ディスク非永続化** | 履歴・連続記録はファイル・DB へ書き込まず、プロセス実行中のメモリ上のみ。再起動で消える |
 | **メモリ内暗号化** | 起動ごとに生成したセッション鍵 (32 バイト) で各エントリを ChaCha20-Poly1305 暗号化。エントリごとにランダムノンス |
-| **平文の非保持** | 重複判定は BLAKE3 ハッシュのみ。履歴ストア内に加工後テキストの平文は格納しない |
+| **平文の非保持** | 履歴の重複判定は BLAKE3 ハッシュのみ。履歴・連続記録ストア内に本文の平文は格納しない |
 | **復号時のゼロ化** | 呼び出し・取り消しで復号した文字列は `SecretString` で保持し、スコープ終了時にゼロ化 |
 | **終了時の破棄** | プロセス終了時に暗号鍵と暗号文バッファをクリア |
 | **表示マスキング** | 履歴メニューのラベルで API キー・JWT 等を `[機密情報のため非表示]` に置換 |
@@ -354,13 +386,7 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 ## ログイン時の自動起動
 
-トレイ「ログイン時に起動」から切り替え。各プラットフォームのネイティブ機構を使用する。
-
-| プラットフォーム | 仕組み |
-| :--------------- | :----- |
-| **Windows** | 現在のユーザー向けレジストリ `Run` キー |
-| **macOS** | `~/Library/LaunchAgents/` への LaunchAgent 配置 |
-| **Linux** | XDG `~/.config/autostart/` への `.desktop` ファイル配置 |
+トレイ「ログイン時に起動」から切り替え。現在のユーザー向けレジストリ `Run` キーに登録する。
 
 実行ファイルのパスが変わった場合 (再インストールや移動後など) は、一度オフにしてから再度オンにすると正しいパスで再登録される。
 
@@ -373,6 +399,5 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 | プラットフォーム | パス |
 | :--------------- | :--- |
 | **Windows** | `%APPDATA%\ClipRefiner\logs\` |
-| **Linux / macOS** | `~/.config/clip-refiner/logs/` |
 
 ログレベルの詳細設定 (`RUST_LOG` など) は [DEVELOPMENT.md のログ節](DEVELOPMENT.md#ログ) を参照してください。

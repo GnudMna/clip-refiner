@@ -6,12 +6,6 @@
 /// ウィンドウタイトルやメニューの表示に使用される
 pub const APP_NAME: &str = "ClipRefiner";
 
-/// アプリケーションの識別子 (kebab-case)
-///
-/// 設定フォルダ名やデータ保存パスの生成に使用される
-#[cfg_attr(windows, allow(dead_code))]
-pub const APP_NAME_KEBAB: &str = "clip-refiner";
-
 // ======================================================================
 // 識別子
 // ======================================================================
@@ -36,6 +30,15 @@ pub const MIN_HISTORY_LIMIT: usize = 1;
 
 /// 履歴の最大保持数
 pub const MAX_HISTORY_LIMIT: usize = 100;
+
+/// 連続記録のデフォルト最大保持数
+pub const DEFAULT_CONTINUOUS_RECORD_LIMIT: usize = 10;
+
+/// 連続記録の最小保持数
+pub const MIN_CONTINUOUS_RECORD_LIMIT: usize = 1;
+
+/// 連続記録の最大保持数
+pub const MAX_CONTINUOUS_RECORD_LIMIT: usize = 100;
 
 /// ポーリング間隔の最小値(ミリ秒)
 pub const MIN_INTERVAL_MS: u64 = 100;
@@ -75,6 +78,9 @@ pub const DEFAULT_HOTKEY_CLIP_SELECTOR: &str = "Alt+Shift+T";
 
 /// 画面 OCR キャプチャのデフォルトホットキー
 pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+O";
+
+/// 連続記録切替のデフォルトホットキー
+pub const DEFAULT_HOTKEY_CONTINUOUS_RECORD: &str = "Alt+Shift+C";
 
 /// 登録クリップの最大件数
 pub const MAX_REGISTERED_CLIPS: usize = 100;

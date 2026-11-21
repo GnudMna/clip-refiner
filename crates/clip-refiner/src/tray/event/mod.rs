@@ -14,12 +14,18 @@ use tray_icon::menu::MenuEvent;
 mod app_control;
 mod clips;
 mod config_reload;
+mod context;
 mod favorites;
 mod history;
+mod loop_event;
 mod monitor;
 mod notification;
 mod ocr;
+mod record;
 mod refine;
+mod user_event;
+
+pub(crate) use record::toggle_continuous_record;
 
 // ======================================================================
 // テスト
@@ -28,7 +34,9 @@ mod refine;
 mod menu_event_tests;
 
 pub(crate) use config_reload::reload_config_with_notification;
+pub(crate) use context::AppEventContext;
 pub(crate) use favorites::{move_favorite_mode, toggle_favorite_mode};
+pub(crate) use loop_event::handle_loop_event;
 pub(crate) use ocr::run_ocr_on_image;
 pub use refine::update_refine;
 
@@ -92,6 +100,9 @@ pub fn handle_menu_event(
         return;
     }
     if history::handle_history_event(&event.id, menu, state, clipboard_worker) {
+        return;
+    }
+    if record::handle_continuous_record_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
     if clips::handle_clips_event(&event.id, menu, state, clipboard_worker) {

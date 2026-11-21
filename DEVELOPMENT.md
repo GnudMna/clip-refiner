@@ -6,7 +6,7 @@
 
 - [前提条件](#前提条件)
 - [ソースからのビルド](#ソースからのビルド)
-- [プラットフォーム別パッケージ作成](#プラットフォーム別パッケージ作成)
+- [Windows パッケージ作成](#windows-パッケージ作成)
 - [開発・テスト](#開発テスト)
 - [品質チェック](#品質チェック)
 - [ライブラリとしての利用](#ライブラリとしての利用)
@@ -21,22 +21,9 @@
 ## 前提条件
 
 - [Rust / Cargo](https://www.rust-lang.org/tools/install) (edition 2024、Rust 1.96 以上。`rust-toolchain.toml` でピン留め)
+- [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) (サプライチェーン監査。`cargo install cargo-deny --locked`)
 
-### Linux の追加パッケージ
-
-GUI および通知機能のために、以下のパッケージが必要になる場合がある:
-
-```bash
-sudo apt-get install libdbus-1-dev pkg-config libatk1.0-dev libgtk-3-dev
-```
-
-画面 OCR を利用する場合は Tesseract 本体と日本語言語パックも必要:
-
-```bash
-sudo apt-get install tesseract-ocr tesseract-ocr-jpn tesseract-ocr-eng
-```
-
-Wayland 環境では `xcap` の画面キャプチャが未対応の compositor があり、その場合は OCR 開始時にエラー通知となる。
+対応 OS は **Windows** のみ。
 
 ---
 
@@ -48,17 +35,11 @@ cd clip-refiner
 cargo build --release
 ```
 
-バイナリは `target/release/ClipRefiner` (Windows では `ClipRefiner.exe`) に生成される。各プラットフォーム用のビルドスクリプトも利用できる:
-
-| プラットフォーム | スクリプト |
-| :--------------- | :--------- |
-| Windows          | `scripts/windows/build.ps1` |
-| macOS            | `scripts/macos/build.sh` |
-| Linux            | `scripts/linux/build.sh` |
+バイナリは `target/release/ClipRefiner.exe` に生成される。ビルドスクリプト `scripts/windows/build.ps1` も利用できる。
 
 ---
 
-## プラットフォーム別パッケージ作成
+## Windows パッケージ作成
 
 ### Windows MSI
 
@@ -72,46 +53,17 @@ cargo build --release
 
 出力先: `target/wix/clip-refiner-{version}-{arch}.msi` (per-user インストール、日本語 UI)
 
-### macOS DMG
-
-`cargo-bundle` で `.app` バンドルを作成し、`hdiutil` で DMG インストーラーを生成する。macOS 11.0 以降が必要。
-
-```bash
-# 前提: cargo install cargo-bundle --locked
-#       Xcode Command Line Tools
-./scripts/macos/build-dmg.sh
-```
-
-出力先:
-
-- `target/release/bundle/osx/ClipRefiner.app`
-- `target/bundle/clip-refiner-{version}-{arch}.dmg` (Applications へのシンボリックリンク付き)
-
-`--skip-build` (`-s`) を付けると、既存のリリースビルドからパッケージのみ作成する。
-
-### Linux deb
-
-`cargo-deb` で `.deb` パッケージを作成する。デスクトップエントリとアイコンも同梱される。
-
-```bash
-# 前提: cargo install cargo-deb --locked
-#       上記「Linux の追加パッケージ」をインストール済みであること
-./scripts/linux/build-deb.sh
-```
-
-出力先: `target/debian/clip-refiner_{version}-1_{arch}.deb`
-
-インストール後は `ClipRefiner` コマンドとアプリケーションメニューから起動できる。ログイン時自動起動は XDG `autostart` を使用する。
-
-`--skip-build` (`-s`) を付けると、既存のリリースビルドからパッケージのみ作成する。
-
 ---
 
 ## 開発・テスト
 
 ```bash
-# 単体テスト・統合テストを実行
+# 単体テスト・統合テストを実行 (デフォルト feature `app` で統合テストも含む)
 cargo test
+
+# 特定の統合テストのみ実行
+cargo test --test monitor_flow
+cargo test --test clips_flow
 
 # ライブラリ API のドキュメントを生成
 cargo doc --no-deps --open
@@ -127,37 +79,136 @@ let output = RefineMode::UrlDecode.refine("hello%20world", &ctx);
 assert_eq!(output, "hello world");
 ```
 
-統合テスト (`crates/clip-refiner/tests/`) では監視ループ・ワーカー・履歴・正規表現の主要経路を検証する。
+統合テスト (`crates/clip-refiner/tests/`) では監視ループ・ワーカー・履歴・正規表現・連続記録・登録クリップの主要経路を検証する。`ClipboardHarness` が監視ループとワーカーコマンドを横断的に駆動する。
 
 | ファイル | 検証内容 |
 | :------- | :------- |
-| `monitor_flow.rs` | 監視加工、Undo、同一テキストの再加工抑制、自身の書き戻しスキップ |
-| `worker_flow.rs` | 手動加工 (`ProcessMode`)、履歴復元後の再加工抑制 |
+| `monitor_flow.rs` | 監視加工、Undo、一時停止、履歴上限、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン |
+| `worker_flow.rs` | 手動加工 (`ProcessMode`)、変更なし加工、Undo 空実行、履歴復元後の再加工抑制 (Polling / Event) |
 | `history_flow.rs` | 暗号化履歴の記録・重複処理・復号 |
 | `regex_flow.rs` | `config` の正規表現設定、コンパイルキャッシュ、Event 方式 |
+| `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
+| `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
+| `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
+| `library_api.rs` | クレートルート re-export と core 連携 |
 
-テスト用ヘルパー (`test_helpers`) はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能。
+### テスト用ヘルパー (`test_helpers`)
+
+`clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy やドキュメントテストを走らせる場合は `--features test-helpers` を付ける。
+
+| モジュール | 所在 | 内容 |
+| :--------- | :--- | :--- |
+| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness` など) |
+| `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
+
+アプリ側の `test_helpers` は core のヘルパーを re-export する。設定ディレクトリを触るテストは `with_temp_config_dir` で一時ディレクトリへ切り替える。
+
+#### `ClipboardHarness`
+
+監視ループ (`handle_clipboard_update`) とワーカーコマンド (`handle_command`) を、OS クリップボードなしで横断検証するハーネス。`InMemoryTextClipboard` と `AppState` (テスト用初期化) を束ね、本番と同じ処理関数を直接呼び出す。
+
+```rust
+use clip_refiner::RefineMode;
+use clip_refiner::test_helpers::ClipboardHarness;
+
+let mut harness = ClipboardHarness::with_text("  hello  ")
+    .with_mode(RefineMode::Trim);
+
+assert!(harness.run_monitor_update(false));
+assert_eq!(harness.clipboard_text(), "hello");
+
+harness.undo();
+assert_eq!(harness.clipboard_text(), "  hello  ");
+```
+
+**ビルダー (設定の事前セット)**
+
+| メソッド | 用途 |
+| :------- | :--- |
+| `with_mode` | 監視・手動加工のデフォルトモード |
+| `with_pipeline` | 監視時の加工パイプライン |
+| `with_history` | 履歴の有効・無効 |
+| `with_continuous_record` | 連続記録の有効・無効 |
+| `with_paused` | 監視の一時停止 |
+| `with_monitor_mode` | `MonitorMode::Polling` / `Event` |
+
+**監視ループ経路**
+
+| メソッド | 本番の対応 |
+| :------- | :--------- |
+| `run_monitor_update(event_driven)` | 監視ループ 1 ティック (`event_driven` は OS イベント有無) |
+| `run_configured_monitor_update()` | 設定の `monitor_mode` に応じた `event_driven` で実行 |
+| `replace_clipboard` / `reset_clipboard` | 外部コピー・クリップボード差し替えの模倣 |
+
+戻り値 `bool` は加工が実行されたか (`handle_clipboard_update` と同じ)。
+
+**ワーカーコマンド経路** (`ClipboardCommand` 相当)
+
+| メソッド | コマンド |
+| :------- | :------- |
+| `process_mode` | `ProcessMode` |
+| `set_text` | `SetText` (履歴復元) |
+| `set_ocr_text` | `SetOcrText` |
+| `undo` | `Undo` |
+| `register_clip_from_clipboard` | `RegisterClipFromClipboard` |
+| `copy_registered_clip` | `CopyRegisteredClip` |
+| `discharge_continuous_record_on_paste` | `paste_watcher::try_paste_continuous_record_front` (`Ctrl+V` 検知経路と同じ) |
+| `discharge_continuous_record_at` | `DischargeContinuousRecordAt` |
+| `catch_up_continuous_record` | `CatchUpContinuousRecord` |
+
+**検証用アクセサ**
+
+`clipboard_text`, `history_len`, `history_entries`, `continuous_record_len`, `continuous_record_entries`, `registered_clip_count`, `registered_clip_text`, `take_undo_source`, `matches_last_written`, `with_config_mut` など。
+
+新しい統合テストを追加するときは、既存の `*_flow.rs` に近い経路かどうかでファイルを選び、監視とワーカーの両方にまたがるケースは `ClipboardHarness` で往復検証する。
 
 ---
 
 ## 品質チェック
 
-プラットフォーム別の `check` スクリプトで、整形・Clippy・テストを一括実行できる。
-
-| プラットフォーム | スクリプト |
-| :--------------- | :--------- |
-| Windows          | `scripts/windows/check.ps1` |
-| macOS            | `scripts/macos/check.sh` |
-| Linux            | `scripts/linux/check.sh` |
+Windows の `check` スクリプト (`scripts/windows/check.ps1`) で、整形・Clippy・サプライチェーン監査・テストを一括実行できる。
 
 個別コマンド:
 
 ```bash
 cargo fmt --check
 cargo clippy --all-targets --features test-helpers -- -D warnings
+cargo deny check
 cargo test --all-targets --features test-helpers
 cargo test --doc --features test-helpers
 ```
+
+### サプライチェーン監査 (`cargo-deny`)
+
+[`deny.toml`](deny.toml) で依存関係の脆弱性・ライセンス・取得元を検証する。`check` スクリプトは `cargo deny check` を含む。
+
+| チェック | 内容 |
+| :------- | :--- |
+| **advisories** | RustSec 公表の脆弱性・yanked crate。`unmaintained` はワークスペース直接依存のみ失敗 |
+| **licenses** | 商用利用可能なパーミッシブライセンスのみ許可 (GPL / LGPL / MPL 等のコピーレフトは拒否) |
+| **bans** | 同一 crate の多重バージョンなど |
+| **sources** | crates.io 以外のレジストリ / git 依存の拒否 |
+
+`graph.all-features` と Windows ターゲット (`x86_64-pc-windows-msvc`) を対象に、feature `app` 有効時の依存グラフを検査する。
+
+許可リストはパーミッシブライセンス (MIT / Apache-2.0 / BSD 等) のみ。コピーレフト (GPL / LGPL / MPL 等) は拒否する。
+
+### 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
+
+`LICENSE` は ClipRefiner 本体 (All Rights Reserved) の利用条件のみを示す。配布バイナリに含まれる OSS 依存の帰属・ライセンス全文は **`THIRD_PARTY_NOTICES`** にまとめる。
+
+| 項目 | 内容 |
+| :--- | :--- |
+| 生成ツール | [cargo-about](https://github.com/EmbarkStudios/cargo-about) (`cargo install cargo-about --locked --features cli`) |
+| 設定 | [`about.toml`](about.toml)、テンプレート [`scripts/templates/third-party-notices.hbs`](scripts/templates/third-party-notices.hbs) |
+| 手動生成 | `scripts/common/generate-third-party-notices.ps1` |
+| 出力 | リポジトリルートの `THIRD_PARTY_NOTICES` (`.gitignore` 対象。パッケージ作成時に自動生成) |
+
+パッケージへの同梱:
+
+| プラットフォーム | 同梱先 |
+| :--------------- | :----- |
+| **Windows MSI** | `%LOCALAPPDATA%\ClipRefiner\THIRD_PARTY_NOTICES` (`build-msi.ps1` が生成後に同梱) |
 
 ---
 
@@ -199,7 +250,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
-| 設定 | `AppConfig::load`, `AppConfig::save`, `AppConfig::reload_from_disk` | 設定ファイル I/O |
+| 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` | 設定ファイル I/O |
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
@@ -236,7 +287,8 @@ assert_eq!(result.as_deref(), Some("あ"));
 ```rust
 use clip_refiner::{AppConfig, RefineContext, apply_text_pipeline};
 
-let config = AppConfig::load();
+let load_outcome = AppConfig::load();
+let config = load_outcome.config;
 let ctx = RefineContext::from_config(&config);
 let pipeline = config.effective_pipeline();
 let _ = apply_text_pipeline("  hello  ", &pipeline, &ctx);
@@ -254,19 +306,28 @@ clip-refiner/
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
 │   │   ├── src/
-│   │   ├── tests/
+│   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
+│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` など)
+│   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・画面 OCR UI
+│   │   │   └── ui/          # WebView セレクター
+│   │   ├── tests/           # 統合テスト (`*_flow.rs`)
 │   │   └── build.rs
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)
 │       └── src/
 │           ├── config/
+│           ├── platform/    # DPAPI・クリップボード画像など GUI 非依存の OS 連携
 │           ├── refiner/
-│           └── security/
+│           ├── security/
+│           └── test_helpers/ # コア単体テスト用
 ├── assets/
 ├── scripts/
-├── packaging/
+│   ├── common/          # 共通ヘルパー (cargo-deny、THIRD_PARTY_NOTICES 生成など)
+│   └── windows/         # ビルド・品質チェック (check.ps1 など)
 ├── CONFIG.md
 └── wix/
 ```
+
+`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
 
 セレクター UI (`src/ui/`) は WebView 上で動作し、`selector-common.js` に共通ロジックを集約している。
 
@@ -330,6 +391,19 @@ flowchart TB
 
 加工ロジック自体 (`refiner/`) はスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。
 
+### デスクトップ通知
+
+通知の呼び出しは 2 層に分ける。
+
+| 層 | モジュール | 責務 |
+| :--- | :--------- | :--- |
+| **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
+| **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
+
+- エラー表示・履歴復元・ホットキー案内など固定メッセージは、呼び出し元から `platform::show_notification` を直接使う
+- 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
+- 起動時は `bootstrap.rs` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
+
 ---
 
 ## ログ
@@ -355,6 +429,7 @@ flowchart TB
 2. [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節を新バージョン見出し (`## [x.y.z] - YYYY-MM-DD`) へ移し、空の `[Unreleased]` を用意する
 3. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
 4. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
+5. パッケージ作成スクリプト (`build-msi.ps1`) は `THIRD_PARTY_NOTICES` を自動生成して同梱する
 
 ---
 

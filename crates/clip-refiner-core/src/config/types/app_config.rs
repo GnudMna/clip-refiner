@@ -23,6 +23,14 @@ fn default_history_limit() -> usize {
     consts::DEFAULT_HISTORY_LIMIT
 }
 
+/// 連続記録の最大保持数を返す
+///
+/// # Returns
+/// * `usize` - 連続記録の最大保持数
+fn default_continuous_record_limit() -> usize {
+    consts::DEFAULT_CONTINUOUS_RECORD_LIMIT
+}
+
 // ======================================================================
 // アプリケーション設定
 // ======================================================================
@@ -47,6 +55,12 @@ pub struct AppConfig {
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
+    /// 連続記録モード (監視時は加工せず元テキストを記録)
+    #[serde(default)]
+    pub continuous_record_enabled: bool,
+    /// 連続記録の最大保持件数
+    #[serde(default = "default_continuous_record_limit")]
+    pub continuous_record_limit: usize,
     /// クリップボード履歴の最大保持件数
     #[serde(default = "default_history_limit")]
     pub history_limit: usize,
@@ -83,6 +97,8 @@ impl Default for AppConfig {
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
+            continuous_record_enabled: false,
+            continuous_record_limit: consts::DEFAULT_CONTINUOUS_RECORD_LIMIT,
             history_limit: consts::DEFAULT_HISTORY_LIMIT,
             is_paused: false,
             notification_settings: NotificationSettings::default(),
@@ -123,6 +139,10 @@ impl AppConfig {
         self.history_limit = self
             .history_limit
             .clamp(consts::MIN_HISTORY_LIMIT, consts::MAX_HISTORY_LIMIT);
+        self.continuous_record_limit = self.continuous_record_limit.clamp(
+            consts::MIN_CONTINUOUS_RECORD_LIMIT,
+            consts::MAX_CONTINUOUS_RECORD_LIMIT,
+        );
         self.interval_ms = self
             .interval_ms
             .clamp(consts::MIN_INTERVAL_MS, consts::MAX_INTERVAL_MS);
@@ -238,6 +258,9 @@ impl AppConfig {
     /// # Returns
     /// * `Ok(())` - 追加成功
     /// * `Err(AddRegisteredClipError)` - 空文字・サイズ超過・件数上限
+    ///
+    /// # Errors
+    /// 空文字、サイズ超過、件数上限のいずれか
     pub fn add_registered_clip(
         &mut self,
         text: impl Into<String>,
@@ -269,6 +292,9 @@ impl AppConfig {
     /// # Returns
     /// * `Ok(())` - 追加成功
     /// * `Err(AddRegisteredClipError)` - サイズ超過・件数上限・保存失敗
+    ///
+    /// # Errors
+    /// 件数上限、画像サイズ超過、保存失敗のいずれか
     pub fn add_registered_image(
         &mut self,
         width: u32,

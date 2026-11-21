@@ -34,6 +34,24 @@ fn history_restore_via_set_text_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "restored-from-history");
 }
 
+/// 変更のない手動加工ではクリップボードを変更しないこと
+#[test]
+fn worker_process_mode_leaves_unchanged_text() {
+    let mut harness = ClipboardHarness::with_text("already-trimmed");
+
+    harness.process_mode(RefineMode::Trim);
+    assert_eq!(harness.clipboard_text(), "already-trimmed");
+}
+
+/// 取り消し対象がないとき `Undo` はクリップボードを変更しないこと
+#[test]
+fn worker_undo_without_source_is_no_op() {
+    let mut harness = ClipboardHarness::with_text("  keep  ");
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "  keep  ");
+}
+
 /// Event 監視方式でも履歴復元直後の再加工を抑制すること
 #[test]
 fn event_mode_history_restore_avoids_immediate_reprocess() {

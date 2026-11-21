@@ -44,7 +44,10 @@ pub fn url_encode(input: &str) -> Cow<'_, str> {
 /// * `input` - デコード対象の文字列
 ///
 /// # Returns
-/// * `Result<String>` - デコードされた文字列。不正なエンコードやUTF-8として不正な場合は `Err` を返す。
+/// * `Result<String>` - デコードされた文字列
+///
+/// # Errors
+/// 不正なパーセントエンコード、または UTF-8 として不正な場合
 pub fn url_decode(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())

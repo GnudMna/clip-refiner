@@ -7,8 +7,7 @@ use std::time::SystemTime;
 use super::permissions::restrict_private_dir_permissions;
 
 use crate::consts;
-
-use anyhow::{Context, Result};
+use crate::error::ConfigError;
 
 // ======================================================================
 // テスト用設定ディレクトリ
@@ -23,21 +22,30 @@ thread_local! {
 // ======================================================================
 /// 設定ディレクトリのパスを取得する
 ///
-/// OSに応じたアプリケーション設定ディレクトリのパスを計算する
-/// Windows は `ClipRefiner`、Linux/macOS は `clip-refiner` を使用する
+/// `%APPDATA%` 配下の `ClipRefiner` ディレクトリを設定ルートとする
 ///
 /// # Returns
-/// * `Result<PathBuf>` - OSに応じた設定ディレクトリのパス
-pub fn get_config_dir() -> Result<PathBuf> {
+/// * `Result<PathBuf>` - 設定ディレクトリのパス
+///
+/// # Errors
+/// システムディレクトリの取得に失敗した場合
+pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
     #[cfg(any(test, debug_assertions))]
     if let Some(dir) = test_config_dir_override() {
         return Ok(dir);
     }
 
-    let base_dirs =
-        directories::BaseDirs::new().context("システムディレクトリの取得に失敗しました")?;
+    Ok(config_base_dir()?.join(consts::APP_NAME))
+}
 
-    Ok(base_dirs.config_dir().join(config_dir_name()))
+/// 設定ディレクトリ基底パス (`%APPDATA%`) を返す
+///
+/// # Errors
+/// 環境変数から設定ディレクトリを解決できない場合
+fn config_base_dir() -> Result<PathBuf, ConfigError> {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .ok_or(ConfigError::SystemDir)
 }
 
 /// テスト用に設定ディレクトリを上書きする
@@ -58,28 +66,20 @@ fn test_config_dir_override() -> Option<PathBuf> {
     TEST_CONFIG_DIR.with(|cell| cell.borrow().clone())
 }
 
-/// OS ごとの設定ディレクトリ名を返す
-#[cfg(windows)]
-fn config_dir_name() -> &'static str {
-    consts::APP_NAME
-}
-
-/// OS ごとの設定ディレクトリ名を返す
-#[cfg(not(windows))]
-fn config_dir_name() -> &'static str {
-    consts::APP_NAME_KEBAB
-}
-
 /// 設定ファイルのパスを取得する
 ///
 /// 設定ディレクトリが存在しない場合は作成する
 ///
 /// # Returns
 /// * `Result<PathBuf>` - `config.toml` の完全なパス
-pub fn get_config_file_path() -> Result<PathBuf> {
+///
+/// # Errors
+/// 設定ディレクトリの作成またはパーミッション設定に失敗した場合
+pub fn get_config_file_path() -> Result<PathBuf, ConfigError> {
     let config_dir = get_config_dir()?;
-    fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
-    restrict_private_dir_permissions(&config_dir)?;
+    fs::create_dir_all(&config_dir).map_err(ConfigError::CreateDir)?;
+    restrict_private_dir_permissions(&config_dir)
+        .map_err(|e| ConfigError::DirPermissions(e.to_string()))?;
     Ok(config_dir.join("config.toml"))
 }
 
@@ -89,15 +89,18 @@ pub fn get_config_file_path() -> Result<PathBuf> {
 ///
 /// # Returns
 /// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
-pub fn config_file_modified_time() -> Result<Option<SystemTime>> {
+///
+/// # Errors
+/// 設定ファイルパス取得、メタデータ取得、更新時刻取得のいずれかに失敗した場合
+pub fn config_file_modified_time() -> Result<Option<SystemTime>, ConfigError> {
     let path = get_config_file_path()?;
     if !path.exists() {
         return Ok(None);
     }
-    let metadata = fs::metadata(&path).context("設定ファイルのメタデータ取得に失敗しました")?;
+    let metadata = fs::metadata(&path).map_err(ConfigError::Metadata)?;
     metadata
         .modified()
-        .context("設定ファイルの更新時刻取得に失敗しました")
+        .map_err(ConfigError::ModifiedTime)
         .map(Some)
 }
 
@@ -107,52 +110,21 @@ pub fn config_file_modified_time() -> Result<Option<SystemTime>> {
 ///
 /// # Returns
 /// * `Result<()>` - 起動に成功した場合は `Ok(())`、失敗した場合は `Err` を返す
-pub fn open_config_file() -> Result<()> {
+///
+/// # Errors
+/// 設定ファイルパスの取得または既定アプリケーションでの起動に失敗した場合
+pub fn open_config_file() -> Result<(), ConfigError> {
     let path = get_config_file_path()?;
     open_path_in_default_application(&path)
 }
 
-/// パスを OS の既定アプリケーションで開く
-fn open_path_in_default_application(path: &Path) -> Result<()> {
-    let path_str = path
-        .to_str()
-        .context("設定ファイルのパスを文字列に変換できませんでした")?;
+/// パスを既定アプリケーションで開く
+fn open_path_in_default_application(path: &Path) -> Result<(), ConfigError> {
+    let path_str = path.to_str().ok_or(ConfigError::InvalidPath)?;
 
-    platform_open_path(path_str)
-}
-
-/// パスを OS の既定アプリケーションで開く
-#[cfg(windows)]
-fn platform_open_path(path_str: &str) -> Result<()> {
     std::process::Command::new("cmd")
         .args(["/C", "start", "", path_str])
         .spawn()
-        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
+        .map_err(ConfigError::Open)?;
     Ok(())
-}
-
-/// パスを OS の既定アプリケーションで開く
-#[cfg(target_os = "macos")]
-fn platform_open_path(path_str: &str) -> Result<()> {
-    std::process::Command::new("open")
-        .arg(path_str)
-        .spawn()
-        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
-    Ok(())
-}
-
-/// パスを OS の既定アプリケーションで開く
-#[cfg(all(unix, not(target_os = "macos")))]
-fn platform_open_path(path_str: &str) -> Result<()> {
-    std::process::Command::new("xdg-open")
-        .arg(path_str)
-        .spawn()
-        .context("設定ファイルの起動コマンドの実行に失敗しました")?;
-    Ok(())
-}
-
-/// パスを OS の既定アプリケーションで開く
-#[cfg(not(any(windows, target_os = "macos", unix)))]
-fn platform_open_path(_path_str: &str) -> Result<()> {
-    anyhow::bail!("このプラットフォームではファイルを開けません")
 }

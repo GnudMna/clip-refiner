@@ -146,6 +146,66 @@ mod tests {
         assert_eq!(state.history_len(), 0);
     }
 
+    fn collect_continuous_record(state: &AppState) -> Vec<String> {
+        (0..state.continuous_record_len())
+            .filter_map(|i| state.get_continuous_record_entry(i).map(|s| s.to_string()))
+            .collect()
+    }
+
+    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になる
+    #[test]
+    fn test_continuous_record_enqueue_limit_and_clear() {
+        let state = test_app_state();
+        let limit = crate::consts::DEFAULT_CONTINUOUS_RECORD_LIMIT;
+
+        state.enqueue_continuous_record("   ");
+        assert_eq!(state.continuous_record_len(), 0);
+
+        state.enqueue_continuous_record("dup");
+        state.enqueue_continuous_record("dup");
+        let records = collect_continuous_record(&state);
+        assert_eq!(records, vec!["dup", "dup"]);
+
+        for i in 0..(limit + 5) {
+            state.enqueue_continuous_record(format!("item-{i}"));
+        }
+        assert_eq!(state.continuous_record_len(), limit);
+        let records = collect_continuous_record(&state);
+        assert_eq!(records.first().map(String::as_str), Some("item-5"));
+
+        state.clear_continuous_record();
+        assert_eq!(state.continuous_record_len(), 0);
+    }
+
+    /// 連続記録キュー先頭取り出しと位置指定排出が FIFO 順で動作すること
+    #[test]
+    fn test_continuous_record_discharge_fifo() {
+        let state = test_app_state();
+        state.enqueue_continuous_record("first");
+        state.enqueue_continuous_record("second");
+        state.enqueue_continuous_record("first");
+
+        assert_eq!(
+            state
+                .discharge_continuous_record_front()
+                .map(|s| s.to_string()),
+            Some("first".to_string())
+        );
+        assert_eq!(
+            state
+                .discharge_continuous_record_at(0)
+                .map(|s| s.to_string()),
+            Some("second".to_string())
+        );
+        assert_eq!(
+            state
+                .discharge_continuous_record_front()
+                .map(|s| s.to_string()),
+            Some("first".to_string())
+        );
+        assert_eq!(state.continuous_record_len(), 0);
+    }
+
     /// 加工成功時に書き戻し本文と観測済み本文が更新されること
     #[test]
     fn test_record_processing_success() {
@@ -173,7 +233,7 @@ mod tests {
         assert!(ps.matches_last_written("written"));
     }
 
-    /// 履歴復元など外部設定時は書き戻しフラグをクリアすること
+    /// 履歴復元など外部設定時は書き戻しフラグを1回分のエコーとして記録すること
     #[test]
     fn test_record_clipboard_set() {
         let state = test_app_state();
@@ -186,7 +246,7 @@ mod tests {
 
         let ps = state.with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen("restored"));
-        assert_eq!(ps.last_written, None);
+        assert!(ps.matches_last_written("restored"));
     }
 
     /// 加工取り消し用テキストの記録と取得

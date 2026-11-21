@@ -27,28 +27,31 @@
 //! assert_eq!(result.as_deref(), Some("あ"));
 //! ```
 
-#![allow(
-    clippy::must_use_candidate,
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc
-)]
+#[cfg(not(target_os = "windows"))]
+compile_error!("clip-refiner-core は Windows 専用です");
 
 pub mod config;
 pub mod consts;
+pub mod error;
 pub mod hotkey_binding;
+pub use hotkey_binding::{
+    HotkeyKey, HotkeyModifiers, HotkeyParseError, ParsedHotkey, parse_hotkey_binding,
+    parse_hotkey_or_default, parse_hotkey_or_default_labeled,
+};
 mod platform;
 pub mod refiner;
 pub mod security;
 
 pub use config::{
-    AppConfig, CONFIG_VERSION, ConfigReloadError, FavoriteMoveDirection, FavoriteToggleResult,
-    HotkeySettings, MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
-    disk_config_modified_time, get_config_dir, open_config_file,
+    AppConfig, CONFIG_VERSION, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
+    FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings, MonitorMode, NotificationSettings,
+    RegexSettings, ResolvedClip, disk_config_modified_time, get_config_dir, open_config_file,
 };
+pub use error::{AddRegisteredClipError, ConfigError, Error};
 pub use refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, OrderedValue, RefineCategory, RefineContext,
-    RefineMode, Refiner, apply_pipeline_to_text, apply_text_pipeline, process_clipboard,
-    process_clipboard_pipeline, split_pipeline,
+    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue, RefineCategory,
+    RefineContext, RefineMode, Refiner, apply_pipeline_to_text, apply_text_pipeline,
+    process_clipboard, process_clipboard_pipeline, split_pipeline,
 };
 pub use security::{is_within_clipboard_limit, is_within_parser_limit};
 

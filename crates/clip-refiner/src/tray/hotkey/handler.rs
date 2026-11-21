@@ -4,11 +4,11 @@ use std::time::Instant;
 use super::super::clip_selector::ClipSelectorWindow;
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
+use super::super::event::toggle_continuous_record as apply_continuous_record_toggle;
 use super::super::event::update_refine;
 use super::super::menu::TrayMenu;
 use super::super::notify;
-#[cfg(screen_ocr)]
-use super::super::ocr_capture::OcrCaptureWindow;
+use super::super::ocr::OcrCaptureWindow;
 use super::super::quick_selector::QuickSelectorWindow;
 use super::super::state::AppState;
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
@@ -34,7 +34,6 @@ pub struct HotkeyEventContext<'a> {
     /// 登録クリップセレクターウィンドウのインスタンス (登録クリップセレクター操作時のみ必要)
     pub clip_selector: Option<&'a ClipSelectorWindow>,
     /// OCR キャプチャオーバーレイ (OCR 操作時のみ必要)
-    #[cfg(screen_ocr)]
     pub ocr_capture: Option<&'a OcrCaptureWindow>,
     /// イベントループの制御フロー
     pub control_flow: &'a mut ControlFlow,
@@ -66,6 +65,8 @@ impl HotkeyHandler {
             Self::toggle_notification(ctx);
         } else if event.id == self.pause_hotkey.id() {
             Self::toggle_pause(ctx);
+        } else if event.id == self.continuous_record_hotkey.id() {
+            Self::toggle_continuous_record(ctx);
         } else if event.id == self.quit_hotkey.id() {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
@@ -146,7 +147,6 @@ impl HotkeyHandler {
     }
 
     /// 画面 OCR キャプチャオーバーレイ表示ホットキーを処理する
-    #[cfg(screen_ocr)]
     fn handle_ocr_hotkey(ctx: &mut HotkeyEventContext<'_>) {
         let Some(ocr_capture) = ctx.ocr_capture else {
             return;
@@ -172,7 +172,6 @@ impl HotkeyHandler {
     }
 
     /// OCR ホットキーが押された場合に処理する
-    #[cfg(screen_ocr)]
     fn handle_ocr_hotkey_if_pressed(
         &self,
         hotkey_id: u32,
@@ -183,15 +182,6 @@ impl HotkeyHandler {
         }
         Self::handle_ocr_hotkey(ctx);
         true
-    }
-
-    #[cfg(not(screen_ocr))]
-    fn handle_ocr_hotkey_if_pressed(
-        &self,
-        _hotkey_id: u32,
-        _ctx: &mut HotkeyEventContext<'_>,
-    ) -> bool {
-        false
     }
 
     /// 成功通知の有効/無効を切り替える
@@ -222,5 +212,19 @@ impl HotkeyHandler {
         ctx.state.save_config();
         notify::show_pause_notification(ctx.state, new_paused, "ショートカット");
         bump_monitor_generation(ctx.state);
+    }
+
+    /// 連続記録の有効/無効を切り替える
+    pub(super) fn toggle_continuous_record(ctx: &mut HotkeyEventContext<'_>) {
+        apply_continuous_record_toggle(ctx.menu, ctx.state, ctx.clipboard_worker);
+        let enabled = ctx.state.with_config(|c| c.continuous_record_enabled);
+        platform::show_notification(
+            "ショートカット",
+            if enabled {
+                "連続記録を有効にしました"
+            } else {
+                "連続記録を無効にしました"
+            },
+        );
     }
 }

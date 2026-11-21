@@ -1,0 +1,48 @@
+# ClipRefiner 依存関係のサプライチェーン監査 (cargo-deny)
+#
+# 実行: cargo deny check
+# 品質チェック: scripts/*/check.* からも呼び出す
+#
+# ライセンス方針: 独自製品への組み込みが可能なパーミッシブライセンスのみ許可する
+# (コピーレフト GPL / LGPL / MPL 等は deny 対象。許可リストに含めない)
+
+[graph]
+all-features = true
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+]
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+unused-allowed-license = "allow"
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "Unlicense",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

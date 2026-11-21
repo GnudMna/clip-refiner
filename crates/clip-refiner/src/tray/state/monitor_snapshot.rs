@@ -14,6 +14,8 @@ pub struct MonitorSnapshot {
     pub is_paused: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
+    /// 連続記録モードが有効かどうか
+    pub continuous_record_enabled: bool,
     /// 正規表現加工用の設定
     pub regex_settings: RegexSettings,
 }

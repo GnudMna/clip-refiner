@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : check.ps1
-# Description : Windows用の品質チェックスクリプト(fmt / clippy / test)
+# Description : Windows用の品質チェックスクリプト(fmt / clippy / deny / test)
 # Usage       : ./check.ps1
 # Requires    : PowerShell 7.0+
 # ========================================================================
@@ -36,6 +36,11 @@ Invoke-ScriptMain {
     if ($LASTEXITCODE -ne 0) {
         throw "エラー: cargo clippy が終了コード $LASTEXITCODE で失敗しました"
     }
+    Write-Host ''
+
+    # サプライチェーン監査を実行
+    Write-Host 'サプライチェーン監査を実行中...'
+    . (Join-Path $PSScriptRoot '..\common\cargo-deny-check.ps1')
     Write-Host ''
 
     # テストを実行

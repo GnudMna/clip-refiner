@@ -63,7 +63,7 @@ pub(super) fn handle_app_control(
         true
     } else if id == menu.launch_at_login_item.id() {
         let enabled = menu.launch_at_login_item.is_checked();
-        if let Err(e) = crate::autostart::set_enabled(enabled) {
+        if let Err(e) = crate::platform::autostart::set_enabled(enabled) {
             crate::log_error!("ログイン時自動起動の設定に失敗: {:?}", e);
             menu.launch_at_login_item.set_checked(!enabled);
             platform::show_notification("エラー", "ログイン時自動起動の設定に失敗しました");

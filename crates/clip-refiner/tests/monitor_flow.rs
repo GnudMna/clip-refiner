@@ -1,7 +1,7 @@
 //! 監視ループ経路の統合テスト
 
 use clip_refiner::RefineMode;
-use clip_refiner::test_helpers::{ClipboardHarness, MonitorMode};
+use clip_refiner::test_helpers::{ClipboardHarness, MAX_CLIPBOARD_TEXT_BYTES, MonitorMode};
 
 // ======================================================================
 // 監視加工
@@ -62,11 +62,37 @@ fn monitor_applies_updated_mode_from_snapshot() {
     assert_eq!(harness.clipboard_text(), "c%20d");
 }
 
+/// 一時停止中は監視加工を実行しないこと
+#[test]
+fn monitor_skips_processing_when_paused() {
+    let mut harness = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_paused(true);
+
+    assert!(!harness.run_monitor_update(false));
+    assert_eq!(harness.clipboard_text(), "  hello  ");
+}
+
+/// 履歴件数が `history_limit` を超えないこと
+#[test]
+fn monitor_respects_history_limit() {
+    let mut harness = ClipboardHarness::with_text("  a  ")
+        .with_mode(RefineMode::Trim)
+        .with_history(true);
+    harness.with_config_mut(|c| c.history_limit = 2);
+
+    for text in ["  a  ", "  b  ", "  c  "] {
+        harness.replace_clipboard(text);
+        assert!(harness.run_monitor_update(false));
+    }
+
+    assert_eq!(harness.history_len(), 2);
+    assert_eq!(harness.history_entries(), vec!["c", "b"]);
+}
+
 /// 上限超過テキストは監視加工をスキップしクリップボードを変更しないこと
 #[test]
 fn monitor_skips_oversized_clipboard_without_modifying() {
-    use clip_refiner::test_helpers::MAX_CLIPBOARD_TEXT_BYTES;
-
     let oversized = "a".repeat(MAX_CLIPBOARD_TEXT_BYTES + 1);
     let mut harness = ClipboardHarness::with_text(oversized.clone()).with_mode(RefineMode::Trim);
 

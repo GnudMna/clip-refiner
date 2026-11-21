@@ -9,6 +9,9 @@ use crate::config::{clear_test_config_dir, set_test_config_dir};
 /// 一時的な設定ディレクトリでクロージャを実行する
 ///
 /// 並列テストでも衝突しないよう、スレッドごとに独立したディレクトリを使う
+///
+/// # Panics
+/// 一時ディレクトリの作成に失敗した場合
 pub fn with_temp_config_dir<F, R>(f: F) -> R
 where
     F: FnOnce() -> R,

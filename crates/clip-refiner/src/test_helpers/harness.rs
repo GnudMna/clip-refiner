@@ -5,12 +5,12 @@ use std::sync::Arc;
 use super::InMemoryTextClipboard;
 
 use crate::config::{AppConfig, MonitorMode};
-use crate::refiner::RefineContext;
-use crate::refiner::RefineMode;
 use crate::refiner::text_clipboard::TextClipboard;
+use crate::refiner::{RefineContext, RefineMode};
 use crate::security::secret_from;
 use crate::tray::clipboard_monitor::handle_clipboard_update;
 use crate::tray::state::test_app_state;
+use crate::tray::try_paste_continuous_record_front;
 use crate::tray::worker::{ClipboardCommand, handle_command};
 
 // ======================================================================
@@ -45,6 +45,21 @@ impl ClipboardHarness {
     #[must_use]
     pub fn with_history(self, enabled: bool) -> Self {
         self.state.with_config_mut(|c| c.history_enabled = enabled);
+        self
+    }
+
+    /// 連続記録モードの有効・無効を設定する
+    #[must_use]
+    pub fn with_continuous_record(self, enabled: bool) -> Self {
+        self.state
+            .with_config_mut(|c| c.continuous_record_enabled = enabled);
+        self
+    }
+
+    /// 監視の一時停止フラグを設定する
+    #[must_use]
+    pub fn with_paused(self, paused: bool) -> Self {
+        self.state.with_config_mut(|c| c.is_paused = paused);
         self
     }
 
@@ -89,6 +104,11 @@ impl ClipboardHarness {
         self.state.history_len()
     }
 
+    /// 連続記録件数を返す
+    pub fn continuous_record_len(&self) -> usize {
+        self.state.continuous_record_len()
+    }
+
     /// 履歴エントリを先頭 (最新) から順に復号して返す
     pub fn history_entries(&self) -> Vec<String> {
         (0..self.history_len())
@@ -96,9 +116,23 @@ impl ClipboardHarness {
             .collect()
     }
 
+    /// 連続記録エントリを先頭 (キュー先頭) から順に復号して返す
+    pub fn continuous_record_entries(&self) -> Vec<String> {
+        (0..self.continuous_record_len())
+            .filter_map(|i| self.continuous_record_entry_text(i))
+            .collect()
+    }
+
     /// 指定インデックスの履歴本文を返す
     pub fn history_entry_text(&self, index: usize) -> Option<String> {
         self.state.get_history_entry(index).map(|s| s.to_string())
+    }
+
+    /// 指定インデックスの連続記録本文を返す
+    pub fn continuous_record_entry_text(&self, index: usize) -> Option<String> {
+        self.state
+            .get_continuous_record_entry(index)
+            .map(|s| s.to_string())
     }
 
     /// 直近の加工前テキストを取り出す
@@ -124,6 +158,9 @@ impl ClipboardHarness {
     /// [`Self::run_configured_monitor_update`] を使う
     pub fn run_monitor_update(&mut self, event_driven: bool) -> bool {
         let snap = self.state.monitor_snapshot();
+        if snap.is_paused {
+            return false;
+        }
         self.refine_ctx.regex = snap.regex_settings.clone();
         handle_clipboard_update(
             &mut self.clipboard,
@@ -181,5 +218,65 @@ impl ClipboardHarness {
             &mut self.refine_ctx,
             ClipboardCommand::Undo,
         );
+    }
+
+    /// 貼り付け (`Ctrl+V`) 相当でキュー先頭をクリップボードへ載せる
+    pub fn discharge_continuous_record_on_paste(&mut self) {
+        let _ = try_paste_continuous_record_front(&self.state, &mut self.clipboard);
+    }
+
+    /// 連続記録キューから指定位置を取り出してクリップボードへセットする
+    pub fn discharge_continuous_record_at(&mut self, index: usize) {
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::DischargeContinuousRecordAt(index),
+        );
+    }
+
+    /// 有効化直後に現在のクリップボード内容をキューへ積む
+    pub fn catch_up_continuous_record(&mut self) {
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::CatchUpContinuousRecord,
+        );
+    }
+
+    /// ワーカーへ送られる `RegisterClipFromClipboard` コマンドを処理する
+    pub fn register_clip_from_clipboard(&mut self) {
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::RegisterClipFromClipboard,
+        );
+    }
+
+    /// ワーカーへ送られる `CopyRegisteredClip` コマンドを処理する
+    pub fn copy_registered_clip(&mut self, index: usize) {
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::CopyRegisteredClip(index),
+        );
+    }
+
+    /// 登録クリップ件数を返す
+    pub fn registered_clip_count(&self) -> usize {
+        self.state.with_config(|c| c.clips.len())
+    }
+
+    /// 指定インデックスの登録クリップ本文を返す (テキスト登録のみ)
+    pub fn registered_clip_text(&self, index: usize) -> Option<String> {
+        self.state
+            .with_config(|c| c.resolve_registered_clip(index))
+            .and_then(|clip| match clip {
+                crate::config::ResolvedClip::Text(text) => Some(text),
+                crate::config::ResolvedClip::Image { .. } => None,
+            })
     }
 }
