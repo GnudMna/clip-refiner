@@ -1,6 +1,6 @@
 [package]
 name = "clip-refiner"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 authors = ["y_hirata"]
 description = "クリップボードのテキストを加工するツール"
@@ -8,30 +8,30 @@ description = "クリップボードのテキストを加工するツール"
 [dependencies]
 anyhow = "1.0"
 arboard = "3.6.1"
-chrono = { version = "0.4.43", features = ["serde"] }
-clap = { version = "4.5.54", features = ["derive"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.1", features = ["derive"] }
 clipboard-win = { version = "5.0", features = ["std"] }
 csv = "1.3"
 directories = "6.0.0"
-global-hotkey = "0.7.0"
+global-hotkey = "0.8.0"
 png = "0.18.1"
 indexmap = { version = "2.14.0", features = ["serde"] }
-notify-rust = "4.14.0"
+notify-rust = "4.17.0"
 percent-encoding = "2.3.2"
-pulldown-cmark = "0.13.3"
-regex = "1.11.1"
+pulldown-cmark = "0.13.4"
+regex = "1.12.4"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 serde_norway = "0.9.42"
 single-instance = "0.3.3"
 strum = { version = "0.28.0", features = ["derive"] }
-tao = "0.35.0"
+tao = "0.35.3"
 tracing = "0.1.44"
-tracing-appender = "0.2.4"
+tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-tray-icon = "0.22.0"
+tray-icon = "0.24.1"
 windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
-wry = "0.55.0"
+wry = "0.55.1"
 
 [build-dependencies]
 winres = "0.1"
@@ -47,3 +47,10 @@ strip = true
 lto = "fat"
 incremental = false
 codegen-units = 1
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13"

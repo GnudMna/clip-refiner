@@ -3,6 +3,7 @@
 //! アプリケーションの常駐実行に関連する UI と背後のイベントループ制御を担当します。
 
 pub mod app;
+mod clipboard_change;
 pub mod event;
 pub mod hotkey;
 pub mod menu;

@@ -115,11 +115,13 @@ impl HotkeyHandler {
                     selector.hide();
                 } else {
                     *last_selector_show = Instant::now();
-                    selector.show(state.get_mode());
+                    selector.show(state.with_config(|c| c.mode));
                 }
             } else if event.id == self.notification_hotkey.id() {
-                let new_val = !state.is_notification_enabled();
-                state.set_notification_enabled(new_val);
+                let new_val = state.with_config_mut(|c| {
+                    c.notification_settings.enabled = !c.notification_settings.enabled;
+                    c.notification_settings.enabled
+                });
                 menu.notification.enabled_item.set_checked(new_val);
                 menu.notification.content_submenu.set_enabled(new_val);
                 state.save_config();
@@ -132,13 +134,14 @@ impl HotkeyHandler {
                     },
                 );
             } else if event.id == self.pause_hotkey.id() {
-                let new_paused = !state.is_paused();
-                state.set_paused(new_paused);
+                let new_paused = state.with_config_mut(|c| {
+                    c.is_paused = !c.is_paused;
+                    c.is_paused
+                });
                 menu.pause_item.set_checked(new_paused);
+                state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
-                if !new_paused {
-                    spawn_monitor_thread(Arc::clone(state));
-                }
+                spawn_monitor_thread(Arc::clone(state));
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;
             }

@@ -168,7 +168,7 @@ cargo build --release
 | :--- | :--- | :--- | :--- |
 | `mode` | string | `"UrlDecode"` | 使用する加工モード |
 | `interval_ms` | number | `1000` | クリップボードのポーリング間隔（ミリ秒） |
-| `monitor_mode` | string | `"Polling"` | 監視方式。`"Polling"` または `"Event"`（Windows のみ） |
+| `monitor_mode` | string | `"Polling"` | 監視方式。`"Polling"` または `"Event"` |
 | `is_paused` | bool | `false` | 監視を一時停止するかどうか |
 | `history_enabled` | bool | `false` | 加工履歴の有効・無効 |
 | `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 |
@@ -176,7 +176,7 @@ cargo build --release
 | `notification_settings.notify_result` | bool | `true` | 加工結果の通知 |
 | `notification_settings.notify_pause` | bool | `true` | 一時停止切替時の通知 |
 
-> **`monitor_mode: "Event"`（Windows 専用）**: OSのクリップボード更新イベントを利用するため、ポーリングより低遅延かつ低CPU負荷です。
+> **`monitor_mode: "Event"`**: クリップボード本文の定期読み取りを避け、OS の変更トークン（Windows: シーケンス番号、macOS: `changeCount`、Linux: X11 の CLIPBOARD オーナー）を監視します。ポーリングより低遅延かつ低 CPU 負荷です。Linux で X11 が利用できない環境（ネイティブ Wayland のみなど）は、自動的にポーリングへフォールバックします。
 
 ---
 
