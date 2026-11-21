@@ -135,6 +135,8 @@ pub struct TrayMenu {
     pub notification: NotificationMenu,
     /// 設定ファイルを開く項目
     pub open_config_item: MenuItem,
+    /// 設定ファイルを再読み込みする項目
+    pub reload_config_item: MenuItem,
     /// ショートカット一覧表示項目
     pub shortcut_list_item: MenuItem,
     /// ログイン時の自動起動を切り替える項目
@@ -175,6 +177,7 @@ impl TrayMenu {
         let launch_at_login_item =
             CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
         let open_config_item = MenuItem::new("設定を開く", true, None);
+        let reload_config_item = MenuItem::new("設定を再読み込み", true, None);
         let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
@@ -193,6 +196,7 @@ impl TrayMenu {
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &open_config_item as &dyn tray_icon::menu::IsMenuItem,
+                &reload_config_item as &dyn tray_icon::menu::IsMenuItem,
                 &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
@@ -222,6 +226,7 @@ impl TrayMenu {
             texts,
             notification,
             open_config_item,
+            reload_config_item,
             shortcut_list_item,
             launch_at_login_item,
         };
@@ -230,6 +235,55 @@ impl TrayMenu {
         this.refresh_category_labels(config.mode);
 
         Ok(this)
+    }
+
+    /// 現在の設定内容をメニュー表示へ反映する
+    ///
+    /// ディスクからの再読み込み後に、チェック状態やサブメニューを同期する
+    ///
+    /// # Arguments
+    /// * `state` - アプリケーションの共有状態
+    ///
+    /// # Returns
+    /// * `Result<()>` - 同期成功時は `Ok(())`、失敗時は `Err`
+    pub fn sync_from_config(&self, state: &AppState) -> Result<()> {
+        let config = state.with_config(std::clone::Clone::clone);
+
+        self.refine
+            .all_items()
+            .for_each(|(item, mode)| item.set_checked(*mode == config.mode));
+        self.refresh_category_labels(config.mode);
+
+        for (item, monitor_mode) in &self.monitor.items {
+            item.set_checked(*monitor_mode == config.monitor_mode);
+        }
+        super::clipboard_monitor::update_monitor_mode_impl(self, config.monitor_mode);
+
+        for (item, ms) in &self.interval.items {
+            item.set_checked(*ms == config.interval_ms);
+        }
+
+        self.history
+            .enabled_item
+            .set_checked(config.history_enabled);
+        self.notification
+            .enabled_item
+            .set_checked(config.notification_settings.enabled);
+        self.notification
+            .notify_mode_item
+            .set_checked(config.notification_settings.notify_mode);
+        self.notification
+            .notify_result_item
+            .set_checked(config.notification_settings.notify_result);
+        self.notification
+            .notify_pause_item
+            .set_checked(config.notification_settings.notify_pause);
+        self.pause_item.set_checked(config.is_paused);
+
+        self.refresh_texts(state)?;
+        self.refresh_history(state)?;
+
+        Ok(())
     }
 }
 
@@ -286,6 +340,7 @@ mod tests {
             notification: TrayMenu::build_notification_menu(false, true, true, true)
                 .expect("通知メニューの構築に失敗"),
             open_config_item: MenuItem::new("設定を開く", true, None),
+            reload_config_item: MenuItem::new("設定を再読み込み", true, None),
             shortcut_list_item: MenuItem::new("ショートカット一覧", true, None),
             launch_at_login_item: CheckMenuItem::new("ログイン時に起動", true, false, None),
         };

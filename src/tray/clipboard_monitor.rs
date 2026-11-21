@@ -82,6 +82,7 @@ pub(crate) fn should_process_clipboard(
 /// * `state` - アプリケーションの共有状態
 /// * `snap` - ループ先頭で取得済みの設定スナップショット
 /// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
+/// * `ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 ///
 /// # Returns
 /// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
@@ -90,6 +91,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
     event_driven: bool,
+    ctx: &RefineContext,
 ) -> bool {
     let Ok(text) = clipboard.get_text() else {
         return false;
@@ -108,10 +110,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard>(
         return false;
     }
 
-    let ctx = RefineContext {
-        regex: snap.regex_settings.clone(),
-    };
-    let outcome = process_text_clipboard(clipboard, snap.mode, &ctx);
+    let outcome = process_text_clipboard(clipboard, snap.mode, ctx);
     let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
     match &outcome {

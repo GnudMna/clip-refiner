@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use super::permissions::restrict_private_dir_permissions;
 use crate::consts;
@@ -46,6 +47,24 @@ pub fn get_config_file_path() -> Result<PathBuf> {
     fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
     restrict_private_dir_permissions(&config_dir)?;
     Ok(config_dir.join("config.toml"))
+}
+
+/// 設定ファイルの最終更新時刻を取得する
+///
+/// ファイルが存在しない場合は `None` を返す
+///
+/// # Returns
+/// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
+pub fn config_file_modified_time() -> Result<Option<SystemTime>> {
+    let path = get_config_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let metadata = fs::metadata(&path).context("設定ファイルのメタデータ取得に失敗しました")?;
+    metadata
+        .modified()
+        .context("設定ファイルの更新時刻取得に失敗しました")
+        .map(Some)
 }
 
 /// 設定ファイルを既定のアプリケーションで開く

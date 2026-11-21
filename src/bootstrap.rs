@@ -28,6 +28,9 @@ pub fn run() -> Result<()> {
 
     let _guard = setup_logging()?;
 
+    #[cfg(windows)]
+    platform::init_notifications();
+
     let args = Args::parse();
 
     let _instance = ensure_single_instance()?;

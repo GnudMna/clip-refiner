@@ -1,7 +1,7 @@
 //! 監視ループ経路の統合テスト
 
 use clip_refiner::RefineMode;
-use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner::test_helpers::{ClipboardHarness, MonitorMode};
 
 // ======================================================================
 // 監視加工
@@ -73,4 +73,83 @@ fn monitor_skips_oversized_clipboard_without_modifying() {
     assert!(!harness.run_monitor_update(false));
     assert_eq!(harness.clipboard_text(), oversized);
     assert_eq!(harness.history_len(), 0);
+}
+
+// ======================================================================
+// Event 監視方式
+// ======================================================================
+/// Event 監視方式でも加工が実行されること
+#[test]
+fn event_mode_processes_clipboard() {
+    let mut harness = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Event);
+
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+}
+
+/// Event 監視方式でも Undo で加工前テキストへ戻せること
+#[test]
+fn event_mode_process_then_undo_restores_original() {
+    let mut harness = ClipboardHarness::with_text("  undo-me  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Event);
+
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "undo-me");
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "  undo-me  ");
+}
+
+/// Event 監視時は元テキストの再コピーでも再加工されること
+#[test]
+fn event_mode_reprocesses_recopied_source_text() {
+    let mut harness = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Event);
+
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+
+    harness.replace_clipboard("  hello  ");
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+}
+
+/// Event 監視時も自身の書き戻し直後のエコーを1回スキップすること
+#[test]
+fn event_mode_skips_own_write_back_echo_once() {
+    let mut harness = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Event);
+
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+
+    assert!(!harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+
+    harness.replace_clipboard("  hello  ");
+    assert!(harness.run_configured_monitor_update());
+    assert_eq!(harness.clipboard_text(), "hello");
+}
+
+/// Event 監視時は加工済みテキストの再イベントでもポーリングと異なり観測を試みること
+#[test]
+fn event_mode_attempts_reprocess_on_unchanged_clipboard() {
+    let mut polling = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Polling);
+    assert!(polling.run_configured_monitor_update());
+    assert!(!polling.run_configured_monitor_update());
+
+    let mut event = ClipboardHarness::with_text("  hello  ")
+        .with_mode(RefineMode::Trim)
+        .with_monitor_mode(MonitorMode::Event);
+    assert!(event.run_configured_monitor_update());
+    // 加工結果と同じ `hello` に対する再イベントでは `Unchanged` だが、ポーリングとは異なり観測する
+    assert!(!event.run_configured_monitor_update());
+    assert_eq!(event.clipboard_text(), "hello");
 }
