@@ -56,7 +56,7 @@ pub(super) fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGu
 
     let file_appender = Arc::new(logger::LocalDailyFileAppender::new(
         &log_dir,
-        "clip-refiner.log",
+        logger::LOG_FILE_PREFIX,
     )?);
     let (non_blocking, guard) =
         tracing_appender::non_blocking(logger::SharedLogAppender(Arc::clone(&file_appender)));

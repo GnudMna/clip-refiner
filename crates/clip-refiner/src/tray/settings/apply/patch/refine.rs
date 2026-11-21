@@ -84,6 +84,22 @@ mod tests {
     use crate::refiner::RefineMode;
     use crate::test_helpers::{ClipboardCommand, TrayTestContext};
 
+    /// パッチを適用し、結果と設定変更の有無を返す
+    fn apply_patch(ctx: &TrayTestContext, patch: &SettingsPatch) -> (PatchApplyOutcome, bool) {
+        let mut outcome = PatchApplyOutcome::default();
+        let mut config_dirty = false;
+        apply_refine_patch(
+            patch,
+            ctx.state(),
+            ctx.menu(),
+            None,
+            ctx.worker(),
+            &mut outcome,
+            &mut config_dirty,
+        );
+        (outcome, config_dirty)
+    }
+
     /// パイプライン非空時のデフォルトモード変更が `mode` のみ更新しパイプラインを保持すること
     #[test]
     fn default_mode_patch_updates_config_when_pipeline_active() {
@@ -95,18 +111,7 @@ mod tests {
             mode: Some(RefineMode::UrlDecode),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome::default();
-        let mut config_dirty = false;
-
-        apply_refine_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            None,
-            ctx.worker(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        let (outcome, config_dirty) = apply_patch(&ctx, &patch);
 
         assert_eq!(
             ctx.state().with_config(|c| c.pipeline.clone()),
@@ -132,18 +137,7 @@ mod tests {
             mode: Some(RefineMode::UrlDecode),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome::default();
-        let mut config_dirty = false;
-
-        apply_refine_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            None,
-            ctx.worker(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        let (outcome, _) = apply_patch(&ctx, &patch);
 
         assert!(ctx.state().with_config(|c| c.pipeline.is_empty()));
         assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::UrlDecode);
@@ -162,18 +156,7 @@ mod tests {
             pipeline: Some(vec![RefineMode::Trim, RefineMode::TrimLines]),
             ..SettingsPatch::default()
         };
-        let mut outcome = PatchApplyOutcome::default();
-        let mut config_dirty = false;
-
-        apply_refine_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            None,
-            ctx.worker(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        let (outcome, config_dirty) = apply_patch(&ctx, &patch);
 
         assert_eq!(
             ctx.state().with_config(|c| c.pipeline.clone()),

@@ -98,7 +98,7 @@
                     Key='Software\Microsoft\Windows\CurrentVersion\Run'
                     Name='ClipRefiner'
                     Type='string'
-                    Value='[Bin]ClipRefiner.exe'
+                    Value='&quot;[Bin]ClipRefiner.exe&quot;'
                     KeyPath='yes'/>
             </Component>
         </DirectoryRef>

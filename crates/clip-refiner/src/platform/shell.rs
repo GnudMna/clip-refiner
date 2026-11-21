@@ -28,14 +28,41 @@ const SHELL_EXECUTE_SUCCESS_MIN: isize = 32;
 /// # Returns
 /// * `io::Result<()>` - 起動を受け付けた場合は `Ok(())`
 pub(crate) fn shell_open(target: &str) -> io::Result<()> {
-    let file = HSTRING::from(target);
-    // SAFETY: `file` は NUL 終端の UTF-16 で呼び出し中は生存し、そのほかの引数は NULL か定数
+    shell_execute(target, None)
+}
+
+/// 指定したプログラムでファイルを開く
+///
+/// 拡張子の関連付けが無いファイルを特定のアプリで開くときに使う。
+/// ファイルのパスは引用符で囲んで 1 つの引数として渡す
+///
+/// # Arguments
+/// * `program` - 起動するプログラムのフルパス
+/// * `file` - プログラムに渡すファイルのパス
+///
+/// # Returns
+/// * `io::Result<()>` - 起動を受け付けた場合は `Ok(())`
+pub(crate) fn shell_open_with(program: &str, file: &str) -> io::Result<()> {
+    shell_execute(program, Some(&format!("\"{file}\"")))
+}
+
+// ======================================================================
+// プライベート関数
+// ======================================================================
+/// `ShellExecuteW` の `open` 動詞を呼び出す
+fn shell_execute(file: &str, parameters: Option<&str>) -> io::Result<()> {
+    let file = HSTRING::from(file);
+    let parameters = parameters.map(HSTRING::from);
+    let parameters = parameters
+        .as_ref()
+        .map_or_else(PCWSTR::null, |parameters| PCWSTR(parameters.as_ptr()));
+    // SAFETY: `file` と `parameters` は NUL 終端の UTF-16 (または NULL) で呼び出し中は生存し、そのほかの引数は NULL か定数
     let result = unsafe {
         ShellExecuteW(
             None,
             w!("open"),
             &file,
-            PCWSTR::null(),
+            parameters,
             PCWSTR::null(),
             SW_SHOWNORMAL,
         )

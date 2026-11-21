@@ -184,6 +184,19 @@ mod tests {
         monitor
     }
 
+    /// Event 監視の状態と監視ループを生成する (実効モードが Event にならない環境では `None`)
+    fn event_mode_monitor() -> Option<(Arc<AppState>, MonitorLoopState)> {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = false;
+            c.monitor_mode = MonitorMode::Event;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        (MonitorLoopState::effective_mode(MonitorMode::Event) == MonitorMode::Event)
+            .then(|| (state, active_monitor(1)))
+    }
+
     /// 監視中かつ世代が一致する場合はティックを実行すること
     #[test]
     fn should_run_monitor_tick_when_active() {
@@ -262,17 +275,9 @@ mod tests {
     /// Event 監視でリスナ稼働中は設定ポーリング間隔まで待機すること
     #[test]
     fn recv_timeout_is_idle_when_event_listener_active() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| {
-            c.is_paused = false;
-            c.monitor_mode = MonitorMode::Event;
-        });
-        state.monitor_generation.store(1, Ordering::SeqCst);
-
-        let monitor = active_monitor(1);
-        if MonitorLoopState::effective_mode(MonitorMode::Event) != MonitorMode::Event {
+        let Some((state, monitor)) = event_mode_monitor() else {
             return;
-        }
+        };
 
         assert_eq!(
             monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
@@ -285,17 +290,9 @@ mod tests {
     fn recv_timeout_is_short_when_event_listener_inactive() {
         use crate::tray::clipboard_monitor::{EVENT_POLL_MS, POLL_TICK_MS};
 
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| {
-            c.is_paused = false;
-            c.monitor_mode = MonitorMode::Event;
-        });
-        state.monitor_generation.store(1, Ordering::SeqCst);
-
-        let monitor = active_monitor(1);
-        if MonitorLoopState::effective_mode(MonitorMode::Event) != MonitorMode::Event {
+        let Some((state, monitor)) = event_mode_monitor() else {
             return;
-        }
+        };
 
         assert_eq!(
             monitor.recv_timeout(&state, false, CONFIG_POLL_INTERVAL),

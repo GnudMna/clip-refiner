@@ -10,7 +10,6 @@ use super::super::verify::{
     parse_asset_digest, validate_asset_name, validate_declared_download_size,
 };
 use super::asset::{asset_matches_kind, select_asset};
-use super::version::{parse_semver, strip_version_prefix};
 
 /// version API レスポンスから更新結果を判定する
 ///
@@ -30,8 +29,13 @@ pub(crate) fn evaluate_update(
     kind: UpdatePackageKind,
     arch: &str,
 ) -> UpdateCheckOutcome {
-    let latest_raw = strip_version_prefix(&response.tag);
-    let Ok(latest) = parse_semver(latest_raw) else {
+    // タグは URL と作業ディレクトリ名にそのまま使うため、`v` + `SemVer` の厳密な形だけを受け付ける
+    // (空白付き・`V` 付き・`v` なしを正規化して通さない)
+    let Some((latest_raw, latest)) = response
+        .tag
+        .strip_prefix('v')
+        .and_then(|raw| Version::parse(raw).ok().map(|version| (raw, version)))
+    else {
         return UpdateError::LatestVersionInvalid {
             tag: response.tag.clone(),
         }
@@ -376,22 +380,40 @@ mod tests {
         assert!(matches!(outcome, UpdateCheckOutcome::UpToDate { .. }));
     }
 
-    /// 不正なタグはエラーになるようにすること
+    /// `v` + `SemVer` の厳密な形でないタグはエラーになるようにすること
+    ///
+    /// 空白付き・`V` 付き・`v` なし・パス区切り入りのタグは正規化して通さない
     #[test]
     fn evaluate_update_errors_on_invalid_tag() {
         let current = Version::parse("0.13.0").expect("semver");
-        let response = VersionApiResponse {
-            tag: "not-a-version".to_string(),
-            assets: vec![asset("clip-refiner-0.13.1-x86_64.msi", 1)],
-        };
 
-        let outcome = evaluate_update(
-            "0.13.0",
-            &current,
-            &response,
-            UpdatePackageKind::Msi,
-            "x86_64",
-        );
-        assert!(matches!(outcome, UpdateCheckOutcome::Error { .. }));
+        for tag in [
+            "not-a-version",
+            " v0.13.1",
+            "v0.13.1 ",
+            "V0.13.1",
+            "0.13.1",
+            "vv0.13.1",
+            "v0.13.1/../x",
+        ] {
+            let response = VersionApiResponse {
+                tag: tag.to_string(),
+                assets: vec![asset("clip-refiner-0.13.1-x86_64.msi", 1)],
+            };
+
+            let outcome = evaluate_update(
+                "0.13.0",
+                &current,
+                &response,
+                UpdatePackageKind::Msi,
+                "x86_64",
+            );
+            match outcome {
+                UpdateCheckOutcome::Error { message } => {
+                    assert!(message.contains("最新バージョンを解釈できません"), "{tag}");
+                }
+                other => panic!("想定外 ({tag}): {other:?}"),
+            }
+        }
     }
 }

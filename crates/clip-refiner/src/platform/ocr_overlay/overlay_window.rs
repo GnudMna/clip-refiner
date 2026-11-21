@@ -229,9 +229,14 @@ mod tests {
         assert!(!overlay.is_visible(), "非表示後は不可視であること");
     }
 
-    /// マウスメッセージ注入で範囲選択が確定し枠色が描画されるようにすること
-    #[test]
-    fn overlay_drag_completes_with_screen_rect_and_border() {
+    /// 完了コールバックの結果を記録するオーバーレイを生成して表示する
+    ///
+    /// 外側の `Option` はコールバック呼び出しの有無、内側は選択確定 / キャンセルを表す
+    #[allow(
+        clippy::option_option,
+        reason = "コールバック未呼び出しと選択キャンセル (`None`) を区別して検証する"
+    )]
+    fn create_recording_overlay() -> (OverlayWindow, Arc<Mutex<Option<Option<ScreenRect>>>>) {
         let completed: Arc<Mutex<Option<Option<ScreenRect>>>> = Arc::new(Mutex::new(None));
         let completed_cb = Arc::clone(&completed);
         let mut overlay = OverlayWindow::create(Box::new(move |rect| {
@@ -239,23 +244,25 @@ mod tests {
         }))
         .expect("オーバーレイを生成できる");
         overlay.show();
+        (overlay, completed)
+    }
 
-        let hwnd = overlay.hwnd_for_test();
+    /// オーバーレイへウィンドウメッセージを注入する
+    fn send_message(hwnd: HWND, message: u32, wparam: usize, lparam: LPARAM) {
         // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
         unsafe {
-            let _ = SendMessageW(
-                hwnd,
-                WM_LBUTTONDOWN,
-                Some(WPARAM(0)),
-                Some(make_lparam(20, 30)),
-            );
-            let _ = SendMessageW(
-                hwnd,
-                WM_MOUSEMOVE,
-                Some(WPARAM(0)),
-                Some(make_lparam(120, 130)),
-            );
+            let _ = SendMessageW(hwnd, message, Some(WPARAM(wparam)), Some(lparam));
         }
+    }
+
+    /// マウスメッセージ注入で範囲選択が確定し枠色が描画されるようにすること
+    #[test]
+    fn overlay_drag_completes_with_screen_rect_and_border() {
+        let (mut overlay, completed) = create_recording_overlay();
+
+        let hwnd = overlay.hwnd_for_test();
+        send_message(hwnd, WM_LBUTTONDOWN, 0, make_lparam(20, 30));
+        send_message(hwnd, WM_MOUSEMOVE, 0, make_lparam(120, 130));
 
         assert_eq!(
             overlay.last_preview_for_test(),
@@ -268,15 +275,7 @@ mod tests {
         );
         assert_eq!(overlay.border_corner_pixel_for_test(), Some(BORDER_PIXEL));
 
-        // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
-        unsafe {
-            let _ = SendMessageW(
-                hwnd,
-                WM_LBUTTONUP,
-                Some(WPARAM(0)),
-                Some(make_lparam(120, 130)),
-            );
-        }
+        send_message(hwnd, WM_LBUTTONUP, 0, make_lparam(120, 130));
 
         assert!(!overlay.is_visible(), "確定後は非表示であること");
         let result = *completed.lock().expect("lock");
@@ -290,30 +289,11 @@ mod tests {
     /// Escape で選択をキャンセルできるようにすること
     #[test]
     fn overlay_escape_cancels_selection() {
-        let completed: Arc<Mutex<Option<Option<ScreenRect>>>> = Arc::new(Mutex::new(None));
-        let completed_cb = Arc::clone(&completed);
-        let mut overlay = OverlayWindow::create(Box::new(move |rect| {
-            *completed_cb.lock().expect("lock") = Some(rect);
-        }))
-        .expect("オーバーレイを生成できる");
-        overlay.show();
+        let (overlay, completed) = create_recording_overlay();
 
         let hwnd = overlay.hwnd_for_test();
-        // SAFETY: `hwnd` はこのスレッドで作成した生存中のオーバーレイで、`lparam` はポインタを含まない
-        unsafe {
-            let _ = SendMessageW(
-                hwnd,
-                WM_LBUTTONDOWN,
-                Some(WPARAM(0)),
-                Some(make_lparam(10, 10)),
-            );
-            let _ = SendMessageW(
-                hwnd,
-                WM_KEYDOWN,
-                Some(WPARAM(usize::from(VK_ESCAPE.0))),
-                Some(LPARAM(0)),
-            );
-        }
+        send_message(hwnd, WM_LBUTTONDOWN, 0, make_lparam(10, 10));
+        send_message(hwnd, WM_KEYDOWN, usize::from(VK_ESCAPE.0), LPARAM(0));
 
         assert!(!overlay.is_visible(), "キャンセル後は非表示であること");
         let result = *completed.lock().expect("lock");

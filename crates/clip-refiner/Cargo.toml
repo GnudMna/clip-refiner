@@ -31,7 +31,6 @@ required-features = ["app"]
 default = ["app"]
 app = [
     "dep:anyhow",
-    "dep:arboard",
     "dep:base64",
     "dep:chrono",
     "dep:clap",
@@ -133,7 +132,6 @@ required-features = ["app"]
 [dependencies]
 clip-refiner-core = { workspace = true, features = ["clipboard", "config"] }
 anyhow = { workspace = true, optional = true }
-arboard = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }

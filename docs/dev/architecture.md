@@ -103,7 +103,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う (`regex` 含む) |
 | `menu/` | `TrayMenu` 型定義、メニュー全体の組み立て・設定同期・履歴 / 連続記録メニュー再構築の共通化・アイコン |
 | `event/` | tao イベントループへの委譲 (`loop_event`, `user_event/` ルーター + ドメインハンドラ)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング。`loop_event` 末尾でセレクター保持同期とアイドル起床 (`ControlFlow::WaitUntil`) |
-| `selector/` | クイック / 登録クリップセレクターの WebView 束 (`SelectorUi`)。`retention.rs` が保持方針、`webview_policy.rs` が CSP と遷移許可を担う |
+| `selector/` | クイック / 登録クリップセレクターの WebView 束 (`SelectorUi`)。`lazy.rs` が両セレクター共通の遅延生成 `WebView` と保持状態 (`LazySelector`)、`retention.rs` が保持方針、`webview_policy.rs` が CSP と遷移許可を担う |
 | `settings/` | 設定ウィンドウ (下表参照) |
 | `worker/` | クリップボード I/O 集約・監視ループ・コマンド処理。クリップボード変更 (OS 通知とシーケンストークン) と設定ディレクトリ変更の検知もここに置く |
 | `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、メニュー構築用の `MenuSnapshot` (必要フィールドのみ)、`AppEvent` (ドメイン別サブイベントのハブ) |
@@ -239,7 +239,7 @@ flowchart TB
 
 ### UI の遅延生成
 
-クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成する。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。セレクターの非表示後の保持は `selector_webview_retention` で選べる (`Keep` 既定で保持、`DisposeOnHide` で非表示時破棄、`DisposeAfterIdle` で N 分アイドル後に破棄)。非表示は `hide_with_retention`、方針変更後の同期と期限到来破棄は毎ループの `sync_selector_retention`、アイドル起床は `apply_idle_control_flow` (`ControlFlow::WaitUntil`) が担う。設定ウィンドウと画面 OCR オーバーレイは非表示時に破棄する (アイドル時の RSS 削減)。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `OcrEvent::DisposeOverlay` を経由する。ライフサイクルは `selector/{quick,clip,retention}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
+クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成する。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。セレクターの非表示後の保持は `selector_webview_retention` で選べる (`Keep` 既定で保持、`DisposeOnHide` で非表示時破棄、`DisposeAfterIdle` で N 分アイドル後に破棄)。非表示は `hide_with_retention`、方針変更後の同期と期限到来破棄は毎ループの `sync_selector_retention`、アイドル起床は `apply_idle_control_flow` (`ControlFlow::WaitUntil`) が担う。設定ウィンドウと画面 OCR オーバーレイは非表示時に破棄する (アイドル時の RSS 削減)。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `OcrEvent::DisposeOverlay` を経由する。ライフサイクルは `selector/{lazy,quick,clip,retention}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
 
 ### 通信の要点
 
@@ -263,7 +263,7 @@ flowchart TB
 | 層 | モジュール | 責務 |
 | :--- | :--------- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
-| **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダから既定アプリで開く。設定ウィンドウの「情報」タブから呼ぶ |
+| **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダ (MSI は `bin` の親) から開く (`THIRD_PARTY_NOTICES` は拡張子が無いためメモ帳を明示起動)。設定ウィンドウの「情報」タブから呼ぶ |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
 | **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
@@ -287,5 +287,7 @@ flowchart TB
 | :--------- | :----- |
 | デバッグビルド (`cargo build` / `cargo run`) | ログファイル + 標準出力 |
 | リリースビルド | ログファイルのみ |
+
+保持期間 (14 日) を超えたログの削除は、起動時に加えて、常駐中に日付が変わってファイルを切り替えるときにも行う。別スレッドのパニックでログの内部ロックが poison されても、書き込みは止めずに続ける。
 
 通常のログは非同期キュー経由で書き込む。パニックは `bootstrap/panic_hook.rs` のフックが発生スレッド・メッセージ・位置をログファイルへ**同期で**書き込み、その後に既定フックへ委譲する (GUI サブシステムでは標準エラーの出力先が無く、abort で非同期キューも失われうるため)。`RUST_BACKTRACE=1` を指定するとバックトレースも記録する。

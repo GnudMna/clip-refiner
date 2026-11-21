@@ -1,22 +1,31 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, TryLockError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 
 use anyhow::{Context, Result};
 use chrono::{Local, NaiveDate};
+
+// ======================================================================
+// 定数
+// ======================================================================
+/// ログファイル名のプレフィックス
+pub const LOG_FILE_PREFIX: &str = "clip-refiner.log";
+/// ログファイルを保持する最大日数
+const LOG_RETENTION_DAYS: i64 = 14;
 
 // ======================================================================
 // 起動時初期化
 // ======================================================================
 /// ログディレクトリの古いファイルを削除する
 ///
-/// アプリケーション起動時に一度呼び出す
+/// アプリケーション起動時に一度呼び出す。常駐中は日付切り替え時に Appender が再実行する
 ///
 /// # Arguments
 /// * `log_dir` - ログファイルが格納されているディレクトリのパス
 pub fn cleanup_on_startup(log_dir: &Path) {
-    if let Err(e) = cleanup_old_logs(log_dir, 14) {
+    let today = Local::now().date_naive();
+    if let Err(e) = cleanup_old_logs(log_dir, LOG_FILE_PREFIX, today, LOG_RETENTION_DAYS) {
         tracing::warn!("起動時ログクリーンアップに失敗: {:?}", e);
     }
 }
@@ -82,7 +91,22 @@ impl LocalDailyFileAppender {
         })
     }
 
+    /// 内部状態のロックを取得する
+    ///
+    /// 別スレッドのパニックでロックが poison されていても、書き込みを止めないよう中身をそのまま使う
+    ///
+    /// # Arguments
+    /// * `&self` - ロック対象の Appender
+    ///
+    /// # Returns
+    /// * `MutexGuard<'_, AppenderState>` - 内部状態のガード
+    fn lock_state(&self) -> MutexGuard<'_, AppenderState> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// 必要なら日付に合わせてファイルを切り替える
+    ///
+    /// 切り替えた場合は、常駐中も古いログが溜まらないよう保持期間を超えたファイルを削除する
     ///
     /// # Arguments
     /// * `state` - 現在開いているファイルの状態
@@ -96,6 +120,14 @@ impl LocalDailyFileAppender {
         }
         state.file = open_log_file(&self.directory, &self.file_name_prefix, today)?;
         state.date = today;
+        if let Err(e) = cleanup_old_logs(
+            &self.directory,
+            &self.file_name_prefix,
+            today,
+            LOG_RETENTION_DAYS,
+        ) {
+            tracing::warn!("日付切り替え時のログクリーンアップに失敗: {:?}", e);
+        }
         Ok(())
     }
 }
@@ -112,19 +144,13 @@ impl Write for LocalDailyFileAppender {
 
 impl Write for &LocalDailyFileAppender {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|e| io::Error::other(format!("ログ Appender のロックに失敗: {e}")))?;
+        let mut state = self.lock_state();
         self.rotate_if_needed(&mut state)?;
         state.file.write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|e| io::Error::other(format!("ログ Appender のロックに失敗: {e}")))?;
+        let mut state = self.lock_state();
         self.rotate_if_needed(&mut state)?;
         state.file.flush()
     }
@@ -197,12 +223,18 @@ fn open_log_file(directory: &Path, prefix: &str, date: NaiveDate) -> io::Result<
 ///
 /// # Arguments
 /// * `log_dir` - ログファイルが格納されているディレクトリのパス
+/// * `prefix` - ログファイル名のプレフィックス (`{prefix}.YYYY-MM-DD` 形式を対象にする)
+/// * `today` - 経過日数の基準にする現在のローカル日付
 /// * `max_days` - ログを保持する最大日数
 ///
 /// # Returns
 /// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返す
-pub fn cleanup_old_logs(log_dir: &Path, max_days: i64) -> Result<()> {
-    let now = chrono::Local::now().date_naive();
+pub fn cleanup_old_logs(
+    log_dir: &Path,
+    prefix: &str,
+    today: NaiveDate,
+    max_days: i64,
+) -> Result<()> {
     let entries = fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
 
     for entry in entries {
@@ -211,11 +243,13 @@ pub fn cleanup_old_logs(log_dir: &Path, max_days: i64) -> Result<()> {
         if path.is_file()
             && let Some(filename) = path.file_name().and_then(|n| n.to_str())
         {
-            // clip-refiner.log.YYYY-MM-DD 形式を想定
-            if let Some(date_str) = filename.strip_prefix("clip-refiner.log.")
+            // {prefix}.YYYY-MM-DD 形式を想定
+            if let Some(date_str) = filename
+                .strip_prefix(prefix)
+                .and_then(|rest| rest.strip_prefix('.'))
                 && let Ok(file_date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
             {
-                let age = now - file_date;
+                let age = today - file_date;
                 if age.num_days() > max_days {
                     tracing::info!("古いログファイルを削除します: {}", filename);
                     let _ = fs::remove_file(path);
@@ -307,10 +341,86 @@ mod tests {
         fs::write(base.join(old_name), "old").expect("古いログファイルの作成に失敗");
         fs::write(base.join(recent_name), "recent").expect("新しいログファイルの作成に失敗");
 
-        cleanup_old_logs(&base, 14).expect("ログクリーンアップに失敗");
+        let today = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        cleanup_old_logs(&base, "clip-refiner.log", today, 14).expect("ログクリーンアップに失敗");
 
         assert!(!base.join(old_name).exists(), "古いログが残っている");
         assert!(base.join(recent_name).exists(), "新しいログが削除された");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// 日付切り替えでファイルを切り替えたとき、保持期間を超えたログを削除すること
+    ///
+    /// 常駐中は起動時クリーンアップが走らないため、ローテーション契機で行う
+    #[test]
+    fn rotation_removes_expired_logs() {
+        let base = temp_log_dir("rotate-cleanup");
+        let day0 = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let day1 = NaiveDate::from_ymd_opt(2026, 7, 13).expect("有効な日付");
+        let step = Arc::new(AtomicU8::new(0));
+        let step_for_fn = Arc::clone(&step);
+
+        let expired = "clip-refiner.log.2026-06-01";
+        let retained = "clip-refiner.log.2026-07-05";
+        fs::write(base.join(expired), "expired").expect("期限切れログの作成に失敗");
+        fs::write(base.join(retained), "retained").expect("保持対象ログの作成に失敗");
+
+        let mut appender =
+            LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || {
+                if step_for_fn.load(Ordering::SeqCst) == 0 {
+                    day0
+                } else {
+                    day1
+                }
+            })
+            .expect("Appender の作成に失敗");
+
+        // 同日中は削除しない
+        appender
+            .write_all(b"day0\n")
+            .expect("1日目の書き込みに失敗");
+        assert!(base.join(expired).exists(), "同日中に削除された");
+
+        step.store(1, Ordering::SeqCst);
+        appender
+            .write_all(b"day1\n")
+            .expect("2日目の書き込みに失敗");
+
+        assert!(!base.join(expired).exists(), "期限切れログが残っている");
+        assert!(base.join(retained).exists(), "保持対象ログが削除された");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// ロックが poison されても書き込みと flush に成功すること
+    #[test]
+    fn write_recovers_from_poisoned_lock() {
+        let base = temp_log_dir("poisoned");
+        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let appender = Arc::new(
+            LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
+                .expect("Appender の作成に失敗"),
+        );
+
+        // ロック保持中にパニックさせて poison する
+        let poisoner = Arc::clone(&appender);
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.state.lock().expect("ロックの取得に失敗");
+            panic!("poison 用のパニック");
+        })
+        .join();
+        assert!(appender.state.is_poisoned(), "poison されていない");
+
+        let mut shared = SharedLogAppender(Arc::clone(&appender));
+        shared
+            .write_all(b"after\n")
+            .expect("poison 後の書き込みに失敗");
+        shared.flush().expect("poison 後の flush に失敗");
+
+        let content = fs::read_to_string(base.join("clip-refiner.log.2026-07-12"))
+            .expect("ログの読み取りに失敗");
+        assert_eq!(content, "after\n");
 
         let _ = fs::remove_dir_all(&base);
     }

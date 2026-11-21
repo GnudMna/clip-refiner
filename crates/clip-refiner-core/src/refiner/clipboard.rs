@@ -119,28 +119,6 @@ impl From<ClipboardIoError> for ClipboardProcessError {
     }
 }
 
-/// テキストに変換モードを適用する
-///
-/// クリップボード I/O は行わない
-///
-/// # Arguments
-/// * `text` - 加工前のテキスト
-/// * `mode` - 適用する変換モード (`RefineMode`)
-/// * `ctx` - 設定依存の加工パラメータ
-///
-/// # Returns
-/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工結果がある
-/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
-/// * `Err(ClipboardProcessError::NoText)` - テキストが空
-#[cfg(test)]
-pub(crate) fn apply_refinement_to_text(
-    text: &str,
-    mode: RefineMode,
-    ctx: &RefineContext,
-) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    apply_pipeline_to_text(text, &[mode], ctx)
-}
-
 /// テキストに加工パイプラインを順に適用する
 ///
 /// クリップボード I/O は行わない。入力サイズ上限を超える場合は `TextTooLarge` を返す
@@ -240,46 +218,6 @@ pub fn process_clipboard_pipeline<C: TextClipboard + ImageClipboard + HtmlClipbo
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
     process_clipboard_pipeline_io(clipboard, pipeline, ctx)
-}
-
-/// テキストクリップボード実装に対して加工を適用する
-///
-/// # Arguments
-/// * `clipboard` - テキストクリップボード実装
-/// * `mode` - 適用する変換モード (`RefineMode`)
-/// * `ctx` - 設定依存の加工パラメータ
-///
-/// # Returns
-/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
-/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
-/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
-#[cfg(test)]
-pub(crate) fn process_text_clipboard<C: TextClipboard>(
-    clipboard: &mut C,
-    mode: RefineMode,
-    ctx: &RefineContext,
-) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    process_text_clipboard_pipeline(clipboard, &[mode], ctx)
-}
-
-/// テキストクリップボード実装に対して加工パイプラインを適用する
-#[cfg(test)]
-pub(crate) fn process_text_clipboard_pipeline<C: TextClipboard>(
-    clipboard: &mut C,
-    pipeline: &[RefineMode],
-    ctx: &RefineContext,
-) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
-    let text = clipboard.get_text()?;
-
-    match apply_pipeline_to_text(&text, pipeline, ctx)? {
-        ClipboardProcessOutcome::Processed(result) => {
-            clipboard.set_text(result.clone())?;
-            Ok(ClipboardProcessOutcome::Processed(result))
-        }
-        ClipboardProcessOutcome::Unchanged | ClipboardProcessOutcome::ImageProcessed { .. } => {
-            Ok(ClipboardProcessOutcome::Unchanged)
-        }
-    }
 }
 
 /// クリップボード上の Excel 描画ビットマップを画像として書き込む
@@ -557,38 +495,29 @@ mod tests {
 
     /// 空文字列は `NoText` エラーになるようにすること
     #[test]
-    fn apply_refinement_to_text_rejects_empty() {
+    fn apply_pipeline_to_text_rejects_empty() {
         assert_eq!(
-            apply_refinement_to_text("", RefineMode::Trim, &empty_ctx()),
+            apply_pipeline_to_text("", &[RefineMode::Trim], &empty_ctx()),
             Err(ClipboardProcessError::NoText)
         );
     }
 
     /// 上限超過は `TextTooLarge` エラーになるようにすること
     #[test]
-    fn apply_refinement_to_text_rejects_oversized() {
+    fn apply_pipeline_to_text_rejects_oversized() {
         let oversized = "a".repeat(crate::consts::MAX_CLIPBOARD_TEXT_BYTES + 1);
         assert_eq!(
-            apply_refinement_to_text(&oversized, RefineMode::Trim, &empty_ctx()),
+            apply_pipeline_to_text(&oversized, &[RefineMode::Trim], &empty_ctx()),
             Err(ClipboardProcessError::TextTooLarge)
         );
     }
 
     /// 変更がある場合は `Processed` を返すようにすること
     #[test]
-    fn apply_refinement_to_text_returns_processed() {
+    fn apply_pipeline_to_text_returns_processed() {
         assert_eq!(
-            apply_refinement_to_text("  hello  ", RefineMode::Trim, &empty_ctx()),
+            apply_pipeline_to_text("  hello  ", &[RefineMode::Trim], &empty_ctx()),
             Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
-        );
-    }
-
-    /// 変更がない場合は `Unchanged` を返すようにすること
-    #[test]
-    fn apply_refinement_to_text_returns_unchanged() {
-        assert_eq!(
-            apply_refinement_to_text("hello", RefineMode::Trim, &empty_ctx()),
-            Ok(ClipboardProcessOutcome::Unchanged)
         );
     }
 
@@ -621,7 +550,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("  hello  ");
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
+            process_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Processed("hello".to_string()))
         );
         assert_eq!(cb.text(), "hello");
@@ -633,7 +562,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("hello");
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
+            process_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Ok(ClipboardProcessOutcome::Unchanged)
         );
         assert_eq!(cb.text(), "hello");
@@ -645,7 +574,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("x").fail_on_read();
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
+            process_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::ReadFailed("read failed".to_string()))
         );
     }
@@ -656,7 +585,7 @@ mod tests {
         let mut cb = InMemoryTextClipboard::with_text("  x  ").fail_on_write();
 
         assert_eq!(
-            process_text_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
+            process_clipboard(&mut cb, RefineMode::Trim, &empty_ctx()),
             Err(ClipboardProcessError::WriteFailed(
                 "write failed".to_string()
             ))

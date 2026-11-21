@@ -1,6 +1,7 @@
 //! セレクター系 `WebView` UI
 
 mod clip;
+mod lazy;
 mod quick;
 mod retention;
 mod ui;

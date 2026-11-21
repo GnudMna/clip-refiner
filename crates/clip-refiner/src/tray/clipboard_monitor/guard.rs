@@ -11,7 +11,7 @@ use crate::refiner::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipbo
 ///   途中で別のコピー (パスワードマネージャー等) が入った内容は加工も上書きもしない
 ///
 /// 変更トークンを取得できない環境では、書き込みの確認は行わない
-pub(super) struct ObservedClipboard<'a, C> {
+pub(crate) struct ObservedClipboard<'a, C> {
     inner: &'a mut C,
     observed_text: Option<&'a str>,
     expected_token: Option<u64>,
@@ -28,10 +28,29 @@ impl<'a, C: TextClipboard> ObservedClipboard<'a, C> {
     ///
     /// # Returns
     /// * `Self` - 読み取り済み本文を固定したクリップボード
-    pub(super) fn new(inner: &'a mut C, observed_text: &'a str, token: Option<u64>) -> Self {
+    pub(crate) fn new(inner: &'a mut C, observed_text: &'a str, token: Option<u64>) -> Self {
+        Self::with_observed(inner, Some(observed_text), token)
+    }
+
+    /// 読み取りに失敗しうる本文と観測開始時の変更トークンで包む
+    ///
+    /// 本文が `None` のとき `get_text` は実際のクリップボードを読む。書き込みの照合は `new` と同じ
+    ///
+    /// # Arguments
+    /// * `inner` - 実際のクリップボード
+    /// * `observed_text` - 読み取り済みの本文 (読めなかった場合は `None`)
+    /// * `token` - 観測を始める前に取得した変更トークン
+    ///
+    /// # Returns
+    /// * `Self` - 読み取り済み本文を固定したクリップボード
+    pub(crate) fn with_observed(
+        inner: &'a mut C,
+        observed_text: Option<&'a str>,
+        token: Option<u64>,
+    ) -> Self {
         Self {
             inner,
-            observed_text: Some(observed_text),
+            observed_text,
             expected_token: token,
             superseded: false,
         }
@@ -44,7 +63,7 @@ impl<'a, C: TextClipboard> ObservedClipboard<'a, C> {
     ///
     /// # Returns
     /// * `bool` - 書き込みを見送った場合は `true`
-    pub(super) fn is_superseded(&self) -> bool {
+    pub(crate) fn is_superseded(&self) -> bool {
         self.superseded
     }
 

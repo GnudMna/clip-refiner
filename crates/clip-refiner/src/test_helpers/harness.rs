@@ -57,6 +57,21 @@ impl ClipboardHarness {
         self
     }
 
+    /// 本文の読み取り直後に別のコピーが入るよう予約する
+    ///
+    /// # Arguments
+    /// * `text` - 割り込むコピーのテキスト
+    ///
+    /// # Returns
+    /// * `Self` - 割り込みコピーを予約した `self`
+    #[must_use]
+    pub fn with_external_copy_after_read(mut self, text: impl Into<String>) -> Self {
+        let clipboard =
+            std::mem::replace(&mut self.clipboard, InMemoryTextClipboard::with_text(""));
+        self.clipboard = clipboard.with_external_copy_after_read(text, false);
+        self
+    }
+
     /// 変換モードを設定する
     ///
     /// # Arguments
@@ -214,9 +229,7 @@ impl ClipboardHarness {
     /// # Returns
     /// * `Vec<String>` - 復号済み履歴本文の一覧 (先頭が最新)
     pub fn history_entries(&self) -> Vec<String> {
-        (0..self.history_len())
-            .filter_map(|i| self.history_entry_text(i))
-            .collect()
+        self.state.clipboard_session().history_texts()
     }
 
     /// 連続記録エントリを先頭 (キュー先頭) から順に復号して返す
@@ -227,9 +240,7 @@ impl ClipboardHarness {
     /// # Returns
     /// * `Vec<String>` - 復号済み連続記録本文の一覧 (先頭がキュー先頭)
     pub fn continuous_record_entries(&self) -> Vec<String> {
-        (0..self.continuous_record_len())
-            .filter_map(|i| self.continuous_record_entry_text(i))
-            .collect()
+        self.state.clipboard_session().continuous_record_texts()
     }
 
     /// 指定インデックスの履歴本文を返す

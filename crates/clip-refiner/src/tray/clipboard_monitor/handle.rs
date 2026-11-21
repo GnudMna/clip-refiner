@@ -260,7 +260,9 @@ pub(crate) fn record_clipboard_outcome(
 ) -> bool {
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
-            state.clipboard_session().record_undo_source(observed_text);
+            state
+                .clipboard_session()
+                .record_undo_source(observed_text, processed);
             state
                 .clipboard_session()
                 .record_processing_success(processed);
@@ -270,7 +272,9 @@ pub(crate) fn record_clipboard_outcome(
             true
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { .. }) => {
-            state.clipboard_session().record_undo_source(observed_text);
+            state
+                .clipboard_session()
+                .record_image_undo_source(observed_text);
             state
                 .clipboard_session()
                 .record_image_processing_success(observed_text);
@@ -317,28 +321,6 @@ mod tests {
     use crate::refiner::RefineMode;
     use crate::test_helpers::InMemoryTextClipboard;
 
-    fn collect_history(state: &Arc<AppState>) -> Vec<String> {
-        (0..state.clipboard_session().history_len())
-            .filter_map(|i| {
-                state
-                    .clipboard_session()
-                    .get_history_entry(i)
-                    .map(|s| s.to_string())
-            })
-            .collect()
-    }
-
-    fn collect_continuous_record(state: &Arc<AppState>) -> Vec<String> {
-        (0..state.clipboard_session().continuous_record_len())
-            .filter_map(|i| {
-                state
-                    .clipboard_session()
-                    .get_continuous_record_entry(i)
-                    .map(|s| s.to_string())
-            })
-            .collect()
-    }
-
     fn test_snapshot(
         pipeline: Vec<RefineMode>,
         history_enabled: bool,
@@ -374,7 +356,10 @@ mod tests {
             .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen("trimmed"));
         assert!(ps.matches_last_written("trimmed"));
-        assert_eq!(collect_history(&state), vec!["trimmed".to_string()]);
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            vec!["trimmed".to_string()]
+        );
         assert_eq!(
             state
                 .clipboard_session()
@@ -404,7 +389,10 @@ mod tests {
             .with_processed_state(|s| s.clone());
         assert!(ps.matches_last_seen("unchanged"));
         assert!(!ps.matches_last_written("unchanged"));
-        assert_eq!(collect_history(&state), vec!["unchanged".to_string()]);
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            vec!["unchanged".to_string()]
+        );
     }
 
     /// 履歴無効時は履歴に追加しないようにすること
@@ -462,7 +450,10 @@ mod tests {
 
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
 
-        assert_eq!(collect_history(&state), vec!["source".to_string()]);
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            vec!["source".to_string()]
+        );
     }
 
     /// 監視除外指定付きの内容は加工・履歴記録しないようにすること
@@ -484,7 +475,10 @@ mod tests {
         // 書き戻さず、観測済み扱いで変更トークンを進める
         assert_eq!(result, ClipboardObserveResult::Observed);
         assert_eq!(clipboard.text(), "  secret  ");
-        assert_eq!(collect_history(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            Vec::<String>::new()
+        );
         let ps = state
             .clipboard_session()
             .with_processed_state(|s| s.clone());
@@ -513,7 +507,10 @@ mod tests {
         assert_eq!(result, ClipboardObserveResult::Observed);
         assert_eq!(clipboard.text(), "  secret  ");
         assert!(clipboard.is_excluded_from_monitoring());
-        assert_eq!(collect_history(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            Vec::<String>::new()
+        );
         assert!(state.clipboard_session().take_undo_source().is_none());
         let ps = state
             .clipboard_session()
@@ -604,7 +601,10 @@ mod tests {
             observe_continuous_record(&mut clipboard, &state),
             ClipboardObserveResult::Observed
         );
-        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().continuous_record_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 除外判定の後に監視除外指定付きのコピーが入っても、連続記録キューへ積まないこと
@@ -619,7 +619,10 @@ mod tests {
             observe_continuous_record(&mut clipboard, &state),
             ClipboardObserveResult::Observed
         );
-        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().continuous_record_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 連続記録モードでは元テキストを加工せず履歴へ記録すること
@@ -635,10 +638,13 @@ mod tests {
         );
         assert_eq!(clipboard.text(), "  raw  ");
         assert_eq!(
-            collect_continuous_record(&state),
+            state.clipboard_session().continuous_record_texts(),
             vec!["  raw  ".to_string()]
         );
-        assert_eq!(collect_history(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 監視再同期時は既観測テキストを連続記録キューへ積まないようにすること
@@ -652,7 +658,10 @@ mod tests {
 
         recover_continuous_record_on_reset(&state, "existing", true, true, false);
 
-        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().continuous_record_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 監視開始直後の初回同期では既存クリップボードを記録しないようにすること
@@ -663,7 +672,10 @@ mod tests {
 
         recover_continuous_record_on_reset(&state, "startup", true, false, true);
 
-        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
+        assert_eq!(
+            state.clipboard_session().continuous_record_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 監視再同期と同時の未観測コピーは連続記録キューへ積むようにすること
@@ -675,7 +687,7 @@ mod tests {
         recover_continuous_record_on_reset(&state, "fresh-copy", true, false, false);
 
         assert_eq!(
-            collect_continuous_record(&state),
+            state.clipboard_session().continuous_record_texts(),
             vec!["fresh-copy".to_string()]
         );
     }

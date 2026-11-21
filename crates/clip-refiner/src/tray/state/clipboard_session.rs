@@ -2,8 +2,31 @@ use std::sync::Mutex;
 
 use super::lock_ext::LockExt;
 use super::monitor_snapshot::ProcessedState;
-use crate::security::{SecretString, secret_from};
+use crate::security::{ContentFingerprint, SecretString, secret_from};
 use crate::tray::history_store::{EncryptedHistoryStore, EncryptedRecordStore};
+
+// ======================================================================
+// 取り消し用エントリ
+// ======================================================================
+/// 取り消し用に保持する加工前テキストと、加工直後のクリップボード本文の指紋
+pub(crate) struct UndoEntry {
+    /// 取り消し時に書き戻す加工前テキスト
+    pub source: SecretString,
+    /// 加工直後にクリップボードへ載っているはずの本文の指紋
+    written: ContentFingerprint,
+    /// 本文を読めない状態を変更済みとみなす場合は `true`
+    text_required: bool,
+}
+
+/// 取り消し用エントリの取り出し結果
+pub(crate) enum UndoLookup {
+    /// 取り消せる
+    Ready(UndoEntry),
+    /// 加工後にクリップボードが変更されたため破棄した
+    Stale,
+    /// 取り消し用の記録がない
+    Empty,
+}
 
 // ======================================================================
 // クリップボードセッション状態
@@ -13,7 +36,7 @@ use crate::tray::history_store::{EncryptedHistoryStore, EncryptedRecordStore};
 /// プロセス再起動で破棄される揮発データのみを保持する
 pub(crate) struct ClipboardSessionState {
     processed_state: Mutex<ProcessedState>,
-    undo_text: Mutex<Option<SecretString>>,
+    undo_text: Mutex<Option<UndoEntry>>,
     history_store: Mutex<EncryptedHistoryStore>,
     continuous_record_store: Mutex<EncryptedRecordStore>,
 }
@@ -94,9 +117,37 @@ impl ClipboardSessionState {
     /// 加工成功時に取り消し用の元テキストを記録する
     ///
     /// # Arguments
-    /// * `text` - 取り消し用に保持する加工前テキスト
-    pub fn record_undo_source(&self, text: &str) {
-        *self.undo_text.lock_ignore_poison() = Some(secret_from(text));
+    /// * `source` - 取り消し用に保持する加工前テキスト
+    /// * `written` - 加工によりクリップボードへ書き戻したテキスト
+    pub fn record_undo_source(&self, source: &str, written: &str) {
+        self.store_undo_entry(UndoEntry {
+            source: secret_from(source),
+            written: ContentFingerprint::from_text(written),
+            text_required: true,
+        });
+    }
+
+    /// 画像加工成功時に取り消し用の元テキストを記録する
+    ///
+    /// 画像書き込みでテキストが消える場合があるため、クリップボードからテキストを
+    /// 読めない状態は加工直後のままとみなす
+    ///
+    /// # Arguments
+    /// * `source` - 取り消し用に保持する加工前テキスト
+    pub fn record_image_undo_source(&self, source: &str) {
+        self.store_undo_entry(UndoEntry {
+            source: secret_from(source),
+            written: ContentFingerprint::from_text(source),
+            text_required: false,
+        });
+    }
+
+    /// 取り消し用エントリを保持する
+    ///
+    /// # Arguments
+    /// * `entry` - 保持する取り消し用エントリ
+    pub fn store_undo_entry(&self, entry: UndoEntry) {
+        *self.undo_text.lock_ignore_poison() = Some(entry);
     }
 
     /// 取り消し用の元テキストを取り出す
@@ -107,7 +158,35 @@ impl ClipboardSessionState {
     /// # Returns
     /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_undo_source(&self) -> Option<SecretString> {
-        self.undo_text.lock_ignore_poison().take()
+        self.undo_text
+            .lock_ignore_poison()
+            .take()
+            .map(|entry| entry.source)
+    }
+
+    /// 現在のクリップボード本文が加工直後のままなら取り消し用エントリを取り出す
+    ///
+    /// 加工後に別の内容がコピーされていた場合は、上書きを避けるためエントリを破棄する
+    ///
+    /// # Arguments
+    /// * `current` - 現在のクリップボード本文。テキストを読めない場合は `None`
+    ///
+    /// # Returns
+    /// * `UndoLookup` - 取り消せる場合は `Ready`、記録がなければ `Empty`、
+    ///   クリップボードが変更済みなら `Stale`
+    pub fn take_undo_entry_if_current(&self, current: Option<&str>) -> UndoLookup {
+        let Some(entry) = self.undo_text.lock_ignore_poison().take() else {
+            return UndoLookup::Empty;
+        };
+        let is_current = match current {
+            Some(text) => entry.written.matches(text),
+            None => !entry.text_required,
+        };
+        if is_current {
+            UndoLookup::Ready(entry)
+        } else {
+            UndoLookup::Stale
+        }
     }
 
     /// 履歴の件数を返す
@@ -130,6 +209,20 @@ impl ClipboardSessionState {
     /// * `Option<SecretString>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
     pub fn get_history_entry(&self, index: usize) -> Option<SecretString> {
         self.history_store.lock_ignore_poison().entry_at(index)
+    }
+
+    /// 履歴をすべて復号して先頭 (最新) から順に返す
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `Vec<String>` - 復号済み履歴本文の一覧 (先頭が最新)
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+    pub fn history_texts(&self) -> Vec<String> {
+        (0..self.history_len())
+            .filter_map(|i| self.get_history_entry(i).map(|s| s.to_string()))
+            .collect()
     }
 
     /// 履歴をクリアする
@@ -181,6 +274,20 @@ impl ClipboardSessionState {
         self.continuous_record_store
             .lock_ignore_poison()
             .entry_at(index)
+    }
+
+    /// 連続記録をすべて復号してキュー先頭から順に返す
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `Vec<String>` - 復号済み連続記録本文の一覧 (先頭がキュー先頭)
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
+    pub fn continuous_record_texts(&self) -> Vec<String> {
+        (0..self.continuous_record_len())
+            .filter_map(|i| self.get_continuous_record_entry(i).map(|s| s.to_string()))
+            .collect()
     }
 
     /// 連続記録をクリアする
@@ -313,12 +420,72 @@ mod tests {
 
         assert!(session.take_undo_source().is_none());
 
-        session.record_undo_source("original");
+        session.record_undo_source("original", "processed");
         assert_eq!(
             session.take_undo_source().as_ref().map(|s| s.as_str()),
             Some("original")
         );
         assert!(session.take_undo_source().is_none());
+    }
+
+    /// 現在のクリップボードが加工直後のままなら取り消せること
+    #[test]
+    fn undo_entry_is_ready_when_clipboard_is_unchanged() {
+        let session = session();
+        session.record_undo_source("original", "processed");
+
+        let UndoLookup::Ready(entry) = session.take_undo_entry_if_current(Some("processed")) else {
+            panic!("取り消せる状態であること");
+        };
+        assert_eq!(entry.source.as_str(), "original");
+    }
+
+    /// 加工後に別の内容がコピーされていたら取り消しを拒否し、記録を破棄すること
+    #[test]
+    fn undo_entry_is_stale_when_clipboard_changed() {
+        let session = session();
+        session.record_undo_source("original", "processed");
+
+        assert!(matches!(
+            session.take_undo_entry_if_current(Some("copied-later")),
+            UndoLookup::Stale
+        ));
+        assert!(matches!(
+            session.take_undo_entry_if_current(Some("processed")),
+            UndoLookup::Empty
+        ));
+    }
+
+    /// テキストを読めない場合、テキスト加工の取り消しは拒否すること
+    #[test]
+    fn undo_entry_is_stale_when_text_unreadable() {
+        let session = session();
+        session.record_undo_source("original", "processed");
+
+        assert!(matches!(
+            session.take_undo_entry_if_current(None),
+            UndoLookup::Stale
+        ));
+    }
+
+    /// 画像加工の取り消しはテキストを読めない状態を加工直後とみなすこと
+    ///
+    /// テキストを読める場合は加工前テキストとの一致を要求する
+    #[test]
+    fn image_undo_entry_accepts_unreadable_text_only_when_unchanged() {
+        let session = session();
+
+        session.record_image_undo_source("original");
+        assert!(matches!(
+            session.take_undo_entry_if_current(None),
+            UndoLookup::Ready(_)
+        ));
+
+        session.record_image_undo_source("original");
+        assert!(matches!(
+            session.take_undo_entry_if_current(Some("copied-later")),
+            UndoLookup::Stale
+        ));
     }
 
     /// `with_processed_state` で二重加工防止状態を更新できるようにすること

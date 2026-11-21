@@ -3,14 +3,29 @@
 //! 一時ファイルへ書き込んでからリネームで置き換え、途中書き込みの破損を防ぐ
 
 use std::ffi::OsString;
-use std::fs::{self, File};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
+
+// ======================================================================
+// 定数
+// ======================================================================
+/// 一時ファイル名の連番 (同一プロセス内の並行書き込みで名前を衝突させない)
+static TEMP_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
+/// プロセス内の置き換えを直列化するロック
+///
+/// Windows では同じ出力先への `MoveFileExW` が同時に走ると `ERROR_ACCESS_DENIED` で失敗するため
+static REPLACE_LOCK: Mutex<()> = Mutex::new(());
 
 // ======================================================================
 // パブリック関数
 // ======================================================================
 /// バイト列を一時ファイル経由で原子的に書き込む
+///
+/// 一時ファイル名は呼び出しごとに一意で、同一プロセス内の並行書き込みは直列に処理する。
+/// 最終的な内容は、最後に完了した呼び出しのものになる
 ///
 /// # Arguments
 /// * `path` - 最終的な出力先
@@ -22,8 +37,14 @@ use std::path::{Path, PathBuf};
 /// # Errors
 /// 一時ファイル作成・書き込み・リネームのいずれかに失敗した場合
 pub(super) fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let tmp_path = sibling_with_suffix(path, ".tmp")?;
-    write_temp_file(&tmp_path, bytes)?;
+    // 保持するのは `()` のみで、poison されても状態は壊れない
+    let _guard = REPLACE_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let seq = TEMP_FILE_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = sibling_with_suffix(path, &format!(".{}.{seq}.tmp", std::process::id()))?;
+    if let Err(err) = write_temp_file(&tmp_path, bytes) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(err);
+    }
     replace_file(&tmp_path, path)
 }
 
@@ -60,7 +81,10 @@ fn sibling_with_suffix(path: &Path, suffix: &str) -> io::Result<PathBuf> {
 
 /// 一時ファイルへ内容を書き出し、ディスクへ同期する
 fn write_temp_file(tmp_path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut file = File::create(tmp_path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(tmp_path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     Ok(())
@@ -159,8 +183,7 @@ mod tests {
             fs::read_to_string(&path).expect("読み取り"),
             "mode = \"Trim\"\n"
         );
-        assert!(!dir.join("config.toml.tmp").exists());
-        assert!(!dir.join("config.toml.prev").exists());
+        assert_no_leftovers(&dir);
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -175,10 +198,72 @@ mod tests {
         write_text_atomically(&path, "new\n").expect("原子的置き換え");
 
         assert_eq!(fs::read_to_string(&path).expect("読み取り"), "new\n");
-        assert!(!dir.join("config.toml.tmp").exists());
-        assert!(!dir.join("config.toml.prev").exists());
+        assert_no_leftovers(&dir);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 同じ出力先への並行書き込みで一時ファイル名が衝突しないこと
+    ///
+    /// 最終的な内容は、いずれかのスレッドが書いた内容が欠けずに残っていればよい
+    #[test]
+    fn write_bytes_atomically_uses_distinct_temp_paths_for_concurrent_writes() {
+        let dir = unique_temp_dir("atomic-concurrent");
+        let path = dir.join("config.toml");
+
+        let tmp_a = sibling_with_suffix(&path, ".a.tmp").expect("パス生成");
+        assert_ne!(
+            tmp_a,
+            sibling_with_suffix(&path, ".b.tmp").expect("パス生成")
+        );
+
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for j in 0..25 {
+                        let body = format!("writer-{i}-{j}\n").repeat(512);
+                        write_text_atomically(&path, &body).expect("並行の原子的置き換え");
+                    }
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("スレッドの終了");
+        }
+
+        let content = fs::read_to_string(&path).expect("読み取り");
+        let first = content.lines().next().expect("内容が空");
+        assert_eq!(content, format!("{first}\n").repeat(512), "内容が混ざった");
+        assert_no_leftovers(&dir);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 書き込み失敗時に一時ファイルを残さないこと
+    #[test]
+    fn write_bytes_atomically_cleans_up_temp_file_on_failure() {
+        let dir = unique_temp_dir("atomic-failure");
+        // 出力先がディレクトリのため、置き換えに失敗する
+        let path = dir.join("config.toml");
+        fs::create_dir_all(&path).expect("ディレクトリ作成");
+
+        assert!(write_text_atomically(&path, "new\n").is_err());
+        assert_no_leftovers(&dir);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 一時ファイルと `.prev` が残っていないことを確認する
+    fn assert_no_leftovers(dir: &Path) {
+        for entry in fs::read_dir(dir).expect("ディレクトリ読み取り") {
+            let name = entry.expect("エントリ").file_name();
+            let name = name.to_string_lossy();
+            assert!(
+                !name.ends_with(".tmp") && !name.ends_with(".prev"),
+                "一時ファイルが残っている: {name}"
+            );
+        }
     }
 
     /// 置き換え中も最終パスが読み取り可能となるようにすること

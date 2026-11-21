@@ -47,8 +47,7 @@
     margin-bottom: 0;
 }
 
-.field label,
-.field .field-label {
+.field label {
     display: block;
     margin-bottom: 6px;
     font-size: 12px;

@@ -3,12 +3,13 @@ use std::sync::mpsc::Sender;
 
 use chrono::Local;
 
+use super::super::clipboard_monitor::ObservedClipboard;
 use super::super::dispatch;
 use super::super::notify::{
     NotificationCategory, show_category_notification, show_image_process_notification,
     show_process_notification,
 };
-use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent};
+use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent, UndoLookup};
 use super::command::ClipboardCommand;
 use crate::clip_template::{
     ClipTemplateContext, clip_template_uses_clipboard, expand_clip_template,
@@ -117,13 +118,29 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard
     refine_ctx: &mut RefineContext,
     mode: RefineMode,
 ) {
+    // 取り消し用テキストと加工対象を同じ読み取りにそろえ、書き戻し前に別のコピーが入れば上書きしない
+    let token = clipboard.change_token();
     let pre_text = clipboard.get_text().ok();
     refine_ctx.regex = state.with_config(|c| c.regex.clone());
     let pipeline = [mode];
-    match process_clipboard_pipeline_io(clipboard, &pipeline, refine_ctx) {
+    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token);
+    let outcome = process_clipboard_pipeline_io(&mut observed, &pipeline, refine_ctx);
+    if observed.is_superseded() {
+        crate::log_debug!("加工中にクリップボードが更新されたため書き戻しを見送り");
+        show_category_notification(
+            state,
+            NotificationCategory::Process,
+            "加工結果",
+            "加工中にクリップボードが更新されたため、書き戻しを中止しました",
+        );
+        return;
+    }
+    match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
             if let Some(ref pre) = pre_text {
-                state.clipboard_session().record_undo_source(pre);
+                state
+                    .clipboard_session()
+                    .record_undo_source(pre, &processed);
             }
             state
                 .clipboard_session()
@@ -132,7 +149,7 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
             if let Some(ref pre) = pre_text {
-                state.clipboard_session().record_undo_source(pre);
+                state.clipboard_session().record_image_undo_source(pre);
                 state
                     .clipboard_session()
                     .record_image_processing_success(pre);
@@ -164,13 +181,16 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
     refine_ctx: &RefineContext,
     reply: &Sender<OneshotProcessResult>,
 ) {
+    // 取り消し用テキストと加工対象を同じ読み取りにそろえ、書き戻し前に別のコピーが入れば上書きしない
+    let token = clipboard.change_token();
     let pre_text = clipboard.get_text().ok();
-    let result = match process_clipboard_pipeline_io(clipboard, pipeline, refine_ctx) {
+    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token);
+    let result = match process_clipboard_pipeline_io(&mut observed, pipeline, refine_ctx) {
         Ok(outcome) => {
             match &outcome {
                 ClipboardProcessOutcome::Processed(processed) => {
                     if let Some(ref pre) = pre_text {
-                        state.clipboard_session().record_undo_source(pre);
+                        state.clipboard_session().record_undo_source(pre, processed);
                     }
                     state
                         .clipboard_session()
@@ -178,7 +198,7 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
                 }
                 ClipboardProcessOutcome::ImageProcessed { .. } => {
                     if let Some(ref pre) = pre_text {
-                        state.clipboard_session().record_undo_source(pre);
+                        state.clipboard_session().record_image_undo_source(pre);
                         state
                             .clipboard_session()
                             .record_image_processing_success(pre);
@@ -198,28 +218,45 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
 
 /// 加工の取り消しコマンドを処理する
 fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
-    if let Some(text) = state.clipboard_session().take_undo_source() {
-        if let Err(e) = clipboard.set_text(text.to_string()) {
-            ClipboardWriteContext::Undo
-                .notification()
-                .notify_with_debug(&e);
-            state.clipboard_session().record_undo_source(&text);
-        } else {
-            state.clipboard_session().record_processing_success(&text);
+    let current = clipboard.get_text().ok();
+    match state
+        .clipboard_session()
+        .take_undo_entry_if_current(current.as_deref())
+    {
+        UndoLookup::Ready(entry) => {
+            if let Err(e) = clipboard.set_text(entry.source.to_string()) {
+                ClipboardWriteContext::Undo
+                    .notification()
+                    .notify_with_debug(&e);
+                state.clipboard_session().store_undo_entry(entry);
+            } else {
+                state
+                    .clipboard_session()
+                    .record_processing_success(&entry.source);
+                show_category_notification(
+                    state,
+                    NotificationCategory::Process,
+                    "加工の取り消し",
+                    "クリップボードを加工前の内容に戻しました",
+                );
+            }
+        }
+        UndoLookup::Stale => {
             show_category_notification(
                 state,
                 NotificationCategory::Process,
                 "加工の取り消し",
-                "クリップボードを加工前の内容に戻しました",
+                "加工後にクリップボードが変更されたため取り消しませんでした",
             );
         }
-    } else {
-        show_category_notification(
-            state,
-            NotificationCategory::Process,
-            "加工の取り消し",
-            "取り消せる加工がありません",
-        );
+        UndoLookup::Empty => {
+            show_category_notification(
+                state,
+                NotificationCategory::Process,
+                "加工の取り消し",
+                "取り消せる加工がありません",
+            );
+        }
     }
 }
 

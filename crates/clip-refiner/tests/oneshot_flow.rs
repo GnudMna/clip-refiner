@@ -6,7 +6,7 @@
     reason = "テスト専用のため、ヘルパー内の失敗もそのまま panic させる"
 )]
 
-use clip_refiner::test_helpers::{ClipboardHarness, InMemoryTextClipboard};
+use clip_refiner::test_helpers::{ClipboardHarness, InMemoryTextClipboard, OneshotProcessResult};
 use clip_refiner_core::refiner::TextClipboard;
 use clip_refiner_core::{
     AppConfig, ClipboardProcessOutcome, RefineContext, RefineMode, apply_pipeline_to_text,
@@ -94,4 +94,17 @@ fn oneshot_via_worker_skips_monitor_write_back_echo() {
     // ワンショット書き戻しのエコーを1回スキップし、常駐モードでは再加工しない
     assert!(!harness.run_monitor_update(true));
     assert_eq!(harness.clipboard_text(), "hello");
+}
+
+/// 読み取り直後に別のコピーが入った場合、上書きも取り消し元の記録もせずエラーを返すこと
+#[test]
+fn oneshot_via_worker_skips_write_when_clipboard_changes_during_read() {
+    let mut harness =
+        ClipboardHarness::with_text("  original  ").with_external_copy_after_read("  external  ");
+
+    let result = harness.process_oneshot_pipeline(vec![RefineMode::Trim], RefineContext::default());
+
+    assert!(matches!(result, OneshotProcessResult::Error { .. }));
+    assert_eq!(harness.clipboard_text(), "  external  ");
+    assert!(harness.take_undo_source().is_none());
 }

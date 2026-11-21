@@ -80,7 +80,7 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | 層 | 手段 | カバー範囲 |
 | :--- | :--- | :--- |
 | JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
-| Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
+| Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,lazy,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
 | Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・並べ替えボタン・テンプレートバッジ・画像サムネ/ホバー、クイックのお気に入り順と `Ctrl+Shift+↑/↓` 並べ替え→TOML・`Ctrl+Enter`・カテゴリ見出しの開閉と再表示時の復元 (`settings.spec.ts` / `quick_selector.spec.ts` / `clip_selector.spec.ts`)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
@@ -224,6 +224,8 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 
 | メソッド | 用途 |
 | :------- | :--- |
+| `with_html` | クリップボードに置く HTML 形式 (`html-to-markdown` の入力) |
+| `with_external_copy_after_read` | 本文の読み取り直後に別の内容がコピーされた状況 (加工中の割り込みコピー) |
 | `with_mode` | 監視・手動加工のデフォルトモード |
 | `with_pipeline` | 監視時の加工パイプライン |
 | `with_history` | 履歴の有効・無効 |
@@ -246,6 +248,7 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 | メソッド | コマンド |
 | :------- | :------- |
 | `process_mode` | `ProcessMode` |
+| `process_oneshot_pipeline` | `ProcessOneshotPipeline` (ワンショットの常駐委譲) |
 | `set_text` | `SetText` (履歴復元) |
 | `set_ocr_text` | `SetOcrText` |
 | `undo` | `Undo` |

@@ -1,14 +1,8 @@
-use std::cell::{Cell, RefCell};
-use std::time::Instant;
-
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowId};
 
-use super::retention::RetainedSelector;
-use super::window::{
-    WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
-    embed_clip_selector_assets,
-};
+use super::lazy::{HasLazySelector, LazySelector};
+use super::window::{WebSelectorWindow, WebViewWindowOptions, embed_clip_selector_assets};
 use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::tray::dispatch;
@@ -98,13 +92,14 @@ pub(crate) fn clip_selector_refresh_script(clips_json: &str) -> String {
 pub struct ClipSelectorWindow {
     /// イベント送信用プロキシ
     proxy: EventLoopProxy<AppEvent>,
-    /// 遅延生成された `WebView` (未生成または破棄後は `None`)
-    inner: RefCell<Option<WebSelectorWindow>>,
-    /// `DisposeAfterIdle` 用の非表示開始時刻
-    idle_hidden_at: Cell<Option<Instant>>,
-    /// テスト用の擬似表示フラグ (`WebView` なしで相互排他を検証する)
-    #[cfg(test)]
-    force_visible: Cell<bool>,
+    /// 遅延生成される `WebView` とその保持状態
+    lazy: LazySelector,
+}
+
+impl HasLazySelector for ClipSelectorWindow {
+    fn lazy(&self) -> &LazySelector {
+        &self.lazy
+    }
 }
 
 // ======================================================================
@@ -121,10 +116,7 @@ impl ClipSelectorWindow {
     pub fn new_shell(proxy: EventLoopProxy<AppEvent>) -> Self {
         Self {
             proxy,
-            inner: RefCell::new(None),
-            idle_hidden_at: Cell::new(None),
-            #[cfg(test)]
-            force_visible: Cell::new(false),
+            lazy: LazySelector::new(),
         }
     }
 
@@ -180,22 +172,6 @@ impl ClipSelectorWindow {
             WebViewWindowOptions::default(),
         )
     }
-
-    /// 未生成なら `WebView` を生成する
-    fn ensure_created(&self, event_loop: &EventLoopWindowTarget<AppEvent>) -> anyhow::Result<()> {
-        if self.inner.borrow().is_some() {
-            return Ok(());
-        }
-        let window = build_hidden_selector_window(
-            event_loop,
-            &format!("{} Clip Selector", consts::APP_NAME),
-            520.0,
-            600.0,
-        )?;
-        let webview = Self::build_webview(window, &self.proxy)?;
-        *self.inner.borrow_mut() = Some(webview);
-        Ok(())
-    }
 }
 
 // ======================================================================
@@ -210,14 +186,15 @@ impl ClipSelectorWindow {
     /// * `event_loop` - 遅延生成用のイベントループ
     /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn show(&self, event_loop: &EventLoopWindowTarget<AppEvent>, clips_json: &str) {
-        self.idle_hidden_at.set(None);
-        if let Err(err) = self.ensure_created(event_loop) {
-            crate::user_error::notify_webview_window_init_failure("登録クリップ", &err);
-            return;
-        }
+        let title = format!("{} Clip Selector", consts::APP_NAME);
         let script = clip_selector_focus_script(clips_json);
-        if let Some(inner) = self.inner.borrow().as_ref() {
-            inner.show_with_script(&script);
+        if let Err(err) = self.lazy.show(
+            event_loop,
+            &title,
+            |window| Self::build_webview(window, &self.proxy),
+            &script,
+        ) {
+            crate::user_error::notify_webview_window_init_failure("登録クリップ", &err);
         }
     }
 
@@ -228,64 +205,24 @@ impl ClipSelectorWindow {
     /// # Arguments
     /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn refresh_items(&self, clips_json: &str) {
-        let inner = self.inner.borrow();
-        let Some(inner) = inner.as_ref() else {
-            return;
-        };
-        let script = clip_selector_refresh_script(clips_json);
-        inner.evaluate_script(&script);
-    }
-
-    /// 登録クリップセレクタを非表示にする (`WebView` の破棄は呼び出し側の保持方針に任せる)
-    ///
-    /// # Arguments
-    /// * `self` - この `ClipSelectorWindow`
-    pub fn hide(&self) {
-        #[cfg(test)]
-        self.force_visible.set(false);
-        if let Some(inner) = self.inner.borrow().as_ref() {
-            inner.hide();
-        }
-    }
-
-    /// `WebView` を破棄する (未生成なら何もしない)
-    ///
-    /// # Arguments
-    /// * `self` - この `ClipSelectorWindow`
-    pub fn dispose(&self) {
-        #[cfg(test)]
-        self.force_visible.set(false);
-        self.idle_hidden_at.set(None);
-        *self.inner.borrow_mut() = None;
-    }
-
-    /// `WebView` が生成済みかどうか
-    ///
-    /// # Arguments
-    /// * `self` - この `ClipSelectorWindow`
-    ///
-    /// # Returns
-    /// * `bool` - 生成済みなら `true`
-    pub fn is_created(&self) -> bool {
-        self.inner.borrow().is_some()
+        self.lazy
+            .evaluate_script(&clip_selector_refresh_script(clips_json));
     }
 
     /// 登録クリップセレクタが現在表示されているかどうかを確認する
     ///
-    /// # Arguments
-    /// * `self` - この `ClipSelectorWindow`
-    ///
     /// # Returns
     /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
-        #[cfg(test)]
-        if self.force_visible.get() {
-            return true;
-        }
-        self.inner
-            .borrow()
-            .as_ref()
-            .is_some_and(WebSelectorWindow::is_visible)
+        self.lazy.is_visible()
+    }
+
+    /// 登録クリップセレクタウィンドウの内部 ID を取得する
+    ///
+    /// # Returns
+    /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
+    pub fn id(&self) -> Option<WindowId> {
+        self.lazy.id()
     }
 
     /// テスト用に表示中として扱う (実 `WebView` は作らない)
@@ -294,44 +231,7 @@ impl ClipSelectorWindow {
     /// * `visible` - 擬似表示するか
     #[cfg(test)]
     pub(crate) fn force_visible_for_test(&self, visible: bool) {
-        self.force_visible.set(visible);
-    }
-
-    /// 登録クリップセレクタウィンドウの内部 ID を取得する
-    ///
-    /// # Arguments
-    /// * `self` - この `ClipSelectorWindow`
-    ///
-    /// # Returns
-    /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
-    pub fn id(&self) -> Option<WindowId> {
-        self.inner.borrow().as_ref().map(WebSelectorWindow::id)
-    }
-}
-
-impl RetainedSelector for ClipSelectorWindow {
-    fn hide_visual(&self) {
-        ClipSelectorWindow::hide(self);
-    }
-
-    fn dispose_webview(&self) {
-        ClipSelectorWindow::dispose(self);
-    }
-
-    fn is_visible(&self) -> bool {
-        ClipSelectorWindow::is_visible(self)
-    }
-
-    fn is_created(&self) -> bool {
-        ClipSelectorWindow::is_created(self)
-    }
-
-    fn idle_hidden_at(&self) -> Option<Instant> {
-        self.idle_hidden_at.get()
-    }
-
-    fn set_idle_hidden_at(&self, at: Option<Instant>) {
-        self.idle_hidden_at.set(at);
+        self.lazy.force_visible_for_test(visible);
     }
 }
 
@@ -364,13 +264,13 @@ mod tests {
         let clip = ClipSelectorWindow::new_shell(state.proxy.clone());
 
         assert!(!clip.is_visible());
-        assert!(!clip.is_created());
+        assert!(!clip.lazy().is_created());
         assert!(clip.id().is_none());
         clip.refresh_items("[]");
-        clip.hide();
-        clip.dispose();
+        clip.lazy().hide();
+        clip.lazy().dispose();
         assert!(!clip.is_visible());
-        assert!(!clip.is_created());
+        assert!(!clip.lazy().is_created());
         assert!(clip.id().is_none());
     }
 

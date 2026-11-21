@@ -220,8 +220,15 @@ mod tests {
                 content.contains("2500"),
                 "更新後の interval_ms が書き込まれていること: {content}"
             );
-            assert!(!path.with_file_name("config.toml.tmp").exists());
-            assert!(!path.with_file_name("config.toml.prev").exists());
+            let dir = path.parent().expect("親ディレクトリ");
+            for entry in fs::read_dir(dir).expect("ディレクトリ読み取り") {
+                let name = entry.expect("エントリ").file_name();
+                let name = name.to_string_lossy();
+                assert!(
+                    !name.ends_with(".tmp") && !name.ends_with(".prev"),
+                    "一時ファイルが残っている: {name}"
+                );
+            }
         });
     }
 

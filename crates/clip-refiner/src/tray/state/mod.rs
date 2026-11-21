@@ -17,6 +17,7 @@ pub use app_event::{
 pub use app_state::AppState;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use app_state::{test_app_state, test_app_state_with_persistence};
+pub(crate) use clipboard_session::UndoLookup;
 pub use lock_ext::LockExt;
 pub use menu_snapshot::MenuSnapshot;
 pub use monitor_snapshot::{MonitorSnapshot, ProcessedState};
@@ -164,13 +165,6 @@ mod tests {
         assert!(!state.monitor_snapshot().auto_processing_enabled());
     }
 
-    fn collect_history(state: &AppState) -> Vec<String> {
-        let session = state.clipboard_session();
-        (0..session.history_len())
-            .filter_map(|i| session.get_history_entry(i).map(|s| s.to_string()))
-            .collect()
-    }
-
     /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になるようにすること
     ///
     /// `add_to_history` は設定の `history_limit` を参照する横断処理として検証する
@@ -188,7 +182,7 @@ mod tests {
         state.add_to_history("first");
         state.add_to_history("second");
         state.add_to_history("first");
-        let h = collect_history(&state);
+        let h = state.clipboard_session().history_texts();
         assert_eq!(h[0], "first");
         assert_eq!(h[1], "second");
         assert_eq!(h.len(), 2);
@@ -198,22 +192,14 @@ mod tests {
             state.add_to_history(format!("item-{i}"));
         }
         assert_eq!(session.history_len(), limit);
-        assert_eq!(collect_history(&state)[0], format!("item-{}", limit + 4));
+        assert_eq!(
+            state.clipboard_session().history_texts()[0],
+            format!("item-{}", limit + 4)
+        );
 
         // clear_history で履歴が空になること
         session.clear_history();
         assert_eq!(session.history_len(), 0);
-    }
-
-    fn collect_continuous_record(state: &AppState) -> Vec<String> {
-        let session = state.clipboard_session();
-        (0..session.continuous_record_len())
-            .filter_map(|i| {
-                session
-                    .get_continuous_record_entry(i)
-                    .map(|s| s.to_string())
-            })
-            .collect()
     }
 
     /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になるようにすること
@@ -230,14 +216,14 @@ mod tests {
 
         state.enqueue_continuous_record("dup");
         state.enqueue_continuous_record("dup");
-        let records = collect_continuous_record(&state);
+        let records = state.clipboard_session().continuous_record_texts();
         assert_eq!(records, vec!["dup", "dup"]);
 
         for i in 0..(limit + 5) {
             state.enqueue_continuous_record(format!("item-{i}"));
         }
         assert_eq!(session.continuous_record_len(), limit);
-        let records = collect_continuous_record(&state);
+        let records = state.clipboard_session().continuous_record_texts();
         assert_eq!(records.first().map(String::as_str), Some("item-5"));
 
         session.clear_continuous_record();

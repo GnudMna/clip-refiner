@@ -21,6 +21,26 @@ fn worker_process_mode_then_undo_round_trip() {
     assert!(harness.take_undo_source().is_none());
 }
 
+/// 加工後に別の内容がコピーされた場合、`Undo` はその内容を上書きしないこと
+///
+/// 取り消し用の記録は破棄され、以降の `Undo` も何も書き戻さない
+#[test]
+fn worker_undo_does_not_overwrite_later_copy() {
+    let mut harness = ClipboardHarness::with_text("  before  ");
+
+    harness.process_mode(RefineMode::Trim);
+    assert_eq!(harness.clipboard_text(), "before");
+
+    // 加工後に別アプリで新しい内容をコピーした状況
+    harness.set_text("copied-later");
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "copied-later");
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "copied-later");
+    assert!(harness.take_undo_source().is_none());
+}
+
 /// 履歴復元 (`SetText`) 直後のポーリングでは再加工しないようにすること
 #[test]
 fn history_restore_via_set_text_avoids_immediate_reprocess() {
@@ -45,6 +65,17 @@ fn worker_process_mode_leaves_unchanged_text() {
 
     harness.process_mode(RefineMode::Trim);
     assert_eq!(harness.clipboard_text(), "already-trimmed");
+}
+
+/// 手動加工の読み取り直後に別のコピーが入った場合、上書きも取り消し元の記録もしないこと
+#[test]
+fn worker_process_mode_skips_write_when_clipboard_changes_during_read() {
+    let mut harness =
+        ClipboardHarness::with_text("  original  ").with_external_copy_after_read("  external  ");
+
+    harness.process_mode(RefineMode::Trim);
+    assert_eq!(harness.clipboard_text(), "  external  ");
+    assert!(harness.take_undo_source().is_none());
 }
 
 /// 取り消し対象がないとき `Undo` はクリップボードを変更しないようにすること

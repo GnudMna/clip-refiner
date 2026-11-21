@@ -29,6 +29,24 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-13
+
+### Fixed
+
+- MSI 版で、設定ウィンドウの「情報」タブから利用者向けドキュメントと第三者ライセンス表示を開けない不具合を修正
+  - 第三者ライセンス表示はメモ帳で開く
+- 加工後に別の内容をコピーしてから Undo ホットキーを押すと、コピーした内容が加工前のテキストで上書きされる不具合を修正
+  - クリップボードが加工直後の内容のままのときだけ取り消し、変更されていた場合は通知して何も書き換えない
+- ログイン時の自動起動が、空白を含むフォルダーに置いたときに起動しない恐れがある不具合を修正
+  - 設定ウィンドウと MSI のどちらで有効にした場合も、登録するパスを引用符で囲む
+  - 設定ウィンドウでは、内部表記の `\\?\` を付けない形で登録する
+- 手動加工や CLI の加工中に別の内容をコピーすると、コピーした内容が加工結果で上書きされ、取り消し元もずれる不具合を修正
+  - 読み取った内容をそのまま加工し、加工中にクリップボードが変わっていた場合は書き換えない
+- 一部のスレッドがパニックしたあと、ログがファイルへ書き込まれなくなる不具合を修正
+- 長期間起動したままにすると、古いログファイルが削除されず溜まり続ける不具合を修正
+  - 起動時に加えて、日付が変わったときにも 14 日より古いログを削除する
+- 設定の保存が重なったときに、保存に失敗することがある不具合を修正
+
 ## [1.4.1] - 2026-10-13
 
 ### Changed
@@ -879,7 +897,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.2...develop
+[1.4.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.1...v1.4.2
 [1.4.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.0...v1.4.1
 [1.4.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.2...v1.4.0
 [1.3.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.1...v1.3.2

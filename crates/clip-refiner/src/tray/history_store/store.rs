@@ -187,30 +187,6 @@ impl EncryptedHistoryStore {
             .ok()
     }
 
-    /// 先頭から一致する最初のエントリを取り出す
-    ///
-    /// # Arguments
-    /// * `text` - 排出対象の本文
-    ///
-    /// # Returns
-    /// * `bool` - 一致するエントリを除去できた場合は `true`
-    #[cfg(test)]
-    pub fn discharge_matching(&mut self, text: &str) -> bool {
-        if text.trim().is_empty() {
-            return false;
-        }
-        let target = ContentFingerprint::from_text(text);
-        let Some(pos) = self
-            .entries
-            .iter()
-            .position(|entry| entry.fingerprint == target)
-        else {
-            return false;
-        };
-        self.entries.remove(pos);
-        true
-    }
-
     /// 指定インデックスのエントリを取り出す
     ///
     /// # Arguments
@@ -386,7 +362,10 @@ mod tests {
             Some("first")
         );
 
-        assert!(store.discharge_matching("second"));
+        assert_eq!(
+            store.discharge_at(1).as_ref().map(|s| s.as_str()),
+            Some("second")
+        );
         assert_eq!(store.len(), 2);
         assert_eq!(
             store.entry_at(0).as_ref().map(|s| s.as_str()),
