@@ -1,4 +1,7 @@
-#![allow(clippy::missing_panics_doc)]
+#![allow(
+    clippy::missing_panics_doc,
+    reason = "テスト専用ヘルパーで、失敗時の panic は仕様"
+)]
 
 use std::sync::Arc;
 

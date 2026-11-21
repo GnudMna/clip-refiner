@@ -1,6 +1,9 @@
 //! 統合テスト共通: 全 `RefineMode` の回帰ケース
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "統合テストの各バイナリがこのモジュールの一部だけを使う"
+)]
 
 use std::collections::HashSet;
 
@@ -60,6 +63,8 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
     ),
     (RefineMode::SortLinesAsc, "c\na\nb", "a\nb\nc"),
     (RefineMode::SortLinesDesc, "a\nc\nb", "c\nb\na"),
+    (RefineMode::SortLinesNaturalAsc, "10\n9\n2", "2\n9\n10"),
+    (RefineMode::SortLinesNaturalDesc, "2\n10\n9", "10\n9\n2"),
     (RefineMode::RemoveEmptyLines, "a\n\nb", "a\nb"),
     (RefineMode::RemoveDuplicateLines, "a\na\nb", "a\nb"),
     (RefineMode::Trim, "  abc  ", "abc"),
@@ -147,7 +152,7 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 /// 全 `RefineMode` バリアントに回帰ケースが存在すること
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();
-    // 固定ケース 39 + 日時 2 + 正規表現 4 + 画像 1 = 46
+    // 固定ケース 41 + 日時 2 + 正規表現 4 + 画像 1 = 48
     assert_eq!(
         fixed.len() + 7,
         RefineMode::iter().count(),

@@ -139,6 +139,32 @@ Visual Studio の「C++ によるデスクトップ開発」(AddressSanitizer �
 
 生成した入力は `fuzz/corpus/<ターゲット>/` に蓄積し、次回の実行で再利用する。失敗した入力は `fuzz/artifacts/<ターゲット>/` に保存する (どちらも Git 管理外)。Windows ではパニック時の `abort` を libFuzzer が捕捉できないため、`fuzz/src/lib.rs` のパニックフックが実行中の入力を `crash-<ハッシュ>` として保存する。見つかった不具合は、修正と同じ変更で `property_transforms.rs` かモジュール内ユニットテストに回帰ケースとして追加する。
 
+### ベンチマーク (`criterion`)
+
+fuzz とは別の観点で、巨大入力での処理時間の悪化を検知する。`crates/clip-refiner-core/benches/transforms.rs` が、パーサ入力上限 (1 MiB) の手前までの入力で次のモードを計測する。
+
+| 計測対象 | モード |
+| :------- | :----- |
+| JSON・YAML | JSON 整形 (順序保持の有無) / JSON→YAML / YAML→JSON |
+| Markdown・HTML・表 | Markdown→HTML / Markdown 表→Excel / HTML→Markdown |
+| 行・文字列 | 昇順ソート / URL エンコード / 半角→全角 |
+| 正規表現 | 置換 (マッチタイムアウト付きの実行パス) |
+
+入力サイズは 64 KiB と 960 KiB の 2 通り。サイズ比に対して処理時間が線形から外れていないか (入力 15 倍で 15 倍前後か) を見る。計測前に各入力が実際に加工されること (上限超過や変換失敗で素通りしていないこと) を検証するため、入力生成や上限を変えて素通りすると失敗する。この検証は `cargo test --all-targets` でも各ベンチを 1 回ずつ実行して行うため、`check.ps1` でベンチのコードが壊れていないことは確認できる。計測自体は時間がかかりマシン負荷でぶれるため、`check.ps1` には含めずローカルで不定期に実行する。変換やパーサ依存を変えたとき、リリース前などに、変更前の基準と比較する。
+
+```powershell
+# 変更前のコミットで基準を保存する
+./scripts/windows/bench.ps1 -Save before
+
+# 変更後に基準と比較する (悪化したベンチを一覧する。終了コードには反映しない)
+./scripts/windows/bench.ps1 -Compare before
+
+# ベンチ名の一部で絞る
+./scripts/windows/bench.ps1 -Filter json_format
+```
+
+基準は `target/criterion/` に保存する (Git 管理外)。ぶれの範囲に収まる差は「有意な変化なし」と表示される。悪化を示した場合は再計測して再現を確かめる。HTML レポートは `target/criterion/report/index.html` に出力する。モードを追加・変更して性能が気になる場合は、`transforms.rs` の `bench_transforms` にケースを足す。
+
 ### WebView E2E (Playwright)
 
 対話 GUI セッションと WebView2 Runtime が必要 (ヘッドレス非対応)。`check.ps1` / pre-push でデフォルト実行する。

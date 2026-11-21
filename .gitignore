@@ -33,3 +33,7 @@ wix/*
 !wix/Banner.bmp
 !wix/Dialog.bmp
 !wix/Eula.rtf
+
+# Claude Code (個人用の設定・メモリ)
+.claude/settings.local.json
+CLAUDE.local.md

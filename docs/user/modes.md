@@ -4,7 +4,7 @@
 
 ## 変換モード一覧
 
-`--mode` に渡す値 (CLI 名) と、トレイメニュー・クイックセレクターでの表示。**全 46 モード**に対応。
+`--mode` に渡す値 (CLI 名) と、トレイメニュー・クイックセレクターでの表示。**全 48 モード**に対応。
 
 > **設定ファイル:** CLI は kebab-case (`url-decode` など) だが、`config.toml` では PascalCase (`UrlDecode` など) を指定する。初回保存時に生成される `config.toml` を参照するとよい。
 
@@ -16,6 +16,7 @@
 |                        | `add-path-quotes` / `remove-path-quotes`                                                           | パスへの引用符 (`"`) の付与・削除                                                                               |
 |                        | `path-to-slash` / `path-to-backslash`                                                              | パス区切り文字をスラッシュ / バックスラッシュに変換                                                             |
 | **行の並べ替え・削除** | `sort-lines-asc` / `sort-lines-desc`                                                               | 行単位での昇順・降順ソート (クォート内改行を含む CSV はレコード単位)                                            |
+|                        | `sort-lines-natural-asc` / `sort-lines-natural-desc`                                               | 連続する数字を数値として比較する自然順ソート (`2` は `10` より前。それ以外は `sort-lines-asc` と同じ)          |
 |                        | `remove-empty-lines`                                                                               | 空行を削除                                                                                                      |
 |                        | `remove-duplicate-lines`                                                                           | 重複行を削除                                                                                                    |
 | **空白の除去**         | `trim`                                                                                             | テキスト全体の前後の空白・改行を削除                                                                            |
@@ -120,6 +121,8 @@ items:
 }
 ```
 
+`.inf` / `.nan` のように JSON で表現できない値を含む YAML は、`null` へ変えず変換しない。
+
 </details>
 
 <details>
@@ -154,6 +157,8 @@ items:
 | モード                   | 入力                          | 出力                          |
 | :----------------------- | :---------------------------- | :---------------------------- |
 | `sort-lines-asc`         | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
+| `sort-lines-asc`         | `10` / `9` / `2`              | `10` / `2` / `9`              |
+| `sort-lines-natural-asc` | `10` / `9` / `2`              | `2` / `9` / `10`              |
 | `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b`   | `a` / `b` / `c`               |
 
 (`/` は行の区切りを表す)
@@ -192,6 +197,8 @@ items:
 | :------- | :--------------------------------------------------------------------- |
 | **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
 | **出力** | `https://example.com/page?id=123`                                      |
+
+URL を含む文章や URL の一覧も扱える。空白 (改行を含む) で区切った項目ごとに処理し、URL 以外の文字列はそのまま残す。
 
 </details>
 

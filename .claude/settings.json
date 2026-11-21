@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo doc:*)",
+      "Bash(cargo deny:*)",
+      "Bash(npm run build:ui:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run format:check)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Write(./.env)",
+      "Write(./.env.*)",
+      "Edit(**/*.bundle.js)",
+      "Write(**/*.bundle.js)",
+      "Edit(./keys/**)",
+      "Write(./keys/**)"
+    ]
+  }
+}

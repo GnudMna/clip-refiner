@@ -1,5 +1,11 @@
 //! ワンショット加工経路の統合テスト
 
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "テスト専用のため、ヘルパー内の失敗もそのまま panic させる"
+)]
+
 use clip_refiner::test_helpers::{ClipboardHarness, InMemoryTextClipboard};
 use clip_refiner_core::refiner::TextClipboard;
 use clip_refiner_core::{

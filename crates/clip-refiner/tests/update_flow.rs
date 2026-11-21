@@ -1,5 +1,11 @@
 //! アプリ更新: ローカル HTTP bridge 経由の確認 → ダウンロード検証 → 適用
 
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "テスト専用のため、ヘルパー内の失敗もそのまま panic させる"
+)]
+
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;

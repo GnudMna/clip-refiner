@@ -1,3 +1,5 @@
+import { escapeHtml } from './html_escape.js';
+
 /**
  * クイックセレクター / 登録クリップセレクターで共有する UI ユーティリティ
  *
@@ -5,20 +7,6 @@
  */
 const SelectorCommon = (function () {
     'use strict';
-
-    /**
-     * HTML 特殊文字をエスケープする
-     *
-     * @param {string} text
-     * @returns {string}
-     */
-    function escapeHtml(text) {
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-    }
 
     /**
      * 検索クエリを正規化する (小文字化・前後空白除去)
@@ -30,6 +18,46 @@ const SelectorCommon = (function () {
         return String(query || '')
             .toLowerCase()
             .trim();
+    }
+
+    /**
+     * 小文字化したテキストでクエリを探し、元のテキスト上の範囲を返す
+     *
+     * `İ` のように小文字化で長さが変わる文字があると、小文字化後の位置は元の位置と一致しない。
+     * 長さが変わる場合は 1 文字ずつ小文字化して位置を対応づけ、一致が文字の途中に掛かるときは
+     * その文字全体を範囲に含める。
+     *
+     * @param {string} text - 対象テキスト
+     * @param {string} query - 正規化済み検索クエリ
+     * @returns {{index: number, end: number} | null} 元テキスト上の範囲。一致しなければ null
+     */
+    function findMatchRange(text, query) {
+        const lowerText = text.toLowerCase();
+        if (lowerText.length === text.length) {
+            const index = lowerText.indexOf(query);
+            return index === -1 ? null : { index, end: index + query.length };
+        }
+
+        let lower = '';
+        // 小文字化後の各 UTF-16 コードユニットが由来する、元テキスト上の文字の範囲
+        const starts = [];
+        const ends = [];
+        let offset = 0;
+        for (const ch of text) {
+            const lowered = ch.toLowerCase();
+            for (let i = 0; i < lowered.length; i++) {
+                starts.push(offset);
+                ends.push(offset + ch.length);
+            }
+            lower += lowered;
+            offset += ch.length;
+        }
+
+        const index = lower.indexOf(query);
+        if (index === -1 || query.length === 0) {
+            return null;
+        }
+        return { index: starts[index], end: ends[index + query.length - 1] };
     }
 
     /**
@@ -45,13 +73,12 @@ const SelectorCommon = (function () {
             return safe;
         }
 
-        const lowerText = String(text).toLowerCase();
-        const index = lowerText.indexOf(query);
-        if (index === -1) {
+        const range = findMatchRange(String(text), query);
+        if (!range) {
             return safe;
         }
 
-        const end = index + query.length;
+        const { index, end } = range;
         return (
             escapeHtml(text.slice(0, index)) +
             '<mark>' +

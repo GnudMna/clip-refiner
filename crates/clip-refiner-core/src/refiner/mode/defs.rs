@@ -59,6 +59,12 @@ pub enum RefineMode {
     /// 行単位で降順に並び替える。クォート内に改行を含むCSVの場合はレコード単位でソートする
     #[strum(message = "降順で並び替え")]
     SortLinesDesc,
+    /// 行単位で自然順の昇順に並び替える。連続する数字を数値として比較する (`2` は `10` より前)
+    #[strum(message = "昇順で並び替え(自然順)")]
+    SortLinesNaturalAsc,
+    /// 行単位で自然順の降順に並び替える。連続する数字を数値として比較する (`10` は `2` より前)
+    #[strum(message = "降順で並び替え(自然順)")]
+    SortLinesNaturalDesc,
     /// 空行を削除する
     #[strum(message = "空行削除")]
     RemoveEmptyLines,

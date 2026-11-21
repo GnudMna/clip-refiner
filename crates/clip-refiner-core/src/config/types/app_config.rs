@@ -40,7 +40,10 @@ fn default_continuous_record_limit() -> usize {
 ///
 /// `bool` 項目は `config.toml` のキーと 1 対 1 に対応する独立した切り替えのため、まとめない
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "`bool` 項目は `config.toml` のキーと 1 対 1 に対応する独立した切り替えのため、まとめない"
+)]
 pub struct AppConfig {
     /// 設定ファイルのスキーマバージョン
     #[serde(default = "default_config_version")]

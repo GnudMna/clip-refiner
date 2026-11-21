@@ -160,6 +160,55 @@ function Assert-UserDocsLinks {
     }
 }
 
+# 出力に同梱される第三者素材が、THIRD_PARTY_NOTICES に追記する表示 (user-docs-notices.txt) と合っているか検証する
+# - フォントは同梱しない (docs/user/theme/fonts/fonts.css で mdBook 既定のフォントを外している)
+# - mdBook と、出力に含まれる highlight.js / clipboard.js / Font Awesome の版が表示に書かれている
+function Assert-UserDocsAssets {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OutputDir
+    )
+
+    $fonts = @(Get-ChildItem -LiteralPath $OutputDir -Recurse -File |
+            Where-Object { $_.Extension -in @('.woff', '.woff2', '.ttf', '.otf') })
+    if ($fonts.Count -gt 0) {
+        throw "エラー: 利用者向けドキュメントにフォントが含まれています ($($fonts[0].Name) など)。docs/user/theme/fonts/fonts.css を確認してください"
+    }
+
+    $noticesPath = Join-Path $ProjectRoot 'scripts\templates\user-docs-notices.txt'
+    $notices = Get-Content -LiteralPath $noticesPath -Raw -Encoding utf8
+
+    $expected = [System.Collections.Generic.List[string]]::new()
+    $expected.Add("mdBook $($script:UserDocsMdBookVersion)")
+    $patterns = @(
+        @{ Pattern = 'Highlight\.js (\d+\.\d+\.\d+)'; Label = 'highlight.js' },
+        @{ Pattern = 'clipboard\.js v(\d+\.\d+\.\d+)'; Label = 'clipboard.js' },
+        @{ Pattern = 'Font Awesome Free (\d+\.\d+\.\d+)'; Label = 'Font Awesome Free' }
+    )
+    $contents = Get-ChildItem -LiteralPath $OutputDir -Recurse -File |
+        Where-Object { $_.Extension -in @('.html', '.js', '.css', '.svg') } |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding utf8 }
+    foreach ($entry in $patterns) {
+        $versions = $contents | ForEach-Object { [regex]::Matches($_, $entry.Pattern) } |
+            ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        foreach ($version in $versions) {
+            $expected.Add("$($entry.Label) $version")
+        }
+    }
+
+    $missing = @($expected | Where-Object { -not $notices.Contains($_) })
+    if ($missing.Count -gt 0) {
+        $lines = @('エラー: 利用者向けドキュメントの第三者素材の表示が出力と合っていません') +
+            @($missing | ForEach-Object { "  $noticesPath に記載がない: $_" }) +
+            @('mdBook の版を変えた場合は、同梱素材とライセンスを確認して表示を更新してください')
+        throw ($lines -join [Environment]::NewLine)
+    }
+}
+
 # docs/user を mdBook でビルドし、出力ディレクトリ (target/user-docs) を返す
 # CHANGELOG.md のリンクを書き換えるため、原稿を target/user-docs-src へ複製してからビルドする
 function Invoke-UserDocsBuild {
@@ -193,16 +242,18 @@ function Invoke-UserDocsBuild {
     & mdbook build $stagingDir --dest-dir $outputDir | Out-Host
     Assert-LastExitCode -CommandLabel 'mdbook build'
 
-    # book.toml は src = "." のため出力へ複製される。404.html (<base href="/">) と .nojekyll は
-    # Web 公開用で、ローカルのファイルとして開く配布物では使わない
-    foreach ($name in @('book.toml', '404.html', '.nojekyll')) {
+    # src = "." のため、book.toml・theme/ (テーマの上書き)・custom.css (ハッシュ付きの複製を参照する) が
+    # 原稿のまま出力へ複製される。404.html (<base href="/">) と .nojekyll は Web 公開用で、
+    # ローカルのファイルとして開く配布物では使わない
+    foreach ($name in @('book.toml', 'theme', 'custom.css', '404.html', '.nojekyll')) {
         $unused = Join-Path $outputDir $name
         if (Test-Path -LiteralPath $unused) {
-            Remove-Item -LiteralPath $unused -Force
+            Remove-Item -LiteralPath $unused -Recurse -Force
         }
     }
 
     Assert-UserDocsLinks -OutputDir $outputDir
+    Assert-UserDocsAssets -ProjectRoot $ProjectRoot -OutputDir $outputDir
 
     $fileCount = @(Get-ChildItem -LiteralPath $outputDir -Recurse -File).Count
     Write-Host "  出力: $outputDir ($fileCount ファイル)"

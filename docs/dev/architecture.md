@@ -39,6 +39,7 @@ clip-refiner/
 │   │   └── build.rs
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)。ライブラリ利用はこちら
 │       ├── README.md    # ライブラリとしての利用
+│       ├── benches/     # 変換の処理時間ベンチマーク (criterion)
 │       └── src/
 │           ├── clip_template.rs # 登録クリップのテンプレート展開 (`{date}` など。feature 非依存)
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize ・ spec (ドキュメント同期テスト) など
@@ -47,7 +48,7 @@ clip-refiner/
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
 │           └── test_helpers/ # コア単体テスト用
-├── .claude/rules/       # Rust ソースのコーディング規約 (comments.md / imports.md)
+├── .claude/             # Claude Code 向けの共有設定 (settings.json) と規約 (rules/)
 ├── assets/
 ├── keys/
 │   └── update-signing/  # 更新署名の minisign 公開鍵 (`*.pub`。build.rs が埋め込む)
@@ -80,7 +81,7 @@ clip-refiner/
 | 種類 | 責務 |
 | :--- | :--- |
 | `quick_selector.js` / `clip_selector.js` / `settings/main.js` | esbuild のエントリ。初期化・DOM 操作・IPC 受信・キーボードイベント |
-| `*_logic.js`・`selector-common.js` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/*_logic.rs`) からも `import` で読み込んで検証する |
+| `*_logic.js`・`selector-common.js`・`html_escape.js` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/*_logic.rs`) からも `import` で読み込んで検証する |
 | その他の `*.js` | DOM を扱う描画・入力イベント・IPC 送信 |
 | `*.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:ui` で再生成) |
 | `*.html` / `*.css` | シェル HTML とスタイル |
@@ -150,6 +151,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `format.ps1` | rustfmt + Prettier 整形 |
 | `test.ps1` / `clippy.ps1` / `coverage.ps1` | 個別の Cargo コマンド (カバレッジは `cargo-llvm-cov`) |
 | `fuzz.ps1` | パーサ系変換のファジング (`cargo-fuzz`。`check.ps1` には含めない) |
+| `bench.ps1` | 変換の処理時間ベンチマーク (`criterion`。基準の保存と比較。`check.ps1` には含めない) |
 | `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
 | `build.ps1` / `build-msi.ps1` / `build-portable.ps1` | ビルド・MSI / ポータブル ZIP 作成 |
 | `verify-msi.ps1` | MSI 検証の CLI ラッパー |

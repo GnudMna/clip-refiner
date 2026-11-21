@@ -169,6 +169,22 @@ cargo install cargo-about --locked --features cli
 
 執筆中のプレビューは `mdbook serve docs/user --open` で行える。このとき変更履歴ページは `CHANGELOG.md` をそのまま取り込むため、ページ内の相対リンクは辿れない (配布物では書き換わる)。
 
+### 同梱する第三者素材とライセンス
+
+mdBook の出力には mdBook 自身と他のプロジェクトの素材が含まれる。cargo-about は Rust の依存だけを扱うため、これらの表示は [`scripts/templates/user-docs-notices.txt`](../../scripts/templates/user-docs-notices.txt) に書き、`generate-third-party-notices.ps1` が `THIRD_PARTY_NOTICES` の末尾に追記する。
+
+| 素材 | ライセンス | 扱い |
+| :--- | :--- | :--- |
+| mdBook のテーマ (ページの雛形・`book.js`・`toc.js`・CSS・favicon) | MPL-2.0 | 改変せずに同梱し、ライセンス全文とソースの入手先を表示する |
+| highlight.js | BSD-3-Clause | ライセンス全文を表示する |
+| clipboard.js | MIT | ライセンス全文を表示する |
+| Font Awesome Free のアイコン (ページ内の SVG) | CC BY 4.0 | 帰属を表示する (SVG 内のコメントにもある) |
+| Open Sans / Source Code Pro (mdBook 既定の Web フォント) | Apache-2.0 / OFL-1.1 | 同梱しない。[`docs/user/theme/fonts/fonts.css`](../user/theme/fonts/fonts.css) を空にして外している (本文は日本語が中心で、閲覧環境のフォントで表示されるため) |
+
+- **MPL-2.0 の扱い:** `deny.toml` の方針では MPL を許可しないが、これは Rust の依存クレートに対するもの。mdBook のテーマはリンクしない別ファイルで、改変せずにソースのまま配るため、ファイル単位の義務 (ライセンス全文とソースの入手先の表示) を満たせば本体のライセンスに影響しない。この例外は `deny.toml` の冒頭にも記す。テーマのファイルを改変 (`docs/user/theme/` で上書き) する場合は、改変したファイルも MPL-2.0 で提供する必要があるため、フォントの無効化 (空の `fonts.css`) 以外の上書きは避ける
+- **検証:** `build-user-docs.ps1` は、出力にフォントが含まれないこと、出力に含まれる mdBook・highlight.js・clipboard.js・Font Awesome の版が `user-docs-notices.txt` に書かれていることを確かめ、合わなければ失敗する。mdBook の版を上げたら、同梱素材とライセンスを確認して `user-docs-notices.txt` を更新する
+- `build-portable.ps1 -SkipNotices` は既存の `THIRD_PARTY_NOTICES` を再利用するため、この追記の無い古いファイルを同梱しないよう、リリース時は再生成したものを使う
+
 ## 環境変数
 
 | 変数 | 用途 |

@@ -31,6 +31,12 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
     // `serde_norway::Value` はタグ付きの値 (`!Ref` など) を扱えるが、`u64` / `i64` を超える整数と
     // 文字列以外のキーを JSON へ出せないため、失敗したら `YamlInput` で読み直す
     let json = match serde_norway::from_str::<Value>(text) {
+        Ok(v) if contains_non_finite(&v) => {
+            tracing::debug!(
+                "JSON で表現できない数値 (.inf / .nan) を含むためスキップ (yaml_to_json)"
+            );
+            return Cow::Borrowed(text);
+        }
         Ok(v) => serde_json::to_string_pretty(&v),
         Err(e) => {
             let Ok(YamlInput(v)) = serde_norway::from_str::<YamlInput>(text) else {
@@ -131,9 +137,11 @@ impl<'de> Visitor<'de> for YamlInputVisitor {
         integer_to_number(&v.to_string())
     }
 
-    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> {
-        // `.inf` / `.nan` は `serde_norway::Value` 経由の変換と同じく null にする
-        Ok(Number::from_f64(v).map_or(OrderedValue::Null, OrderedValue::Number))
+    fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
+        // `.inf` / `.nan` は JSON で表現できず、null にすると値が変わるため変換しない
+        Number::from_f64(v)
+            .map(OrderedValue::Number)
+            .ok_or_else(|| E::custom("JSON で表現できない数値 (.inf / .nan)"))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
@@ -170,6 +178,27 @@ impl<'de> Visitor<'de> for YamlInputVisitor {
             object.insert(key, value);
         }
         Ok(OrderedValue::Object(object))
+    }
+}
+
+/// YAML の値が `.inf` / `.nan` などの有限でない数値を含むか判定する
+///
+/// JSON は有限でない数値を表現できず、そのまま直列化すると null になる
+///
+/// # Arguments
+/// * `value` - 判定する YAML の値
+///
+/// # Returns
+/// * `bool` - 有限でない数値を含む場合は `true`
+fn contains_non_finite(value: &Value) -> bool {
+    match value {
+        Value::Number(n) => !n.is_finite(),
+        Value::Sequence(items) => items.iter().any(contains_non_finite),
+        Value::Mapping(map) => map
+            .iter()
+            .any(|(k, v)| contains_non_finite(k) || contains_non_finite(v)),
+        Value::Tagged(tagged) => contains_non_finite(&tagged.value),
+        _ => false,
     }
 }
 
@@ -250,6 +279,45 @@ mod tests {
     fn test_yaml_to_json_keeps_tagged_values() {
         let output = yaml_to_json("a: !Ref b\n");
         assert!(output.contains("\"!Ref\": \"b\""), "{output}");
+    }
+
+    /// `.inf` / `.nan` を含む YAML は null へ変えず元の文字列を返すこと
+    #[test]
+    fn test_yaml_to_json_rejects_non_finite_numbers() {
+        for input in [
+            "a: .inf
+",
+            "a: -.INF
+",
+            "a: .nan
+",
+            "- 1
+- [.NaN]
+",
+            "a: !Tag .inf
+",
+            "a: {b: .Inf}
+",
+        ] {
+            assert_eq!(yaml_to_json(input), input);
+            assert_eq!(yaml_to_json_preserve_order(input), input);
+        }
+    }
+
+    /// 有限の小数と、`.inf` に似た文字列は従来どおり変換すること
+    #[test]
+    fn test_yaml_to_json_keeps_finite_numbers_and_inf_like_strings() {
+        let input = "a: 1.5
+b: \".inf\"
+c: .infinity
+";
+        let expected = "{
+  \"a\": 1.5,
+  \"b\": \".inf\",
+  \"c\": \".infinity\"
+}";
+        assert_eq!(yaml_to_json(input), expected);
+        assert_eq!(yaml_to_json_preserve_order(input), expected);
     }
 
     /// パーサ上限超過の入力は JSON 変換をスキップすること

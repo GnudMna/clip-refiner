@@ -3,6 +3,12 @@
 //! 実装の既定値 (`AppConfig` / `consts`)・生成 TOML コメント・configuration.md / README を
 //! 突き合わせ、スキーマ番号や上限・既定ホットキーのドリフトを検出する
 
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "テスト専用モジュールのため、失敗はそのまま panic させる"
+)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

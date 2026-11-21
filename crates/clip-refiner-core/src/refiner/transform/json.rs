@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::Cell;
 
 use crate::refiner::OrderedValue;
 use crate::security::is_within_parser_limit;
@@ -117,7 +118,7 @@ pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
         }
     };
 
-    match serde_norway::to_string(&YamlValue(&v)) {
+    match to_yaml_string(|guard| serde_norway::to_string(&YamlValue { value: &v, guard })) {
         Ok(yaml_text) => Cow::Owned(yaml_text),
         Err(e) => {
             tracing::debug!("YAML 変換に失敗 (json_to_yaml): {}", e);
@@ -150,7 +151,7 @@ pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
         }
     };
 
-    match serde_norway::to_string(&YamlOrderedValue(&v)) {
+    match to_yaml_string(|guard| serde_norway::to_string(&YamlOrderedValue { value: &v, guard })) {
         Ok(yaml_text) => Cow::Owned(yaml_text),
         Err(e) => {
             tracing::debug!("YAML 変換に失敗 (json_to_yaml_preserve_order): {}", e);
@@ -160,44 +161,161 @@ pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
 }
 
 // ======================================================================
-// YAML 出力用の数値変換
+// YAML 出力用の値変換
 // ======================================================================
-/// `serde_json::Value` を YAML の数値表現で直列化するラッパー
+/// YAML 1.1 で真偽値として解釈される文字列
+///
+/// `serde_norway` は YAML 1.2 の `true` / `false` しか引用符で囲わないため、
+/// これらは出力時に自前で単一引用符を付ける
+const YAML11_BOOL_WORDS: [&str; 16] = [
+    "y", "Y", "n", "N", "yes", "Yes", "YES", "no", "No", "NO", "on", "On", "ON", "off", "Off",
+    "OFF",
+];
+
+/// 引用符を付ける文字列を、直列化の間だけ別の語へ置き換えるための状態
+///
+/// `serde_norway` は文字列の引用スタイルを指定できない。そのため YAML 1.1 の真偽値語は
+/// 入力に現れない接頭辞付きの語へ置き換えて直列化し、出力後に `'yes'` の形へ戻す
+struct QuoteGuard {
+    prefix: String,
+    /// 置き換えを 1 回以上行ったか
+    used: Cell<bool>,
+    /// 入力の文字列が接頭辞を含んでいたか
+    collided: Cell<bool>,
+}
+
+impl QuoteGuard {
+    fn new(prefix: String) -> Self {
+        Self {
+            prefix,
+            used: Cell::new(false),
+            collided: Cell::new(false),
+        }
+    }
+
+    /// 直列化する文字列を返す (YAML 1.1 の真偽値語は置き換える)
+    ///
+    /// # Arguments
+    /// * `s` - 元の文字列
+    ///
+    /// # Returns
+    /// * `Cow<'a, str>` - 直列化する文字列
+    fn mask<'a>(&self, s: &'a str) -> Cow<'a, str> {
+        if s.contains(&self.prefix) {
+            self.collided.set(true);
+        }
+        if YAML11_BOOL_WORDS.contains(&s) {
+            self.used.set(true);
+            Cow::Owned(format!("{}{s}__", self.prefix))
+        } else {
+            Cow::Borrowed(s)
+        }
+    }
+
+    /// 置き換えた語を単一引用符付きの文字列へ戻す
+    ///
+    /// # Arguments
+    /// * `yaml` - 直列化済みの YAML
+    ///
+    /// # Returns
+    /// * `String` - 引用符を付けた YAML
+    fn restore(&self, mut yaml: String) -> String {
+        if self.used.get() {
+            for word in YAML11_BOOL_WORDS {
+                yaml = yaml.replace(&format!("{}{word}__", self.prefix), &format!("'{word}'"));
+            }
+        }
+        yaml
+    }
+}
+
+/// YAML 文字列への直列化を、YAML 1.1 の真偽値語を引用符で囲って行う
+///
+/// 入力が置き換え用の接頭辞を含む場合は、接頭辞を伸ばして直列化をやり直す
+///
+/// # Arguments
+/// * `serialize` - `QuoteGuard` を使って値を直列化する関数
+///
+/// # Returns
+/// * `Result<String, serde_norway::Error>` - 直列化した YAML
+fn to_yaml_string(
+    serialize: impl Fn(&QuoteGuard) -> Result<String, serde_norway::Error>,
+) -> Result<String, serde_norway::Error> {
+    let mut prefix = String::from("__clip_refiner_yaml11_");
+    loop {
+        let guard = QuoteGuard::new(prefix.clone());
+        let yaml = serialize(&guard)?;
+        if !guard.collided.get() {
+            return Ok(guard.restore(yaml));
+        }
+        prefix.push('_');
+    }
+}
+
+/// `serde_json::Value` を YAML の数値・文字列表現で直列化するラッパー
 ///
 /// `arbitrary_precision` 有効時の `Number` は JSON 以外の直列化先で内部構造体として
-/// 出力されるため、数値だけ `serialize_yaml_number` で整数・浮動小数点へ変換する
-struct YamlValue<'a>(&'a Value);
+/// 出力されるため、数値だけ `serialize_yaml_number` で整数・浮動小数点へ変換する。
+/// 文字列とキーは `QuoteGuard` で YAML 1.1 の真偽値語に引用符を付ける
+struct YamlValue<'a> {
+    value: &'a Value,
+    guard: &'a QuoteGuard,
+}
 
 impl Serialize for YamlValue<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.0 {
+        let guard = self.guard;
+        match self.value {
             Value::Number(n) => serialize_yaml_number(n, serializer),
-            Value::Array(items) => serializer.collect_seq(items.iter().map(YamlValue)),
-            Value::Object(map) => {
-                serializer.collect_map(map.iter().map(|(k, v)| (k, YamlValue(v))))
+            Value::String(s) => serializer.serialize_str(&guard.mask(s)),
+            Value::Array(items) => {
+                serializer.collect_seq(items.iter().map(|value| YamlValue { value, guard }))
+            }
+            Value::Object(map) => serializer.collect_map(
+                map.iter()
+                    .map(|(k, value)| (YamlKey { key: k, guard }, YamlValue { value, guard })),
+            ),
+            other => other.serialize(serializer),
+        }
+    }
+}
+
+/// `OrderedValue` を YAML の数値・文字列表現で直列化するラッパー
+///
+/// 扱いは `YamlValue` と同じ
+struct YamlOrderedValue<'a> {
+    value: &'a OrderedValue,
+    guard: &'a QuoteGuard,
+}
+
+impl Serialize for YamlOrderedValue<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let guard = self.guard;
+        match self.value {
+            OrderedValue::Number(n) => serialize_yaml_number(n, serializer),
+            OrderedValue::String(s) => serializer.serialize_str(&guard.mask(s)),
+            OrderedValue::Array(items) => {
+                serializer.collect_seq(items.iter().map(|value| YamlOrderedValue { value, guard }))
+            }
+            OrderedValue::Object(map) => {
+                serializer.collect_map(map.iter().map(|(k, value)| {
+                    (YamlKey { key: k, guard }, YamlOrderedValue { value, guard })
+                }))
             }
             other => other.serialize(serializer),
         }
     }
 }
 
-/// `OrderedValue` を YAML の数値表現で直列化するラッパー
-///
-/// 数値の扱いは `YamlValue` と同じ
-struct YamlOrderedValue<'a>(&'a OrderedValue);
+/// オブジェクトのキーを `QuoteGuard` 経由で直列化するラッパー
+struct YamlKey<'a> {
+    key: &'a str,
+    guard: &'a QuoteGuard,
+}
 
-impl Serialize for YamlOrderedValue<'_> {
+impl Serialize for YamlKey<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.0 {
-            OrderedValue::Number(n) => serialize_yaml_number(n, serializer),
-            OrderedValue::Array(items) => {
-                serializer.collect_seq(items.iter().map(YamlOrderedValue))
-            }
-            OrderedValue::Object(map) => {
-                serializer.collect_map(map.iter().map(|(k, v)| (k, YamlOrderedValue(v))))
-            }
-            other => other.serialize(serializer),
-        }
+        serializer.serialize_str(&self.guard.mask(self.key))
     }
 }
 
@@ -408,6 +526,69 @@ mod tests {
             );
             assert!(!output.contains("serde_json"), "{output}");
         }
+    }
+
+    /// YAML 1.1 で真偽値になる文字列は引用符で囲って出力すること
+    #[test]
+    fn test_json_to_yaml_quotes_yaml11_bool_words() {
+        let input = r#"{"a":"yes","b":"No","c":"ON","d":"off","e":"y","f":"N"}"#;
+        for output in [json_to_yaml(input), json_to_yaml_preserve_order(input)] {
+            for expected in [
+                "a: 'yes'
+",
+                "b: 'No'
+",
+                "c: 'ON'
+",
+                "d: 'off'
+",
+                "e: 'y'
+",
+                "f: 'N'
+",
+            ] {
+                assert!(output.contains(expected), "{output}");
+            }
+        }
+    }
+
+    /// キーと配列要素の真偽値語も引用符で囲うこと
+    #[test]
+    fn test_json_to_yaml_quotes_yaml11_bool_words_in_keys_and_arrays() {
+        let input = r#"{"on":["yes","no"],"k":{"y":"n"}}"#;
+        for output in [json_to_yaml(input), json_to_yaml_preserve_order(input)] {
+            assert!(output.contains("'on':"), "{output}");
+            assert!(output.contains("- 'yes'"), "{output}");
+            assert!(output.contains("- 'no'"), "{output}");
+            assert!(output.contains("'y': 'n'"), "{output}");
+        }
+    }
+
+    /// 真偽値語を含むだけの文字列や、他の語は引用符を付けないこと
+    #[test]
+    fn test_json_to_yaml_keeps_other_strings_plain() {
+        let input = r#"{"a":"yes sir","b":"yesterday","c":"ok"}"#;
+        let output = json_to_yaml(input);
+        assert_eq!(
+            output,
+            "a: yes sir
+b: yesterday
+c: ok
+"
+        );
+    }
+
+    /// 置き換え用の接頭辞を含む入力でも文字列を壊さないこと
+    #[test]
+    fn test_json_to_yaml_survives_prefix_collision() {
+        let input = r#"{"a":"__clip_refiner_yaml11_yes__","b":"yes"}"#;
+        let output = json_to_yaml(input);
+        assert_eq!(
+            output,
+            "a: __clip_refiner_yaml11_yes__
+b: 'yes'
+"
+        );
     }
 
     /// YAML で表現できない数値は元の文字列を返すこと

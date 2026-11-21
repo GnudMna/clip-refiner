@@ -3,7 +3,10 @@
 // ======================================================================
 /// 修飾キーの組み合わせ (`Alt+Shift+S` 形式の修飾部)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "修飾キーごとの独立したフラグで、状態機械にまとめる意味がない"
+)]
 pub struct HotkeyModifiers {
     /// Alt 修飾
     pub alt: bool,

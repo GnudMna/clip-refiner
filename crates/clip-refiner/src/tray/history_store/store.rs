@@ -113,6 +113,11 @@ impl EncryptedHistoryStore {
 
         let fingerprint = ContentFingerprint::from_text(text);
 
+        // 暗号化に失敗した場合に既存エントリを失わないよう、重複の削除は暗号化後に行う
+        let Some(ciphertext) = self.encrypt(text) else {
+            return;
+        };
+
         if let Some(pos) = self
             .entries
             .iter()
@@ -120,10 +125,6 @@ impl EncryptedHistoryStore {
         {
             self.entries.remove(pos);
         }
-
-        let Some(ciphertext) = self.encrypt(text) else {
-            return;
-        };
 
         self.entries.insert(
             0,

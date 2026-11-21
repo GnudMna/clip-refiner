@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 
 use csv::ReaderBuilder;
 
@@ -17,6 +18,34 @@ use csv::ReaderBuilder;
 /// # Returns
 /// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
 pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
+    sort_with(text, descending, false)
+}
+
+/// 行またはCSVレコード単位でテキストを自然順に並び替える
+///
+/// `sort_lines` と同じ単位・判定で並び替えるが、連続する数字を数値として比較する
+/// (例: `2` は `10` より前になる)。比較時は大文字小文字を区別しない
+///
+/// # Arguments
+/// * `text` - 並び替える対象のテキスト
+/// * `descending` - 降順にする場合は `true`、昇順にする場合は `false`
+///
+/// # Returns
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
+pub fn sort_lines_natural(text: &str, descending: bool) -> Cow<'_, str> {
+    sort_with(text, descending, true)
+}
+
+/// 比較方法を指定して行またはCSVレコード単位で並び替える
+///
+/// # Arguments
+/// * `text` - 並び替える対象のテキスト
+/// * `descending` - 降順にする場合は `true`
+/// * `natural` - 連続する数字を数値として比較する場合は `true`
+///
+/// # Returns
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
+fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
     }
@@ -28,11 +57,11 @@ pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     // 単独の CR を含むテキストも行単位で並び替える
     if !has_lone_cr(text)
         && is_likely_csv(text)
-        && let Some(sorted) = sort_csv_records(text, line_ending, descending)
+        && let Some(sorted) = sort_csv_records(text, line_ending, descending, natural)
     {
         return sorted;
     }
-    sort_plain_lines(text, line_ending, descending)
+    sort_plain_lines(text, line_ending, descending, natural)
 }
 
 // ======================================================================
@@ -59,7 +88,7 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
         .filter(|line| !line.trim().is_empty())
         .collect();
 
-    let result = lines.join(line_ending);
+    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -92,7 +121,7 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
         }
     }
 
-    let result = super::utils::join_lines(&lines, line_ending);
+    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -172,6 +201,7 @@ fn has_lone_cr(text: &str) -> bool {
 /// * `text` - 並び替える対象のCSVテキスト
 /// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
 /// * `descending` - 降順にする場合は `true`
+/// * `natural` - 連続する数字を数値として比較する場合は `true`
 ///
 /// # Returns
 /// * `Option<Cow<'_, str>>` - レコード単位で並び替えられたCSVテキスト。
@@ -180,6 +210,7 @@ fn sort_csv_records<'a>(
     text: &'a str,
     line_ending: &str,
     descending: bool,
+    natural: bool,
 ) -> Option<Cow<'a, str>> {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
@@ -222,14 +253,15 @@ fn sort_csv_records<'a>(
         prev_end.is_some(),
     );
 
+    let compare = key_comparator(natural);
     if descending {
-        entries.sort_by(|a, b| b.0.cmp(&a.0));
+        entries.sort_by(|a, b| compare(&b.0, &a.0));
     } else {
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries.sort_by(|a, b| compare(&a.0, &b.0));
     }
 
     let lines: Vec<&str> = entries.iter().map(|(_, raw)| *raw).collect();
-    let result = super::utils::join_lines(&lines, line_ending);
+    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
     if result == text {
         Some(Cow::Borrowed(text))
     } else {
@@ -259,22 +291,102 @@ fn push_blank_lines(entries: &mut Vec<(String, &str)>, gap: &str, after_record: 
 /// * `text` - 並び替える対象のテキスト
 /// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
 /// * `descending` - 降順にする場合は `true`
+/// * `natural` - 連続する数字を数値として比較する場合は `true`
 ///
 /// # Returns
 /// * `Cow<'_, str>` - 行単位で並び替えられたテキスト
-fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
-    let mut lines: Vec<&str> = text.lines().collect();
+fn sort_plain_lines<'a>(
+    text: &'a str,
+    line_ending: &str,
+    descending: bool,
+    natural: bool,
+) -> Cow<'a, str> {
+    // (比較キー, 元の行)
+    let mut entries: Vec<(String, &str)> = text
+        .lines()
+        .map(|line| (line.to_lowercase(), line))
+        .collect();
+    let compare = key_comparator(natural);
     if descending {
-        lines.sort_by_cached_key(|b| std::cmp::Reverse(b.to_lowercase()));
+        entries.sort_by(|a, b| compare(&b.0, &a.0));
     } else {
-        lines.sort_by_cached_key(|a| a.to_lowercase());
+        entries.sort_by(|a, b| compare(&a.0, &b.0));
     }
-    let result = super::utils::join_lines(&lines, line_ending);
+
+    let lines: Vec<&str> = entries.iter().map(|(_, line)| *line).collect();
+    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
         Cow::Owned(result)
     }
+}
+
+/// 比較キーの比較関数を選ぶ
+///
+/// # Arguments
+/// * `natural` - 連続する数字を数値として比較する場合は `true`
+///
+/// # Returns
+/// * `fn(&str, &str) -> Ordering` - 辞書順または自然順の比較関数
+fn key_comparator(natural: bool) -> fn(&str, &str) -> Ordering {
+    if natural {
+        natural_cmp
+    } else {
+        |a, b| a.cmp(b)
+    }
+}
+
+/// 連続する数字を数値として文字列を比較する
+///
+/// 数字以外は文字単位で比較し、数字の連続 (ASCII 数字のみ) は桁数に依らず数値の大小で比較する。
+/// 先頭の 0 は無視するため、数値が等しい場合は次の部分の比較に進む。
+/// 桁数の大きい数字も扱えるよう、数値へ変換せず桁数と文字列で比較する。
+///
+/// # Arguments
+/// * `a` - 比較する文字列 (小文字化済み)
+/// * `b` - 比較する文字列 (小文字化済み)
+///
+/// # Returns
+/// * `Ordering` - `a` が `b` より前なら `Less`、後なら `Greater`、同順位なら `Equal`
+fn natural_cmp(a: &str, b: &str) -> Ordering {
+    let (mut a, mut b) = (a, b);
+    loop {
+        match (a.chars().next(), b.chars().next()) {
+            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(ca), Some(cb)) if ca.is_ascii_digit() && cb.is_ascii_digit() => {
+                let (num_a, rest_a) = split_digits(a);
+                let (num_b, rest_b) = split_digits(b);
+                let (num_a, num_b) = (num_a.trim_start_matches('0'), num_b.trim_start_matches('0'));
+                // 先頭の 0 を除いた桁数が多いほど大きい。同じ桁数なら文字列比較が数値比較に一致する
+                let order = num_a.len().cmp(&num_b.len()).then_with(|| num_a.cmp(num_b));
+                if order != Ordering::Equal {
+                    return order;
+                }
+                (a, b) = (rest_a, rest_b);
+            }
+            (Some(ca), Some(cb)) => {
+                if ca != cb {
+                    return ca.cmp(&cb);
+                }
+                (a, b) = (&a[ca.len_utf8()..], &b[cb.len_utf8()..]);
+            }
+        }
+    }
+}
+
+/// 文字列の先頭にある ASCII 数字の連続とその残りに分ける
+///
+/// # Arguments
+/// * `s` - 分割する文字列
+///
+/// # Returns
+/// * `(&str, &str)` - 先頭の数字の連続と、その後ろの文字列
+fn split_digits(s: &str) -> (&str, &str) {
+    let end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    s.split_at(end)
 }
 
 // ======================================================================
@@ -321,13 +433,13 @@ mod tests {
     #[test]
     fn test_sort_csv_with_newlines_keeps_blank_lines_and_crlf() {
         let input = "z,\"x\r\ny\"\r\n\r\na,1\r\n";
-        assert_eq!(sort_lines(input, false), "\r\na,1\r\nz,\"x\r\ny\"");
+        assert_eq!(sort_lines(input, false), "\r\na,1\r\nz,\"x\r\ny\"\r\n");
         // 空行が最後に来る場合は、末尾の改行が行の終端とみなされて消えないよう改行を 1 つ足す
         assert_eq!(sort_lines(input, true), "z,\"x\r\ny\"\r\na,1\r\n\r\n");
 
-        // 先頭・途中・末尾の空行を行単位の並び替えと同じ数だけ残す
+        // 先頭・途中・末尾の空行を行単位の並び替えと同じ数だけ残し、元の末尾の改行も保つ
         let input = "\n\nz,\"a\nb\"\n\n\nc,d\n\n";
-        assert_eq!(sort_lines(input, false), "\n\n\n\n\nc,d\nz,\"a\nb\"");
+        assert_eq!(sort_lines(input, false), "\n\n\n\n\nc,d\nz,\"a\nb\"\n");
     }
 
     /// クォート内改行が無ければ、CSV とみなせても元の行の文字列のまま並び替えること
@@ -338,10 +450,31 @@ mod tests {
         assert_eq!(sort_lines(input, false), "log(\"x\", 1)\nlog(\"y\", 2)");
     }
 
-    /// クォート内改行が無ければ、CSV とみなせても空行を残し末尾に改行を付けないこと
+    /// クォート内改行が無ければ、CSV とみなせても空行を残し、元の末尾の改行も保つこと
+    ///
+    /// 空行は空文字列として比較するため、昇順では先頭に来る
     #[test]
     fn test_sort_csv_like_lines_keeps_blank_lines() {
-        assert_eq!(sort_lines("b,1\n\na,2\n", false), "\na,2\nb,1");
+        assert_eq!(sort_lines("b,1\n\na,2\n", false), "\na,2\nb,1\n");
+        assert_eq!(sort_lines("b,1\n\na,2", false), "\na,2\nb,1");
+    }
+
+    /// 行操作は元の末尾の改行の有無を保つこと
+    #[test]
+    fn test_line_actions_keep_trailing_newline() {
+        // 末尾が改行 1 つの場合
+        assert_eq!(remove_duplicate_lines("a\nb\na\n"), "a\nb\n");
+        assert_eq!(sort_lines("b\na\n", false), "a\nb\n");
+        assert_eq!(remove_empty_lines("a\n\nb\n"), "a\nb\n");
+        // 末尾に改行が無い場合は付けない
+        assert_eq!(remove_duplicate_lines("a\nb\na"), "a\nb");
+        assert_eq!(sort_lines("b\na", false), "a\nb");
+        assert_eq!(remove_empty_lines("a\n\nb"), "a\nb");
+        // 変更が無ければ元の文字列を返す
+        assert!(matches!(sort_lines("a\nb\n", false), Cow::Borrowed(_)));
+        assert!(matches!(remove_empty_lines("a\nb\n"), Cow::Borrowed(_)));
+        // 残る行が無ければ空文字列になる
+        assert_eq!(remove_empty_lines("\n \n"), "");
     }
 
     /// クォート内に単独の CR を含む CSV でも、CR を改行に変えず行単位で並び替えること
@@ -405,6 +538,62 @@ mod tests {
     fn test_sort_single_line() {
         let input = "single";
         assert_eq!(sort_lines(input, false), "single");
+    }
+
+    /// 自然順の昇順で数字を数値として並び替えられるようにすること
+    #[test]
+    fn test_sort_natural_asc() {
+        assert_eq!(sort_lines_natural("10\n9\n2", false), "2\n9\n10");
+        // 辞書順では 10 が先頭になる
+        assert_eq!(sort_lines("10\n9\n2", false), "10\n2\n9");
+        // 数字の前後に文字がある場合も、数字の連続ごとに比較する
+        assert_eq!(
+            sort_lines_natural("file10.txt\nfile2.txt\nFile1.txt", false),
+            "File1.txt\nfile2.txt\nfile10.txt"
+        );
+    }
+
+    /// 自然順の降順で数字を数値として並び替えられるようにすること
+    #[test]
+    fn test_sort_natural_desc() {
+        assert_eq!(sort_lines_natural("2\n10\n9", true), "10\n9\n2");
+    }
+
+    /// 自然順で先頭の 0 を無視し、桁あふれする長さの数字も比較できるようにすること
+    #[test]
+    fn test_sort_natural_leading_zeros_and_long_digits() {
+        assert_eq!(
+            sort_lines_natural("a010\na9\na0002", false),
+            "a0002\na9\na010"
+        );
+        assert_eq!(
+            sort_lines_natural(
+                "x100000000000000000000000000000\nx99999999999999999999999999999",
+                false
+            ),
+            "x99999999999999999999999999999\nx100000000000000000000000000000"
+        );
+        // 数値が等しい行は元の順序を保つ
+        assert_eq!(sort_lines_natural("a01\na1\na001", false), "a01\na1\na001");
+    }
+
+    /// 自然順で数字がない行や空行を含んでも、並び替え済みの結果が変わらないようにすること
+    #[test]
+    fn test_sort_natural_mixed_and_idempotent() {
+        let output = sort_lines_natural("b\n\n10\na2\na10\n1", false);
+        assert_eq!(output, "\n1\n10\na2\na10\nb");
+        assert!(matches!(
+            sort_lines_natural(&output, false),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(sort_lines_natural("", false), Cow::Borrowed(_)));
+    }
+
+    /// 自然順でもクォート内改行を含む CSV をレコード単位で並び替えられるようにすること
+    #[test]
+    fn test_sort_natural_csv_records() {
+        let input = "10,\"x\ny\"\n2,b\n9,c";
+        assert_eq!(sort_lines_natural(input, false), "2,b\n9,c\n10,\"x\ny\"");
     }
 
     /// `is_likely_csv`: カンマ区切りで複数列かつ行数が一致すればCSV判定できるようにすること
@@ -482,7 +671,7 @@ mod tests {
     fn test_remove_empty_lines_crlf() {
         let input = "line1\r\n\r\nline2\r\n";
         let output = remove_empty_lines(input);
-        assert_eq!(output, "line1\r\nline2");
+        assert_eq!(output, "line1\r\nline2\r\n");
     }
 
     /// CRLF 入力で重複行削除しても CRLF が保持されるようにすること
@@ -490,6 +679,6 @@ mod tests {
     fn test_remove_duplicate_lines_crlf() {
         let input = "line1\r\nline2\r\nline1\r\n";
         let output = remove_duplicate_lines(input);
-        assert_eq!(output, "line1\r\nline2");
+        assert_eq!(output, "line1\r\nline2\r\n");
     }
 }

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "ビルドスクリプトは失敗時に panic してビルドを中断するのが正規の挙動"
+)]
+
 use std::env;
 use std::fmt::Write;
 use std::fs;
@@ -170,11 +175,11 @@ fn empty_bridge_key_source() -> String {
     format!(
         "// build.rs が生成する。平文のダウンロードキーは含めない\n\
          const BRIDGE_KEY_PRESENT: bool = false;\n\
-         #[allow(dead_code)]\n\
+         #[allow(dead_code, reason = \"鍵未設定のビルドでは参照されない\")]\n\
          static BRIDGE_KEY_BLOB: &[u8] = &[];\n\
-         #[allow(dead_code)]\n\
+         #[allow(dead_code, reason = \"鍵未設定のビルドでは参照されない\")]\n\
          const BRIDGE_KEY_WRAP: [u8; {OBFUSCATE_MASK_LEN}] = [0u8; {OBFUSCATE_MASK_LEN}];\n\
-         #[allow(dead_code)]\n\
+         #[allow(dead_code, reason = \"鍵未設定のビルドでは参照されない\")]\n\
          const BRIDGE_KEY_MASK: [u8; {OBFUSCATE_MASK_LEN}] = [0u8; {OBFUSCATE_MASK_LEN}];\n"
     )
 }

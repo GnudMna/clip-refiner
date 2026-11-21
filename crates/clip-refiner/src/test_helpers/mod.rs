@@ -2,7 +2,12 @@
 //!
 //! デバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能
 
-#![allow(clippy::missing_panics_doc)]
+#![allow(
+    clippy::expect_used,
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "テスト専用ヘルパーで、失敗時の panic は仕様"
+)]
 
 mod harness;
 

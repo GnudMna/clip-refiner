@@ -52,6 +52,8 @@ pub(super) const FIXED_CASES: &[(RefineMode, &str, &str)] = &[
     ),
     (RefineMode::SortLinesAsc, "c\na\nb", "a\nb\nc"),
     (RefineMode::SortLinesDesc, "a\nc\nb", "c\nb\na"),
+    (RefineMode::SortLinesNaturalAsc, "10\n9\n2", "2\n9\n10"),
+    (RefineMode::SortLinesNaturalDesc, "2\n10\n9", "10\n9\n2"),
     (RefineMode::RemoveEmptyLines, "a\n\nb", "a\nb"),
     (RefineMode::RemoveDuplicateLines, "a\na\nb", "a\nb"),
     (RefineMode::Trim, "  abc  ", "abc"),

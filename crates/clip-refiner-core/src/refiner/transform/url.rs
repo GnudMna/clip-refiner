@@ -56,17 +56,51 @@ pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
 // ======================================================================
 // UTM パラメータ削除
 // ======================================================================
-/// URLからUTMパラメータ(計測用パラメータ)を除去する
+/// テキストに含まれるURLからUTMパラメータ(計測用パラメータ)を除去する
 ///
-/// URLのクエリ文字列(?以降)に含まれる `utm_` で始まるパラメータをすべて取り除く
-/// 他のパラメータは維持される
+/// 空白で区切った項目ごとに、クエリ文字列(?以降)の `utm_` で始まるパラメータをすべて取り除く
+/// 他のパラメータと、URL以外の文字列・改行・空白は維持される
 ///
 /// # Arguments
-/// * `input` - 対象のURL文字列
+/// * `input` - 対象のテキスト (URL単体、URLを含む文章、URLの一覧など)
+///
+/// # Returns
+/// * `Cow<'_, str>` - UTMパラメータが除去されたテキスト。変更がない場合は元の文字列への参照を返す。
+pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
+    let mut output: Option<String> = None;
+    // `input` のうち `output` へ未コピーの範囲の開始位置
+    let mut copied = 0;
+    let mut offset = 0;
+
+    // 区切りの空白を含めて分割し、項目ごとに処理する
+    for piece in input.split_inclusive(char::is_whitespace) {
+        let token = piece.trim_end_matches(char::is_whitespace);
+        if let Cow::Owned(cleaned) = remove_utm_from_url(token) {
+            let output = output.get_or_insert_with(|| String::with_capacity(input.len()));
+            output.push_str(&input[copied..offset]);
+            output.push_str(&cleaned);
+            copied = offset + token.len();
+        }
+        offset += piece.len();
+    }
+
+    match output {
+        Some(mut output) => {
+            output.push_str(&input[copied..]);
+            Cow::Owned(output)
+        }
+        None => Cow::Borrowed(input),
+    }
+}
+
+/// 1つのURLからUTMパラメータを除去する
+///
+/// # Arguments
+/// * `input` - 空白を含まないURL文字列
 ///
 /// # Returns
 /// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。変更がない場合は元の文字列への参照を返す。
-pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
+fn remove_utm_from_url(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");
     let Some(query_and_fragment) = parts.next() else {
@@ -226,6 +260,39 @@ mod tests {
             remove_utm_params("http://example.com?UTM_SOURCE=S"),
             "http://example.com?UTM_SOURCE=S"
         );
+    }
+
+    /// URLを含む文章でも、URL以外の文字列を失わずUTMパラメータだけを除去すること
+    #[test]
+    fn test_remove_utm_params_keeps_surrounding_text() {
+        assert_eq!(
+            remove_utm_params("see https://a.com/?utm_source=x and https://b.com/?id=1"),
+            "see https://a.com/ and https://b.com/?id=1"
+        );
+        assert_eq!(
+            remove_utm_params("a https://a.com/?id=1&utm_source=x b"),
+            "a https://a.com/?id=1 b"
+        );
+    }
+
+    /// 複数行のURL一覧で、各行を個別に処理し改行を維持すること
+    #[test]
+    fn test_remove_utm_params_multiline() {
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x\nhttps://b.com/?id=1"),
+            "https://a.com/\nhttps://b.com/?id=1"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x\r\n\r\n  https://b.com/?utm_medium=y\n"),
+            "https://a.com/\r\n\r\n  https://b.com/\n"
+        );
+    }
+
+    /// 変更するURLがない文章は元の参照をそのまま返すこと
+    #[test]
+    fn test_remove_utm_params_unchanged_text_is_borrowed() {
+        let input = "see https://b.com/?id=1\n  and more";
+        assert!(matches!(remove_utm_params(input), Cow::Borrowed(_)));
     }
 
     /// フラグメント(#)がある場合のUTMパラメータ削除できるようにすること

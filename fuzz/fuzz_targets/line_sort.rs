@@ -25,7 +25,12 @@ fuzz_target!(|data: &[u8]| {
         // 改行コードが混在する入力と、末尾が単独の CR の入力は出力の改行コードがそろうため行の比較から除く
         let mixed_line_endings = text.contains("\r\n") && text.replace("\r\n", "").contains('\n');
         let comparable = !mixed_line_endings && !text.ends_with('\r');
-        for mode in [RefineMode::SortLinesAsc, RefineMode::SortLinesDesc] {
+        for mode in [
+            RefineMode::SortLinesAsc,
+            RefineMode::SortLinesDesc,
+            RefineMode::SortLinesNaturalAsc,
+            RefineMode::SortLinesNaturalDesc,
+        ] {
             let output = mode.refine(text, &ctx);
             if comparable {
                 assert_eq!(

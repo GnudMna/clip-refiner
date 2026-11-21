@@ -208,7 +208,10 @@ pub(super) fn replace_all_cancellable(
     let mut last = 0;
     for caps in re.captures_iter(text) {
         check_cancel(cancel)?;
-        let m = caps.get(0).expect("captures_iter は全体マッチを持つ");
+        // 全体マッチ (グループ 0) は常に存在するため、到達しない分岐
+        let Some(m) = caps.get(0) else {
+            continue;
+        };
         out.push_str(&text[last..m.start()]);
         caps.expand(replacement, &mut out);
         last = m.end();

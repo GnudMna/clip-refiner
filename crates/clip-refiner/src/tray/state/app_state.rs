@@ -279,6 +279,10 @@ pub(crate) fn test_app_state_with_persistence() -> AppState {
     test_app_state_inner(true)
 }
 
+#[allow(
+    clippy::expect_used,
+    reason = "テスト専用のため、生成失敗はそのまま panic させる"
+)]
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 fn test_app_state_inner(persist_config: bool) -> AppState {
     use crate::config::AppConfig;

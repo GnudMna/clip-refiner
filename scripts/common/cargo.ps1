@@ -64,6 +64,51 @@ function Invoke-CargoTest {
     }
 }
 
+# ベンチマーク (criterion) を実行し、基準との比較で悪化したベンチ名を返す
+#
+# -SaveBaseline は結果を指定名の基準として保存し、-Baseline は保存済みの基準と比較する。
+# 計測値はマシン負荷でぶれるため、悪化の判定は目安として扱う (終了コードには反映しない)
+function Invoke-CargoBench {
+    [CmdletBinding()]
+    param(
+        [string]$SaveBaseline,
+        [string]$Baseline,
+        [string]$Filter
+    )
+
+    $benchArgs = @('bench', '-p', 'clip-refiner-core', '--bench', 'transforms')
+    $criterionArgs = @()
+    if ($Filter) {
+        $criterionArgs += $Filter
+    }
+    if ($SaveBaseline) {
+        $criterionArgs += @('--save-baseline', $SaveBaseline)
+    }
+    if ($Baseline) {
+        $criterionArgs += @('--baseline', $Baseline)
+    }
+    if ($criterionArgs.Count -gt 0) {
+        $benchArgs += '--'
+        $benchArgs += $criterionArgs
+    }
+
+    $regressed = [System.Collections.Generic.List[string]]::new()
+    $current = ''
+    cargo @benchArgs | ForEach-Object {
+        Write-Host $_
+        # ベンチ名は単独行か `time:` と同じ行の先頭に出る
+        if ($_ -match '^(\S+/\d+)(\s|$)') {
+            $current = $Matches[1]
+        }
+        if ($_ -match 'Performance has regressed') {
+            $regressed.Add($current)
+        }
+    }
+    Assert-LastExitCode -CommandLabel 'cargo bench'
+
+    return $regressed.ToArray()
+}
+
 # デバッグバイナリをビルドする (E2E 用など)
 function Invoke-CargoBuild {
     [CmdletBinding()]

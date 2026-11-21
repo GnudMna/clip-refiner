@@ -3,6 +3,12 @@
 //! 代表入力の回帰 (`refine_modes.rs`) では拾えない境界ケースを、任意入力で成り立つ性質から検出する
 //! 性質は 件数・内容の保存 / 往復 / 冪等性 (`f(f(x)) == f(x)`) / パニックしないこと の 4 種
 
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "テスト専用のため、ヘルパー内の失敗もそのまま panic させる"
+)]
+
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -252,7 +258,12 @@ proptest! {
     /// 行の並べ替えは行の並び順だけを変え、行数と行の集合を保つこと
     #[test]
     fn sort_lines_preserves_line_multiset(input in prop_oneof![lines_text(), multiline_csv_text()]) {
-        for mode in [RefineMode::SortLinesAsc, RefineMode::SortLinesDesc] {
+        for mode in [
+            RefineMode::SortLinesAsc,
+            RefineMode::SortLinesDesc,
+            RefineMode::SortLinesNaturalAsc,
+            RefineMode::SortLinesNaturalDesc,
+        ] {
             let output = refine(mode, &input);
             prop_assert_eq!(line_counts(&output), line_counts(&input), "mode={:?}", mode);
         }
@@ -398,6 +409,8 @@ const IDEMPOTENT_MODES: &[RefineMode] = &[
     RefineMode::RemoveDuplicateLines,
     RefineMode::SortLinesAsc,
     RefineMode::SortLinesDesc,
+    RefineMode::SortLinesNaturalAsc,
+    RefineMode::SortLinesNaturalDesc,
     RefineMode::JsonFormat,
     RefineMode::JsonFormatPreserveOrder,
     RefineMode::ToHalfwidth,

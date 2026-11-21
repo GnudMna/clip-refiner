@@ -42,7 +42,7 @@ mod tests {
             TrayMenu::build_refine_menu(RefineMode::Trim, &active, &[], &HotkeySettings::default())
                 .expect("変換モードメニューの構築に失敗");
         let modes: Vec<_> = refine.all_mode_items().map(|(_, mode)| *mode).collect();
-        assert_eq!(modes.len(), 46);
+        assert_eq!(modes.len(), 48);
         assert!(
             refine
                 .all_mode_items()

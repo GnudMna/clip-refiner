@@ -12,14 +12,18 @@
 
 ## コーディング規約
 
-Rust ソースの規約は `.claude/rules/` に置く (Claude Code では対象ファイルを扱うときに自動で読み込まれる)。
+規約は `.claude/rules/` に置く (Claude Code では対象ファイルを扱うときに自動で読み込まれる)。
 
 | ファイル | 内容 |
 | :------- | :--- |
-| `comments.md` | コメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
-| `imports.md` | `use` 文のグループ順 (`std` → `super` / `crate` → 外部クレート)・空行・アルファベット順 |
+| `comments.md` | Rust のコメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
+| `imports.md` | Rust の `use` 文のグループ順 (`std` → `super` / `crate` → 外部クレート)・空行・アルファベット順 |
+| `javascript.md` | WebView UI の JavaScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント) |
+| `docs.md` | ドキュメントの文体、`docs/user/` の制約、CHANGELOG の書き方 |
 
-JavaScript は ESLint / Prettier の設定に従う ([JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。
+JavaScript の整形・静的検査は ESLint / Prettier の設定に従う ([JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。
+
+`.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
 
 ## ドキュメントの配置
 

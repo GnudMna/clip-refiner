@@ -8,6 +8,7 @@
 - `crates/clip-refiner` — デスクトップアプリ (トレイ常駐・WebView UI・IPC・OS 連携)。core API は re-export しない
 - `crates/clip-refiner/src/ui/` — WebView UI の JavaScript。`*.bundle.js` は esbuild 生成物のため直接編集せず、`npm run build:ui` で再生成してソースと同じコミットに含める
 - `e2e/` — Playwright + WebView2 による UI E2E
+- `crates/clip-refiner-core/benches/` — 変換の処理時間ベンチ (criterion)。`cargo test --all-targets` でも 1 回ずつ実行され、入力が素通りしていないことを検証する
 - `fuzz/` — パーサ系変換の cargo-fuzz ターゲット (nightly が必要なためワークスペース外。`check.ps1` に含めない)
 - `scripts/windows/` — 開発者向けエントリポイント (PowerShell 7 で実行)。実処理は `scripts/common/` に置く
 
@@ -25,6 +26,7 @@ cargo test -p clip-refiner-core --no-default-features --all-targets
 npm run build:ui                    # UI バンドル再生成
 npm run lint                        # ESLint
 ./scripts/windows/fuzz.ps1          # ファジング (nightly + cargo-fuzz。不定期にローカルで実行)
+./scripts/windows/bench.ps1         # 処理時間ベンチ (criterion。-Save / -Compare で基準と比較)
 
 # 完了前の品質チェック一式 (fmt / clippy / deny / eslint / test / e2e)
 ./scripts/windows/check.ps1
@@ -52,7 +54,17 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 ## コーディング規約
 
-Rust ソース (`**/*.rs`) の規約は `.claude/rules/` に置く (対象ファイルを扱うときに自動で読み込まれる)。
+規約は `.claude/rules/` に置く (対象ファイルを扱うときに自動で読み込まれる)。
 
-- [comments.md](.claude/rules/comments.md) — コメント・ドキュメントコメント・`SAFETY` コメント・テストの記述規約
-- [imports.md](.claude/rules/imports.md) — `use` 文のグループ分けと並び順
+- [comments.md](.claude/rules/comments.md) — Rust のコメント・ドキュメントコメント・`SAFETY` コメント・テストの記述規約
+- [imports.md](.claude/rules/imports.md) — Rust の `use` 文のグループ分けと並び順
+- [javascript.md](.claude/rules/javascript.md) — WebView UI の JavaScript (バンドル・`innerHTML` のサニタイズ・純粋ロジックの分離)
+- [docs.md](.claude/rules/docs.md) — ドキュメントの文体・`docs/user/` の制約・CHANGELOG の書き方
+
+`.claude/settings.json` は共有の権限設定を持つ。`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
+
+## 注意点
+
+- `unwrap` / `expect` は clippy で警告になる (テストは除く)。`unsafe` には `// SAFETY:` を付ける
+- Git フック (`scripts/git/hooks/`: pre-commit は fmt、pre-push は `check.ps1`) は `./scripts/windows/install-hooks.ps1` で有効化できる。スキップは `CLIP_REFINER_SKIP_HOOK=1` (pre-commit / pre-push)、`CLIP_REFINER_SKIP_E2E=1` (E2E のみ)
+- `docs/user/` は MSI / ZIP に同梱する mdBook 原稿のため、`docs/dev/` など外部へリンクしない

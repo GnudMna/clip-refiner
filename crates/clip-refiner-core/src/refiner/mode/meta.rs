@@ -83,6 +83,8 @@ impl RefineMode {
             | Self::PathToBackslash => RefineCategory::Path,
             Self::SortLinesAsc
             | Self::SortLinesDesc
+            | Self::SortLinesNaturalAsc
+            | Self::SortLinesNaturalDesc
             | Self::RemoveEmptyLines
             | Self::RemoveDuplicateLines => RefineCategory::LineActions,
             Self::Trim | Self::TrimLines => RefineCategory::Trim,
@@ -431,7 +433,9 @@ mod tests {
         assert!(variants.contains(&RefineMode::UrlEncode));
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
+        assert!(variants.contains(&RefineMode::SortLinesNaturalAsc));
+        assert!(variants.contains(&RefineMode::SortLinesNaturalDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 46);
+        assert_eq!(variants.len(), 48);
     }
 }

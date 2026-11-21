@@ -5,6 +5,11 @@
 #
 # ライセンス方針: 独自製品への組み込みが可能なパーミッシブライセンスのみ許可する
 # (コピーレフト GPL / LGPL / MPL 等は deny 対象。許可リストに含めない)
+#
+# 例外: 配布物の利用者向けドキュメント (docs\) は mdBook のテーマ (MPL-2.0) を改変せずに含む。
+# Rust の依存としてリンクしない別ファイルで、ファイル単位の義務 (ライセンス全文とソースの入手先の表示) を
+# scripts/templates/user-docs-notices.txt で満たすため、cargo-deny の対象外として扱う
+# (詳細は docs/dev/setup.md の「利用者向けドキュメントの同梱」)
 
 [graph]
 all-features = true

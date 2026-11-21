@@ -94,7 +94,7 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                     chars.next(); // 'u' を消費
                     let hex: String = std::iter::from_fn(|| chars.next()).take(4).collect();
                     if hex.len() == 4 {
-                        if let Ok(code) = u16::from_str_radix(&hex, 16) {
+                        if let Some(code) = parse_hex4(&hex) {
                             // サロゲートペア上位 (U+D800..U+DBFF) の処理
                             if (0xD800..=0xDBFF).contains(&code) {
                                 // \uXXXX の次に \uYYYY があるか確認
@@ -104,7 +104,7 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                                     let low_hex: String =
                                         std::iter::from_fn(|| temp_chars.next()).take(4).collect();
                                     if low_hex.len() == 4
-                                        && let Ok(low) = u16::from_str_radix(&low_hex, 16)
+                                        && let Some(low) = parse_hex4(&low_hex)
                                         && (0xDC00..=0xDFFF).contains(&low)
                                     {
                                         // サロゲートペアをUnicodeスカラー値に変換
@@ -152,6 +152,23 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
         Cow::Owned(result)
     } else {
         Cow::Borrowed(input)
+    }
+}
+
+/// 4 桁の 16 進数文字列を `u16` に変換する
+///
+/// `u16::from_str_radix` は先頭の `+` を受け付けるため、全桁が 16 進数字かを先に確認する
+///
+/// # Arguments
+/// * `hex` - 変換対象の文字列
+///
+/// # Returns
+/// * `Option<u16>` - 4 文字すべてが 16 進数字の場合は `Some(値)`、それ以外は `None`
+fn parse_hex4(hex: &str) -> Option<u16> {
+    if hex.len() == 4 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        u16::from_str_radix(hex, 16).ok()
+    } else {
+        None
     }
 }
 
@@ -251,6 +268,11 @@ mod tests {
         assert_eq!(unescape_string("\\u004"), "\\u004");
         // 無効な16進数はそのまま残す
         assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
+        // 先頭の符号は16進数字ではないためそのまま残す
+        assert_eq!(unescape_string("\\u+041"), "\\u+041");
+        assert_eq!(unescape_string("\\u-041"), "\\u-041");
+        // サロゲートペア下位側の符号もそのまま残す
+        assert_eq!(unescape_string("\\uD83D\\u+E00"), "\\uD83D\\u+E00");
     }
 
     /// `regex_escape` の基本動作できるようにすること

@@ -65,6 +65,17 @@ function test_highlight_text() {
     assert.equal(SelectorCommon.highlightText('Hello', ''), 'Hello');
 }
 
+/** 小文字化で長さが変わる文字があってもハイライト位置がずれないこと */
+function test_highlight_text_length_changing_lowercase() {
+    // 'İ'.toLowerCase() は 'i' + U+0307 の 2 コードユニットになる
+    assert.equal(SelectorCommon.highlightText('İstanbul', 'bul'), 'İstan<mark>bul</mark>');
+    assert.equal(SelectorCommon.highlightText('İİ abc', 'abc'), 'İİ <mark>abc</mark>');
+    // 一致が小文字化後の文字の途中で終わるときは元の文字全体を含める
+    assert.equal(SelectorCommon.highlightText('aİb', 'ai'), '<mark>aİ</mark>b');
+    // サロゲートペアを挟んでもずれない
+    assert.equal(SelectorCommon.highlightText('İ😀x', 'x'), 'İ😀<mark>x</mark>');
+}
+
 /** 選択インデックスをクランプできること */
 function test_clamp_index() {
     assert.equal(SelectorCommon.clampIndex(5, 0), 0);
@@ -402,6 +413,7 @@ const tests = [
     test_escape_html,
     test_normalize_query,
     test_highlight_text,
+    test_highlight_text_length_changing_lowercase,
     test_clamp_index,
     test_handle_arrow_keys,
     test_handle_escape_key,

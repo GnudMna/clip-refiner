@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : generate-third-party-notices.ps1
-# Description : THIRD_PARTY_NOTICES を cargo-about で生成する
+# Description : THIRD_PARTY_NOTICES を cargo-about で生成し、利用者向けドキュメントの素材表示を追記する
 # Usage       : . (Join-Path $PSScriptRoot 'generate-third-party-notices.ps1')
 # Requires    : PowerShell 7.0+
 # ========================================================================
@@ -40,5 +40,11 @@ cargo about generate $Template `
     --locked
 
 Assert-LastExitCode -CommandLabel 'cargo about generate'
+
+# cargo-about は Rust の依存だけを扱うため、利用者向けドキュメント (mdBook の HTML) に含まれる素材の表示を追記する
+$userDocsNotices = Join-Path $ProjectRoot 'scripts\templates\user-docs-notices.txt'
+$notices = (Get-Content -LiteralPath $OutputFile -Raw -Encoding utf8).TrimEnd() + "`n`n" +
+    (Get-Content -LiteralPath $userDocsNotices -Raw -Encoding utf8)
+Set-Content -LiteralPath $OutputFile -Value $notices -Encoding utf8 -NoNewline
 
 Write-Host "生成しました: $OutputFile"

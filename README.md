@@ -14,7 +14,7 @@
 </p>
 
 <p>
-  <sub>46 種類の変換モード &middot; 加工パイプライン &middot; 設定ウィンドウ &middot; お気に入り &middot; 画面 OCR &middot; 暗号化履歴 &middot; 連続記録 &middot; 機密情報マスキング</sub>
+  <sub>48 種類の変換モード &middot; 加工パイプライン &middot; 設定ウィンドウ &middot; お気に入り &middot; 画面 OCR &middot; 暗号化履歴 &middot; 連続記録 &middot; 機密情報マスキング</sub>
 </p>
 
 </div>
@@ -29,7 +29,7 @@
 | :--- | :--- |
 | [使い方](docs/user/usage.md) | 監視モード・ワンショット・トレイ・設定ウィンドウ・セレクター・履歴・連続記録・OCR・更新・自動起動 |
 | [設定リファレンス](docs/user/configuration.md) | `config.toml` の場所・設定項目と既定値・処理の制限・ホットキー形式・通知・パイプライン・ログ |
-| [変換モード](docs/user/modes.md) | 全 46 モードの一覧と使用例 |
+| [変換モード](docs/user/modes.md) | 全 48 モードの一覧と使用例 |
 | [セキュリティ](docs/user/security.md) | 信頼境界・履歴の保護・監視除外・表示マスキング・登録クリップ・ワンショット IPC・更新の検証 |
 | [トラブルシューティング](docs/user/troubleshooting.md) | 症状別の確認事項 |
 | [CHANGELOG.md](CHANGELOG.md) | バージョンごとの変更履歴 |

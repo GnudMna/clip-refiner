@@ -21,18 +21,20 @@ pub fn detect_line_ending(text: &str) -> &str {
 // ======================================================================
 /// 行を改行コードで結合する
 ///
-/// 最終行が空行の場合は末尾に改行を 1 つ足す。結合結果の末尾の改行は `str::lines` で
+/// 元のテキストが改行で終わっていた場合は、末尾に改行を 1 つ付けて元の終端を保つ
+/// 最終行が空行の場合も末尾に改行を 1 つ足す。結合結果の末尾の改行は `str::lines` で
 /// 行の終端とみなされるため、足さないと再度行に分けたときに空行が 1 つ消える
 ///
 /// # Arguments
 /// * `lines` - 結合する行 (改行を含まない)
 /// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
+/// * `trailing_newline` - 元のテキストが改行で終わっていた場合は `true`
 ///
 /// # Returns
-/// * `String` - 結合後のテキスト
-pub fn join_lines(lines: &[&str], line_ending: &str) -> String {
+/// * `String` - 結合後のテキスト。行が無い場合は空文字列
+pub fn join_lines(lines: &[&str], line_ending: &str, trailing_newline: bool) -> String {
     let mut result = lines.join(line_ending);
-    if lines.last().is_some_and(|line| line.is_empty()) {
+    if !lines.is_empty() && (trailing_newline || lines.last().is_some_and(|line| line.is_empty())) {
         result.push_str(line_ending);
     }
     result
@@ -108,15 +110,19 @@ mod tests {
         assert_eq!(detect_line_ending("no newline"), "\n");
     }
 
-    /// 最終行が空行のときだけ末尾に改行を足して結合すること
+    /// 元が改行終わり、または最終行が空行のときだけ末尾に改行を足して結合すること
     #[test]
     fn test_join_lines() {
-        assert_eq!(join_lines(&["a", "b"], "\n"), "a\nb");
+        assert_eq!(join_lines(&["a", "b"], "\n", false), "a\nb");
+        // 元が改行で終わっていれば、改行を 1 つだけ付ける
+        assert_eq!(join_lines(&["a", "b"], "\n", true), "a\nb\n");
         // 末尾の空行を `lines` で数え直しても残るようにする
-        assert_eq!(join_lines(&["a", ""], "\r\n"), "a\r\n\r\n");
-        assert_eq!(join_lines(&["a", ""], "\r\n").lines().count(), 2);
-        assert_eq!(join_lines(&[""], "\n"), "\n");
-        assert_eq!(join_lines(&[], "\n"), "");
+        assert_eq!(join_lines(&["a", ""], "\r\n", false), "a\r\n\r\n");
+        assert_eq!(join_lines(&["a", ""], "\r\n", true), "a\r\n\r\n");
+        assert_eq!(join_lines(&["a", ""], "\r\n", false).lines().count(), 2);
+        assert_eq!(join_lines(&[""], "\n", false), "\n");
+        // 行が無ければ、改行も付けない
+        assert_eq!(join_lines(&[], "\n", true), "");
     }
 
     /// `process_lines` の行単位変換と Borrowed 返却できるようにすること

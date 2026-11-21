@@ -29,6 +29,29 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-11
+
+### Added
+
+- 数字を数値として比較する自然順の並び替えモード (昇順 / 降順) を追加
+  - `10` / `9` / `2` を `2` / `9` / `10` に並び替える (従来の並び替えは `10` / `2` / `9`)
+
+### Fixed
+
+- 履歴の暗号化に失敗したとき、同じ内容の既存の履歴エントリまで消える不具合を修正
+- クイックセレクター / 登録クリップセレクターの検索ハイライトが、`İ` のように小文字化で長さが変わる文字の後ろでずれる不具合を修正
+- UTM 除去で、複数の URL や URL を含む文章を加工すると、最初の `?` より後ろのテキストが消える不具合を修正
+  - 空白 (改行を含む) で区切った項目ごとに処理し、URL 以外の文字列は残す
+- アンエスケープで `\u+041` のように 16 進数字以外を含む `\uXXXX` が `A` などに変換される不具合を修正
+  - 4 文字すべてが 16 進数字の場合のみ変換し、それ以外はそのまま残す
+- YAML から JSON への変換で、`.inf` / `.nan` が警告なしに `null` へ変わる不具合を修正
+  - JSON で表現できない値を含む場合は変換せず、元のテキストを維持する
+- JSON から YAML への変換で、文字列 `"yes"` などが引用符なしで出力され、YAML 1.1 のツールで真偽値と解釈される不具合を修正
+  - `y` / `n` / `yes` / `no` / `on` / `off` (大文字小文字違いを含む) の文字列とキーを引用符で囲って出力する
+
+- 並べ替え・重複行削除・空行削除で、末尾が改行 1 つで終わるテキストの末尾の改行が消える不具合を修正
+  - 元のテキストが改行で終わっていれば、結果も改行 1 つで終える
+
 ## [1.3.0] - 2026-10-10
 
 ### Added
@@ -750,7 +773,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.1...develop
+[1.3.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.3.0...v1.3.1
 [1.3.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.2.1...v1.3.0
 [1.2.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.2.0...v1.2.1
 [1.2.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.1.1...v1.2.0

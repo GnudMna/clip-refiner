@@ -6,7 +6,10 @@ use crate::security::ContentFingerprint;
 ///
 /// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する。
 /// `bool` 項目は `AppConfig` の同名キーをそのまま写す
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "`bool` 項目は `AppConfig` の同名キーをそのまま写す"
+)]
 pub struct MonitorSnapshot {
     /// 監視時に適用する変換モード列
     pub pipeline: Vec<RefineMode>,

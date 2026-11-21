@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 /// 通知の内容に関する設定
 ///
 /// どのタイミングでどのような通知を表示するかを制御する。エラー通知は `enabled` に関わらず常に表示する
-#[allow(clippy::struct_excessive_bools)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "`config.toml` の通知キーと 1 対 1 に対応する独立した切り替えのため、まとめない"
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     /// デスクトップ通知の有効/無効 (エラー通知は常に表示)

@@ -1,5 +1,11 @@
 //! ワンショット名前付きパイプ IPC の実パイプ往復テスト
 
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "テスト専用のため、ヘルパー内の失敗もそのまま panic させる"
+)]
+
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::sync::Mutex;
