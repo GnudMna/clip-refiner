@@ -129,28 +129,10 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                         continue; // 空のテキストは無視
                     } else if text != last_text {
                         let current_mode = *thread_mode.lock().unwrap();
-
-                        let result = match current_mode {
-                            CodecMode::Encode => Some(encoder::percent_encode_text(&text)),
-                            CodecMode::Decode => {
-                                match decoder::percent_decode_text(&text) {
-                                    Ok(s) => Some(s),
-                                    Err(_) => None, // デコード失敗、無視
-                                }
-                            }
-                        };
-
-                        if let Some(processed) = result {
-                            // 処理済みのテキストが元のテキストと同じ場合は無限ループを回避
-                            if processed != text {
-                                // 無限ループを回避するため、書き込み前にlast_textを更新
-                                // これにより次のループで読み込んだ時に processed == last_text となり処理されない
-                                last_text = processed.clone();
-                                if let Err(e) = clipboard.set_text(processed) {
-                                    eprintln!("クリップボードへの書き込みに失敗: {}", e);
-                                }
-                                continue; // ここでlast_textを更新したのでループ末尾の更新をスキップ
-                            }
+                        if let Some(processed) = process_clipboard(current_mode) {
+                            // processed はすでに clipboard に書き込まれている
+                            last_text = processed;
+                            continue;
                         }
                     }
                     last_text = text;
@@ -202,6 +184,10 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
                             check_item.set_checked(false);
                         }
                         item.set_checked(true);
+
+                        // クリップボードの内容を変換
+                        process_clipboard(*app_mode);
+
                         codec_handled = true;
                         break;
                     }
@@ -224,6 +210,28 @@ pub fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     })
+}
+
+/// クリップボードの内容を変換
+fn process_clipboard(mode: CodecMode) -> Option<String> {
+    let mut clipboard = Clipboard::new().ok()?;
+    let text = clipboard.get_text().ok()?;
+
+    if text.is_empty() {
+        return None;
+    }
+
+    let processed = match mode {
+        CodecMode::Encode => encoder::percent_encode_text(&text),
+        CodecMode::Decode => decoder::percent_decode_text(&text).unwrap_or(text.clone()),
+    };
+
+    if processed != text {
+        let _ = clipboard.set_text(processed.clone());
+        return Some(processed);
+    }
+
+    None
 }
 
 /// トレイアイコンの作成
