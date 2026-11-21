@@ -35,7 +35,10 @@ pub use crate::consts::CONFIG_VERSION;
 pub use crate::error::ConfigError;
 #[cfg(feature = "config")]
 pub use migrate::format_unsupported_config_version_message;
-#[cfg(all(feature = "config", any(test, debug_assertions)))]
+#[cfg(all(
+    feature = "config",
+    any(test, debug_assertions, feature = "test-helpers")
+))]
 pub use paths::{begin_capture_open_path_for_test, take_captured_open_path_for_test};
 #[cfg(all(
     feature = "config",

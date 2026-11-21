@@ -2,28 +2,29 @@
 //!
 //! パイプは現在ユーザー専用 DACL で作成し、他ユーザーからの接続を拒否する
 //! 接続ごとに処理スレッドへ渡し、応答待ちの接続があっても次の接続を受け付ける
+//! 要求の読み取りには期限を設け、要求を送らない接続が処理枠を占有し続けないようにする
 
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::protocol::{
     BoundedLine, OneshotIpcRequest, OneshotIpcResponse, parse_request, read_bounded_line,
 };
+use super::session::resident_pipe_name;
 use crate::config::permissions::OwnerOnlySecurityAttributes;
-use crate::consts;
 use crate::tray::worker::ClipboardWorkerHandle;
 
 use anyhow::{Context, Result};
-use windows::Win32::Foundation::{ERROR_PIPE_CONNECTED, HANDLE};
+use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_CONNECTED, HANDLE};
 use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX};
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
-    PIPE_TYPE_BYTE, PIPE_WAIT,
+    PIPE_TYPE_BYTE, PIPE_WAIT, PeekNamedPipe,
 };
 use windows::core::PCWSTR;
 
@@ -32,6 +33,10 @@ use windows::core::PCWSTR;
 // ======================================================================
 /// ワーカー応答待ちの上限
 const WORKER_REPLY_TIMEOUT: Duration = Duration::from_secs(30);
+/// 接続から要求 1 行を受け取り終えるまでの上限
+pub(crate) const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
+/// 要求の到着を確認する間隔
+const READ_POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// パイプ入出力バッファサイズ
 const PIPE_BUFFER_SIZE: u32 = 64 * 1024;
 /// 同時に処理する接続数の上限
@@ -52,7 +57,7 @@ pub struct OneshotIpcServer {
 }
 
 impl OneshotIpcServer {
-    /// 本番パイプ名で待受スレッドを起動する
+    /// 現在のログオンセッション用の本番パイプ名で待受スレッドを起動する
     ///
     /// # Arguments
     /// * `worker` - クリップボードワーカーへのハンドル
@@ -61,18 +66,21 @@ impl OneshotIpcServer {
     /// * `Result<Self>` - 停止時に待受を終了するガード
     ///
     /// # Errors
-    /// 待受スレッドの起動に失敗した場合
+    /// パイプ名の解決または待受スレッドの起動に失敗した場合
     pub fn start(worker: Arc<ClipboardWorkerHandle>) -> Result<Self> {
-        Self::start_named(worker, consts::ONESHOT_IPC_PIPE_NAME.to_owned())
+        let pipe_name = resident_pipe_name().context("ワンショット IPC のパイプ名の解決に失敗")?;
+        // 他プロセスによる本番パイプ名の先取りを避けるため FIRST_PIPE_INSTANCE を付ける
+        Self::spawn(worker, pipe_name, REQUEST_READ_TIMEOUT, true)
     }
 
     /// 指定パイプ名で待受スレッドを起動する
     ///
-    /// 統合テストでは本番パイプと衝突しない一意な名前を渡す
+    /// 統合テストでは本番パイプと衝突しない一意な名前と、短い読み取り期限を渡す
     ///
     /// # Arguments
     /// * `worker` - クリップボードワーカーへのハンドル
     /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
+    /// * `read_timeout` - 接続から要求 1 行を受け取り終えるまでの上限
     ///
     /// # Returns
     /// * `Result<Self>` - 停止時に待受を終了するガード
@@ -82,17 +90,45 @@ impl OneshotIpcServer {
     pub(crate) fn start_named(
         worker: Arc<ClipboardWorkerHandle>,
         pipe_name: String,
+        read_timeout: Duration,
     ) -> Result<Self> {
         // テスト用パイプは FIRST_PIPE_INSTANCE を付けない
         // 連続接続でインスタンス再作成が失敗し、クライアントが応答待ちのまま残るのを避ける
-        let first_instance_only = pipe_name == consts::ONESHOT_IPC_PIPE_NAME;
+        Self::spawn(worker, pipe_name, read_timeout, false)
+    }
+
+    /// 待受スレッドを起動する
+    ///
+    /// # Arguments
+    /// * `worker` - クリップボードワーカーへのハンドル
+    /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
+    /// * `read_timeout` - 接続から要求 1 行を受け取り終えるまでの上限
+    /// * `first_instance_only` - 手持ちインスタンスが無いときに `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 停止時に待受を終了するガード
+    ///
+    /// # Errors
+    /// 待受スレッドの起動に失敗した場合
+    fn spawn(
+        worker: Arc<ClipboardWorkerHandle>,
+        pipe_name: String,
+        read_timeout: Duration,
+        first_instance_only: bool,
+    ) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_flag = Arc::clone(&stop);
         let listen_name = pipe_name.clone();
         let thread = thread::Builder::new()
             .name("clip-refiner-oneshot-ipc".into())
             .spawn(move || {
-                run_server_loop(&worker, &stop_flag, &listen_name, first_instance_only);
+                run_server_loop(
+                    &worker,
+                    &stop_flag,
+                    &listen_name,
+                    first_instance_only,
+                    read_timeout,
+                );
             })
             .context("ワンショット IPC 待受スレッドの起動に失敗")?;
 
@@ -161,6 +197,90 @@ impl Drop for ActiveConnection {
 }
 
 // ======================================================================
+// 期限付き読み取り
+// ======================================================================
+/// 期限までに届いた分だけを読み取るパイプリーダー
+///
+/// 同期パイプの `ReadFile` は届くまで戻らないため、`PeekNamedPipe` で到着済みの
+/// バイト数を確かめ、その範囲だけを読む。期限を過ぎると `TimedOut` を返す
+struct DeadlineReader<'a> {
+    /// 接続済みのパイプ
+    pipe: &'a File,
+    /// 読み取りを打ち切る時刻
+    deadline: Instant,
+}
+
+impl<'a> DeadlineReader<'a> {
+    /// 現在時刻から `timeout` 後を期限とするリーダーを作る
+    ///
+    /// # Arguments
+    /// * `pipe` - 接続済みのパイプ
+    /// * `timeout` - 読み取り全体の上限
+    ///
+    /// # Returns
+    /// * `Self` - 期限付きリーダー
+    fn new(pipe: &'a File, timeout: Duration) -> Self {
+        Self {
+            pipe,
+            deadline: Instant::now() + timeout,
+        }
+    }
+}
+
+impl Read for DeadlineReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        loop {
+            // クライアント切断後も未読データは読めるため、到着済みの分を先に返す
+            let Some(available) = pipe_available_bytes(self.pipe)? else {
+                return Ok(0);
+            };
+            if available > 0 {
+                let len = buf.len().min(available as usize);
+                let mut pipe = self.pipe;
+                return pipe.read(&mut buf[..len]);
+            }
+            if Instant::now() >= self.deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "要求の受信が期限を超えた",
+                ));
+            }
+            thread::sleep(READ_POLL_INTERVAL);
+        }
+    }
+}
+
+/// パイプに到着済みで未読のバイト数を返す
+///
+/// # Arguments
+/// * `pipe` - 接続済みのパイプ
+///
+/// # Returns
+/// * `io::Result<Option<u32>>` - 未読バイト数。クライアントが切断し未読データも無い場合は `None`
+fn pipe_available_bytes(pipe: &File) -> io::Result<Option<u32>> {
+    let mut available = 0u32;
+    // SAFETY: `pipe` が所有する有効なパイプハンドルを借用し、`available` は呼び出し中に生存する
+    let peeked = unsafe {
+        PeekNamedPipe(
+            HANDLE(pipe.as_raw_handle()),
+            None,
+            0,
+            None,
+            Some(&raw mut available),
+            None,
+        )
+    };
+    match peeked {
+        Ok(()) => Ok(Some(available)),
+        Err(err) if err.code() == ERROR_BROKEN_PIPE.into() => Ok(None),
+        Err(err) => Err(io::Error::other(err)),
+    }
+}
+
+// ======================================================================
 // 待受ループ
 // ======================================================================
 fn run_server_loop(
@@ -168,6 +288,7 @@ fn run_server_loop(
     stop: &AtomicBool,
     pipe_name: &str,
     first_instance_only: bool,
+    read_timeout: Duration,
 ) {
     let active = Arc::new(AtomicU32::new(0));
     let mut listening: Option<File> = None;
@@ -210,7 +331,7 @@ fn run_server_loop(
                 None
             }
         };
-        spawn_connection_handler(connection, worker);
+        spawn_connection_handler(connection, worker, read_timeout);
     }
 }
 
@@ -239,12 +360,17 @@ fn wait_for_free_slot(active: &AtomicU32, stop: &AtomicBool) -> bool {
 /// # Arguments
 /// * `connection` - 処理中として登録済みの接続
 /// * `worker` - クリップボードワーカーへのハンドル
-fn spawn_connection_handler(connection: ActiveConnection, worker: &Arc<ClipboardWorkerHandle>) {
+/// * `read_timeout` - 要求 1 行を受け取り終えるまでの上限
+fn spawn_connection_handler(
+    connection: ActiveConnection,
+    worker: &Arc<ClipboardWorkerHandle>,
+    read_timeout: Duration,
+) {
     let worker = Arc::clone(worker);
     let spawned = thread::Builder::new()
         .name("clip-refiner-oneshot-ipc-conn".into())
         .spawn(move || {
-            handle_connected_client(&connection.pipe, &worker);
+            handle_connected_client(&connection.pipe, &worker, read_timeout);
         });
     if let Err(err) = spawned {
         crate::log_warn!("ワンショット IPC 接続処理スレッドの起動に失敗: {err}");
@@ -262,7 +388,10 @@ fn spawn_connection_handler(connection: ActiveConnection, worker: &Arc<Clipboard
 ///
 /// # Errors
 /// セキュリティ記述子の構築または `CreateNamedPipeW` に失敗した場合
-fn create_pipe_instance_named(pipe_name: &str, first_instance_only: bool) -> Result<File> {
+pub(super) fn create_pipe_instance_named(
+    pipe_name: &str,
+    first_instance_only: bool,
+) -> Result<File> {
     let security = OwnerOnlySecurityAttributes::new()
         .context("ワンショット IPC のセキュリティ記述子の構築に失敗")?;
 
@@ -311,13 +440,17 @@ fn connect_pipe(pipe: &File) -> windows::core::Result<()> {
     }
 }
 
-fn handle_connected_client(pipe: &File, worker: &ClipboardWorkerHandle) {
-    let mut reader = BufReader::new(pipe);
+fn handle_connected_client(pipe: &File, worker: &ClipboardWorkerHandle, read_timeout: Duration) {
+    let mut reader = BufReader::new(DeadlineReader::new(pipe, read_timeout));
     let line = match read_bounded_line(&mut reader) {
         Ok(BoundedLine::Line(line)) => line,
         Ok(BoundedLine::Eof) => return,
         Ok(BoundedLine::TooLarge) => {
             crate::log_warn!("ワンショット IPC 要求が大きすぎるため破棄");
+            return;
+        }
+        Err(err) if err.kind() == io::ErrorKind::TimedOut => {
+            crate::log_warn!("ワンショット IPC 要求が期限内に届かないため切断");
             return;
         }
         Err(err) => {
@@ -378,18 +511,44 @@ fn write_response(mut stream: &File, response: &OneshotIpcResponse) -> std::io::
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::fs::OpenOptions;
-    use std::io::{BufRead, BufReader, Write};
+    use std::fs::{File, OpenOptions};
+    use std::io::{self, BufRead, BufReader, Write};
     use std::sync::atomic::{AtomicBool, AtomicU32};
     use std::sync::{Arc, Barrier};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
+    use super::super::protocol::{BoundedLine, read_bounded_line};
     use super::{
-        MAX_ACTIVE_CONNECTIONS, OneshotIpcServer, connect_pipe, create_pipe_instance_named,
-        wait_for_free_slot,
+        DeadlineReader, MAX_ACTIVE_CONNECTIONS, OneshotIpcServer, REQUEST_READ_TIMEOUT,
+        connect_pipe, create_pipe_instance_named, wait_for_free_slot,
     };
     use crate::test_helpers::{stub_worker, test_app_state_arc, wait_for_oneshot_pipe};
+
+    /// 期限付き読み取りテストの期限
+    const SHORT_READ_TIMEOUT: Duration = Duration::from_millis(200);
+
+    /// 接続済みのサーバー側パイプとクライアントを作る
+    fn connected_pair(label: &str) -> (File, File) {
+        let pipe_name = format!(
+            r"\\.\pipe\com.y_hirata.clip-refiner.oneshot-deadline-{label}-{}",
+            std::process::id()
+        );
+        let server = create_pipe_instance_named(&pipe_name, true).expect("create pipe");
+        let client = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&pipe_name)
+            .expect("open pipe");
+        connect_pipe(&server).expect("connect pipe");
+        (server, client)
+    }
+
+    /// 期限付きで 1 行読み取る
+    fn read_line_with_deadline(server: &File) -> io::Result<BoundedLine> {
+        let mut reader = BufReader::new(DeadlineReader::new(server, SHORT_READ_TIMEOUT));
+        read_bounded_line(&mut reader)
+    }
 
     /// 待受スレッド起動に成功したらサーバーガードを返すようにすること
     #[test]
@@ -399,7 +558,7 @@ mod tests {
             r"\\.\pipe\com.y_hirata.clip-refiner.oneshot-start-test-{}",
             std::process::id()
         );
-        let server = OneshotIpcServer::start_named(worker, pipe_name.clone())
+        let server = OneshotIpcServer::start_named(worker, pipe_name.clone(), REQUEST_READ_TIMEOUT)
             .expect("待受スレッドを起動できる");
         assert!(
             wait_for_oneshot_pipe(&pipe_name, Duration::from_secs(2)),
@@ -466,5 +625,70 @@ mod tests {
         let active = AtomicU32::new(MAX_ACTIVE_CONNECTIONS);
         let stop = AtomicBool::new(true);
         assert!(!wait_for_free_slot(&active, &stop));
+    }
+
+    /// 期限内に届いた要求行を読み取れるようにすること
+    #[test]
+    fn deadline_reader_reads_line_sent_in_time() {
+        let (server, mut client) = connected_pair("line");
+        writeln!(client, "ping").expect("client write");
+        client.flush().expect("client flush");
+
+        assert_eq!(
+            read_line_with_deadline(&server).expect("read"),
+            BoundedLine::Line("ping".into())
+        );
+    }
+
+    /// 何も送らない接続は期限で `TimedOut` とすること
+    #[test]
+    fn deadline_reader_times_out_without_data() {
+        let (server, _client) = connected_pair("idle");
+
+        let started = Instant::now();
+        let err = read_line_with_deadline(&server).expect_err("タイムアウトを期待");
+
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+        // 期限を過ぎてから打ち切り、無期限には待たない
+        assert!(started.elapsed() >= SHORT_READ_TIMEOUT);
+        assert!(started.elapsed() < SHORT_READ_TIMEOUT * 10);
+    }
+
+    /// 改行を送らないまま止まった接続も期限で `TimedOut` とすること
+    #[test]
+    fn deadline_reader_times_out_on_partial_line() {
+        let (server, mut client) = connected_pair("partial");
+        client.write_all(b"{\"type\":").expect("client write");
+        client.flush().expect("client flush");
+
+        let err = read_line_with_deadline(&server).expect_err("タイムアウトを期待");
+
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+    }
+
+    /// 何も送らずに切断した接続は EOF とすること
+    #[test]
+    fn deadline_reader_returns_eof_on_disconnect() {
+        let (server, client) = connected_pair("disconnect");
+        drop(client);
+
+        assert_eq!(
+            read_line_with_deadline(&server).expect("read"),
+            BoundedLine::Eof
+        );
+    }
+
+    /// 送信後に切断した接続でも未読の要求行を読み取れるようにすること
+    #[test]
+    fn deadline_reader_reads_pending_data_after_disconnect() {
+        let (server, mut client) = connected_pair("pending");
+        writeln!(client, "ping").expect("client write");
+        client.flush().expect("client flush");
+        drop(client);
+
+        assert_eq!(
+            read_line_with_deadline(&server).expect("read"),
+            BoundedLine::Line("ping".into())
+        );
     }
 }

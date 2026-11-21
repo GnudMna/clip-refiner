@@ -53,7 +53,6 @@ app = [
     "dep:clipboard-win",
     "dep:ureq",
     "dep:windows",
-    "dep:windows-future",
     "dep:winreg",
     "dep:zip",
     "dep:zeroize",
@@ -106,21 +105,9 @@ path = "tests/worker_recovery_flow.rs"
 required-features = ["app"]
 
 [[test]]
-name = "oneshot_flow"
-path = "tests/oneshot_flow.rs"
-
-[[test]]
 name = "oneshot_ipc_flow"
 path = "tests/oneshot_ipc_flow.rs"
 required-features = ["app"]
-
-[[test]]
-name = "settings_ui_logic"
-path = "tests/settings_ui_logic.rs"
-
-[[test]]
-name = "regex_preview_logic"
-path = "tests/regex_preview_logic.rs"
 
 [[test]]
 name = "notification_flow"
@@ -131,14 +118,6 @@ required-features = ["app"]
 name = "settings_shared_logic"
 path = "tests/settings_shared_logic.rs"
 required-features = ["app"]
-
-[[test]]
-name = "settings_panels_logic"
-path = "tests/settings_panels_logic.rs"
-
-[[test]]
-name = "selector_logic"
-path = "tests/selector_logic.rs"
 
 [[test]]
 name = "platform_flow"
@@ -195,13 +174,14 @@ windows = { workspace = true, optional = true, features = [
     "Win32_System_IO",
     "Win32_System_LibraryLoader",
     "Win32_System_Pipes",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_System_WinRT",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
-windows-future = { workspace = true, optional = true }
 winreg = { workspace = true, optional = true }
 
 [dev-dependencies]

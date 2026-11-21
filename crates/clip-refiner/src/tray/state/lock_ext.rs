@@ -7,11 +7,12 @@ use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 ///
 /// トレイ常駐アプリでは、保持者スレッドのパニックでロックが汚染されても
 /// プロセス全体を終了させず UI と監視を継続する方針を取る
-/// ポイズン発生時はエラーログを出し、汚染されたガードを返して処理を続行する
+/// ポイズン発生時はエラーログを出し、ポイズン状態を解除したうえでガードを返して処理を続行する
+/// 解除しないと以後のロック取得のたびにポイズン扱いとなり、同じエラーログが出続ける
 pub trait LockExt<T> {
     /// ロックを取得する
     ///
-    /// ポイズニングされている場合は汚染された状態のままデータを取得する
+    /// ポイズニングされている場合はポイズン状態を解除してデータを取得する
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;
 }
 
@@ -23,7 +24,9 @@ impl<T> LockExt<T> for Mutex<T> {
                 crate::log_error!(
                     "Mutex がポイズン状態になっています。データを復旧して処理を継続します"
                 );
-                poison.into_inner()
+                let guard = poison.into_inner();
+                self.clear_poison();
+                guard
             }
         }
     }
@@ -33,11 +36,11 @@ impl<T> LockExt<T> for Mutex<T> {
 pub trait RwLockExt<T> {
     /// 読み取りロックを取得する
     ///
-    /// ポイズニングされている場合は汚染された状態のままデータを取得する
+    /// ポイズニングされている場合はポイズン状態を解除してデータを取得する
     fn read_ignore_poison(&self) -> RwLockReadGuard<'_, T>;
     /// 書き込みロックを取得する
     ///
-    /// ポイズニングされている場合は汚染された状態のままデータを取得する
+    /// ポイズニングされている場合はポイズン状態を解除してデータを取得する
     fn write_ignore_poison(&self) -> RwLockWriteGuard<'_, T>;
 }
 
@@ -49,7 +52,9 @@ impl<T> RwLockExt<T> for RwLock<T> {
                 crate::log_error!(
                     "RwLock の読み取りロックがポイズン状態です。データを復旧して処理を継続します"
                 );
-                poison.into_inner()
+                let guard = poison.into_inner();
+                self.clear_poison();
+                guard
             }
         }
     }
@@ -61,7 +66,9 @@ impl<T> RwLockExt<T> for RwLock<T> {
                 crate::log_error!(
                     "RwLock の書き込みロックがポイズン状態です。データを復旧して処理を継続します"
                 );
-                poison.into_inner()
+                let guard = poison.into_inner();
+                self.clear_poison();
+                guard
             }
         }
     }
@@ -90,6 +97,9 @@ mod tests {
 
         assert!(mutex.lock().is_err());
         assert_eq!(*mutex.lock_ignore_poison(), 42);
+        // 復旧後はポイズン状態が解除され、以後の取得でエラーログが出ない
+        assert!(!mutex.is_poisoned());
+        assert!(mutex.lock().is_ok());
     }
 
     /// `RwLock` 読み取りのポイズン後も値を復旧できるようにすること
@@ -105,6 +115,9 @@ mod tests {
 
         assert!(lock.read().is_err());
         assert_eq!(lock.read_ignore_poison().as_str(), "ok");
+        // 復旧後はポイズン状態が解除される
+        assert!(!lock.is_poisoned());
+        assert!(lock.write().is_ok());
     }
 
     /// `RwLock` 書き込みのポイズン後も値を更新できるようにすること
@@ -120,6 +133,8 @@ mod tests {
 
         assert!(lock.write().is_err());
         *lock.write_ignore_poison() = 7;
-        assert_eq!(*lock.read_ignore_poison(), 7);
+        // 復旧後はポイズン状態が解除される
+        assert!(!lock.is_poisoned());
+        assert_eq!(*lock.read().expect("read"), 7);
     }
 }

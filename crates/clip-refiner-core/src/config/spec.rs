@@ -1,6 +1,6 @@
 //! 設定仕様の同期カタログ
 //!
-//! 実装の既定値 (`AppConfig` / `consts`)・生成 TOML コメント・CONFIG.md / README を
+//! 実装の既定値 (`AppConfig` / `consts`)・生成 TOML コメント・configuration.md / README を
 //! 突き合わせ、スキーマ番号や上限・既定ホットキーのドリフトを検出する
 
 use std::fs;
@@ -18,6 +18,9 @@ use crate::consts;
 // ======================================================================
 // ワークスペースファイル
 // ======================================================================
+/// 設定リファレンスのワークスペース相対パス
+const CONFIG_DOC: &str = "docs/user/configuration.md";
+
 /// ワークスペースルート (リポジトリ直下) を返す
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -79,7 +82,7 @@ fn config_table_default(section: &str, key: &str) -> String {
             .trim_matches('`')
             .to_string();
     }
-    panic!("CONFIG.md の設定項目表に `{key}` がない")
+    panic!("configuration.md の設定項目表に `{key}` がない")
 }
 
 /// 空配列以外の TOML 文字列既定値を返す
@@ -263,7 +266,7 @@ fn spec_hotkey_fields(hk: &HotkeySettings) -> Vec<SpecField> {
     ]
 }
 
-/// 空配列を CONFIG.md の `(空)` 表記に合わせる
+/// 空配列を configuration.md の `(空)` 表記に合わせる
 fn empty_array_cell<T>(items: &[T]) -> String {
     if items.is_empty() {
         "(空)".to_string()
@@ -305,7 +308,7 @@ fn format_kib(bytes: usize) -> String {
     format!("{} KiB", bytes / 1024)
 }
 
-/// 既定ホットキー (README / CONFIG の本文にも現れる)
+/// 既定ホットキー (README / configuration.md の本文にも現れる)
 fn default_hotkeys() -> [&'static str; 10] {
     [
         consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
@@ -371,20 +374,20 @@ rest
     );
 }
 
-/// CONFIG.md のスキーマ番号が `CONFIG_VERSION` と一致すること
+/// configuration.md のスキーマ番号が `CONFIG_VERSION` と一致すること
 #[test]
 fn config_md_schema_version_matches_consts() {
-    let md = read_workspace_file("CONFIG.md");
+    let md = read_workspace_file(CONFIG_DOC);
     let version = consts::CONFIG_VERSION;
     assert!(
         md.contains(&format!(
             "現行の設定スキーマは `version = {version}` (`CONFIG_VERSION`)"
         )),
-        "CONFIG.md 冒頭のスキーマ番号が {version} ではない"
+        "configuration.md 冒頭のスキーマ番号が {version} ではない"
     );
     assert!(
         md.contains("移行手順が無いスキーマ"),
-        "CONFIG.md に未対応 version の既存項目維持方針が無い"
+        "configuration.md に未対応 version の既存項目維持方針が無い"
     );
 
     let items = markdown_section(&md, "## 設定項目");
@@ -400,7 +403,7 @@ fn config_md_schema_version_matches_consts() {
         }
         assert!(
             example.contains(&format!("version = {version}")),
-            "CONFIG.md の TOML 例の version が {version} ではない:\n{example}"
+            "configuration.md の TOML 例の version が {version} ではない:\n{example}"
         );
     }
 }
@@ -408,7 +411,7 @@ fn config_md_schema_version_matches_consts() {
 /// 設定項目表の既定値が `AppConfig::default` と一致すること
 #[test]
 fn config_md_item_defaults_match_app_config() {
-    let md = read_workspace_file("CONFIG.md");
+    let md = read_workspace_file(CONFIG_DOC);
     let items = markdown_section(&md, "## 設定項目");
     let config = AppConfig::default();
     assert_eq!(config.version, consts::CONFIG_VERSION);
@@ -417,7 +420,7 @@ fn config_md_item_defaults_match_app_config() {
         let actual = config_table_default(items, field.key);
         assert_eq!(
             actual, field.default_cell,
-            "CONFIG.md の `{}` 既定値が実装と異なる",
+            "configuration.md の `{}` 既定値が実装と異なる",
             field.key
         );
     }
@@ -426,21 +429,21 @@ fn config_md_item_defaults_match_app_config() {
 /// 処理の制限が `consts` の上限と一致すること
 #[test]
 fn config_md_processing_limits_match_consts() {
-    let md = read_workspace_file("CONFIG.md");
+    let md = read_workspace_file(CONFIG_DOC);
     let limits = markdown_section(&md, "## 処理の制限");
     for needle in processing_limit_needles() {
         assert!(
             limits.contains(&needle),
-            "CONFIG.md の処理の制限に `{needle}` がない"
+            "configuration.md の処理の制限に `{needle}` がない"
         );
     }
 }
 
-/// README / CONFIG に既定ホットキーが含まれること
+/// README / configuration.md に既定ホットキーが含まれること
 #[test]
 fn readme_and_config_list_default_hotkeys() {
     let readme = read_workspace_file("README.md");
-    let config_md = read_workspace_file("CONFIG.md");
+    let config_md = read_workspace_file(CONFIG_DOC);
     for hotkey in default_hotkeys() {
         assert!(
             readme.contains(hotkey),
@@ -448,7 +451,7 @@ fn readme_and_config_list_default_hotkeys() {
         );
         assert!(
             config_md.contains(hotkey),
-            "CONFIG.md に既定ホットキー `{hotkey}` がない"
+            "configuration.md に既定ホットキー `{hotkey}` がない"
         );
     }
 }

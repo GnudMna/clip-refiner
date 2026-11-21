@@ -20,6 +20,24 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-03
+
+### Changed
+
+- ドキュメントを読み手ごとに再構成した。利用者向けは `docs/user/` (使い方・設定リファレンス・変換モード・セキュリティ・トラブルシューティング)、開発者向けは `docs/dev/` (環境構築・テスト・アーキテクチャ・リリース・開発規約) に分け、`CONFIG.md` / `DEVELOPMENT.md` を廃止した。README は概要・クイックスタート・ドキュメント索引に絞り、README と設定リファレンスで重複していた説明 (セキュリティ・更新・トラブルシューティングなど) を 1 か所にまとめた。`clip-refiner-core` のライブラリ利用手順は `crates/clip-refiner-core/README.md` へ移した
+
+### Fixed
+
+- 複数ユーザーが同時にサインインしている環境 (ユーザー切り替え・リモートデスクトップ) で、2 人目以降のトレイ常駐へ `--mode` / `--pipeline` のワンショット実行を委譲できず失敗する問題を修正した。常駐の多重起動防止はログオンセッションごとなのに、IPC のパイプ名がマシン全体で 1 つだったため、先に起動した別ユーザーの常駐のパイプへ接続しようとしていた。パイプ名をログオンセッションごとに分け、CLI は接続先パイプの作成元が同じセッションであることを確かめるようにした
+- 内部ロックがポイズン状態 (保持中のスレッドがパニック) になった後、そのロックを取得するたびに同じエラーログが出続ける問題を修正した。復旧時にポイズン状態を解除し、エラーログは発生時の 1 回だけ出すようにした
+
+### Security
+
+- パスワードマネージャー等が付与する監視除外フォーマット (`ExcludeClipboardContentFromMonitorProcessing` / `Clipboard Viewer Ignore` / `CanIncludeInClipboardHistory` = 0) を尊重するようにした。該当するコピーは監視時に本文を読まず、自動加工・履歴・連続記録の対象外とする
+- ワンショット IPC: 常駐側の要求読み取りに期限 (5 秒) を設けた。従来は接続したまま要求を送らない、または改行を送らずに止まった接続が処理枠を無期限に占有し、同時処理上限 (4 接続) まで埋まるとワンショット委譲が失敗し続けた。期限を過ぎた接続は応答せずに切断する
+- 更新: version API が返すアセット名を検証せずに保存先ファイルパスとダウンロード URL へ使っていた。ASCII 英数字と `.` `-` `_` だけからなる単一のファイル名 (先頭・末尾の `.`・Windows の予約デバイス名・200 バイト超を除く) に限り、パス区切りや `..` を含む名前は更新確認時と適用直前の両方で拒否するようにした
+- 更新: MSI 適用時の `msiexec` を名前だけで起動していたため、実行ファイルと同じフォルダに同名のファイルがあるとそちらが起動されえた。システムフォルダ (`GetSystemDirectoryW`) の `msiexec.exe` を絶対パスで起動するようにした
+
 ## [1.1.0] - 2026-10-03
 
 ### Changed
@@ -167,7 +185,7 @@
 - 設定 UI: サイドバーを WAI-ARIA の `tablist` / `tab` / `tabpanel` パターンに準拠させ、上下・左右矢印と Home / End でタブ移動できるようにした
 - 品質チェック (`check.ps1`): 設定 UI バンドル再生成後に `settings.bundle.js` の未ステージ差分を検出し、ソースと生成物のコミットずれを防ぐようにした
 - リリース手順 (`release.ps1`): MSI に加え `build-portable.ps1` でポータブル ZIP も一括作成するようにした (`-SkipPortable` で省略可。MSI 作成済みならビルドと `THIRD_PARTY_NOTICES` を再利用)
-- 同一ユーザー脅威モデルを明示した: CONFIG に [信頼境界 (同一ユーザー前提)](CONFIG.md#信頼境界-同一ユーザー前提) を追加し、README・設定 UI (履歴 / 登録クリップ)・ワンショット IPC 節から参照するようにした。保護境界は現在の Windows ユーザー単位で、同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうることを案内する
+- 同一ユーザー脅威モデルを明示した: CONFIG に [信頼境界 (同一ユーザー前提)](docs/user/security.md#信頼境界-同一ユーザー前提) を追加し、README・設定 UI (履歴 / 登録クリップ)・ワンショット IPC 節から参照するようにした。保護境界は現在の Windows ユーザー単位で、同一ユーザーの他プロセスからは設定・IPC・鍵に到達しうることを案内する
 - アプリ更新: 確認・ダウンロード・適用・差し替えの失敗を `UpdateError` (`thiserror`) に集約し、Outcome / デスクトップ通知 / MessageBox へは `Display` 経由で渡すようにした。更新通知は `UserNotification` 経由に統一した
 - トレイメニュー同期で `MenuSnapshot` により `AppConfig` 全体の clone を避け、履歴と連続記録のメニュー再構築を `menu/rebuild.rs` に共通化した
 - ドキュメント (README / CONFIG / DEVELOPMENT) を監視既定・設定 UI・更新エラー経路・信頼境界に合わせて更新した
@@ -201,7 +219,7 @@
 
 ### Security
 
-- ワンショット IPC の名前付きパイプを現在ユーザー専用 DACL で作成するようにした。既定 ACL (Everyone 読み取り・管理者フルコントロール等) をやめ、他ユーザーからのローカル接続を拒否する (`PIPE_REJECT_REMOTE_CLIENTS` は従来どおり)。脅威モデルは [CONFIG.md の信頼境界](CONFIG.md#信頼境界-同一ユーザー前提) / [ワンショット IPC](CONFIG.md#ワンショット-ipc) に記載
+- ワンショット IPC の名前付きパイプを現在ユーザー専用 DACL で作成するようにした。既定 ACL (Everyone 読み取り・管理者フルコントロール等) をやめ、他ユーザーからのローカル接続を拒否する (`PIPE_REJECT_REMOTE_CLIENTS` は従来どおり)。脅威モデルは [CONFIG.md の信頼境界](docs/user/security.md#信頼境界-同一ユーザー前提) / [ワンショット IPC](docs/user/security.md#ワンショット-ipc) に記載
 
 ### Added
 
@@ -372,7 +390,7 @@
 - Windows 専用化に伴い、クロスプラットフォーム用の `#[cfg]`・スタブ・`windows` 子モジュール名を整理
 - OS 連携を `platform/` 配下へ集約 (`autostart`、通知、OCR、画面キャプチャなど)
 - デスクトップ通知を WinRT トースト (`notify.rs`) に統一
-- 開発時の依存関係監査に `cargo-deny` を導入 ([DEVELOPMENT.md](DEVELOPMENT.md#サプライチェーン監査-cargo-deny))
+- 開発時の依存関係監査に `cargo-deny` を導入 ([DEVELOPMENT.md](docs/dev/testing.md#サプライチェーン監査-cargo-deny))
 
 ### Removed
 
@@ -389,9 +407,9 @@
 - ライブラリ API: `config` モジュールの公開、加工パイプライン API (`apply_text_pipeline`, `apply_pipeline_to_text`, `split_pipeline`)、クレートルート re-export、`RefineContext::with_regex`
 - `clip-refiner-core` クレートで加工ロジックと設定型を GUI 非依存に分離 (`crates/` 配下)
 - feature `app` (デフォルト) でトレイ UI / CLI をオプション化。ライブラリ利用は `default-features = false` または core 直接依存
-- [CONFIG.md](CONFIG.md) を追加し、設定リファレンス・変換モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例を README から分離
+- `CONFIG.md` を追加し、設定リファレンス・変換モード一覧・UI 操作・画面 OCR・履歴セキュリティ・使用例を README から分離
 - [CHANGELOG.md](CHANGELOG.md) を追加 (Keep a Changelog 形式)
-- [DEVELOPMENT.md](DEVELOPMENT.md) にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
+- `DEVELOPMENT.md` にスレッドモデル (Event loop / クリップボードワーカー / ホットキー) の説明を追記
 
 ### Changed
 
@@ -643,7 +661,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.1.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.1.1...develop
+[1.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.1.0...v1.1.1
 [1.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.0.0...v1.1.0
 [1.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.1...v1.0.0
 [0.15.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.15.0...v0.15.1

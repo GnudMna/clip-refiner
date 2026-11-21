@@ -40,6 +40,10 @@ impl TextClipboard for OwnedClipboard {
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
         TextClipboard::set_text(&mut self.inner, text)
     }
+
+    fn is_excluded_from_monitoring(&mut self) -> bool {
+        crate::native::clipboard_exclusion::is_excluded_from_monitoring()
+    }
 }
 
 impl ImageClipboard for OwnedClipboard {

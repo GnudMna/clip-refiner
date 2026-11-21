@@ -44,6 +44,9 @@ pub(crate) enum UpdateError {
         /// リリースタグ
         tag: String,
     },
+    /// アセット名が単一のファイル名として安全に扱えない
+    #[error("最新リリースのアセット名が不正なため更新できません")]
+    AssetNameInvalid,
     /// アセットに digest / sha256 が無い
     #[error("最新リリースにアセットの完全性情報 (digest) がありません (asset={asset})")]
     DigestMissing {

@@ -15,6 +15,15 @@ const SHA256_HEX_LEN: usize = 64;
 ///
 /// MSI / ポータブル ZIP の想定サイズを大きく上回る応答でディスクを圧迫しないための上限
 pub(crate) const MAX_UPDATE_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
+/// アセット名の最大バイト数
+///
+/// 署名ファイル名 (`<asset>.minisig`) を付けても NTFS のファイル名上限 255 に収まる長さ
+const MAX_ASSET_NAME_LEN: usize = 200;
+/// Windows の予約デバイス名 (拡張子付きでもデバイスとして解釈されうる)
+const RESERVED_DEVICE_NAMES: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
 
 // ======================================================================
 // パブリック関数
@@ -47,6 +56,35 @@ pub(crate) fn parse_asset_digest(raw: &str) -> Result<String, UpdateError> {
     }
 
     Ok(hex.to_ascii_lowercase())
+}
+
+/// アセット名が単一のファイル名として安全に扱えるか検証する
+///
+/// アセット名は作業ディレクトリ配下の保存先パスと bridge のダウンロード URL に
+/// そのまま使うため、ASCII 英数字と `.` `-` `_` だけからなる名前に限る
+/// パス区切り・ドライブ指定・`..`・URL で意味を持つ文字・Windows の予約デバイス名を拒否する
+///
+/// # Arguments
+/// * `name` - version API が報告するアセット名
+///
+/// # Returns
+/// * `Result<(), UpdateError>` - 安全なファイル名なら `Ok(())`
+pub(crate) fn validate_asset_name(name: &str) -> Result<(), UpdateError> {
+    let valid_chars = name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'));
+    // 先頭 `.` は `.` / `..` と隠しファイル、末尾 `.` は Windows の名前正規化を避ける
+    let valid = !name.is_empty()
+        && name.len() <= MAX_ASSET_NAME_LEN
+        && valid_chars
+        && !name.starts_with('.')
+        && !name.ends_with('.')
+        && !is_reserved_device_name(name);
+    if !valid {
+        crate::log_warn!("不正な更新アセット名を拒否: {name:?}");
+        return Err(UpdateError::AssetNameInvalid);
+    }
+    Ok(())
 }
 
 /// アセットの宣言サイズがダウンロード可能な範囲か検証する
@@ -102,6 +140,14 @@ pub(crate) fn download_and_verify_with_key(
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// 最初の `.` より前の部分が Windows の予約デバイス名か判定する
+fn is_reserved_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name);
+    RESERVED_DEVICE_NAMES
+        .iter()
+        .any(|reserved| stem.eq_ignore_ascii_case(reserved))
+}
+
 /// ダウンロード本体 (失敗時の削除は呼び出し側)
 fn download_and_verify_inner(
     url: &str,
@@ -229,6 +275,67 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+
+    /// 配布物の命名規約に沿ったアセット名を受け付けること
+    #[test]
+    fn validate_asset_name_accepts_release_names() {
+        for name in [
+            "clip-refiner-0.13.1-x86_64.msi",
+            "clip-refiner-0.15.1-aarch64-pc-windows-msvc-portable.zip",
+            "ClipRefiner_1.0.0.MSI",
+        ] {
+            assert!(validate_asset_name(name).is_ok(), "{name}");
+        }
+    }
+
+    /// パスとして解釈されうるアセット名を拒否すること
+    #[test]
+    fn validate_asset_name_rejects_path_like_names() {
+        let too_long = format!("{}.msi", "a".repeat(MAX_ASSET_NAME_LEN));
+        for name in [
+            "",
+            ".",
+            "..",
+            "../evil.msi",
+            "..\\evil.msi",
+            "sub/evil.msi",
+            "sub\\evil.msi",
+            "C:\\Windows\\evil.msi",
+            "C:evil.msi",
+            "\\\\server\\share\\evil.msi",
+            "evil.msi:stream",
+            ".hidden.msi",
+            "evil.msi.",
+            "evil msi.msi",
+            "evil%2F.msi",
+            "evil.msi?x=1",
+            "evil.msi#frag",
+            "評価.msi",
+            too_long.as_str(),
+        ] {
+            assert_eq!(
+                validate_asset_name(name),
+                Err(UpdateError::AssetNameInvalid),
+                "{name:?}"
+            );
+        }
+    }
+
+    /// Windows の予約デバイス名を拡張子付きでも拒否すること
+    #[test]
+    fn validate_asset_name_rejects_reserved_device_names() {
+        for name in ["CON", "nul.msi", "Com1.portable.zip"] {
+            assert_eq!(
+                validate_asset_name(name),
+                Err(UpdateError::AssetNameInvalid),
+                "{name}"
+            );
+        }
+
+        // 最初の `.` より前が予約名と一致しなければ許可する
+        assert!(validate_asset_name("lpt9-portable.zip").is_ok());
+        assert!(validate_asset_name("console.msi").is_ok());
+    }
 
     /// ローカルファイルのサイズと SHA-256 を検証する (テスト用)
     fn verify_file_integrity(

@@ -45,27 +45,29 @@ impl MonitorLoopState {
     /// 監視世代の切り替え時にベースラインを再同期する
     ///
     /// 現在のクリップボード本文を観測済みとして記録し、イベント監視用トークンと
-    /// ポーリング用タイマーをリセットする
+    /// ポーリング用タイマーをリセットする。監視除外が指定された内容は本文を読まない。
     ///
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
     /// * `state` - アプリケーションの共有状態
     pub fn reset(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
-        let text = clipboard.get_text().unwrap_or_default();
         let new_token = clipboard_seq::token().unwrap_or(0);
-        let token_changed = new_token != self.last_token;
-        let initial_sync = self.tracked_generation == 0;
-        let already_seen = state
-            .clipboard_session()
-            .with_processed_state(|ps| ps.matches_last_seen(&text));
-        state.clipboard_session().record_clipboard_observed(&text);
-        clipboard_monitor::recover_continuous_record_on_reset(
-            state,
-            &text,
-            token_changed,
-            already_seen,
-            initial_sync,
-        );
+        if !clipboard.is_excluded_from_monitoring() {
+            let text = clipboard.get_text().unwrap_or_default();
+            let token_changed = new_token != self.last_token;
+            let initial_sync = self.tracked_generation == 0;
+            let already_seen = state
+                .clipboard_session()
+                .with_processed_state(|ps| ps.matches_last_seen(&text));
+            state.clipboard_session().record_clipboard_observed(&text);
+            clipboard_monitor::recover_continuous_record_on_reset(
+                state,
+                &text,
+                token_changed,
+                already_seen,
+                initial_sync,
+            );
+        }
         self.last_token = new_token;
         self.last_poll_at = Instant::now();
         self.tracked_generation = state.monitor_generation.load(Ordering::SeqCst);

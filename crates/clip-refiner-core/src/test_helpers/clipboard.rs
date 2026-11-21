@@ -10,6 +10,7 @@ pub struct InMemoryTextClipboard {
     written_image: Option<(u32, u32, Vec<u8>)>,
     fail_on_read: bool,
     fail_on_write: bool,
+    excluded_from_monitoring: bool,
 }
 
 impl InMemoryTextClipboard {
@@ -28,6 +29,7 @@ impl InMemoryTextClipboard {
             written_image: None,
             fail_on_read: false,
             fail_on_write: false,
+            excluded_from_monitoring: false,
         }
     }
 
@@ -75,6 +77,19 @@ impl InMemoryTextClipboard {
         self
     }
 
+    /// パスワードマネージャー等の監視除外指定付きとして扱う
+    ///
+    /// # Arguments
+    /// * `self` - 設定対象のインメモリクリップボード
+    ///
+    /// # Returns
+    /// * `Self` - 監視除外フラグを立てたクリップボード
+    #[must_use]
+    pub fn excluded_from_monitoring(mut self) -> Self {
+        self.excluded_from_monitoring = true;
+        self
+    }
+
     /// 保持中のテキストを返す
     ///
     /// # Arguments
@@ -114,6 +129,10 @@ impl TextClipboard for InMemoryTextClipboard {
         }
         self.text = text;
         Ok(())
+    }
+
+    fn is_excluded_from_monitoring(&mut self) -> bool {
+        self.excluded_from_monitoring
     }
 }
 

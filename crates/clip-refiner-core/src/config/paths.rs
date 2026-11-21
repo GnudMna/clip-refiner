@@ -1,4 +1,4 @@
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use crate::error::ConfigError;
 // ======================================================================
 // テスト用設定ディレクトリ
 // ======================================================================
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 thread_local! {
     static TEST_CONFIG_DIR: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
     /// 既定アプリ起動を抑止してパスを記録するかどうか
@@ -27,7 +27,7 @@ thread_local! {
 ///
 /// 優先順位:
 /// 1. 環境変数 `CLIP_REFINER_CONFIG_DIR` (非空のとき)
-/// 2. テスト用上書き (`set_test_config_dir`, debug/test のみ)
+/// 2. テスト用上書き (`set_test_config_dir`, debug/test/`test-helpers` のみ)
 /// 3. ポータブルモード (実行ファイル隣に `portable` があるとき `<exe_dir>/data`)
 /// 4. `%APPDATA%` 配下の `ClipRefiner`
 ///
@@ -41,7 +41,7 @@ pub fn get_config_dir() -> Result<PathBuf, ConfigError> {
         return Ok(dir);
     }
 
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
     if let Some(dir) = test_config_dir_override() {
         return Ok(dir);
     }
@@ -64,7 +64,7 @@ pub fn is_portable_mode() -> bool {
         return false;
     }
 
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
     if test_config_dir_override().is_some() {
         return false;
     }
@@ -119,20 +119,20 @@ fn config_base_dir() -> Result<PathBuf, ConfigError> {
 ///
 /// # Arguments
 /// * `dir` - 上書き先の設定ディレクトリパス
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub fn set_test_config_dir(dir: PathBuf) {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = Some(dir));
 }
 
 /// テスト用設定ディレクトリの上書きを解除する
 ///
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub fn clear_test_config_dir() {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = None);
     super::clip_store_key::clear_clip_store_key_cache();
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 fn test_config_dir_override() -> Option<PathBuf> {
     TEST_CONFIG_DIR.with(|cell| cell.borrow().clone())
 }
@@ -194,7 +194,7 @@ pub fn open_config_file() -> Result<(), ConfigError> {
 /// テスト時に既定アプリ起動を抑止し、開こうとしたパスの記録を開始する
 ///
 /// [`take_captured_open_path_for_test`] で記録を取得して終了する
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub fn begin_capture_open_path_for_test() {
     CAPTURED_OPEN_PATH.with(|cell| *cell.borrow_mut() = None);
     OPEN_PATH_CAPTURE_ENABLED.with(|cell| cell.set(true));
@@ -204,7 +204,7 @@ pub fn begin_capture_open_path_for_test() {
 ///
 /// # Returns
 /// * `Option<PathBuf>` - キャプチャ中に開こうとしたパス。未起動なら `None`
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub fn take_captured_open_path_for_test() -> Option<PathBuf> {
     OPEN_PATH_CAPTURE_ENABLED.with(|cell| cell.set(false));
     CAPTURED_OPEN_PATH.with(|cell| cell.borrow_mut().take())
@@ -212,7 +212,7 @@ pub fn take_captured_open_path_for_test() -> Option<PathBuf> {
 
 /// パスを既定アプリケーションで開く
 fn open_path_in_default_application(path: &Path) -> Result<(), ConfigError> {
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
     if OPEN_PATH_CAPTURE_ENABLED.with(Cell::get) {
         CAPTURED_OPEN_PATH.with(|cell| *cell.borrow_mut() = Some(path.to_path_buf()));
         return Ok(());

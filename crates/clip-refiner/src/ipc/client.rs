@@ -1,6 +1,6 @@
 //! ワンショット IPC クライアント (CLI 側)
 
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Write};
 use std::os::windows::io::AsRawHandle;
 use std::thread;
@@ -10,6 +10,7 @@ use super::protocol::{
     BoundedLine, MAX_IPC_MESSAGE_BYTES, OneshotIpcRequest, OneshotIpcResponse, build_request,
     parse_response, read_bounded_line,
 };
+use super::session::{is_server_in_current_session, resident_pipe_name};
 use crate::consts;
 use crate::refiner::{RefineContext, RefineMode};
 
@@ -47,6 +48,9 @@ pub enum ClientError {
     /// 応答 JSON が不正
     #[error("常駐プロセスからの応答を解釈できませんでした: {0}")]
     Protocol(String),
+    /// パイプの作成元が別のログオンセッションにあり、要求を送らずに切断した
+    #[error("常駐プロセスのパイプが別のログオンセッションで作成されています")]
+    ForeignSession,
 }
 
 impl ClientError {
@@ -87,7 +91,8 @@ pub fn process_via_resident(
     pipeline: &[RefineMode],
     ctx: &RefineContext,
 ) -> Result<OneshotIpcResponse, ClientError> {
-    process_via_pipe(consts::ONESHOT_IPC_PIPE_NAME, pipeline, ctx)
+    let pipe_name = resident_pipe_name().map_err(|e| ClientError::Connect(e.to_string()))?;
+    process_via_pipe(&pipe_name, pipeline, ctx)
 }
 
 /// 指定パイプへワンショット加工を委譲する
@@ -143,11 +148,7 @@ pub(crate) fn send_raw_line_to_pipe(
     pipe_name: &str,
     line: &str,
 ) -> Result<OneshotIpcResponse, ClientError> {
-    let mut stream = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(pipe_name)
-        .map_err(|e| ClientError::Connect(e.to_string()))?;
+    let mut stream = open_pipe(pipe_name)?;
 
     writeln!(stream, "{line}").map_err(|e| ClientError::Io(e.to_string()))?;
     stream.flush().map_err(|e| ClientError::Io(e.to_string()))?;
@@ -184,6 +185,32 @@ pub(crate) fn wait_for_named_pipe(pipe_name: &str, timeout: Duration) -> bool {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// パイプへ接続し、作成元が現在のログオンセッションにあることを確かめる
+///
+/// 名前付きパイプの名前空間はマシン全体で共有されるため、別セッションのプロセスが
+/// 同じ名前のパイプを先に作成している場合は要求を送らずに切断する
+///
+/// # Arguments
+/// * `pipe_name` - 接続先パイプ名
+///
+/// # Returns
+/// * `Result<File, ClientError>` - 接続済みのパイプ
+///
+/// # Errors
+/// 接続できない場合、または作成元が別セッションの場合
+fn open_pipe(pipe_name: &str) -> Result<File, ClientError> {
+    let stream = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(pipe_name)
+        .map_err(|e| ClientError::Connect(e.to_string()))?;
+    match is_server_in_current_session(&stream) {
+        Ok(true) => Ok(stream),
+        Ok(false) => Err(ClientError::ForeignSession),
+        Err(e) => Err(ClientError::Connect(e.to_string())),
+    }
+}
+
 fn new_request_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -200,18 +227,14 @@ fn send_request_to(
         return Err(ClientError::Protocol("要求が大きすぎます".into()));
     }
 
-    let mut stream = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(pipe_name)
-        .map_err(|e| ClientError::Connect(e.to_string()))?;
+    let mut stream = open_pipe(pipe_name)?;
 
     writeln!(stream, "{body}").map_err(|e| ClientError::Io(e.to_string()))?;
     stream.flush().map_err(|e| ClientError::Io(e.to_string()))?;
     read_response_line(&mut stream)
 }
 
-fn read_response_line(stream: &mut std::fs::File) -> Result<OneshotIpcResponse, ClientError> {
+fn read_response_line(stream: &mut File) -> Result<OneshotIpcResponse, ClientError> {
     let started = Instant::now();
     // サーバーが応答せず切断する経路 (過大要求破棄など) でも固まらないよう、
     // 受信データまたは切断をタイムアウト付きで待つ
@@ -248,7 +271,7 @@ fn read_response_line(stream: &mut std::fs::File) -> Result<OneshotIpcResponse, 
     }
 }
 
-fn pipe_has_pending_data(stream: &std::fs::File) -> bool {
+fn pipe_has_pending_data(stream: &File) -> bool {
     let mut avail = 0u32;
     // SAFETY: `stream` が所有する有効なパイプハンドルを借用し、`avail` は呼び出し中に生存する
     let ok = unsafe {
@@ -264,7 +287,7 @@ fn pipe_has_pending_data(stream: &std::fs::File) -> bool {
     ok.is_ok() && avail > 0
 }
 
-fn pipe_is_still_connected(stream: &std::fs::File) -> bool {
+fn pipe_is_still_connected(stream: &File) -> bool {
     let mut avail = 0u32;
     // SAFETY: `stream` が所有する有効なパイプハンドルを借用し、`avail` は呼び出し中に生存する
     unsafe {

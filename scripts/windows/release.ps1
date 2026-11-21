@@ -210,7 +210,7 @@ Invoke-ScriptMain {
     Write-Host 'リリース手順が完了しました'
     Write-Host ''
     Write-Host '次の作業 (手動):'
-    Write-Host '  - README.md / CONFIG.md にユーザ向けの大きな変更があれば更新'
+    Write-Host '  - README.md / docs/user/ にユーザ向けの大きな変更があれば更新'
     Write-Host '  - consts::CONFIG_VERSION を変更した場合は CHANGELOG の設定節を追記'
     Write-Host "  - リモートへ push: git push -u origin $releaseBranch"
     Write-Host "  - Gitea 上で v$newVersion タグを付与する"

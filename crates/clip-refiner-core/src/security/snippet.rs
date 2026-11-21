@@ -8,7 +8,6 @@ use regex::Regex;
 // 機密情報の検出
 // ======================================================================
 /// 機密情報検出用の正規表現をコンパイルする
-#[allow(clippy::expect_used)]
 fn sensitive_regex(pattern: &str) -> Regex {
     Regex::new(pattern).expect("機密情報検出用正規表現のコンパイルに失敗")
 }

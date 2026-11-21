@@ -55,7 +55,7 @@ function Assert-UpdateSigningReady {
     # 関数の戻り値はパイプラインで展開され 1 件だとスカラーになるため、配列に包み直す
     $publicKeys = @(Get-UpdateSigningPublicKeyPaths -ProjectRoot $ProjectRoot)
     if ($publicKeys.Count -eq 0) {
-        throw 'エラー: keys/update-signing/*.pub がありません。公開鍵を埋め込まないとアプリが更新を適用できません (DEVELOPMENT.md の更新署名鍵を参照)'
+        throw 'エラー: keys/update-signing/*.pub がありません。公開鍵を埋め込まないとアプリが更新を適用できません (docs/dev/release.md の更新署名鍵を参照)'
     }
 
     $secretKey = [Environment]::GetEnvironmentVariable('CLIP_REFINER_SIGNING_KEY')

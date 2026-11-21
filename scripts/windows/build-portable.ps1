@@ -9,7 +9,7 @@
 #
 # 前提:
 #   - 実行ファイル隣の `portable` マーカーでポータブルモードになること
-#     (詳細は CONFIG.md の「ポータブルモード」)
+#     (詳細は docs/user/configuration.md の「ポータブルモード」)
 #
 # 出力:
 #   target/portable/clip-refiner-{version}-{target-triple}-portable/
@@ -214,7 +214,7 @@ ClipRefiner ポータブル版
 注意:
 - ログイン時の自動起動はレジストリに絶対パスを書くため、USB 用途には向きません
 - 登録クリップの鍵は Windows DPAPI で保護されるため、別ユーザー / 別 PC では復号できない場合があります
-- 詳細はプロジェクトの CONFIG.md (ポータブルモード) を参照してください
+- 詳細はプロジェクトの docs/user/configuration.md (ポータブルモード) を参照してください
 "@
         Set-Content -LiteralPath (Join-Path $stagingWorkDir $ReadmeName) -Value $portableReadme.TrimEnd() -Encoding utf8
 

@@ -14,9 +14,10 @@ pub const APP_NAME: &str = "ClipRefiner";
 /// 多重起動防止やレジストリ、設定のスコープ分離に使用される
 pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 
-/// ワンショット CLI と常駐プロセス間の名前付きパイプパス
+/// ワンショット CLI と常駐プロセス間の名前付きパイプパスの基底名
 ///
 /// 常駐側がサーバー、`--mode` / `--pipeline` 実行側がクライアントになる
+/// 実際のパイプ名は末尾に `.<ログオンセッション ID>` を付け、セッションごとの常駐と対応させる
 pub const ONESHOT_IPC_PIPE_NAME: &str = r"\\.\pipe\com.y_hirata.clip-refiner.oneshot";
 
 /// 設定ディレクトリ上書き用の環境変数名

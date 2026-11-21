@@ -1,6 +1,6 @@
 # ClipRefiner
 
-クリップボードのテキストを加工する Windows 常駐アプリ。詳細な開発手順・設計は [DEVELOPMENT.md](DEVELOPMENT.md)、設定仕様は [CONFIG.md](CONFIG.md) を参照する。
+クリップボードのテキストを加工する Windows 常駐アプリ。開発者向けドキュメントは [docs/dev/](docs/dev/) (環境構築・テスト・アーキテクチャ・リリース・開発規約)、利用者向けは [docs/user/](docs/user/) にあり、設定仕様は [docs/user/configuration.md](docs/user/configuration.md) を参照する。どの文書に何を書くかは [docs/dev/contributing.md のドキュメントの配置](docs/dev/contributing.md#ドキュメントの配置) に従う。
 
 ## 構成
 
@@ -16,7 +16,7 @@
 
 ```powershell
 cargo fmt
-cargo test                          # 単体テスト + 統合テスト
+cargo test --all-targets --features test-helpers  # 単体テスト + 統合テスト (check.ps1 と同じ。--release でも通る)
 cargo test --test monitor_flow      # 統合テストを絞る (tests/*_flow.rs)
 cargo test -p clip-refiner-core --no-default-features --all-targets
 ./scripts/windows/clippy.ps1        # clippy (-D warnings)
@@ -34,9 +34,9 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 `cargo test` はコードとドキュメントのずれを検出する。次を変えたら同じ変更で更新する。
 
-- 設定キー・既定値・処理上限・既定ホットキー・`CONFIG_VERSION` → CONFIG.md の設定項目表 / 処理の制限、README のホットキー表 (`crates/clip-refiner-core/src/config/spec.rs` が検証)
+- 設定キー・既定値・処理上限・既定ホットキー・`CONFIG_VERSION` → `docs/user/configuration.md` の設定項目表 / 処理の制限、README のホットキー表 (`crates/clip-refiner-core/src/config/spec.rs` が検証)
 - UI の JavaScript → `*.bundle.js` を再生成 (`tests/ui_bundle_flow.rs` が検証)
-- 利用者に見える挙動 → README / CONFIG の該当節
+- 利用者に見える挙動 → README / `docs/user/` の該当節
 
 ドキュメントは常体 (だ・である調) で書く。
 

@@ -39,7 +39,8 @@ pub use harness::ClipboardHarness;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use ipc::{
     process_oneshot_via_pipe, send_raw_oneshot_line, spawn_oneshot_stub_responder,
-    start_oneshot_ipc_for_test, unique_oneshot_pipe_name, wait_for_oneshot_pipe,
+    start_oneshot_ipc_for_test, start_oneshot_ipc_with_read_timeout_for_test,
+    unique_oneshot_pipe_name, wait_for_oneshot_pipe,
 };
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use js_runner::run_js_test_script;

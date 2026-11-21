@@ -1,4 +1,4 @@
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, ConfigError>;
 const CLIP_STORE_KEY_FILE: &str = "registered-clips.key";
 static CLIP_STORE_KEY: OnceLock<[u8; CIPHER_KEY_LEN]> = OnceLock::new();
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 thread_local! {
     static THREAD_CLIP_STORE_KEY: RefCell<Option<[u8; CIPHER_KEY_LEN]>> = const { RefCell::new(None) };
 }
@@ -36,7 +36,7 @@ thread_local! {
 /// # Errors
 /// 設定ディレクトリ取得、鍵ファイル読み書き、DPAPI / パーミッション設定のいずれかに失敗した場合
 pub fn clip_store_key() -> Result<[u8; CIPHER_KEY_LEN]> {
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
     if let Some(key) = thread_local_clip_store_key() {
         return Ok(key);
     }
@@ -50,7 +50,7 @@ pub fn clip_store_key() -> Result<[u8; CIPHER_KEY_LEN]> {
     Ok(key)
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 fn thread_local_clip_store_key() -> Option<[u8; CIPHER_KEY_LEN]> {
     THREAD_CLIP_STORE_KEY.with(|cell| {
         if let Some(key) = *cell.borrow() {
@@ -74,7 +74,7 @@ pub fn ensure_clip_store_key() -> Result<()> {
 }
 
 /// テスト用にキャッシュ済み暗号化鍵を破棄する
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 pub(crate) fn clear_clip_store_key_cache() {
     THREAD_CLIP_STORE_KEY.with(|cell| *cell.borrow_mut() = None);
 }

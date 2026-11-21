@@ -259,7 +259,6 @@ mod tests {
     use crate::security::ContentFingerprint;
     use crate::tray::state::ProcessedState;
 
-    #[allow(clippy::expect_used)]
     fn session() -> ClipboardSessionState {
         ClipboardSessionState::new().expect("テスト用クリップボードセッションの生成に失敗")
     }

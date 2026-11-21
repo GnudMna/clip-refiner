@@ -4,7 +4,9 @@ use super::super::error::UpdateError;
 use super::super::types::{
     AvailableUpdate, UpdateCheckOutcome, UpdatePackageKind, VersionApiResponse,
 };
-use super::super::verify::{parse_asset_digest, validate_declared_download_size};
+use super::super::verify::{
+    parse_asset_digest, validate_asset_name, validate_declared_download_size,
+};
 use super::asset::{asset_matches_kind, select_asset};
 use super::version::{parse_semver, strip_version_prefix};
 
@@ -64,6 +66,9 @@ pub(crate) fn evaluate_update(
         return err.into();
     };
 
+    if let Err(err) = validate_asset_name(&asset.name) {
+        return err.into();
+    }
     let Some(raw_digest) = asset.integrity_raw() else {
         return UpdateError::DigestMissing {
             asset: asset.name.clone(),
@@ -242,6 +247,30 @@ mod tests {
         match outcome {
             UpdateCheckOutcome::Error { message } => {
                 assert!(message.contains("digest"));
+            }
+            other => panic!("想定外: {other:?}"),
+        }
+    }
+
+    /// パス区切りを含むアセット名は Available にしないようにすること
+    #[test]
+    fn evaluate_update_errors_when_asset_name_is_path() {
+        let current = Version::parse("0.13.0").expect("semver");
+        let response = VersionApiResponse {
+            tag: "v0.13.1".to_string(),
+            assets: vec![asset("..\\..\\clip-refiner-0.13.1-x86_64.msi", 42)],
+        };
+
+        let outcome = evaluate_update(
+            "0.13.0",
+            &current,
+            &response,
+            UpdatePackageKind::Msi,
+            "x86_64",
+        );
+        match outcome {
+            UpdateCheckOutcome::Error { message } => {
+                assert!(message.contains("アセット名"));
             }
             other => panic!("想定外: {other:?}"),
         }

@@ -36,6 +36,19 @@ pub trait TextClipboard {
     /// # Errors
     /// クリップボードへの書き込みに失敗した場合
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError>;
+
+    /// 現在の内容がパスワードマネージャー等により監視除外を指定されているか判定する
+    ///
+    /// 本文を読む前に呼ぶ。既定実装は常に `false`
+    ///
+    /// # Arguments
+    /// * `self` - 判定対象のクリップボード
+    ///
+    /// # Returns
+    /// * `bool` - 除外指定がある場合は `true`
+    fn is_excluded_from_monitoring(&mut self) -> bool {
+        false
+    }
 }
 
 /// 画像形式のクリップボード読み書き

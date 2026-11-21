@@ -7,8 +7,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::ipc::{
-    ClientError, OneshotIpcResponse, OneshotIpcServer, OneshotProcessResult, process_via_pipe,
-    send_raw_line_to_pipe, wait_for_named_pipe,
+    ClientError, OneshotIpcResponse, OneshotIpcServer, OneshotProcessResult, REQUEST_READ_TIMEOUT,
+    process_via_pipe, send_raw_line_to_pipe, wait_for_named_pipe,
 };
 use crate::refiner::{RefineContext, RefineMode};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
@@ -68,8 +68,25 @@ pub fn spawn_oneshot_stub_responder(
 pub fn start_oneshot_ipc_for_test(
     worker: Arc<ClipboardWorkerHandle>,
 ) -> (OneshotIpcServer, String) {
+    start_oneshot_ipc_with_read_timeout_for_test(worker, REQUEST_READ_TIMEOUT)
+}
+
+/// 要求の読み取り期限を指定してテスト用 IPC サーバーを起動する
+///
+/// 要求を送らない接続が期限で切断される経路を短時間で検証するために使う
+///
+/// # Arguments
+/// * `worker` - クリップボードワーカーへのハンドル
+/// * `read_timeout` - 接続から要求 1 行を受け取り終えるまでの上限
+///
+/// # Returns
+/// * `(OneshotIpcServer, String)` - サーバーガードとパイプ名
+pub fn start_oneshot_ipc_with_read_timeout_for_test(
+    worker: Arc<ClipboardWorkerHandle>,
+    read_timeout: Duration,
+) -> (OneshotIpcServer, String) {
     let pipe_name = unique_oneshot_pipe_name();
-    let server = OneshotIpcServer::start_named(worker, pipe_name.clone())
+    let server = OneshotIpcServer::start_named(worker, pipe_name.clone(), read_timeout)
         .expect("ワンショット IPC 待受スレッドの起動に失敗");
     assert!(
         wait_for_named_pipe(&pipe_name, Duration::from_secs(2)),

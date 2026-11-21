@@ -101,6 +101,12 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
         return ClipboardObserveResult::Observed;
     }
 
+    // パスワードマネージャー等の除外指定付きコピーは本文を読まずに観測済みとする
+    if clipboard.is_excluded_from_monitoring() {
+        crate::log_debug!("監視除外が指定されたクリップボード内容のため加工をスキップ");
+        return ClipboardObserveResult::Observed;
+    }
+
     let text = match clipboard.get_text() {
         Ok(text) => text,
         Err(_) if snap.produces_image() => String::new(),
@@ -169,6 +175,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
 /// 連続記録モードでクリップボードの内容更新を検知し、元テキストをキューへ積む
 ///
 /// 加工は行わず、クリップボードへの書き戻しや通知も発生しない
+/// 監視除外が指定された内容は本文を読まずに記録対象外とする
 ///
 /// # Returns
 /// * `ClipboardObserveResult` - 読み取り失敗時は `ReadFailed`、それ以外は `Observed`
@@ -176,6 +183,11 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
 ) -> ClipboardObserveResult {
+    if clipboard.is_excluded_from_monitoring() {
+        crate::log_debug!("監視除外が指定されたクリップボード内容のため記録をスキップ");
+        return ClipboardObserveResult::Observed;
+    }
+
     let Ok(text) = clipboard.get_text() else {
         return ClipboardObserveResult::ReadFailed;
     };
@@ -436,6 +448,46 @@ mod tests {
         assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
 
         assert_eq!(collect_history(&state), vec!["source".to_string()]);
+    }
+
+    /// 監視除外指定付きの内容は加工・履歴記録しないようにすること
+    #[test]
+    fn handle_update_skips_excluded_content() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
+        let mut clipboard =
+            InMemoryTextClipboard::with_text("  secret  ").excluded_from_monitoring();
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            true,
+            &RefineContext::default(),
+        );
+
+        // 書き戻さず、観測済み扱いで変更トークンを進める
+        assert_eq!(result, ClipboardObserveResult::Observed);
+        assert_eq!(clipboard.text(), "  secret  ");
+        assert_eq!(collect_history(&state), Vec::<String>::new());
+        let ps = state
+            .clipboard_session()
+            .with_processed_state(|s| s.clone());
+        assert!(!ps.matches_last_seen("  secret  "));
+    }
+
+    /// 監視除外指定付きの内容は連続記録キューへ積まないようにすること
+    #[test]
+    fn continuous_record_skips_excluded_content() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        let mut clipboard = InMemoryTextClipboard::with_text("secret").excluded_from_monitoring();
+
+        assert_eq!(
+            observe_continuous_record(&mut clipboard, &state),
+            ClipboardObserveResult::Observed
+        );
+        assert_eq!(collect_continuous_record(&state), Vec::<String>::new());
     }
 
     /// 連続記録モードでは元テキストを加工せず履歴へ記録すること

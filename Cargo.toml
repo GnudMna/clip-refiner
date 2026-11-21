@@ -3,7 +3,7 @@ members = ["crates/clip-refiner", "crates/clip-refiner-core"]
 resolver = "2"
 
 [workspace.package]
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]
@@ -49,7 +49,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tray-icon = "0.26.0"
 ureq = { version = "3.4.2", features = ["json"] }
 windows = "0.62.2"
-windows-future = { version = "0.100.0", features = ["std"] }
 winreg = "0.56.0"
 winres = "0.1.12"
 wry = "0.57.0"
@@ -63,9 +62,6 @@ strip = true
 lto = "fat"
 incremental = false
 codegen-units = 1
-
-[workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

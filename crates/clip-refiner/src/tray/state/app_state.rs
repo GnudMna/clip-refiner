@@ -269,7 +269,6 @@ impl AppState {
 // ======================================================================
 /// ユニットテスト用の `AppState` を生成する
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-#[allow(clippy::expect_used)]
 pub(crate) fn test_app_state() -> AppState {
     test_app_state_inner(false)
 }
@@ -278,13 +277,11 @@ pub(crate) fn test_app_state() -> AppState {
 ///
 /// `with_temp_config_dir` 内でのみ使うこと
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-#[allow(clippy::expect_used)]
 pub(crate) fn test_app_state_with_persistence() -> AppState {
     test_app_state_inner(true)
 }
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-#[allow(clippy::expect_used)]
 fn test_app_state_inner(persist_config: bool) -> AppState {
     use crate::config::AppConfig;
     use crate::refiner::RefineMode;

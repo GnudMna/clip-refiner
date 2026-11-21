@@ -8,11 +8,12 @@ use super::signature::{
     download_signature, embedded_signing_keys, signature_asset_name, verify_file_signature,
 };
 use super::types::{AvailableUpdate, UpdateApplyOutcome};
-use super::verify::download_and_verify_with_key;
+use super::verify::{download_and_verify_with_key, validate_asset_name};
 use super::{
     BRIDGE_BASE_URL, RELEASE_OWNER, RELEASE_REPO, UPDATE_WORK_DIR_NAME, bridge_download_key,
 };
 
+use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
 use zip::ZipArchive;
 
 // ======================================================================
@@ -126,6 +127,10 @@ fn apply_update_with(
     download_key: Option<&str>,
     trusted_keys: &[&str],
 ) -> UpdateApplyOutcome {
+    // 確認時にも検証済みだが、保存先パスと URL に使う直前でも再確認する
+    if let Err(err) = validate_asset_name(&update.asset_name) {
+        return err.into();
+    }
     let work_dir = match update_work_dir(&update.latest_version) {
         Ok(dir) => dir,
         Err(err) => return err.into(),
@@ -256,12 +261,18 @@ fn update_work_dir(version: &str) -> Result<PathBuf, UpdateError> {
 }
 
 /// MSI を `msiexec` で起動する
+///
+/// 実行ファイルと同じフォルダの同名ファイルを拾わないよう、システムフォルダの絶対パスで起動する
 fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
     let Some(path_str) = msi_path.to_str() else {
         return UpdateError::MsiPathInvalid.into();
     };
+    let Some(msiexec) = system_msiexec_path() else {
+        crate::log_warn!("システムフォルダの取得に失敗");
+        return UpdateError::MsiLaunch.into();
+    };
 
-    match std::process::Command::new("msiexec")
+    match std::process::Command::new(msiexec)
         .args(["/i", path_str])
         .spawn()
     {
@@ -271,6 +282,21 @@ fn launch_msi(msi_path: &Path) -> UpdateApplyOutcome {
             UpdateError::MsiLaunch.into()
         }
     }
+}
+
+/// システムフォルダの `msiexec.exe` の絶対パスを返す
+///
+/// # Returns
+/// * `Option<PathBuf>` - 取得できない場合は `None`
+fn system_msiexec_path() -> Option<PathBuf> {
+    let mut buf = [0u16; 260];
+    // SAFETY: `buf` は呼び出し中有効な書き込み可能バッファで、長さはスライスから渡す
+    let len = usize::try_from(unsafe { GetSystemDirectoryW(Some(&mut buf)) }).ok()?;
+    if len == 0 || len >= buf.len() {
+        return None;
+    }
+    let dir = PathBuf::from(String::from_utf16(&buf[..len]).ok()?);
+    Some(dir.join("msiexec.exe"))
 }
 
 /// ポータブル ZIP を展開し、可能なら差し替えヘルパーを起動する
@@ -422,6 +448,14 @@ mod tests {
         );
     }
 
+    /// `msiexec` をシステムフォルダの絶対パスで解決できるようにすること
+    #[test]
+    fn system_msiexec_path_is_absolute_and_exists() {
+        let path = system_msiexec_path().expect("msiexec path");
+        assert!(path.is_absolute());
+        assert!(path.is_file(), "{}", path.display());
+    }
+
     /// ZIP を展開してファイル内容を復元できるようにすること
     #[test]
     fn extract_zip_archive_writes_nested_files() {
@@ -531,6 +565,27 @@ mod tests {
             asset_name: asset_name.to_string(),
             size: 1,
             sha256: "a".repeat(64),
+        }
+    }
+
+    /// 不正なアセット名ではダウンロードせずに失敗すること
+    #[test]
+    fn apply_update_rejects_path_like_asset_name() {
+        let update = sample_update("../clip-refiner-0.14.3-x86_64.msi");
+
+        // 接続できない URL でも検証で先に失敗するためネットワークへは出ない
+        let outcome = apply_update_with(
+            &update,
+            "http://127.0.0.1:9",
+            ApplyOptions::TEST,
+            None,
+            &["unused"],
+        );
+        match outcome {
+            UpdateApplyOutcome::Error { message } => {
+                assert_eq!(message, UpdateError::AssetNameInvalid.to_string());
+            }
+            other => panic!("expected Error, got {other:?}"),
         }
     }
 

@@ -1,13 +1,15 @@
 //! ワンショット名前付きパイプ IPC の実パイプ往復テスト
 
 use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::sync::Mutex;
+use std::thread;
 use std::time::Duration;
 
 use clip_refiner::test_helpers::{
     OneshotIpcStatus, OneshotProcessResult, process_oneshot_via_pipe, send_raw_oneshot_line,
-    set_worker_alive, spawn_oneshot_stub_responder, start_oneshot_ipc_for_test, stub_worker,
-    test_app_state_arc,
+    set_worker_alive, spawn_oneshot_stub_responder, start_oneshot_ipc_for_test,
+    start_oneshot_ipc_with_read_timeout_for_test, stub_worker, test_app_state_arc,
 };
 use clip_refiner_core::config::{RegexPreset, RegexSettings, RegexStep};
 use clip_refiner_core::{RefineContext, RefineMode};
@@ -312,5 +314,60 @@ fn oneshot_ipc_pipe_recovers_after_connection_limit() {
                 .expect("IPC 往復");
 
         assert_eq!(response.status, OneshotIpcStatus::Processed);
+    });
+}
+
+/// 要求を送らない接続が処理枠を埋めたままでも、読み取り期限で枠が空くようにすること
+#[test]
+fn oneshot_ipc_pipe_frees_slots_from_idle_connections_after_read_timeout() {
+    with_oneshot_ipc_lock(|| {
+        let read_timeout = Duration::from_millis(200);
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+        let _responder = spawn_oneshot_stub_responder(rx, |_, _| OneshotProcessResult::Processed);
+        let (_server, pipe_name) =
+            start_oneshot_ipc_with_read_timeout_for_test(worker, read_timeout);
+
+        // 処理枠 (4) と枠待ちの 1 接続を、要求を送らない接続で埋めたまま閉じない
+        let _idle: Vec<File> = (0..5).map(|_| open_idle_connection(&pipe_name)).collect();
+
+        // 処理中の接続が期限で切断され、枠待ちの接続も枠に入ったあと期限で切断される
+        thread::sleep(read_timeout * 3);
+
+        assert!(
+            clip_refiner::test_helpers::wait_for_oneshot_pipe(&pipe_name, Duration::from_secs(2)),
+            "期限切れ後のパイプ待受が開始されなかった"
+        );
+        let response =
+            process_oneshot_via_pipe(&pipe_name, &[RefineMode::Trim], &RefineContext::default())
+                .expect("IPC 往復");
+
+        assert_eq!(response.status, OneshotIpcStatus::Processed);
+    });
+}
+
+/// 改行を送らずに止まった接続は、期限で切断されたことをクライアントが検知できること
+#[test]
+fn oneshot_ipc_pipe_disconnects_partial_request_after_read_timeout() {
+    with_oneshot_ipc_lock(|| {
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+        drop(rx);
+        let (_server, pipe_name) =
+            start_oneshot_ipc_with_read_timeout_for_test(worker, Duration::from_millis(200));
+
+        let mut stream = open_idle_connection(&pipe_name);
+        stream
+            .write_all(b"{\"type\":")
+            .expect("途中までの要求を送る");
+        stream.flush().expect("flush");
+
+        // サーバーが切断すると応答を受け取らずに EOF / 切断エラーになる
+        let mut buf = Vec::new();
+        let read = stream.read_to_end(&mut buf);
+        assert!(
+            matches!(read, Ok(0)) || read.is_err(),
+            "期限切れで応答なしに切断されること: {read:?}"
+        );
     });
 }
