@@ -12,34 +12,12 @@ use arboard::Clipboard;
 use clap::Parser;
 use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
+use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg(windows)]
-use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-
-/// コマンドライン引数
-///
-/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
-#[derive(Parser, Debug)]
-#[command(
-    author,
-    version,
-    about = "クリップボードのテキストを加工するツール",
-    help_template = "\
-{about-with-newline}
-使用方法:
-    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
-    --mode指定: クリップボードの内容を一度だけ加工
-
-{all-args}
-"
-)]
-struct Args {
-    /// 実行モードの指定（ワンショット実行用）
-    #[arg(short = 'm', long = "mode", value_enum)]
-    mode: Option<refiner::RefineMode>,
-}
-
+// ======================================================================
+// エントリポイント
+// ======================================================================
 /// アプリケーションのエントリポイント
 ///
 /// 設定の初期化、ロギングのセットアップ、コマンドライン引数の解析を行い、
@@ -65,17 +43,52 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+// ======================================================================
+// 引数設定
+// ======================================================================
+/// コマンドライン引数
+///
+/// アプリケーションの動作モード（常駐またはワンショット）を指定します。
+#[derive(Parser, Debug)]
+#[command(
+    author,
+    version,
+    about = "クリップボードのテキストを加工するツール",
+    help_template = "\
+{about-with-newline}
+使用方法:
+    引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
+    --mode指定: クリップボードの内容を一度だけ加工
+
+{all-args}
+"
+)]
+struct Args {
+    /// 実行モードの指定（ワンショット実行用）
+    #[arg(short = 'm', long = "mode", value_enum)]
+    mode: Option<refiner::RefineMode>,
+}
+
+// ======================================================================
+// コンソール設定
+// ======================================================================
 /// Windows環境で親プロセスのコンソールをアタッチする
 ///
 /// これにより、コンソール（`cmd.exe` や `PowerShell`）から `cargo run` などで起動した場合に、
 /// アプリケーションからの標準出力がコンソール上に表示されるようになります。
 fn setup_console() {
     #[cfg(windows)]
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+
+    #[cfg(windows)]
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
     }
 }
 
+// ======================================================================
+// ロギング初期化
+// ======================================================================
 /// ロギングシステムを初期化する
 ///
 /// 設定ディレクトリ内の `logs` フォルダに日次のログファイルを作成し、
@@ -95,21 +108,21 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     let file_appender = tracing_appender::rolling::daily(&log_dir, "clip-refiner.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(non_blocking)
-        .with_ansi(false);
+    let file_layer = ts_fmt::layer().with_writer(non_blocking).with_ansi(false);
 
-    let stdout_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stdout);
-
-    tracing_subscriber::registry()
+    // stdout への出力はデバッグビルド限定とする。
+    let builder = tracing_subscriber::registry()
         .with(
             EnvFilter::builder()
                 .with_default_directive(tracing::Level::INFO.into())
                 .from_env_lossy(),
         )
-        .with(file_layer)
-        .with(stdout_layer)
-        .init();
+        .with(file_layer);
+
+    #[cfg(debug_assertions)]
+    let builder = builder.with(ts_fmt::layer().with_writer(std::io::stdout));
+
+    builder.init();
 
     // グローバルロガーを初期化
     logger::init_global_logger(Box::new(logger::TracingLogger::new(log_dir)));
@@ -119,6 +132,9 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
     Ok(guard)
 }
 
+// ======================================================================
+// 多重起動防止
+// ======================================================================
 /// アプリケーションの多重起動を防止し、インスタンスを保持する
 ///
 /// `APP_ID` を使用してシステム全体で一意のインスタンスを確認します。
@@ -141,6 +157,9 @@ fn ensure_single_instance() -> Result<SingleInstance> {
     Ok(instance)
 }
 
+// ======================================================================
+// ワンショット実行
+// ======================================================================
 /// クリップボードの内容を一度だけ加工して終了する
 ///
 /// 常駐せずに、現在のクリップボードのテキストを指定されたモードで加工し、

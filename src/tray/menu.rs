@@ -3,14 +3,17 @@ use std::sync::Mutex;
 use super::state::{AppState, LockExt};
 use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
-use strum::IntoEnumIterator;
 
 use anyhow::{Context, Result};
+use strum::IntoEnumIterator;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
 };
 
+// ======================================================================
+// メニュー構造体定義
+// ======================================================================
 /// 変換モードをカテゴリごとにグループ化して管理する構造体
 pub struct CategoryGroup {
     /// カテゴリ用のサブメニューインスタンス
@@ -109,6 +112,9 @@ pub struct TrayMenu {
     pub shortcut_list_item: MenuItem,
 }
 
+// ======================================================================
+// メニュー全体構築
+// ======================================================================
 impl TrayMenu {
     /// トレイアイコンのメニューを構築する。
     ///
@@ -125,7 +131,7 @@ impl TrayMenu {
         let current_interval = state.interval_ms();
         let current_monitor_mode = state.get_monitor_mode();
         let history_enabled = state.is_history_enabled();
-        let show_success_notification = state.show_success_notification();
+        let show_success_notification = state.is_notification_enabled();
 
         let refine = Self::build_refine_menu(current_mode)?;
         let monitor = Self::build_monitor_menu(current_monitor_mode)?;
@@ -190,7 +196,12 @@ impl TrayMenu {
 
         Ok(this)
     }
+}
 
+// ======================================================================
+// 変換モードメニュー
+// ======================================================================
+impl TrayMenu {
     /// 変換モードメニューを構築する
     ///
     /// # Arguments
@@ -308,7 +319,12 @@ impl TrayMenu {
                 .set_text(format!("{}{}", prefix, group.category.label()));
         }
     }
+}
 
+// ======================================================================
+// 監視方式メニュー
+// ======================================================================
+impl TrayMenu {
     /// 監視方式メニューを構築する
     ///
     /// # Arguments
@@ -353,7 +369,12 @@ impl TrayMenu {
             items: monitor_mode_items,
         })
     }
+}
 
+// ======================================================================
+// 監視周期メニュー
+// ======================================================================
+impl TrayMenu {
     /// 監視周期メニューを構築する
     ///
     /// # Arguments
@@ -403,7 +424,12 @@ impl TrayMenu {
             items: interval_items,
         })
     }
+}
 
+// ======================================================================
+// 履歴メニュー
+// ======================================================================
+impl TrayMenu {
     /// 履歴メニューの基本構造を構築する
     ///
     /// # Arguments
@@ -431,7 +457,12 @@ impl TrayMenu {
             records,
         })
     }
+}
 
+// ======================================================================
+// 通知メニュー
+// ======================================================================
+impl TrayMenu {
     /// 通知メニューを構築する
     ///
     /// # Arguments
@@ -481,7 +512,12 @@ impl TrayMenu {
             notify_pause_item,
         })
     }
+}
 
+// ======================================================================
+// 履歴更新
+// ======================================================================
+impl TrayMenu {
     /// クリップボード履歴リストの内容を現在の状態に合わせて再構築する
     ///
     /// # Arguments
@@ -531,15 +567,41 @@ impl TrayMenu {
     }
 }
 
+// ======================================================================
+// アイコン作成
+// ======================================================================
 /// 埋め込まれたアセットからトレイ用のアイコンを作成する
 ///
 /// # Returns
 /// * `Result<Icon>` - 作成されたアイコン。失敗した場合はエラーを返します。
 pub fn create_icon() -> Result<Icon> {
+    use std::io::Cursor;
+
     let icon_bytes = include_bytes!("../../assets/icon.png");
-    let img =
-        image::load_from_memory(icon_bytes).context("アイコン画像のデコードに失敗しました")?;
-    let rgba = img.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    Icon::from_rgba(rgba.into_raw(), width, height).context("アイコンデータの作成に失敗しました")
+    let decoder = png::Decoder::new(Cursor::new(icon_bytes.as_slice()));
+    let mut reader = decoder
+        .read_info()
+        .context("アイコンPNGのデコードに失敗しました")?;
+    let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(0)];
+    let info = reader
+        .next_frame(&mut buf)
+        .context("アイコンPNGフレームの読み取りに失敗しました")?;
+    let bytes = &buf[..info.buffer_size()];
+
+    // カラータイプに応じて RGBA8 に変換する
+    let rgba: Vec<u8> = match info.color_type {
+        png::ColorType::Rgba => bytes.to_vec(),
+        png::ColorType::Rgb => bytes
+            .chunks(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        png::ColorType::GrayscaleAlpha => bytes
+            .chunks(2)
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
+        png::ColorType::Grayscale => bytes.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        other => anyhow::bail!("サポート外PNGカラータイプ: {:?}", other),
+    };
+
+    Icon::from_rgba(rgba, info.width, info.height).context("アイコンデータの作成に失敗しました")
 }

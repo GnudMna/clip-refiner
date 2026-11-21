@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use super::event;
@@ -13,6 +14,9 @@ use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 use tray_icon::menu::MenuEvent;
 
+// ======================================================================
+// アプリケーション構造体
+// ======================================================================
 /// アプリケーション全体のコンテキストとメインロジックを管理する構造体
 ///
 /// 各コンポーネント（状態、メニュー、UI、ホットキー、ワーカー）を保持し、
@@ -27,11 +31,14 @@ pub struct App {
     /// グローバルホットキーの管理
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
-    pub clipboard_tx: std::sync::mpsc::Sender<super::worker::ClipboardCommand>,
+    pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
     /// 最後にセレクタを表示した時刻（連打防止用）
     pub last_selector_show: Instant,
 }
 
+// ======================================================================
+// 初期化
+// ======================================================================
 impl App {
     /// アプリケーションを初期化する
     ///
@@ -63,7 +70,12 @@ impl App {
             last_selector_show: Instant::now(),
         })
     }
+}
 
+// ======================================================================
+// イベント処理
+// ======================================================================
+impl App {
     /// メインループからのイベントを受信し、適切に振り分けて処理する
     ///
     /// ユーザーイベント、ウィンドウイベント、メニューイベントなどを各ハンドラに委譲します。

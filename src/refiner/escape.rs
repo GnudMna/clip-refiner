@@ -1,5 +1,8 @@
 use std::borrow::Cow;
 
+// ======================================================================
+// エスケープ
+// ======================================================================
 /// 文字列をバックスラッシュでエスケープする
 ///
 /// JSONやプログラム文字列内で特殊な意味を持つ文字（改行、タブ、ダブルクォートなど）の前に
@@ -45,6 +48,9 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// アンエスケープ
+// ======================================================================
 /// 文字列のエスケープを解除する
 ///
 /// バックスラッシュでエスケープされた特殊文字（`\n`, `\t` など）を元の文字に戻します。
@@ -83,6 +89,58 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
                     changed = true;
                     continue;
                 }
+                'u' => {
+                    chars.next(); // consume 'u'
+                    let hex: String = std::iter::from_fn(|| chars.next()).take(4).collect();
+                    if hex.len() == 4 {
+                        if let Ok(code) = u16::from_str_radix(&hex, 16) {
+                            // サロゲートペア上位 (U+D800..U+DBFF) の処理
+                            if (0xD800..=0xDBFF).contains(&code) {
+                                // \uXXXX の次に \uYYYY があるか確認
+                                let mut temp_chars = chars.clone();
+                                if temp_chars.next() == Some('\\') && temp_chars.next() == Some('u')
+                                {
+                                    let low_hex: String =
+                                        std::iter::from_fn(|| temp_chars.next()).take(4).collect();
+                                    if low_hex.len() == 4
+                                        && let Ok(low) = u16::from_str_radix(&low_hex, 16)
+                                        && (0xDC00..=0xDFFF).contains(&low)
+                                    {
+                                        // サロゲートペアをUnicodeスカラー値に変換
+                                        let scalar = 0x10000u32
+                                            + ((code as u32 - 0xD800) << 10)
+                                            + (low as u32 - 0xDC00);
+                                        if let Some(ch) = char::from_u32(scalar) {
+                                            // 消費済みの分だけ chars を進める
+                                            chars.next(); // '\'
+                                            chars.next(); // 'u'
+                                            for _ in 0..4 {
+                                                chars.next();
+                                            }
+                                            result.push(ch);
+                                            changed = true;
+                                            continue;
+                                        }
+                                    }
+                                }
+                                // サロゲートペアでない場合はそのまま出力
+                                result.push_str(&format!("\\u{}", hex));
+                            } else if let Some(ch) = char::from_u32(code as u32) {
+                                result.push(ch);
+                                changed = true;
+                                continue;
+                            } else {
+                                result.push_str(&format!("\\u{}", hex));
+                            }
+                        } else {
+                            result.push_str(&format!("\\u{}", hex));
+                        }
+                    } else {
+                        result.push_str(&format!("\\u{}", hex));
+                    }
+                    changed = true;
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -96,6 +154,9 @@ pub fn unescape_string(input: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// 正規表現エスケープ
+// ======================================================================
 /// 正規表現のメタ文字をエスケープする
 ///
 /// 正規表現内で特殊な意味を持つ文字（`.`, `*`, `+` など）の前にバックスラッシュを挿入し、
@@ -152,6 +213,9 @@ pub fn regex_unescape(input: &str) -> Cow<'_, str> {
     }
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +235,21 @@ mod tests {
     }
 
     #[test]
+    fn test_unescape_unicode() {
+        // 基本的な \uXXXX
+        assert_eq!(unescape_string("\\u0041"), "A");
+        assert_eq!(unescape_string("\\u3042"), "あ");
+        // テキスト中に埋め込まれた \uXXXX
+        assert_eq!(unescape_string("hello\\u0020world"), "hello world");
+        // サロゲートペア (U+1F600 GRINNING FACE)
+        assert_eq!(unescape_string("\\uD83D\\uDE00"), "\u{1F600}");
+        // 不完全な \uXXXX はそのまま残す
+        assert_eq!(unescape_string("\\u004"), "\\u004");
+        // 無効な16進数はそのまま残す
+        assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
+    }
+
+    #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("h.w"), "h\\.w");
         assert_eq!(regex_escape("plain"), "plain");
@@ -182,5 +261,59 @@ mod tests {
         assert_eq!(regex_unescape("h\\.w"), "h.w");
         assert_eq!(regex_unescape("plain"), "plain");
         assert!(matches!(regex_unescape("plain"), Cow::Borrowed(_)));
+    }
+
+    /// escape_string: すべての対象文字が正しくエスケープされること
+    #[test]
+    fn test_escape_string_all_chars() {
+        assert_eq!(escape_string("\""), "\\\"");
+        assert_eq!(escape_string("\\"), "\\\\");
+        assert_eq!(escape_string("/"), "\\/");
+        assert_eq!(escape_string("\x08"), "\\b");
+        assert_eq!(escape_string("\x0c"), "\\f");
+        assert_eq!(escape_string("\n"), "\\n");
+        assert_eq!(escape_string("\r"), "\\r");
+        assert_eq!(escape_string("\t"), "\\t");
+    }
+
+    /// escape_string: 空文字列は Borrowed を返すこと
+    #[test]
+    fn test_escape_string_empty() {
+        assert!(matches!(escape_string(""), Cow::Borrowed(_)));
+    }
+
+    /// unescape_string: すべての対象シーケンスが正しくアンエスケープされること
+    #[test]
+    fn test_unescape_string_all_sequences() {
+        assert_eq!(unescape_string("\\\""), "\"");
+        assert_eq!(unescape_string("\\\\"), "\\");
+        assert_eq!(unescape_string("\\/"), "/");
+        assert_eq!(unescape_string("\\b"), "\x08");
+        assert_eq!(unescape_string("\\f"), "\x0c");
+        assert_eq!(unescape_string("\\n"), "\n");
+        assert_eq!(unescape_string("\\r"), "\r");
+        assert_eq!(unescape_string("\\t"), "\t");
+    }
+
+    /// unescape_string: バックスラッシュを含まない文字列は Borrowed を返すこと
+    #[test]
+    fn test_unescape_string_no_backslash() {
+        assert!(matches!(unescape_string("hello world"), Cow::Borrowed(_)));
+    }
+
+    /// regex_unescape: メタ文字以外のバックスラッシュはそのまま残ること
+    #[test]
+    fn test_regex_unescape_non_meta() {
+        // 'a' は正規表現メタ文字でないのでそのまま
+        assert_eq!(regex_unescape("\\a"), "\\a");
+    }
+
+    /// regex_escape / regex_unescape の往復変換
+    #[test]
+    fn test_regex_escape_unescape_roundtrip() {
+        let original = "a.b*c+d?e";
+        let escaped = regex_escape(original);
+        let unescaped = regex_unescape(&escaped);
+        assert_eq!(unescaped, original);
     }
 }

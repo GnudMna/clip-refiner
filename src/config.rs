@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 use crate::consts;
@@ -6,6 +7,9 @@ use crate::refiner::RefineMode;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+// ======================================================================
+// 監視モード
+// ======================================================================
 /// クリップボードの監視方式
 ///
 /// クリップボードの更新を検知するための異なるアプローチを提供します。
@@ -21,11 +25,17 @@ pub enum MonitorMode {
     Event,
 }
 
+// ======================================================================
+// 通知設定
+// ======================================================================
 /// 通知の内容に関する設定
 ///
 /// どのタイミングでどのような通知を表示するかを制御します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
+    /// 成功通知機能全体の有効/無効スイッチ
+    #[serde(default)]
+    pub enabled: bool,
     /// 実行されたモード名を通知するかどうか
     #[serde(default = "consts::default_true")]
     pub notify_mode: bool,
@@ -41,9 +51,10 @@ impl Default for NotificationSettings {
     /// デフォルトの通知設定を生成する
     ///
     /// # Returns
-    /// * `Self` - すべての通知が有効なデフォルト設定。
+    /// * `Self` - 通知オフ・各サブ設定はオンのデフォルト設定。
     fn default() -> Self {
         Self {
+            enabled: false,
             notify_mode: true,
             notify_result: true,
             notify_pause: true,
@@ -51,6 +62,9 @@ impl Default for NotificationSettings {
     }
 }
 
+// ======================================================================
+// アプリケーション設定
+// ======================================================================
 /// アプリケーションの設定情報
 ///
 /// JSONファイルとして保存・読み込みされるアプリケーション全体の構成設定です。
@@ -66,9 +80,6 @@ pub struct AppConfig {
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
-    /// 成功時に通知を表示するかどうか
-    #[serde(default)]
-    pub show_success_notification: bool,
     /// 監視が一時停止されているかどうか
     #[serde(default)]
     pub is_paused: bool,
@@ -88,13 +99,15 @@ impl Default for AppConfig {
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
             history_enabled: false,
-            show_success_notification: false,
             is_paused: false,
             notification_settings: NotificationSettings::default(),
         }
     }
 }
 
+// ======================================================================
+// 設定ファイル操作
+// ======================================================================
 impl AppConfig {
     /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
     ///
@@ -102,7 +115,7 @@ impl AppConfig {
     /// * `Result<PathBuf>` - 設定ファイルの完全なパス。
     fn config_path() -> Result<PathBuf> {
         let config_dir = get_config_dir()?;
-        std::fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
+        fs::create_dir_all(&config_dir).context("設定ディレクトリの作成に失敗しました")?;
         Ok(config_dir.join("config.json"))
     }
 
@@ -128,7 +141,7 @@ impl AppConfig {
         }
 
         // ファイル読み込み
-        let content = match std::fs::read_to_string(&config_path) {
+        let content = match fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
                 crate::log_warn!("設定ファイルの読み込みに失敗: {:?}", e);
@@ -161,7 +174,7 @@ impl AppConfig {
             e
         })?;
 
-        std::fs::write(&config_path, content).map_err(|e| {
+        fs::write(&config_path, content).map_err(|e| {
             crate::log_error!("設定ファイルの書き込みに失敗: {:?}", e);
             e
         })?;
@@ -170,6 +183,9 @@ impl AppConfig {
     }
 }
 
+// ======================================================================
+// 設定ディレクトリ
+// ======================================================================
 /// 設定ディレクトリのパスを取得する
 ///
 /// OSに応じたアプリケーション設定ディレクトリのパスを計算します。
@@ -189,6 +205,9 @@ pub fn get_config_dir() -> Result<PathBuf> {
     Ok(base_dirs.config_dir().join(dir_name))
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +226,44 @@ mod tests {
         let decoded: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config.interval_ms, decoded.interval_ms);
         assert_eq!(config.mode, decoded.mode);
+    }
+
+    /// NotificationSettings のデフォルト値が正しいこと
+    #[test]
+    fn test_notification_settings_default() {
+        let ns = NotificationSettings::default();
+        assert!(!ns.enabled, "enabled のデフォルトは false");
+        assert!(ns.notify_mode);
+        assert!(ns.notify_result);
+        assert!(ns.notify_pause);
+    }
+
+    /// 古い設定 JSON (show_success_notification フィールドあり) を読んでも
+    /// デフォルト値でデシリアライズできること
+    #[test]
+    fn test_app_config_backward_compat_old_field() {
+        // mode の serde 表現は enum のバリアント名そのまま ("UrlDecode")
+        let old_json = r#"{
+            "mode": "UrlDecode",
+            "interval_ms": 1000,
+            "show_success_notification": true
+        }"#;
+        let config: AppConfig = serde_json::from_str(old_json).unwrap();
+        // 未知フィールドは無視され、notification_settings はデフォルト値になる
+        assert_eq!(config.interval_ms, 1000);
+        assert!(!config.notification_settings.enabled);
+    }
+
+    /// notification_settings.enabled が JSON に保存・復元されること
+    #[test]
+    fn test_notification_settings_serde_roundtrip() {
+        let mut config = AppConfig::default();
+        config.notification_settings.enabled = true;
+        config.notification_settings.notify_result = false;
+
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        assert!(decoded.notification_settings.enabled);
+        assert!(!decoded.notification_settings.notify_result);
     }
 }
