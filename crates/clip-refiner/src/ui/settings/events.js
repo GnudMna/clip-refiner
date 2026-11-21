@@ -1,36 +1,113 @@
-    function bindPipelineEvents() {
-        document.querySelectorAll('.pipeline-up').forEach((button) => {
-            button.addEventListener('click', () => {
-                const index = Number(button.dataset.index);
-                const pipeline = [...state.pipeline];
-                if (index <= 0) {
-                    return;
-                }
-                [pipeline[index - 1], pipeline[index]] = [pipeline[index], pipeline[index - 1]];
-                applyPipelineChange(pipeline);
-            });
-        });
+    // ======================================================================
+    // 設定画面 イベントバインド
+    // ======================================================================
 
-        document.querySelectorAll('.pipeline-down').forEach((button) => {
-            button.addEventListener('click', () => {
-                const index = Number(button.dataset.index);
-                const pipeline = [...state.pipeline];
-                if (index >= pipeline.length - 1) {
-                    return;
-                }
-                [pipeline[index + 1], pipeline[index]] = [pipeline[index], pipeline[index + 1]];
-                applyPipelineChange(pipeline);
-            });
-        });
+    /**
+     * 加工パイプライン行の上下移動・削除ボタンを処理する
+     *
+     * @param {HTMLButtonElement} button
+     */
+    function handlePipelineAction(button) {
+        const index = Number(button.dataset.index);
+        if (Number.isNaN(index)) {
+            return;
+        }
 
-        document.querySelectorAll('.pipeline-remove').forEach((button) => {
-            button.addEventListener('click', () => {
-                const index = Number(button.dataset.index);
-                applyPipelineChange(state.pipeline.filter((_, i) => i !== index));
-            });
-        });
+        if (button.classList.contains('pipeline-up')) {
+            const pipeline = [...state.pipeline];
+            if (index <= 0) {
+                return;
+            }
+            [pipeline[index - 1], pipeline[index]] = [pipeline[index], pipeline[index - 1]];
+            applyPipelineChange(pipeline);
+            return;
+        }
+
+        if (button.classList.contains('pipeline-down')) {
+            const pipeline = [...state.pipeline];
+            if (index >= pipeline.length - 1) {
+                return;
+            }
+            [pipeline[index + 1], pipeline[index]] = [pipeline[index], pipeline[index + 1]];
+            applyPipelineChange(pipeline);
+            return;
+        }
+
+        if (button.classList.contains('pipeline-remove')) {
+            applyPipelineChange(state.pipeline.filter((_, i) => i !== index));
+        }
     }
 
+    /**
+     * コンテンツ領域のクリックを委譲処理する
+     *
+     * @param {MouseEvent} event
+     */
+    function handleContentClick(event) {
+        const button = event.target.closest('button');
+        if (!button) {
+            return;
+        }
+
+        if (button.classList.contains('pipeline-up')
+            || button.classList.contains('pipeline-down')
+            || button.classList.contains('pipeline-remove')) {
+            handlePipelineAction(button);
+            return;
+        }
+
+        if (button.classList.contains('favorite-remove')) {
+            postIpcEnvelope({ type: 'favorite-toggle', mode: button.dataset.mode });
+            return;
+        }
+
+        if (button.classList.contains('favorite-up')) {
+            postIpcEnvelope({
+                type: 'favorite-move',
+                mode: button.dataset.mode,
+                direction: 'up',
+            });
+            return;
+        }
+
+        if (button.classList.contains('favorite-down')) {
+            postIpcEnvelope({
+                type: 'favorite-move',
+                mode: button.dataset.mode,
+                direction: 'down',
+            });
+            return;
+        }
+
+        if (button.classList.contains('clip-copy')) {
+            postIpcEnvelope({ type: 'clip-copy', index: Number(button.dataset.index) });
+            return;
+        }
+
+        if (button.classList.contains('clip-delete')) {
+            showConfirmDialog({
+                message: 'この登録クリップを削除しますか？',
+                confirmLabel: '削除する',
+                onConfirm: () => {
+                    postIpcEnvelope({
+                        type: 'clip-delete',
+                        index: Number(button.dataset.index),
+                    });
+                },
+            });
+        }
+    }
+
+    /** コンテンツ領域へのクリック委譲を一度だけバインドする */
+    function bindContentDelegation() {
+        if (contentDelegationBound) {
+            return;
+        }
+        document.getElementById('content')?.addEventListener('click', handleContentClick);
+        contentDelegationBound = true;
+    }
+
+    /** 監視タブのフォームイベントをバインドする */
     function bindMonitorEvents() {
         document.getElementById('monitor-paused')?.addEventListener('change', (event) => {
             state.isPaused = event.target.checked;
@@ -77,11 +154,11 @@
         document.getElementById('pipeline-clear-btn')?.addEventListener('click', () => {
             applyPipelineChange([]);
         });
-
-        bindPipelineEvents();
     }
 
+    /** 通知タブのフォームイベントをバインドする */
     function bindNotificationEvents() {
+        /** DOM の通知設定を読み取りパッチをスケジュールする */
         function applyNotifications() {
             scheduleApply({
                 notificationSettings: {
@@ -103,17 +180,21 @@
         });
     }
 
+    /** 履歴・連続記録タブのフォームイベントをバインドする */
     function bindHistoryEvents() {
         document.getElementById('history-enabled')?.addEventListener('change', (event) => {
             scheduleApply({ historyEnabled: event.target.checked });
         });
         document.getElementById('record-enabled')?.addEventListener('change', (event) => {
+            state.continuousRecordEnabled = event.target.checked;
             scheduleApply({ continuousRecordEnabled: event.target.checked });
+            syncContinuousRecordUi();
         });
 
         const historyLimit = document.getElementById('history-limit');
         if (historyLimit) {
             const bounds = historyLimitBounds();
+            /** 履歴保持件数入力をコミットする */
             const commitHistoryLimit = () => commitLimitInput(
                 historyLimit,
                 'historyLimit',
@@ -127,6 +208,7 @@
         const recordLimit = document.getElementById('record-limit');
         if (recordLimit) {
             const bounds = recordLimitBounds();
+            /** 連続記録保持件数入力をコミットする */
             const commitRecordLimit = () => commitLimitInput(
                 recordLimit,
                 'continuousRecordLimit',
@@ -153,7 +235,9 @@
         });
     }
 
+    /** 正規表現タブのフォームイベントをバインドする */
     function bindRegexEvents() {
+        /** DOM の正規表現設定を検証し、有効ならパッチをスケジュールする */
         function applyRegex() {
             const settings = readRegexFromDom();
             const validation = validateRegexSettings(settings);
@@ -179,10 +263,12 @@
         updateRegexFeedback();
     }
 
+    /** ショートカットタブのイベントをバインドする */
     function bindShortcutsEvents() {
         document.getElementById('shortcuts-open-config-btn')?.addEventListener('click', openConfigFile);
     }
 
+    /** お気に入りタブのイベントをバインドする */
     function bindFavoriteEvents() {
         document.getElementById('favorite-add-btn')?.addEventListener('click', () => {
             const select = document.getElementById('favorite-add-mode');
@@ -192,37 +278,16 @@
             }
             postIpcEnvelope({ type: 'favorite-toggle', mode: modeId });
         });
-        document.querySelectorAll('.favorite-remove').forEach((button) => {
-            button.addEventListener('click', () => {
-                postIpcEnvelope({ type: 'favorite-toggle', mode: button.dataset.mode });
-            });
-        });
-        document.querySelectorAll('.favorite-up').forEach((button) => {
-            button.addEventListener('click', () => {
-                postIpcEnvelope({
-                    type: 'favorite-move',
-                    mode: button.dataset.mode,
-                    direction: 'up',
-                });
-            });
-        });
-        document.querySelectorAll('.favorite-down').forEach((button) => {
-            button.addEventListener('click', () => {
-                postIpcEnvelope({
-                    type: 'favorite-move',
-                    mode: button.dataset.mode,
-                    direction: 'down',
-                });
-            });
-        });
     }
 
+    /** 一般タブのイベントをバインドする */
     function bindGeneralEvents() {
         document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
             scheduleApply({ launchAtLogin: event.target.checked });
         });
     }
 
+    /** 登録クリップタブのイベントをバインドする */
     function bindClipEvents() {
         document.getElementById('clip-register-btn')?.addEventListener('click', () => {
             if (clipRegisterPending) {
@@ -231,27 +296,9 @@
             setClipRegisterPending(true);
             postIpcEnvelope({ type: 'clip-register' });
         });
-        document.querySelectorAll('.clip-copy').forEach((button) => {
-            button.addEventListener('click', () => {
-                postIpcEnvelope({ type: 'clip-copy', index: Number(button.dataset.index) });
-            });
-        });
-        document.querySelectorAll('.clip-delete').forEach((button) => {
-            button.addEventListener('click', () => {
-                showConfirmDialog({
-                    message: 'この登録クリップを削除しますか？',
-                    confirmLabel: '削除する',
-                    onConfirm: () => {
-                        postIpcEnvelope({
-                            type: 'clip-delete',
-                            index: Number(button.dataset.index),
-                        });
-                    },
-                });
-            });
-        });
     }
 
+    /** アクティブタブに応じたパネルイベントをバインドする */
     function bindActivePanelEvents() {
         switch (activeTab) {
             case 'monitor':

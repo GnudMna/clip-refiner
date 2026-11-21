@@ -53,6 +53,12 @@ impl EncryptedHistoryStore {
 // ======================================================================
 impl EncryptedHistoryStore {
     /// 保持している履歴件数を返す
+    ///
+    /// # Arguments
+    /// * `self` - この `EncryptedHistoryStore`
+    ///
+    /// # Returns
+    /// * `usize` - 保持している履歴件数
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -144,6 +150,9 @@ impl EncryptedHistoryStore {
 
     /// キュー先頭を取り出して返す
     ///
+    /// # Arguments
+    /// * `self` - この `EncryptedHistoryStore`
+    ///
     /// # Returns
     /// * `Option<SecretString>` - 先頭エントリ。空の場合は `None`
     pub fn discharge_front(&mut self) -> Option<SecretString> {
@@ -194,6 +203,9 @@ impl EncryptedHistoryStore {
     }
 
     /// 履歴をすべて削除する
+    ///
+    /// # Arguments
+    /// * `self` - この `EncryptedHistoryStore`
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -251,7 +263,7 @@ impl Drop for EncryptedHistoryStore {
 mod tests {
     use super::*;
 
-    /// 暗号化ストアに平文バイト列がそのまま残らないこと
+    /// 暗号化ストアに平文バイト列がそのまま残らないようにすること
     #[test]
     fn test_encrypted_entries_do_not_contain_plaintext() {
         let mut store = EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗");

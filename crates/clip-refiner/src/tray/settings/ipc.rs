@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
-use crate::config::{FavoriteMoveDirection, MonitorMode, NotificationSettings, RegexSettings};
+use super::model::deep_merge_json_values;
+
+pub(crate) use super::model::SettingsPatch;
+
+use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, AppState, RegexPreviewRequest};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
 
 // ======================================================================
@@ -134,68 +138,8 @@ pub(crate) enum SettingsIpcAction {
     RegexPreview(u64, RegexSettings),
 }
 
-/// 設定ウィンドウから適用する部分更新
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", default)]
-pub(crate) struct SettingsPatch {
-    pub monitor_mode: Option<MonitorMode>,
-    pub interval_ms: Option<u64>,
-    pub mode: Option<RefineMode>,
-    pub pipeline: Option<Vec<RefineMode>>,
-    pub notification_settings: Option<NotificationSettings>,
-    pub history_enabled: Option<bool>,
-    pub history_limit: Option<usize>,
-    pub continuous_record_enabled: Option<bool>,
-    pub continuous_record_limit: Option<usize>,
-    pub regex: Option<RegexSettings>,
-    pub launch_at_login: Option<bool>,
-    pub is_paused: Option<bool>,
-}
-
-impl SettingsPatch {
-    /// 後から届いた部分更新を既存パッチへマージする
-    ///
-    /// ネスト項目 (`notification_settings` / `regex`) は JSON 単位で深くマージする
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn merge_from(&mut self, other: &Self) {
-        let Ok(mut base_json) = serde_json::to_value(&*self) else {
-            return;
-        };
-        let Ok(other_json) = serde_json::to_value(other) else {
-            return;
-        };
-        deep_merge_json_values(&mut base_json, &other_json);
-        if let Ok(merged) = serde_json::from_value(base_json) {
-            *self = merged;
-        }
-    }
-}
-
-/// JSON オブジェクトを再帰的にマージする (`null` はスキップ)
-fn deep_merge_json_values(base: &mut serde_json::Value, other: &serde_json::Value) {
-    let (Some(base_map), Some(other_map)) = (base.as_object_mut(), other.as_object()) else {
-        if !other.is_null() {
-            *base = other.clone();
-        }
-        return;
-    };
-
-    for (key, other_value) in other_map {
-        if other_value.is_null() {
-            continue;
-        }
-        match base_map.get_mut(key) {
-            Some(base_value) if base_value.is_object() && other_value.is_object() => {
-                deep_merge_json_values(base_value, other_value);
-            }
-            _ => {
-                base_map.insert(key.clone(), other_value.clone());
-            }
-        }
-    }
-}
-
 /// 適用待ちキューへ部分更新 JSON を原子的にマージして格納する
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn enqueue_settings_patch_json(state: &Arc<AppState>, patch_json: &str) -> bool {
     let mut guard = state.pending_settings_patch_mut();
     let merged_json = if let Some(existing) = guard.as_ref() {
@@ -300,7 +244,9 @@ pub(crate) fn dispatch_settings_ipc(
 mod tests {
     use super::*;
 
-    /// JSON エンベロープ形式の `apply` を解釈できること
+    use crate::config::NotificationSettings;
+
+    /// JSON エンベロープ形式の `apply` を解釈できるようにすること
     #[test]
     fn parse_ipc_apply_patch() {
         let action = parse_settings_ipc_message(
@@ -318,7 +264,7 @@ mod tests {
         assert!(notification.notify_pause);
     }
 
-    /// `snake_case` 別名でも IPC パッチを解釈できること
+    /// `snake_case` 別名でも IPC パッチを解釈できるようにすること
     #[test]
     fn parse_ipc_apply_patch_nested_snake_case_alias() {
         let action = parse_settings_ipc_message(
@@ -336,7 +282,7 @@ mod tests {
         assert!(notification.notify_pause);
     }
 
-    /// ネスト項目の camelCase でも解釈できること
+    /// ネスト項目の camelCase でも解釈できるようにすること
     #[test]
     fn parse_ipc_apply_patch_nested_camel_case_alias() {
         let action = parse_settings_ipc_message(
@@ -351,7 +297,7 @@ mod tests {
         assert!(regex.case_insensitive);
     }
 
-    /// `SettingsPatch::merge_from` で複数フィールドを統合できること
+    /// `SettingsPatch::merge_from` で複数フィールドを統合できるようにすること
     #[test]
     fn merge_settings_patch_combines_fields() {
         let mut base = SettingsPatch {
@@ -366,7 +312,7 @@ mod tests {
         assert_eq!(base.continuous_record_enabled, Some(true));
     }
 
-    /// `merge_from` でネスト項目を深くマージできること
+    /// `merge_from` でネスト項目を深くマージできるようにすること
     #[test]
     fn merge_settings_patch_deep_merges_nested_fields() {
         let mut base = SettingsPatch {
@@ -396,7 +342,7 @@ mod tests {
         assert!(!notification.notify_pause);
     }
 
-    /// JSON 文字列マージでネスト項目の一部だけを更新できること
+    /// JSON 文字列マージでネスト項目の一部だけを更新できるようにすること
     #[test]
     fn merge_settings_patch_json_strings_preserves_sibling_nested_fields() {
         let existing = r#"{"notificationSettings":{"enabled":true,"notifyMode":false,"notifyResult":false,"notifyPause":true}}"#;
@@ -411,7 +357,7 @@ mod tests {
         assert_eq!(value["notificationSettings"]["notifyPause"], true);
     }
 
-    /// `favorite-move` メッセージを解釈できること
+    /// `favorite-move` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_favorite_move() {
         let action = parse_settings_ipc_message(
@@ -426,7 +372,7 @@ mod tests {
         ));
     }
 
-    /// `open-config` メッセージを解釈できること
+    /// `open-config` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_open_config() {
         assert!(matches!(
@@ -435,7 +381,7 @@ mod tests {
         ));
     }
 
-    /// `enqueue_settings_patch_json` で部分 JSON を深くマージできること
+    /// `enqueue_settings_patch_json` で部分 JSON を深くマージできるようにすること
     #[test]
     fn enqueue_settings_patch_json_deep_merges_nested_fields() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -466,7 +412,7 @@ mod tests {
         assert_eq!(value["notificationSettings"]["notifyPause"], true);
     }
 
-    /// `clip-copy` メッセージを解釈できること
+    /// `clip-copy` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clip_copy() {
         assert!(matches!(
@@ -475,7 +421,7 @@ mod tests {
         ));
     }
 
-    /// `enqueue_settings_patch` で連続投入したパッチがマージされること
+    /// `enqueue_settings_patch` で連続投入したパッチがマージされるようにすること
     #[test]
     fn enqueue_settings_patch_merges_sequential_applies() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -503,7 +449,7 @@ mod tests {
         assert_eq!(patch.continuous_record_enabled, Some(true));
     }
 
-    /// `close` メッセージを解釈できること
+    /// `close` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_close() {
         assert!(matches!(
@@ -512,7 +458,7 @@ mod tests {
         ));
     }
 
-    /// `clear-history` メッセージを解釈できること
+    /// `clear-history` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clear_history() {
         assert!(matches!(
@@ -521,7 +467,7 @@ mod tests {
         ));
     }
 
-    /// `clear-record` メッセージを解釈できること
+    /// `clear-record` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clear_record() {
         assert!(matches!(
@@ -530,7 +476,7 @@ mod tests {
         ));
     }
 
-    /// `clip-delete` メッセージを解釈できること
+    /// `clip-delete` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clip_delete() {
         assert!(matches!(
@@ -539,7 +485,7 @@ mod tests {
         ));
     }
 
-    /// `clip-register` メッセージを解釈できること
+    /// `clip-register` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clip_register() {
         assert!(matches!(
@@ -548,7 +494,7 @@ mod tests {
         ));
     }
 
-    /// `favorite-toggle` メッセージを解釈できること
+    /// `favorite-toggle` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_favorite_toggle() {
         assert!(matches!(
@@ -557,7 +503,7 @@ mod tests {
         ));
     }
 
-    /// `regex-preview` メッセージを解釈できること
+    /// `regex-preview` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_regex_preview() {
         let action = parse_settings_ipc_message(
@@ -573,7 +519,7 @@ mod tests {
         assert!(settings.multiline);
     }
 
-    /// JS から送る `apply` JSON をキュー投入から取り出しまで往復できること
+    /// JS から送る `apply` JSON をキュー投入から取り出しまで往復できるようにすること
     #[test]
     fn ipc_apply_round_trip_through_queue() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -593,14 +539,14 @@ mod tests {
         assert_eq!(restored.is_paused, Some(true));
     }
 
-    /// 旧プレフィックス形式は解釈しないこと
+    /// 旧プレフィックス形式は解釈しないであるようにすること
     #[test]
     fn parse_ipc_legacy_prefix_returns_none() {
         assert!(parse_settings_ipc_message("close").is_none());
         assert!(parse_settings_ipc_message("apply:{}").is_none());
     }
 
-    /// 不正な JSON は `None` を返すこと
+    /// 不正な JSON は `None` を返すようにすること
     #[test]
     fn parse_ipc_unknown_returns_none() {
         assert!(parse_settings_ipc_message("invalid").is_none());

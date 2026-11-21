@@ -165,7 +165,7 @@ pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 有効な JSON を整形できること
+    /// 有効な JSON を整形できるようにすること
     #[test]
     fn test_format_json_valid() {
         let input = r#"{"b":1,"a":2}"#;
@@ -173,14 +173,14 @@ mod tests {
         assert!(output.contains("\"a\": 2"));
     }
 
-    /// 不正な JSON は元の文字列を返すこと
+    /// 不正な JSON は元の文字列を返すようにすること
     #[test]
     fn test_format_json_invalid() {
         let input = r#"{"a":1,"b":}"#;
         assert_eq!(format_json(input), input);
     }
 
-    /// キー順序保持の整形: 元の順序が維持されること
+    /// キー順序保持の整形: 元の順序が維持されるようにすること
     #[test]
     fn test_format_json_preserve_order() {
         let input = r#"{"z":1,"a":2,"m":3}"#;
@@ -191,7 +191,7 @@ mod tests {
         assert!(z_pos < a_pos && a_pos < m_pos, "キー順序が保持されていない");
     }
 
-    /// キー順序不同の整形: キーがアルファベット順(またはソート済み)になること
+    /// キー順序不同の整形: キーがアルファベット順(またはソート済み)になるようにすること
     #[test]
     fn test_format_json_unordered_sorts_keys() {
         let input = r#"{"z":1,"a":2}"#;
@@ -201,14 +201,14 @@ mod tests {
         assert!(a_pos < z_pos, "serde_json はキーをソートするはず");
     }
 
-    /// 不正 JSON は `preserve_order` でも元の文字列を返すこと
+    /// 不正 JSON は `preserve_order` でも元の文字列を返すようにすること
     #[test]
     fn test_format_json_preserve_order_invalid() {
         let input = r#"{"a":1,}"#;
         assert_eq!(format_json_preserve_order(input), input);
     }
 
-    /// `json_to_yaml`: JSONをYAMLに変換できること
+    /// `json_to_yaml`: JSONをYAMLに変換できるようにすること
     #[test]
     fn test_json_to_yaml_valid() {
         let input = r#"{"name":"Alice","age":30}"#;
@@ -217,14 +217,14 @@ mod tests {
         assert!(output.contains("age: 30"));
     }
 
-    /// `json_to_yaml`: 不正 JSON は元の文字列を返すこと
+    /// `json_to_yaml`: 不正 JSON は元の文字列を返すようにすること
     #[test]
     fn test_json_to_yaml_invalid() {
         let input = r#"{"a":}"#;
         assert_eq!(json_to_yaml(input), input);
     }
 
-    /// `json_to_yaml_preserve_order`: キー順序が維持されること
+    /// `json_to_yaml_preserve_order`: キー順序が維持されるようにすること
     #[test]
     fn test_json_to_yaml_preserve_order() {
         let input = r#"{"z":1,"a":2,"m":3}"#;
@@ -235,7 +235,7 @@ mod tests {
         assert!(z_pos < a_pos && a_pos < m_pos, "キー順序が保持されていない");
     }
 
-    /// 配列を含む JSON の変換
+    /// 配列を含む JSON の変換できるようにすること
     #[test]
     fn test_json_to_yaml_array() {
         let input = r"[1,2,3]";

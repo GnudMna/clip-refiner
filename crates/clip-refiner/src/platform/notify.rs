@@ -13,8 +13,8 @@ fn format_notification_summary(summary: &str) -> String {
 use anyhow::{Context, Result};
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
-use windows::core::HSTRING;
-use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+use windows::core::{HSTRING, PCWSTR};
 use winreg::RegKey;
 use winreg::RegValue;
 use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ};
@@ -76,10 +76,9 @@ fn init_notifications_inner() -> Result<()> {
 fn set_process_app_user_model_id(app_id: &str) -> Result<()> {
     let app_id_wide = to_wide(app_id);
     // SAFETY: `app_id_wide` はヌル終端の有効な UTF-16 文字列
-    let hr = unsafe { SetCurrentProcessExplicitAppUserModelID(app_id_wide.as_ptr()) };
-    if hr < 0 {
-        anyhow::bail!("SetCurrentProcessExplicitAppUserModelID が失敗: HRESULT {hr:#x}");
-    }
+    let hr = unsafe { SetCurrentProcessExplicitAppUserModelID(PCWSTR(app_id_wide.as_ptr())) };
+    hr.ok()
+        .context("SetCurrentProcessExplicitAppUserModelID が失敗")?;
     Ok(())
 }
 
@@ -200,7 +199,7 @@ fn to_wide(value: &str) -> Vec<u16> {
 mod tests {
     use super::*;
 
-    /// `AppUserModelID` 用レジストリキーのパスを組み立てること
+    /// `AppUserModelID` 用レジストリキーのパスを組み立てるようにすること
     #[test]
     fn aumid_registry_key_path_includes_app_id() {
         assert_eq!(
@@ -209,13 +208,13 @@ mod tests {
         );
     }
 
-    /// 埋め込み ICO が空でないこと
+    /// 埋め込み ICO が空でないであるようにすること
     #[test]
     fn registry_icon_bytes_not_empty() {
         assert!(!REGISTRY_ICON_BYTES.is_empty());
     }
 
-    /// `\\?\` プレフィックスを除去できること
+    /// `\\?\` プレフィックスを除去できるようにすること
     #[test]
     fn strip_verbatim_prefix_removes_extended_path_prefix() {
         let path = Path::new(r"\\?\C:\Users\test\notification-icon.ico");
@@ -225,7 +224,7 @@ mod tests {
         );
     }
 
-    /// `REG_EXPAND_SZ` の型が正しいこと
+    /// `REG_EXPAND_SZ` の型が正しいであるようにすること
     #[test]
     fn to_reg_expand_sz_uses_expand_sz_type() {
         assert_eq!(to_reg_expand_sz("ClipRefiner").vtype, REG_EXPAND_SZ);

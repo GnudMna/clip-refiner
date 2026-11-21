@@ -30,6 +30,12 @@ impl TrayMenu {
     }
 
     /// 登録クリップメニューを設定内容に合わせて更新する
+    ///
+    /// # Arguments
+    /// * `state` - アプリケーションの共有状態
+    ///
+    /// # Returns
+    /// * `Result<()>` - 成功時は `Ok(())`、失敗時はエラー
     pub fn refresh_clips(&self, state: &AppState) -> Result<()> {
         self.clips.rebuild(state)
     }
@@ -40,6 +46,12 @@ impl TrayMenu {
 // ======================================================================
 impl ClipsMenu {
     /// 登録クリップリストの内容を現在の設定に合わせて再構築する
+    ///
+    /// # Arguments
+    /// * `state` - アプリケーションの共有状態
+    ///
+    /// # Returns
+    /// * `Result<()>` - 成功時は `Ok(())`、失敗時はエラー
     pub fn rebuild(&self, state: &AppState) -> Result<()> {
         let entries: Vec<(String, usize)> = state.with_config(|config| {
             config

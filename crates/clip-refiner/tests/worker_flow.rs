@@ -3,6 +3,10 @@
 use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{ClipboardHarness, MonitorMode};
 
+// ======================================================================
+// テスト
+// ======================================================================
+
 /// `ProcessMode` → `Undo` でクリップボードと取り消し状態が往復すること
 #[test]
 fn worker_process_mode_then_undo_round_trip() {
@@ -17,7 +21,7 @@ fn worker_process_mode_then_undo_round_trip() {
     assert!(harness.take_undo_source().is_none());
 }
 
-/// 履歴復元 (`SetText`) 直後のポーリングでは再加工しないこと
+/// 履歴復元 (`SetText`) 直後のポーリングでは再加工しないようにすること
 #[test]
 fn history_restore_via_set_text_avoids_immediate_reprocess() {
     let mut harness = ClipboardHarness::with_text("  first  ")
@@ -34,7 +38,7 @@ fn history_restore_via_set_text_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "restored-from-history");
 }
 
-/// 変更のない手動加工ではクリップボードを変更しないこと
+/// 変更のない手動加工ではクリップボードを変更しないようにすること
 #[test]
 fn worker_process_mode_leaves_unchanged_text() {
     let mut harness = ClipboardHarness::with_text("already-trimmed");
@@ -43,7 +47,7 @@ fn worker_process_mode_leaves_unchanged_text() {
     assert_eq!(harness.clipboard_text(), "already-trimmed");
 }
 
-/// 取り消し対象がないとき `Undo` はクリップボードを変更しないこと
+/// 取り消し対象がないとき `Undo` はクリップボードを変更しないようにすること
 #[test]
 fn worker_undo_without_source_is_no_op() {
     let mut harness = ClipboardHarness::with_text("  keep  ");

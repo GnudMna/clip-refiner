@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use super::super::clipboard_monitor::{self, EVENT_POLL_MS, POLL_TICK_MS};
+use super::super::clipboard_monitor::{self, ClipboardObserveResult, EVENT_POLL_MS, POLL_TICK_MS};
 use super::super::state::AppState;
 use super::clipboard_seq;
 
@@ -55,8 +55,11 @@ impl MonitorLoopState {
     /// * `state` - アプリケーションの共有状態
     pub fn reset(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
         let text = clipboard.get_text().unwrap_or_default();
+        let new_token = clipboard_seq::token().unwrap_or(0);
+        let token_changed = new_token != self.last_token;
         state.record_clipboard_observed(&text);
-        self.last_token = clipboard_seq::token().unwrap_or(0);
+        clipboard_monitor::recover_continuous_record_on_reset(state, &text, token_changed);
+        self.last_token = new_token;
         self.last_poll_at = Instant::now();
         self.tracked_generation = state.monitor_generation.load(Ordering::SeqCst);
         self.event_fallback_warned = false;
@@ -90,23 +93,22 @@ impl MonitorLoopState {
     /// * `Duration` - `recv_timeout` に渡す待機時間
     pub fn recv_timeout(&self, state: &Arc<AppState>) -> Duration {
         let generation = state.monitor_generation.load(Ordering::SeqCst);
-        if state.with_config(|c| c.is_paused)
-            || generation == 0
-            || self.tracked_generation != generation
-        {
+        let snap = state.monitor_snapshot();
+        if generation == 0 || self.tracked_generation != generation {
             return Duration::from_millis(100);
         }
 
-        match Self::effective_mode(state) {
-            MonitorMode::Polling => {
-                let snap = state.monitor_snapshot();
-                let elapsed =
-                    u64::try_from(self.last_poll_at.elapsed().as_millis()).unwrap_or(u64::MAX);
-                let remaining = snap.interval_ms.saturating_sub(elapsed);
-                Duration::from_millis(POLL_TICK_MS.min(remaining.max(1)))
-            }
-            MonitorMode::Event => Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS)),
+        if snap.is_paused && !snap.continuous_record_enabled {
+            return Duration::from_millis(100);
         }
+
+        if snap.continuous_record_enabled || Self::effective_mode(state) == MonitorMode::Event {
+            return Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS));
+        }
+
+        let elapsed = u64::try_from(self.last_poll_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let remaining = snap.interval_ms.saturating_sub(elapsed);
+        Duration::from_millis(POLL_TICK_MS.min(remaining.max(1)))
     }
 
     /// 監視ループの1ティックを実行する
@@ -119,9 +121,6 @@ impl MonitorLoopState {
     /// * `state` - アプリケーションの共有状態
     pub fn tick(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
         let snap = state.monitor_snapshot();
-        if snap.is_paused {
-            return;
-        }
 
         if state.with_config(|c| c.monitor_mode) == MonitorMode::Event
             && !clipboard_seq::supports_event_monitor()
@@ -135,50 +134,93 @@ impl MonitorLoopState {
 
         self.refine_ctx.regex = snap.regex_settings.clone();
 
+        if snap.continuous_record_enabled {
+            self.tick_continuous_record(clipboard, state);
+        }
+
+        if !snap.auto_processing_enabled() {
+            return;
+        }
+
         match Self::effective_mode(state) {
-            MonitorMode::Event => {
-                if let Some(token) = clipboard_seq::token()
-                    && token != self.last_token
-                {
-                    self.last_token = token;
-                    if clipboard_monitor::handle_clipboard_update(
-                        clipboard,
-                        state,
-                        &snap,
-                        true,
-                        &self.refine_ctx,
-                    ) {
-                        self.last_token = clipboard_seq::token().unwrap_or(self.last_token);
-                    }
-                }
+            MonitorMode::Event => self.tick_event_processing(clipboard, state, &snap),
+            MonitorMode::Polling => self.tick_polling_processing(clipboard, state, &snap),
+        }
+    }
+
+    /// 連続記録向けにクリップボード変更を検知する
+    ///
+    /// 監視方式に依存せず変更トークンで検知する (イベント監視と同じ周期)
+    fn tick_continuous_record(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
+        if let Some(token) = clipboard_seq::token() {
+            if token != self.last_token {
+                let result = clipboard_monitor::observe_continuous_record(clipboard, state);
+                Self::apply_token_after_observe(self, token, result);
             }
-            MonitorMode::Polling => {
-                if self.last_poll_at.elapsed() >= Duration::from_millis(snap.interval_ms) {
-                    if snap.continuous_record_enabled {
-                        // 連続記録は同一内容の再コピーでも積むため、変更トークンで検知する
-                        if let Some(token) = clipboard_seq::token()
-                            && token != self.last_token
-                        {
-                            self.last_token = token;
-                            clipboard_monitor::handle_clipboard_update(
-                                clipboard,
-                                state,
-                                &snap,
-                                true,
-                                &self.refine_ctx,
-                            );
-                        }
-                    } else {
-                        clipboard_monitor::handle_clipboard_update(
-                            clipboard,
-                            state,
-                            &snap,
-                            false,
-                            &self.refine_ctx,
-                        );
-                    }
-                    self.last_poll_at = Instant::now();
-                }
+            return;
+        }
+
+        let interval_ms = state.with_config(|c| c.interval_ms);
+        if self.last_poll_at.elapsed() >= Duration::from_millis(interval_ms) {
+            let _ = clipboard_monitor::observe_continuous_record(clipboard, state);
+            self.last_poll_at = Instant::now();
+        }
+    }
+
+    /// イベント監視で加工処理を試みる
+    fn tick_event_processing(
+        &mut self,
+        clipboard: &mut Clipboard,
+        state: &Arc<AppState>,
+        snap: &super::super::state::MonitorSnapshot,
+    ) {
+        let Some(token) = clipboard_seq::token() else {
+            return;
+        };
+        if token == self.last_token {
+            return;
+        }
+
+        let result = clipboard_monitor::handle_clipboard_update(
+            clipboard,
+            state,
+            snap,
+            true,
+            &self.refine_ctx,
+        );
+        Self::apply_token_after_observe(self, token, result);
+    }
+
+    /// ポーリング監視で加工処理を試みる
+    fn tick_polling_processing(
+        &mut self,
+        clipboard: &mut Clipboard,
+        state: &Arc<AppState>,
+        snap: &super::super::state::MonitorSnapshot,
+    ) {
+        if self.last_poll_at.elapsed() < Duration::from_millis(snap.interval_ms) {
+            return;
+        }
+
+        let result = clipboard_monitor::handle_clipboard_update(
+            clipboard,
+            state,
+            snap,
+            false,
+            &self.refine_ctx,
+        );
+        if result != ClipboardObserveResult::ReadFailed {
+            self.last_poll_at = Instant::now();
+        }
+    }
+
+    /// 観測結果に応じて変更トークンを更新する
+    fn apply_token_after_observe(monitor: &mut Self, token: u64, result: ClipboardObserveResult) {
+        match result {
+            ClipboardObserveResult::ReadFailed => {}
+            ClipboardObserveResult::Observed => monitor.last_token = token,
+            ClipboardObserveResult::ClipboardWritten => {
+                monitor.last_token = clipboard_seq::token().unwrap_or(token);
             }
         }
     }
@@ -186,8 +228,7 @@ impl MonitorLoopState {
 
 /// 監視ループの1ティックを実行するかどうかを判定する
 ///
-/// 監視が停止中の場合はfalseを返し、
-/// 監視中は監視世代が一致している場合はtrueを返す
+/// 連続記録が有効なら一時停止中でもティックを実行する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -197,9 +238,11 @@ impl MonitorLoopState {
 /// * `bool` - 監視ループの1ティックを実行するかどうか
 pub(super) fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLoopState) -> bool {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
-    !state.with_config(|c| c.is_paused)
-        && generation > 0
-        && monitor.tracked_generation == generation
+    if generation == 0 || monitor.tracked_generation != generation {
+        return false;
+    }
+
+    state.with_config(|c| !c.is_paused || c.continuous_record_enabled)
 }
 
 /// 監視世代を同期する
@@ -218,8 +261,9 @@ pub(super) fn sync_monitor_generation(
 ) {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
     let paused = state.with_config(|c| c.is_paused);
+    let continuous_record = state.with_config(|c| c.continuous_record_enabled);
 
-    if paused || generation == 0 {
+    if generation == 0 || (paused && !continuous_record) {
         monitor.tracked_generation = 0;
         return;
     }

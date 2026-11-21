@@ -3,6 +3,7 @@
 mod apply;
 mod geometry;
 mod ipc;
+mod model;
 mod regex_preview;
 mod snapshot;
 mod window;
@@ -18,7 +19,8 @@ pub(crate) use apply::{
 pub(crate) mod test_support {
     pub(crate) use super::apply::apply_settings_patch_without_ui;
     pub(crate) use super::ipc::{
-        SettingsIpcAction, SettingsPatch, enqueue_settings_patch, enqueue_settings_patch_json,
+        SettingsIpcAction, enqueue_settings_patch, enqueue_settings_patch_json,
         parse_settings_ipc_message,
     };
+    pub(crate) use super::model::SettingsPatch;
 }

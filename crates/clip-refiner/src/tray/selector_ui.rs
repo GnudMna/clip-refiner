@@ -27,8 +27,13 @@ pub struct SelectorUi {
 impl SelectorUi {
     /// イベントループ上にセレクター系ウィンドウを生成する
     ///
-    /// # Errors
-    /// いずれかのウィンドウ初期化に失敗した場合
+    /// # Arguments
+    /// * `event_loop` - ウィンドウ作成用のイベントループ
+    /// * `proxy` - イベント送信用プロキシ
+    /// * `clipboard_worker` - クリップボード操作ワーカー
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 成功時は `SelectorUi`、いずれかのウィンドウ初期化に失敗した場合はエラー
     pub fn new(
         event_loop: &EventLoop<AppEvent>,
         proxy: &EventLoopProxy<AppEvent>,

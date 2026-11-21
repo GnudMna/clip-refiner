@@ -126,6 +126,13 @@ impl HotkeyHandler {
     }
 
     /// お気に入り変換モード用ホットキーのみ再登録する
+    ///
+    /// # Arguments
+    /// * `hotkeys` - ホットキー割り当て
+    /// * `favorite_count` - 再登録するお気に入りスロット数
+    ///
+    /// # Returns
+    /// * `Result<Vec<HotkeyRegistrationFailure>>` - 再登録失敗一覧
     pub fn reload_favorite_slots(
         &mut self,
         hotkeys: &HotkeySettings,

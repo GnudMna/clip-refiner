@@ -308,6 +308,16 @@ body {
     background: var(--warning-color);
 }
 
+.status-continuous-record {
+    background: var(--accent-soft);
+    border: 1px solid rgba(90, 168, 255, 0.35);
+    color: #b8d9ff;
+}
+
+.status-continuous-record::before {
+    background: var(--accent-color);
+}
+
 .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

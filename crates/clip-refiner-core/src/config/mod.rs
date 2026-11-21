@@ -36,7 +36,7 @@ mod tests {
     use crate::consts;
     use crate::refiner::RefineMode;
 
-    /// `AppConfig` のデフォルト値が正しいこと
+    /// `AppConfig` のデフォルト値が正しいであるようにすること
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
@@ -47,7 +47,7 @@ mod tests {
         assert_eq!(config.hotkeys, HotkeySettings::default());
     }
 
-    /// `AppConfig` のシリアライズ/デシリアライズ往復
+    /// `AppConfig` のシリアライズ/デシリアライズ往復できるようにすること
     #[test]
     fn test_app_config_serde() {
         let config = AppConfig::default();
@@ -60,7 +60,7 @@ mod tests {
         assert_eq!(config.hotkeys, decoded.hotkeys);
     }
 
-    /// `NotificationSettings` のデフォルト値が正しいこと
+    /// `NotificationSettings` のデフォルト値が正しいであるようにすること
     #[test]
     fn test_notification_settings_default() {
         let ns = NotificationSettings::default();
@@ -70,7 +70,7 @@ mod tests {
         assert!(ns.notify_pause);
     }
 
-    /// `notification_settings.enabled` が TOML に保存・復元されること
+    /// `notification_settings.enabled` が TOML に保存・復元されるようにすること
     #[test]
     fn test_notification_settings_serde_roundtrip() {
         let mut config = AppConfig::default();
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(config.interval_ms, consts::MIN_INTERVAL_MS);
     }
 
-    /// v0 TOML は移行後に v1 へ更新され、設定値と `favorite_modes` が保持されること
+    /// v0 TOML は移行後に v1 へ更新され、設定値と `favorite_modes` が保持されるようにすること
     #[test]
     fn test_prepare_loaded_migrates_v0_toml() {
         let v0_toml = r#"
@@ -123,7 +123,7 @@ interval_ms = 500
         assert!(prepared.favorite_modes.is_empty());
     }
 
-    /// v0 TOML を保存すると v1 スキーマで書き出されること
+    /// v0 TOML を保存すると v1 スキーマで書き出されるようにすること
     #[test]
     fn test_save_after_v0_migration_writes_current_version() {
         use super::serialize::config_to_toml;
@@ -147,7 +147,7 @@ interval_ms = 2000
         assert!(content.contains("favorite_modes"));
     }
 
-    /// version 未指定の TOML は現行スキーマとして読み込まれ、移行不要であること
+    /// version 未指定の TOML は現行スキーマとして読み込まれ、移行不要であるようにすること
     #[test]
     fn test_prepare_loaded_without_version_is_current_schema() {
         let toml_str = r#"
@@ -195,7 +195,7 @@ history_enabled = true
         assert!(prepared.history_enabled);
     }
 
-    /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えること
+    /// `fix_invalid` が不正なホットキーをデフォルトへ置き換えるようにすること
     #[test]
     fn test_hotkey_settings_fix_invalid() {
         let mut hotkeys = HotkeySettings {
@@ -209,7 +209,7 @@ history_enabled = true
         );
     }
 
-    /// `fix_duplicates` が固定割り当ての重複をデフォルトへ戻すこと
+    /// `fix_duplicates` が固定割り当ての重複をデフォルトへ戻すようにすること
     #[test]
     fn test_hotkey_settings_fix_duplicate_fixed_fields() {
         let mut hotkeys = HotkeySettings {
@@ -247,7 +247,7 @@ history_enabled = true
         assert!(hotkeys.favorite_mode_slots[1].is_empty());
     }
 
-    /// `add_registered_clip` が登録・検証・上限チェックを行うこと
+    /// `add_registered_clip` が登録・検証・上限チェックを行うとすること
     #[test]
     fn test_add_registered_clip() {
         use super::AddRegisteredClipError;
@@ -359,7 +359,7 @@ history_enabled = true
         );
     }
 
-    /// お気に入りスロットのデフォルトホットキーが解決されること
+    /// お気に入りスロットのデフォルトホットキーが解決されるようにすること
     #[test]
     fn test_favorite_slot_default_bindings() {
         let hotkeys = HotkeySettings::default();
@@ -391,7 +391,7 @@ history_enabled = true
         );
     }
 
-    /// `pipeline` 未設定時は `mode` のみが有効パイプラインになること
+    /// `pipeline` 未設定時は `mode` のみが有効パイプラインになるようにすること
     #[test]
     fn test_effective_pipeline_falls_back_to_mode() {
         let config = AppConfig::default();
@@ -399,7 +399,7 @@ history_enabled = true
         assert!(!config.is_pipeline_active());
     }
 
-    /// `pipeline` 設定時はその順序で有効パイプラインになること
+    /// `pipeline` 設定時はその順序で有効パイプラインになるようにすること
     #[test]
     fn test_effective_pipeline_uses_configured_chain() {
         let config = AppConfig {
@@ -413,7 +413,7 @@ history_enabled = true
         assert!(config.is_pipeline_active());
     }
 
-    /// `pipeline` が TOML に保存・復元されること
+    /// `pipeline` が TOML に保存・復元されるようにすること
     #[test]
     fn test_pipeline_serde_roundtrip() {
         let config = AppConfig {

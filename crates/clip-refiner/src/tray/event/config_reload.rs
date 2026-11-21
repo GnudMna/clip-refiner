@@ -136,6 +136,12 @@ fn reload_error_message(error: &ConfigReloadError) -> String {
 }
 
 /// 設定再読み込みを実行し、結果をデスクトップ通知で表示する
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `hotkey_handler` - グローバルホットキーハンドラ
+/// * `clip_selector` - 登録クリップセレクター (表示中なら内容を更新)
 pub fn reload_config_with_notification(
     state: &Arc<AppState>,
     menu: &TrayMenu,
@@ -174,7 +180,7 @@ mod tests {
         assert!(message.contains("将来 version を現行へ揃え"));
     }
 
-    /// 変更がない場合は基本メッセージのみであること
+    /// 変更がない場合は基本メッセージのみであるようにすること
     #[test]
     fn build_reload_message_without_changes() {
         assert_eq!(build_reload_message(&[]), "設定を反映しました");

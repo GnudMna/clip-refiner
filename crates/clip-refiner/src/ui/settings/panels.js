@@ -1,3 +1,8 @@
+    // ======================================================================
+    // 設定画面 パネル HTML 生成
+    // ======================================================================
+
+    /** @type {Record<string, () => string>} */
     const PANEL_RENDERERS = {
         general: renderGeneralPanel,
         favorites: renderFavoritesPanel,
@@ -9,38 +14,74 @@
         shortcuts: renderShortcutsPanel,
     };
 
-    function renderSidebar() {
+    /** サイドバーのアクティブタブ表示を DOM に反映する */
+    function syncSidebarActiveTab() {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) {
+            return;
+        }
+        sidebar.querySelectorAll('.nav-btn').forEach((button) => {
+            const isActive = button.dataset.tab === activeTab;
+            button.classList.toggle('active', isActive);
+            if (isActive) {
+                button.setAttribute('aria-current', 'page');
+            } else {
+                button.removeAttribute('aria-current');
+            }
+        });
+    }
+
+    /**
+     * サイドバーを初期化またはアクティブ状態を更新する
+     *
+     * タブ切替前に現在タブのスクロール位置を保存する
+     */
+    function ensureSidebar() {
         const content = document.getElementById('content');
         if (content) {
             tabScrollPositions[activeTab] = content.scrollTop;
         }
 
         const sidebar = document.getElementById('sidebar');
-        sidebar.innerHTML = TABS.map((tab) => {
-            const active = tab.id === activeTab ? ' active' : '';
-            return '<button type="button" class="nav-btn' + active + '" data-tab="'
-                + tab.id + '"'
-                + (tab.id === activeTab ? ' aria-current="page"' : '')
-                + '>' + escapeHtml(tab.label) + '</button>';
-        }).join('');
-        sidebar.querySelectorAll('.nav-btn').forEach((button) => {
-            button.addEventListener('click', () => {
-                if (button.dataset.tab === activeTab) {
+        if (!sidebar) {
+            return;
+        }
+
+        if (!sidebarInitialized) {
+            sidebar.innerHTML = TABS.map((tab) => {
+                const active = tab.id === activeTab ? ' active' : '';
+                return '<button type="button" class="nav-btn' + active + '" data-tab="'
+                    + tab.id + '"'
+                    + (tab.id === activeTab ? ' aria-current="page"' : '')
+                    + '>' + escapeHtml(tab.label) + '</button>';
+            }).join('');
+            sidebar.addEventListener('click', (event) => {
+                const button = event.target.closest('.nav-btn');
+                if (!button || button.dataset.tab === activeTab) {
                     return;
                 }
                 activeTab = button.dataset.tab;
                 render();
             });
-        });
+            sidebarInitialized = true;
+            return;
+        }
+
+        syncSidebarActiveTab();
     }
 
+    /** @returns {string} 監視タブのパネル HTML */
     function renderMonitorPanel() {
         const intervalDisabled = state.monitorMode === 'Event' ? ' disabled' : '';
         const pipelineMax = maxPipelineLength();
+        const processingDisabled = state.continuousRecordEnabled ? ' is-disabled' : '';
 
         const body = '<div id="monitor-pause-banner" class="status-banner status-paused" role="status"'
             + (state.isPaused ? '' : ' hidden')
             + '>クリップボード監視は一時停止中です</div>'
+            + '<div id="monitor-record-banner" class="status-banner status-continuous-record" role="status"'
+            + (state.continuousRecordEnabled ? '' : ' hidden')
+            + '>連続記録中はコピー時の自動加工を停止しています</div>'
             + card('監視の状態', optionCheckbox(
                 'monitor-paused',
                 state.isPaused,
@@ -66,6 +107,7 @@
                 }).join('')
                 + '</select>'
                 + '<p class="hint">イベント監視時は使用されない</p></div>')
+            + '<div id="monitor-processing-section"' + processingDisabled + '>'
             + card('デフォルトモード', ''
                 + '<div class="field">'
                 + '<label for="default-mode">適用モード</label>'
@@ -78,11 +120,13 @@
                 + '<button type="button" class="danger-btn" id="pipeline-clear-btn">クリア</button>'
                 + '</div>'
                 + '<p class="hint">最大 ' + pipelineMax + ' 段まで。空の場合はデフォルトモードのみ適用</p>'
-                + '<p class="hint">Excel→画像 など画像出力モードは末尾に1つのみ配置され、途中に追加した場合は自動的に末尾へ移動する</p>');
+                + '<p class="hint">Excel→画像 など画像出力モードは末尾に1つのみ配置され、途中に追加した場合は自動的に末尾へ移動する</p>')
+            + '</div>';
 
         return panelWrap('monitor', body);
     }
 
+    /** @returns {string} 通知タブのパネル HTML */
     function renderNotificationsPanel() {
         const ns = state.notificationSettings;
         const subDisabled = ns.enabled ? '' : ' is-disabled';
@@ -101,6 +145,7 @@
         return panelWrap('notifications', body);
     }
 
+    /** @returns {string} 履歴・連続記録タブのパネル HTML */
     function renderHistoryPanel() {
         const historyBounds = historyLimitBounds();
         const recordBounds = recordLimitBounds();
@@ -115,12 +160,15 @@
             + '<div class="card-actions"><button type="button" class="danger-btn" id="clear-history-btn">履歴をクリア</button></div>');
 
         const recordCard = card('連続記録', ''
+            + '<div id="record-active-banner" class="status-banner status-continuous-record" role="status"'
+            + (state.continuousRecordEnabled ? '' : ' hidden')
+            + '>連続記録中はコピー時の自動加工を停止しています</div>'
             + '<div class="option-list">'
             + optionCheckbox(
                 'record-enabled',
                 state.continuousRecordEnabled,
                 '連続記録を有効にする',
-                '加工せず元テキストを順に記録する'
+                '加工せず元テキストを順に記録する。有効中は自動加工が停止する'
             )
             + '</div>'
             + '<div class="field"><label for="record-limit">最大保持件数</label>'
@@ -132,6 +180,7 @@
         return panelWrap('history', '<div class="card-grid">' + historyCard + recordCard + '</div>');
     }
 
+    /** @returns {string} 正規表現タブのパネル HTML */
     function renderRegexPanel() {
         const regex = state.regex;
         const body = card('正規表現の置換', ''
@@ -147,7 +196,7 @@
             + card('プレビュー', ''
                 + '<div class="regex-preview">'
                 + '<div class="regex-preview-row"><span class="regex-preview-label">サンプル</span>'
-                + '<code class="regex-preview-sample">' + escapeHtml(REGEX_SAMPLE_TEXT) + '</code></div>'
+                + '<code class="regex-preview-sample">' + escapeHtml(state.regexPreviewSample) + '</code></div>'
                 + '<div class="regex-preview-row"><span class="regex-preview-label">結果</span>'
                 + '<code class="regex-preview-result" id="regex-preview-result">—</code></div>'
                 + '</div>'
@@ -156,6 +205,7 @@
         return panelWrap('regex', body);
     }
 
+    /** @returns {string} お気に入りタブのパネル HTML */
     function renderFavoritesPanel() {
         const favorites = state.favoriteModes || [];
         let listHtml = '';
@@ -188,6 +238,7 @@
         return panelWrap('favorites', body);
     }
 
+    /** @returns {string} ショートカットタブのパネル HTML */
     function renderShortcutsPanel() {
         const shortcuts = state.shortcuts || [];
         let listHtml = '';
@@ -214,6 +265,7 @@
         return panelWrap('shortcuts', body);
     }
 
+    /** @returns {string} 一般タブのパネル HTML */
     function renderGeneralPanel() {
         const body = card('起動', ''
             + '<div class="option-list">'
@@ -229,6 +281,12 @@
         return panelWrap('general', body);
     }
 
+    /**
+     * 登録クリップ 1 行分のテーブル行 HTML
+     *
+     * @param {{ id: string, label?: string, preview?: string, kind: string, thumbnail?: string }} clip
+     * @returns {string}
+     */
     function renderClipRow(clip) {
         const label = clip.label || clip.preview || '(無題)';
         const kindBadge = clip.kind === 'image'
@@ -256,6 +314,7 @@
             + '</td></tr>';
     }
 
+    /** @returns {string} 登録クリップタブのパネル HTML */
     function renderClipsPanel() {
         const clips = state.clips || [];
         let listHtml = '';

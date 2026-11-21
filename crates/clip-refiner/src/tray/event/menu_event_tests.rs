@@ -22,6 +22,9 @@ fn with_test_worker(
 }
 
 // ======================================================================
+// テスト
+// ======================================================================
+// ======================================================================
 // フォーカス喪失
 // ======================================================================
 /// 表示直後 200ms 以内はフォーカス喪失を無視すること
@@ -79,7 +82,7 @@ fn update_monitor_mode_switches_to_event_and_disables_interval() {
     assert!(!menu.interval.main_submenu.is_enabled());
 }
 
-/// 同一モードへの `update_monitor_mode` は no-op であること
+/// 同一モードへの `update_monitor_mode` は no-op であようにすること
 #[test]
 fn update_monitor_mode_noop_when_unchanged() {
     let state = Arc::new(test_app_state());
@@ -99,7 +102,7 @@ fn menu_event(id: &tray_icon::menu::MenuId) -> MenuEvent {
     MenuEvent { id: id.clone() }
 }
 
-/// 終了メニューで `ControlFlow::Exit` になること
+/// 終了メニューで `ControlFlow::Exit` になるようにすること
 #[test]
 fn handle_menu_event_quit_exits() {
     let state = Arc::new(test_app_state());
@@ -119,7 +122,7 @@ fn handle_menu_event_quit_exits() {
     assert!(matches!(control_flow, ControlFlow::Exit));
 }
 
-/// 一時停止チェック ON で設定が一時停止になること
+/// 一時停止チェック ON で設定が一時停止になるようにすること
 #[test]
 fn handle_menu_event_pause_enables_paused() {
     let state = Arc::new(test_app_state());
@@ -140,7 +143,7 @@ fn handle_menu_event_pause_enables_paused() {
     assert!(state.with_config(|c| c.is_paused));
 }
 
-/// 履歴クリアで履歴が空になること
+/// 履歴クリアで履歴が空になるようにすること
 #[test]
 fn handle_menu_event_history_clear() {
     let state = Arc::new(test_app_state());
@@ -164,7 +167,7 @@ fn handle_menu_event_history_clear() {
     assert_eq!(state.history_len(), 0);
 }
 
-/// 登録クリップの「クリップボードを登録」でワーカーコマンドが送信されること
+/// 登録クリップの「クリップボードを登録」でワーカーコマンドが送信されるようにすること
 #[test]
 fn handle_menu_event_clips_register_sends_command() {
     let state = Arc::new(test_app_state());
@@ -218,7 +221,7 @@ fn handle_menu_event_history_select_sends_text() {
     }
 }
 
-/// 加工モード選択で設定とワーカーコマンドが更新されること
+/// 加工モード選択で設定とワーカーコマンドが更新されるようにすること
 #[test]
 fn handle_menu_event_refine_mode_change() {
     let state = Arc::new(test_app_state());
@@ -248,7 +251,7 @@ fn handle_menu_event_refine_mode_change() {
     }
 }
 
-/// 通知 ON で設定が更新されること
+/// 通知 ON で設定が更新されるようにすること
 #[test]
 fn handle_menu_event_notification_enabled() {
     let state = Arc::new(test_app_state());
@@ -269,7 +272,7 @@ fn handle_menu_event_notification_enabled() {
     assert!(state.with_config(|c| c.notification_settings.enabled));
 }
 
-/// クリップボード内容表示の切替で `notify_result` が更新されること
+/// クリップボード内容表示の切替で `notify_result` が更新されるようにすること
 #[test]
 fn handle_menu_event_notification_clipboard_content_toggle() {
     let state = Arc::new(test_app_state());
@@ -290,7 +293,7 @@ fn handle_menu_event_notification_clipboard_content_toggle() {
     assert!(state.with_config(|c| c.notification_settings.notify_result));
 }
 
-/// 監視周期選択で `interval_ms` が更新されること
+/// 監視周期選択で `interval_ms` が更新されるようにすること
 #[test]
 fn handle_menu_event_interval_change() {
     let state = Arc::new(test_app_state());
@@ -317,7 +320,7 @@ fn handle_menu_event_interval_change() {
     assert!(item.is_checked());
 }
 
-/// 監視方式メニューで Event モードへ切り替わること
+/// 監視方式メニューで Event モードへ切り替わようにすること
 #[test]
 fn handle_menu_event_monitor_mode_change() {
     let state = Arc::new(test_app_state());
@@ -344,7 +347,7 @@ fn handle_menu_event_monitor_mode_change() {
     assert!(!menu.interval.main_submenu.is_enabled());
 }
 
-/// 履歴有効化で設定が更新されること
+/// 履歴有効化で設定が更新されるようにすること
 #[test]
 fn handle_menu_event_history_enabled() {
     let state = Arc::new(test_app_state());
@@ -365,7 +368,7 @@ fn handle_menu_event_history_enabled() {
     assert!(state.with_config(|c| c.history_enabled));
 }
 
-/// 連続記録有効化で設定が更新され、現在のクリップボードがキューへ積まれること
+/// 連続記録有効化で設定が更新され、現在のクリップボードがキューへ積まれようにすること
 #[test]
 fn handle_menu_event_continuous_record_enabled() {
     let state = Arc::new(test_app_state());
@@ -385,13 +388,18 @@ fn handle_menu_event_continuous_record_enabled() {
 
     assert!(state.with_config(|c| c.continuous_record_enabled));
     assert!(menu.continuous_record.enabled_item.is_checked());
+    assert!(!menu.refine.main_submenu.is_enabled());
+    assert_eq!(
+        menu.continuous_record.main_submenu.text(),
+        "連続記録 (自動加工停止)"
+    );
     match rx.try_recv().unwrap() {
         ClipboardCommand::CatchUpContinuousRecord => {}
         other => panic!("unexpected command: {other:?}"),
     }
 }
 
-/// お気に入り登録メニューで現在モードが登録されること
+/// お気に入り登録メニューで現在モードが登録されるようにすること
 #[test]
 fn handle_menu_event_add_favorite_registers_current_mode() {
     let state = Arc::new(test_app_state());
@@ -410,4 +418,25 @@ fn handle_menu_event_add_favorite_registers_current_mode() {
     );
 
     assert!(state.with_config(|config| config.is_favorite_mode(RefineMode::Trim)));
+}
+
+/// クリップボード監視再開メニューがアプリ制御イベントとして処理されるようにすること
+#[test]
+fn handle_menu_event_retry_clipboard_worker_is_handled() {
+    let state = Arc::new(test_app_state());
+    let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+    menu.set_clipboard_worker_retry_enabled(true);
+    let (worker, _) = with_test_worker(&state);
+    let mut control_flow = ControlFlow::Wait;
+
+    handle_menu_event(
+        &menu_event(menu.retry_clipboard_worker_item.id()),
+        &menu,
+        &state,
+        &worker,
+        None,
+        &mut control_flow,
+    );
+
+    assert!(matches!(control_flow, ControlFlow::Wait));
 }

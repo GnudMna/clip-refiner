@@ -18,6 +18,12 @@ impl Default for ContentFingerprint {
 
 impl ContentFingerprint {
     /// テキストから指紋を生成する
+    ///
+    /// # Arguments
+    /// * `text` - 指紋化対象のテキスト
+    ///
+    /// # Returns
+    /// * `Self` - BLAKE3 ハッシュとバイト長からなる指紋
     pub fn from_text(text: &str) -> Self {
         Self {
             hash: *blake3::hash(text.as_bytes()).as_bytes(),
@@ -26,6 +32,13 @@ impl ContentFingerprint {
     }
 
     /// テキストがこの指紋と一致するか判定する
+    ///
+    /// # Arguments
+    /// * `self` - 比較対象の指紋
+    /// * `text` - 判定対象のテキスト
+    ///
+    /// # Returns
+    /// * `bool` - ハッシュとバイト長が一致する場合は `true`
     pub fn matches(&self, text: &str) -> bool {
         text.len() == self.byte_len && Self::from_text(text).hash == self.hash
     }
@@ -45,14 +58,14 @@ mod tests {
         assert!(fp.matches("hello"));
     }
 
-    /// 異なるテキストは一致しないこと
+    /// 異なるテキストは一致しないであるようにすること
     #[test]
     fn fingerprint_rejects_different_text() {
         let fp = ContentFingerprint::from_text("hello");
         assert!(!fp.matches("world"));
     }
 
-    /// 長さが異なる場合は一致しないこと
+    /// 長さが異なる場合は一致しないであるようにすること
     #[test]
     fn fingerprint_rejects_different_length() {
         let fp = ContentFingerprint::from_text("ab");

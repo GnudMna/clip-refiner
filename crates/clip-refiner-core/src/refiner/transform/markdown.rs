@@ -268,7 +268,7 @@ fn unescape_table_cell(cell: &str) -> String {
 mod tests {
     use super::*;
 
-    /// 見出しと太字の基本的な Markdown→HTML 変換
+    /// 見出しと太字の基本的な Markdown→HTML 変換できるようにすること
     #[test]
     fn test_markdown_to_html_basic() {
         let input = "# Header\n**bold**";
@@ -276,7 +276,7 @@ mod tests {
         assert!(output.contains("<h1>Header</h1>"));
     }
 
-    /// 太字・斜体の変換
+    /// 太字・斜体の変換できるようにすること
     #[test]
     fn test_markdown_to_html_inline() {
         let output = markdown_to_html("**bold** and *italic*");
@@ -284,14 +284,14 @@ mod tests {
         assert!(output.contains("<em>italic</em>"));
     }
 
-    /// `取り消し線の変換(ENABLE_STRIKETHROUGH)`
+    /// `取り消し線の変換(ENABLE_STRIKETHROUGH)`できるようにすること
     #[test]
     fn test_markdown_to_html_strikethrough() {
         let output = markdown_to_html("~~strike~~");
         assert!(output.contains("<del>strike</del>"));
     }
 
-    /// `テーブルの変換(ENABLE_TABLES)`
+    /// `テーブルの変換(ENABLE_TABLES)`できるようにすること
     #[test]
     fn test_markdown_to_html_table() {
         let input = "| A | B |\n|---|---|\n| 1 | 2 |";
@@ -301,7 +301,7 @@ mod tests {
         assert!(output.contains("<td>"));
     }
 
-    /// `excel_to_markdown_table`: 基本的な TSV 変換
+    /// `excel_to_markdown_table`: 基本的な TSV 変換できるようにすること
     #[test]
     fn test_excel_to_markdown_table_basic() {
         let input = "Name\tAge\nAlice\t30\nBob\t25";
@@ -312,7 +312,7 @@ mod tests {
         assert!(output.contains("| Bob | 25 |"));
     }
 
-    /// `excel_to_markdown_table`: セル内の `|` がエスケープされること
+    /// `excel_to_markdown_table`: セル内の `|` がエスケープされるようにすること
     #[test]
     fn test_excel_to_markdown_table_pipe_escape() {
         let input = "A|B\tC";
@@ -320,7 +320,7 @@ mod tests {
         assert!(output.contains("A\\|B"));
     }
 
-    /// `excel_to_markdown_table`: 空入力は元の文字列を返すこと
+    /// `excel_to_markdown_table`: 空入力は元の文字列を返すようにすること
     #[test]
     fn test_excel_to_markdown_table_empty() {
         let input = "";
@@ -336,7 +336,7 @@ mod tests {
         assert!(output.contains("|---|---|---|"));
     }
 
-    /// `markdown_table_to_excel`: 基本的な Markdown 表変換
+    /// `markdown_table_to_excel`: 基本的な Markdown 表変換できるようにすること
     #[test]
     fn test_markdown_table_to_excel_basic() {
         let input = "| Name | Age |\n|---|---|\n| Alice | 30 |\n| Bob | 25 |";
@@ -344,7 +344,7 @@ mod tests {
         assert_eq!(output, "Name\tAge\nAlice\t30\nBob\t25");
     }
 
-    /// `markdown_table_to_excel`: セル内の `\|` が復元されること
+    /// `markdown_table_to_excel`: セル内の `\|` が復元されるようにすること
     #[test]
     fn test_markdown_table_to_excel_pipe_unescape() {
         let input = "| A\\|B | C |\n|---|---|\n| 1 | 2 |";
@@ -352,7 +352,7 @@ mod tests {
         assert_eq!(output, "A|B\tC\n1\t2");
     }
 
-    /// `markdown_table_to_excel`: セル内の `<br>` が改行に戻ること
+    /// `markdown_table_to_excel`: セル内の `<br>` が改行に戻るようにすること
     #[test]
     fn test_markdown_table_to_excel_br_to_newline() {
         let input = "| Col |\n|---|\n| a<br>b |";
@@ -360,14 +360,14 @@ mod tests {
         assert_eq!(output, "Col\n\"a\nb\"");
     }
 
-    /// `markdown_table_to_excel`: 空入力は元の文字列を返すこと
+    /// `markdown_table_to_excel`: 空入力は元の文字列を返すようにすること
     #[test]
     fn test_markdown_table_to_excel_empty() {
         let input = "";
         assert_eq!(markdown_table_to_excel(input), input);
     }
 
-    /// `markdown_table_to_excel`: 表でないテキストは元の文字列を返すこと
+    /// `markdown_table_to_excel`: 表でないテキストは元の文字列を返すようにすること
     #[test]
     fn test_markdown_table_to_excel_non_table() {
         let input = "plain text";

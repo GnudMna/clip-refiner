@@ -1,6 +1,6 @@
 //! クリップボードのテキストを加工するツール `ClipRefiner` のライブラリクレート
 //!
-//! 加工ロジックと設定型は [`clip_refiner_core`] クレートに分離されている。
+//! 加工ロジックと設定型は [`clip_refiner_core`] クレートに分離されている
 //! feature `app` (デフォルト有効) ではトレイ常駐 UI と [`run`] を提供する
 //!
 //! # ライブラリのみ利用する場合
@@ -48,6 +48,8 @@ mod logger;
 mod platform;
 #[cfg(feature = "app")]
 mod tray;
+#[cfg(feature = "app")]
+mod user_error;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 #[cfg(feature = "app")]

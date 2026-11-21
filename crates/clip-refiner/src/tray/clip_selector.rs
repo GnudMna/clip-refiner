@@ -75,6 +75,13 @@ pub struct ClipSelectorWindow {
 // ======================================================================
 impl ClipSelectorWindow {
     /// 登録クリップセレクタウィンドウと `WebView` を初期化して生成する
+    ///
+    /// # Arguments
+    /// * `window` - ベースとなる `tao` ウィンドウ
+    /// * `proxy` - UI スレッド (イベントループ) へメッセージを送信するプロキシ
+    ///
+    /// # Returns
+    /// * `anyhow::Result<Self>` - 成功時は `ClipSelectorWindow`、失敗時はエラー
     pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let html = assemble_clip_selector_html();
         let proxy_clone = proxy.clone();
@@ -114,28 +121,49 @@ impl ClipSelectorWindow {
 // ======================================================================
 impl ClipSelectorWindow {
     /// 登録クリップセレクタを表示し、登録クリップ一覧を反映する
+    ///
+    /// # Arguments
+    /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn show(&self, clips_json: &str) {
         let script = clip_selector_focus_script(clips_json);
         self.inner.show_with_script(&script);
     }
 
     /// 登録クリップ一覧を再描画する (ウィンドウ表示中の更新用)
+    ///
+    /// # Arguments
+    /// * `clips_json` - 登録クリップ一覧 JSON
     pub fn refresh_items(&self, clips_json: &str) {
         let script = clip_selector_refresh_script(clips_json);
         self.inner.evaluate_script(&script);
     }
 
     /// 登録クリップセレクタを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipSelectorWindow`
     pub fn hide(&self) {
         self.inner.hide();
     }
 
     /// 登録クリップセレクタが現在表示されているかどうかを確認する
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipSelectorWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
         self.inner.is_visible()
     }
 
     /// 登録クリップセレクタウィンドウの内部 ID を取得する
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipSelectorWindow`
+    ///
+    /// # Returns
+    /// * `tao::window::WindowId` - ウィンドウ ID
     pub fn id(&self) -> tao::window::WindowId {
         self.inner.id()
     }
@@ -145,6 +173,13 @@ impl ClipSelectorWindow {
 // ウィンドウ初期化
 // ======================================================================
 /// 登録クリップセレクタウィンドウを初期化して、非表示状態のインスタンスを作成する
+///
+/// # Arguments
+/// * `event_loop` - ウィンドウ作成用のイベントループ
+/// * `proxy` - イベント送信用プロキシ
+///
+/// # Returns
+/// * `anyhow::Result<ClipSelectorWindow>` - 成功時は `ClipSelectorWindow`、失敗時はエラー
 pub fn init_clip_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
@@ -165,7 +200,7 @@ pub fn init_clip_selector(
 mod tests {
     use super::*;
 
-    /// `select:` プレフィックス付きメッセージからインデックスを復元できること
+    /// `select:` プレフィックス付きメッセージからインデックスを復元できるようにすること
     #[test]
     fn parse_ipc_select_clip() {
         assert_eq!(
@@ -174,7 +209,7 @@ mod tests {
         );
     }
 
-    /// `close` メッセージを解釈できること
+    /// `close` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_close() {
         assert_eq!(
@@ -183,7 +218,7 @@ mod tests {
         );
     }
 
-    /// `register` メッセージを解釈できること
+    /// `register` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_register() {
         assert_eq!(
@@ -192,7 +227,7 @@ mod tests {
         );
     }
 
-    /// `delete:` プレフィックス付きメッセージからインデックスを復元できること
+    /// `delete:` プレフィックス付きメッセージからインデックスを復元できるようにすること
     #[test]
     fn parse_ipc_delete_clip() {
         assert_eq!(
@@ -201,26 +236,27 @@ mod tests {
         );
     }
 
-    /// 不正なメッセージは `None` を返すこと
+    /// 不正なメッセージは `None` を返すようにすること
     #[test]
     fn parse_ipc_unknown_returns_none() {
         assert_eq!(parse_clip_selector_ipc_message("invalid"), None);
         assert_eq!(parse_clip_selector_ipc_message("select:not-a-number"), None);
     }
 
-    /// 生成 HTML に CSS が埋め込まれること
+    /// 生成 HTML に CSS が埋め込まれようにすること
     #[test]
     fn assemble_clip_selector_html_embeds_css() {
         let html = assemble_clip_selector_html();
         assert!(!html.contains(r#"@import url("selector.css");"#));
         assert!(!html.contains(r#"@import url("clip_selector.css");"#));
         assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(!html.contains(r#"<script src="clip_selector.js"></script>"#));
         assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("#image-hover-preview"));
         assert!(html.contains("focusInput"));
     }
 
-    /// フォーカス用スクリプトに JSON が含まれること
+    /// フォーカス用スクリプトに JSON が含まれるようにすること
     #[test]
     fn clip_selector_focus_script_contains_json() {
         let script = clip_selector_focus_script(r#"[{"id":"0","label":"test"}]"#);
@@ -229,7 +265,7 @@ mod tests {
         assert!(script.ends_with(");"));
     }
 
-    /// 再描画用スクリプトが `refreshItems` を呼ぶこと
+    /// 再描画用スクリプトが `refreshItems` を呼ようにすること
     #[test]
     fn clip_selector_refresh_script_calls_refresh_items() {
         let script = clip_selector_refresh_script(r"[]");

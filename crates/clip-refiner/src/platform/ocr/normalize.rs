@@ -54,25 +54,25 @@ fn is_japanese_compact_char(ch: char) -> bool {
 mod tests {
     use super::*;
 
-    /// 漢字・かなの間に挿入されたスペースを除去する
+    /// 漢字・かなの間に挿入されたスペースを除去すること
     #[test]
     fn normalize_removes_spaces_between_japanese_chars() {
         assert_eq!(normalize_ocr_text("日 本 語 の テ ス ト"), "日本語のテスト");
     }
 
-    /// 英単語間のスペースは維持する
+    /// 英単語間のスペースは維持すること
     #[test]
     fn normalize_keeps_spaces_between_latin_words() {
         assert_eq!(normalize_ocr_text("hello world"), "hello world");
     }
 
-    /// 英字と日本語の間のスペースは維持する
+    /// 英字と日本語の間のスペースは維持すること
     #[test]
     fn normalize_keeps_space_between_latin_and_japanese() {
         assert_eq!(normalize_ocr_text("API の 説明"), "API の説明");
     }
 
-    /// 改行は維持する
+    /// 改行は維持すること
     #[test]
     fn normalize_keeps_line_breaks() {
         assert_eq!(normalize_ocr_text("あ い\nう え"), "あい\nうえ");

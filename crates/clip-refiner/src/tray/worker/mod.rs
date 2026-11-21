@@ -121,7 +121,7 @@ mod tests {
         assert!(should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中はティックを実行しないこと
+    /// 一時停止中はティックを実行しないであるようにすること
     #[test]
     fn should_not_run_monitor_tick_when_paused() {
         let state = Arc::new(test_app_state());
@@ -132,7 +132,7 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 監視世代が 0 の場合はティックを実行しないこと
+    /// 監視世代が 0 の場合はティックを実行しないであるようにすること
     #[test]
     fn should_not_run_monitor_tick_when_generation_zero() {
         let state = Arc::new(test_app_state());
@@ -142,7 +142,7 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 追跡中の世代と不一致の場合はティックを実行しないこと
+    /// 追跡中の世代と不一致の場合はティックを実行しないであるようにすること
     #[test]
     fn should_not_run_monitor_tick_when_generation_mismatch() {
         let state = Arc::new(test_app_state());
@@ -153,7 +153,21 @@ mod tests {
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中は `recv_timeout` が短い間隔を返すこと
+    /// 一時停止中でも連続記録が有効ならティックを実行すること
+    #[test]
+    fn should_run_monitor_tick_when_paused_with_continuous_record() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = true;
+            c.continuous_record_enabled = true;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        assert!(should_run_monitor_tick(&state, &monitor));
+    }
+
+    /// 一時停止中は `recv_timeout` が短い間隔を返すようにすること
     #[test]
     fn recv_timeout_is_short_when_paused() {
         let state = Arc::new(test_app_state());
@@ -168,7 +182,7 @@ mod tests {
         assert_eq!(monitor.recv_timeout(&state), Duration::from_millis(100));
     }
 
-    /// 設定が Polling の場合は実効監視モードも Polling であること
+    /// 設定が Polling の場合は実効監視モードも Polling であるようにすること
     #[test]
     fn effective_mode_is_polling_when_configured() {
         let state = Arc::new(test_app_state());
@@ -195,7 +209,7 @@ mod tests {
         }
     }
 
-    /// クリップボード画像を登録できること
+    /// クリップボード画像を登録できるようにすること
     #[test]
     fn register_clip_from_clipboard_saves_image() {
         use crate::test_helpers::InMemoryTextClipboard;
@@ -220,7 +234,7 @@ mod tests {
         });
     }
 
-    /// 登録画像をクリップボードへコピーできること
+    /// 登録画像をクリップボードへコピーできるようにすること
     #[test]
     fn copy_registered_writes_image_to_clipboard() {
         use crate::test_helpers::InMemoryTextClipboard;

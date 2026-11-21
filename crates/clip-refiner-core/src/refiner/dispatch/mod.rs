@@ -85,8 +85,9 @@ mod tests {
         ctx
     }
 
-    /// `全てのRefineModeバリアントを網羅するテーブル駆動テスト`
-    /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
+    /// 全 `RefineMode` バリアントを網羅してテーブル駆動で検証すること
+    ///
+    /// 各モードが正しく配線され、期待通りの加工を行う
     #[test]
     #[allow(clippy::too_many_lines)]
     fn test_all_refine_modes() {

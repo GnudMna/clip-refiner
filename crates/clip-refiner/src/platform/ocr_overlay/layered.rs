@@ -4,13 +4,13 @@ use super::geometry::{clamp_rect, expand_rect};
 use super::types::{BORDER_PIXEL, BORDER_WIDTH, DIM_ALPHA, SelectionRect};
 
 use anyhow::{Context, Result, bail};
-use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::Graphics::Gdi::{
+use windows::Win32::Foundation::{COLORREF, HWND, POINT, SIZE};
+use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION, CreateCompatibleDC,
-    CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, ReleaseDC,
-    SelectObject,
+    CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, HGDIOBJ,
+    ReleaseDC, SelectObject,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::{ULW_ALPHA, UpdateLayeredWindow};
+use windows::Win32::UI::WindowsAndMessaging::{ULW_ALPHA, UpdateLayeredWindow};
 
 // ======================================================================
 // レイヤード描画
@@ -34,11 +34,19 @@ struct LayeredPresenter {
     hdc_mem: HDC,
     hbmp: HBITMAP,
     bits: *mut core::ffi::c_void,
-    saved_bitmap: HBITMAP,
+    saved_bitmap: HGDIOBJ,
 }
 
 impl LayeredOverlay {
     /// 対象ウィンドウへ半透明レイヤーを割り当てる
+    ///
+    /// # Arguments
+    /// * `hwnd` - レイヤーを割り当てる対象ウィンドウ
+    /// * `width` - オーバーレイの幅 (ピクセル)
+    /// * `height` - オーバーレイの高さ (ピクセル)
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 生成した `LayeredOverlay`。領域が空または GDI 初期化失敗時は `Err`
     pub fn new(hwnd: HWND, width: u32, height: u32) -> Result<Self> {
         if width == 0 || height == 0 {
             bail!("オーバーレイ領域が空");
@@ -65,6 +73,12 @@ impl LayeredOverlay {
     }
 
     /// 画面全体を暗転状態へ戻す
+    ///
+    /// # Arguments
+    /// * `self` - この `LayeredOverlay`
+    ///
+    /// # Returns
+    /// * `Result<()>` - 描画更新に成功した場合は `Ok(())`、失敗時は `Err`
     pub fn reset_to_dim(&mut self) -> Result<()> {
         fill_dim_layer(&mut self.bgra, &self.dim_row, self.height);
         self.last_preview = None;
@@ -72,6 +86,12 @@ impl LayeredOverlay {
     }
 
     /// 選択範囲だけ差分更新する
+    ///
+    /// # Arguments
+    /// * `selection` - 更新する選択矩形
+    ///
+    /// # Returns
+    /// * `Result<()>` - 描画更新に成功した場合は `Ok(())`、失敗時は `Err`
     pub fn update_selection(&mut self, selection: SelectionRect) -> Result<()> {
         if let Some(old) = self.last_preview.replace(selection) {
             restore_dim_rect(
@@ -98,9 +118,9 @@ impl Drop for LayeredPresenter {
     fn drop(&mut self) {
         unsafe {
             SelectObject(self.hdc_mem, self.saved_bitmap);
-            DeleteObject(self.hbmp);
-            DeleteDC(self.hdc_mem);
-            ReleaseDC(HWND::default(), self.hdc_screen);
+            let _ = DeleteObject(self.hbmp.into());
+            let _ = DeleteDC(self.hdc_mem);
+            let _ = ReleaseDC(Some(HWND::default()), self.hdc_screen);
         }
     }
 }
@@ -109,34 +129,34 @@ impl LayeredPresenter {
     /// 再利用可能な DIB セクションを確保する
     fn new(width: u32, height: u32) -> Result<Self> {
         unsafe {
-            let hdc_screen = GetDC(HWND::default());
-            if hdc_screen.is_null() {
+            let hdc_screen = GetDC(Some(HWND::default()));
+            if hdc_screen.is_invalid() {
                 bail!("画面 DC の取得に失敗");
             }
 
-            let hdc_mem = CreateCompatibleDC(hdc_screen);
-            if hdc_mem.is_null() {
-                ReleaseDC(HWND::default(), hdc_screen);
+            let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+            if hdc_mem.is_invalid() {
+                let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
                 bail!("互換 DC の作成に失敗");
             }
 
             let bmi = bitmap_info(width, height)?;
             let mut bits: *mut core::ffi::c_void = ptr::null_mut();
             let hbmp = CreateDIBSection(
-                hdc_mem,
-                ptr::from_ref(&bmi),
+                Some(hdc_mem),
+                &raw const bmi,
                 DIB_RGB_COLORS,
-                ptr::from_mut(&mut bits),
-                ptr::null_mut(),
+                &raw mut bits,
+                None,
                 0,
-            );
-            if hbmp.is_null() || bits.is_null() {
-                DeleteDC(hdc_mem);
-                ReleaseDC(HWND::default(), hdc_screen);
+            )?;
+            if hbmp.is_invalid() || bits.is_null() {
+                let _ = DeleteDC(hdc_mem);
+                let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
                 bail!("DIB セクションの作成に失敗");
             }
 
-            let saved_bitmap = SelectObject(hdc_mem, hbmp);
+            let saved_bitmap = SelectObject(hdc_mem, hbmp.into());
             Ok(Self {
                 hdc_screen,
                 hdc_mem,
@@ -152,11 +172,11 @@ impl LayeredPresenter {
         unsafe {
             ptr::copy_nonoverlapping(bgra.as_ptr(), self.bits.cast(), bgra.len());
 
-            let size = windows_sys::Win32::Foundation::SIZE {
+            let size = SIZE {
                 cx: i32::try_from(width).context("幅の変換に失敗")?,
                 cy: i32::try_from(height).context("高さの変換に失敗")?,
             };
-            let point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
+            let point = POINT { x: 0, y: 0 };
             let blend = BLENDFUNCTION {
                 BlendOp: 0,
                 BlendFlags: 0,
@@ -164,20 +184,18 @@ impl LayeredPresenter {
                 AlphaFormat: u8::try_from(AC_SRC_ALPHA).unwrap_or(1),
             };
 
-            let ok = UpdateLayeredWindow(
+            UpdateLayeredWindow(
                 hwnd,
-                self.hdc_screen,
-                ptr::null(),
-                ptr::from_ref(&size),
-                self.hdc_mem,
-                ptr::from_ref(&point),
-                0,
-                ptr::from_ref(&blend),
+                Some(self.hdc_screen),
+                None,
+                Some(&raw const size),
+                Some(self.hdc_mem),
+                Some(&raw const point),
+                COLORREF(0),
+                Some(&raw const blend),
                 ULW_ALPHA,
-            );
-            if ok == 0 {
-                bail!("レイヤードウィンドウの更新に失敗");
-            }
+            )
+            .map_err(|_| anyhow::anyhow!("レイヤードウィンドウの更新に失敗"))?;
         }
 
         Ok(())
@@ -206,7 +224,7 @@ fn bitmap_info(width: u32, height: u32) -> Result<BITMAPINFO> {
             biHeight: -i32::try_from(height).context("高さの変換に失敗")?,
             biPlanes: 1,
             biBitCount: 32,
-            biCompression: BI_RGB,
+            biCompression: BI_RGB.0,
             biSizeImage: 0,
             biXPelsPerMeter: 0,
             biYPelsPerMeter: 0,
@@ -333,7 +351,7 @@ fn set_pixel(bgra: &mut [u8], frame_width: u32, x: i32, y: i32, pixel: [u8; 4]) 
 mod tests {
     use super::*;
 
-    /// 選択範囲内のピクセルが透明になる
+    /// 選択範囲内のピクセルが透明になるようにすること
     #[test]
     fn clear_rect_makes_selection_transparent() {
         let dim_row = build_dim_row(4);
@@ -354,7 +372,7 @@ mod tests {
         assert_eq!(bgra[3], DIM_ALPHA);
     }
 
-    /// 差分更新で選択範囲を戻せる
+    /// 差分更新で選択範囲を戻せようにすること
     #[test]
     fn restore_dim_rect_refills_selection_area() {
         let dim_row = build_dim_row(4);

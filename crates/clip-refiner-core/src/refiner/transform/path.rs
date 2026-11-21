@@ -191,7 +191,7 @@ fn extract_single_basename(line: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// 複数行からのベースネーム抽出テスト
+    /// 複数行からのベースネーム抽出できるようにすること
     #[test]
     fn test_extract_basename_multiline() {
         let input = "\"C:\\Program Files (x86)\"\n\"C:\\ProgramData\"\n\"C:\\Program Files\"";
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(extract_basename(input), expected);
     }
 
-    /// パスと非パスが混在する場合のベースネーム抽出テスト
+    /// パスと非パスが混在する場合のベースネーム抽出できるようにすること
     #[test]
     fn test_extract_basename_mixed() {
         let input = "C:\\foo\\bar.txt\nNot a path\n/tmp/test.log";
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(extract_basename(input), expected);
     }
 
-    /// パスの引用符削除テスト
+    /// パスの引用符削除できるようにすること
     #[test]
     fn test_remove_path_quotes() {
         let input = "\"C:\\foo\\bar.txt\"\n\"Not a path\"\nD:\\data";
@@ -215,7 +215,7 @@ mod tests {
         assert_eq!(remove_path_quotes(input), expected);
     }
 
-    /// パスへの引用符付与テスト
+    /// パスへの引用符付与できるようにすること
     #[test]
     fn test_add_path_quotes() {
         let input = "C:\\foo\\bar.txt\n\"Already quoted\"\nE:\\work";
@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(add_path_quotes(input), expected);
     }
 
-    /// スラッシュ区切りへの変換テスト
+    /// スラッシュ区切りへの変換できるようにすること
     #[test]
     fn test_convert_to_forward_slash() {
         let input = "C:\\Users\\Test\\file.txt";
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(convert_to_forward_slash(input), expected);
     }
 
-    /// 複数行のスラッシュ区切り変換テスト
+    /// 複数行のスラッシュ区切り変換できるようにすること
     #[test]
     fn test_convert_to_forward_slash_multiline() {
         let input = "C:\\foo\\bar.txt\nD:\\data\\test.log";
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(convert_to_forward_slash(input), expected);
     }
 
-    /// 既にスラッシュ区切りの場合に変更されないことを確認するテスト
+    /// 既にスラッシュ区切りの場合に変更されないことを確認すること
     #[test]
     fn test_convert_to_forward_slash_already_slash() {
         let input = "/usr/local/bin";
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(result, input);
     }
 
-    /// バックスラッシュ区切りへの変換テスト
+    /// バックスラッシュ区切りへの変換できるようにすること
     #[test]
     fn test_convert_to_backslash() {
         let input = "/usr/local/bin";
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(convert_to_backslash(input), expected);
     }
 
-    /// 複数行のバックスラッシュ区切り変換テスト
+    /// 複数行のバックスラッシュ区切り変換できるようにすること
     #[test]
     fn test_convert_to_backslash_multiline() {
         let input = "/home/user/file.txt\n/tmp/test.log";
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(convert_to_backslash(input), expected);
     }
 
-    /// 既にバックスラッシュ区切りの場合に変更されないことを確認するテスト
+    /// 既にバックスラッシュ区切りの場合に変更されないことを確認すること
     #[test]
     fn test_convert_to_backslash_already_backslash() {
         let input = "C:\\Windows\\System32";
@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(result, input);
     }
 
-    /// 異なる種類のパスが混在する場合の変換テスト
+    /// 異なる種類のパスが混在する場合の変換できるようにすること
     #[test]
     fn test_convert_mixed_content() {
         let input = "C:\\foo\\bar.txt\nNot a path\nD:\\data";
@@ -281,14 +281,14 @@ mod tests {
         assert_eq!(convert_to_forward_slash(input), expected);
     }
 
-    /// スペースを含むパスからのベースネーム抽出テスト
+    /// スペースを含むパスからのベースネーム抽出できるようにすること
     #[test]
     fn test_extract_basename_spaces() {
         let input = "C:\\Program Files\\My App\\app.exe";
         assert_eq!(extract_basename(input), "app.exe");
     }
 
-    /// 相対パスからのベースネーム抽出テスト
+    /// 相対パスからのベースネーム抽出できるようにすること
     #[test]
     fn test_extract_basename_relative() {
         let input = "./foo/bar/baz.txt";

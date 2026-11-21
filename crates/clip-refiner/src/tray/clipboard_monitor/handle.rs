@@ -1,37 +1,19 @@
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
-use super::notify;
-use super::state::{AppState, MonitorSnapshot, ProcessedState};
+use super::decision::{should_process_clipboard, should_record_continuous_clipboard};
 
 use crate::config::MonitorMode;
-use crate::platform;
 use crate::refiner::{
     ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode,
     TextClipboard, process_clipboard_pipeline_io,
 };
-use crate::security::{ContentFingerprint, is_within_clipboard_limit};
+use crate::security::is_within_clipboard_limit;
+use crate::tray::notify;
+use crate::tray::state::{AppState, MonitorSnapshot};
+use crate::user_error::UserNotification;
 
 // ======================================================================
-// 監視スレッド管理
-// ======================================================================
-/// クリップボード監視の世代カウンタを進め、ワーカーに監視状態のリセットを通知する
-///
-/// 監視処理自体はクリップボードワーカースレッド内で実行される
-/// 一時停止中 (`is_paused == true`) の場合は何もしない
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-pub fn bump_monitor_generation(state: &Arc<AppState>) {
-    if state.with_config(|c| c.is_paused) {
-        return;
-    }
-
-    state.monitor_generation.fetch_add(1, Ordering::SeqCst);
-}
-
-// ======================================================================
-// クリップボード更新処理
+// 定数
 // ======================================================================
 /// ポーリングスリープを分割するチック間隔(ミリ秒)
 pub(crate) const POLL_TICK_MS: u64 = 50;
@@ -39,38 +21,51 @@ pub(crate) const POLL_TICK_MS: u64 = 50;
 /// イベント監視ループのスリープ間隔(ミリ秒)
 pub(crate) const EVENT_POLL_MS: u64 = 100;
 
-/// 加工を試みるべきか判定する。スキップする場合は `processed_state` を更新する。
+/// クリップボード観測の結果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClipboardObserveResult {
+    /// クリップボード本文を読み取れず、変更トークンを進めない
+    ReadFailed,
+    /// 観測のみ (連続記録・スキップ・変更なし)
+    Observed,
+    /// 加工によりクリップボードを書き換えた
+    ClipboardWritten,
+}
+
+// ======================================================================
+// クリップボード更新処理
+// ======================================================================
+/// 監視世代の再同期後に取りこぼした連続記録を回復する
+///
+/// 世代更新とコピーが同じタイミングで重なった場合、トークンだけ進んで
+/// キューへ積まれないことがあるため、トークン変化時は現在の本文を積む
 ///
 /// # Arguments
-/// * `ps` - 前回の加工状態
-/// * `text` - 現在のクリップボードテキスト
-/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
-///
-/// # Returns
-/// * `true` - 加工を試みる
-/// * `false` - スキップする
-pub(crate) fn should_process_clipboard(
-    ps: &mut ProcessedState,
+/// * `state` - アプリケーションの共有状態
+/// * `text` - 再同期時に読み取ったクリップボード本文
+/// * `token_changed` - 前回トークンから変化した場合は `true`
+pub(crate) fn recover_continuous_record_on_reset(
+    state: &Arc<AppState>,
     text: &str,
-    event_driven: bool,
-) -> bool {
-    if text.is_empty() {
-        return false;
+    token_changed: bool,
+) {
+    if !token_changed || !state.with_config(|c| c.continuous_record_enabled) {
+        return;
     }
 
-    // 自身の書き戻しによるクリップボード変更イベントを1回無視
-    if ps.matches_last_written(text) {
-        ps.last_written = None;
-        ps.last_seen = ContentFingerprint::from_text(text);
-        return false;
+    if !is_within_clipboard_limit(text) {
+        state.record_clipboard_observed(text);
+        return;
     }
 
-    // ポーリング: 前回と同じ内容なら加工しない
-    if !event_driven && ps.matches_last_seen(text) {
-        return false;
+    let should_record =
+        state.with_processed_state(|ps| should_record_continuous_clipboard(ps, text));
+    if !should_record {
+        return;
     }
 
-    true
+    state.record_clipboard_observed(text);
+    state.enqueue_continuous_record(text);
 }
 
 /// クリップボードの内容更新を検知し、必要に応じて加工処理を行う
@@ -86,40 +81,40 @@ pub(crate) fn should_process_clipboard(
 /// * `ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 ///
 /// # Returns
-/// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
+/// * `ClipboardObserveResult` - 観測結果。`ReadFailed` のとき呼び出し元は変更トークンを進めない
 pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
     event_driven: bool,
     ctx: &RefineContext,
-) -> bool {
-    if snap.continuous_record_enabled {
-        return handle_continuous_record_update(clipboard, state, snap, event_driven);
+) -> ClipboardObserveResult {
+    if !snap.auto_processing_enabled() {
+        return ClipboardObserveResult::Observed;
     }
 
     let text = match clipboard.get_text() {
         Ok(text) => text,
         Err(_) if snap.produces_image() => String::new(),
-        Err(_) => return false,
+        Err(_) => return ClipboardObserveResult::ReadFailed,
     };
 
     if text.is_empty() {
         if !snap.produces_image() {
-            return false;
+            return ClipboardObserveResult::Observed;
         }
     } else {
         let should_process =
             state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
 
         if !should_process {
-            return false;
+            return ClipboardObserveResult::Observed;
         }
 
         if !is_within_clipboard_limit(&text) {
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
             state.record_clipboard_observed(&text);
-            return false;
+            return ClipboardObserveResult::Observed;
         }
     }
 
@@ -150,56 +145,47 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
             crate::log_warn!("クリップボードのテキストが上限を超えているため加工をスキップ");
         }
         Err(e) => {
-            crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
-            platform::show_notification("加工エラー", e.user_message());
+            UserNotification::from(e).notify_with_debug(e);
         }
     }
 
-    updated
+    if updated {
+        ClipboardObserveResult::ClipboardWritten
+    } else {
+        ClipboardObserveResult::Observed
+    }
 }
 
-/// 連続記録モードでクリップボードの内容更新を検知し、元テキストを履歴へ記録する
+/// 連続記録モードでクリップボードの内容更新を検知し、元テキストをキューへ積む
 ///
 /// 加工は行わず、クリップボードへの書き戻しや通知も発生しない
 ///
-/// # Arguments
-/// * `clipboard` - クリップボード操作用のインスタンス
-/// * `state` - アプリケーションの共有状態
-/// * `snap` - ループ先頭で取得済みの設定スナップショット
-/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
-///
 /// # Returns
-/// * `bool` - 常に `false` (クリップボードは更新しない)
-fn handle_continuous_record_update<C: TextClipboard>(
+/// * `ClipboardObserveResult` - 読み取り失敗時は `ReadFailed`、それ以外は `Observed`
+pub(crate) fn observe_continuous_record<C: TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
-    _snap: &MonitorSnapshot,
-    event_driven: bool,
-) -> bool {
+) -> ClipboardObserveResult {
     let Ok(text) = clipboard.get_text() else {
-        return false;
+        return ClipboardObserveResult::ReadFailed;
     };
 
-    if text.is_empty() {
-        return false;
-    }
+    let should_record =
+        state.with_processed_state(|ps| should_record_continuous_clipboard(ps, &text));
 
-    let should_process =
-        state.with_processed_state(|ps| should_process_clipboard(ps, &text, event_driven));
-
-    if !should_process {
-        return false;
+    if !should_record {
+        return ClipboardObserveResult::Observed;
     }
 
     if !is_within_clipboard_limit(&text) {
         crate::log_warn!("クリップボードのテキストが上限を超えているため記録をスキップ");
         state.record_clipboard_observed(&text);
-        return false;
+        return ClipboardObserveResult::Observed;
     }
 
     state.record_clipboard_observed(&text);
     state.enqueue_continuous_record(&text);
-    false
+    ClipboardObserveResult::Observed
 }
 
 /// 加工結果に応じて共有状態と履歴を更新する
@@ -261,7 +247,7 @@ pub(crate) fn record_clipboard_outcome(
 /// # Arguments
 /// * `menu` - トレイメニュー構造体
 /// * `monitor_mode` - 新しく選択された監視方式
-pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: MonitorMode) {
+pub fn update_monitor_mode_impl(menu: &crate::tray::menu::TrayMenu, monitor_mode: MonitorMode) {
     match monitor_mode {
         MonitorMode::Event => menu.interval.main_submenu.set_enabled(false),
         MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
@@ -273,118 +259,24 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     use crate::config::RegexSettings;
     use crate::refiner::RefineMode;
-    use crate::security::ContentFingerprint;
+    use crate::test_helpers::InMemoryTextClipboard;
 
-    /// 空文字列は加工対象外とすること
-    #[test]
-    fn empty_text_is_not_processed() {
-        let mut ps = ProcessedState::default();
-        assert!(!should_process_clipboard(&mut ps, "", false));
-        assert!(!should_process_clipboard(&mut ps, "", true));
-    }
-
-    fn collect_history(state: &std::sync::Arc<crate::tray::state::AppState>) -> Vec<String> {
+    fn collect_history(state: &Arc<AppState>) -> Vec<String> {
         (0..state.history_len())
             .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
             .collect()
     }
 
-    fn collect_continuous_record(
-        state: &std::sync::Arc<crate::tray::state::AppState>,
-    ) -> Vec<String> {
+    fn collect_continuous_record(state: &Arc<AppState>) -> Vec<String> {
         (0..state.continuous_record_len())
             .filter_map(|i| state.get_continuous_record_entry(i).map(|s| s.to_string()))
             .collect()
-    }
-
-    /// ポーリング時は新しいテキストを加工対象とすること
-    #[test]
-    fn polling_processes_new_text() {
-        let mut ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("old"),
-            last_written: None,
-        };
-
-        assert!(should_process_clipboard(&mut ps, "new", false));
-    }
-
-    /// 自身の書き戻しによる変更イベントを1回スキップすること
-    #[test]
-    fn should_skip_own_write_back_echo() {
-        let mut ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("input"),
-            last_written: Some(ContentFingerprint::from_text("output")),
-        };
-
-        assert!(!should_process_clipboard(&mut ps, "output", true));
-        assert_eq!(ps.last_written, None);
-        assert!(ps.matches_last_seen("output"));
-    }
-
-    /// ポーリング時は同一テキストをスキップし、イベント時は再処理すること
-    #[test]
-    fn polling_skips_unchanged_text() {
-        let mut ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("same"),
-            last_written: None,
-        };
-
-        assert!(!should_process_clipboard(&mut ps, "same", false));
-        assert!(should_process_clipboard(&mut ps, "same", true));
-    }
-
-    /// イベント駆動時は加工済みテキストの再コピーも処理対象とすること
-    #[test]
-    fn event_mode_allows_recopy_of_processed_output() {
-        let mut ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("processed"),
-            last_written: None,
-        };
-
-        // 加工結果と同じ文字列の再コピー(イベント駆動)も加工対象とする
-        assert!(should_process_clipboard(&mut ps, "processed", true));
-    }
-
-    /// イベント駆動時は元テキストの再コピーも処理対象とすること
-    #[test]
-    fn event_mode_allows_recopy_of_source_text() {
-        let mut ps = ProcessedState {
-            last_seen: ContentFingerprint::from_text("processed"),
-            last_written: None,
-        };
-
-        assert!(should_process_clipboard(&mut ps, "  source  ", true));
-    }
-
-    /// 一時停止中は `bump_monitor_generation` が世代を進めないこと
-    #[test]
-    fn bump_monitor_generation_skips_when_paused() {
-        use std::sync::atomic::Ordering;
-
-        let state = Arc::new(crate::tray::state::test_app_state());
-        state.with_config_mut(|c| c.is_paused = true);
-
-        bump_monitor_generation(&state);
-        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
-    }
-
-    /// 監視中は `bump_monitor_generation` が世代カウンタをインクリメントすること
-    #[test]
-    fn bump_monitor_generation_increments_when_active() {
-        use std::sync::atomic::Ordering;
-
-        let state = Arc::new(crate::tray::state::test_app_state());
-        state.with_config_mut(|c| c.is_paused = false);
-
-        bump_monitor_generation(&state);
-        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 1);
-
-        bump_monitor_generation(&state);
-        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
     }
 
     fn test_snapshot(
@@ -402,7 +294,7 @@ mod tests {
         }
     }
 
-    /// 加工成功時に `processed_state` と履歴が更新されること
+    /// 加工成功時に `processed_state` と履歴が更新されるようにすること
     #[test]
     fn record_outcome_processed_updates_state_and_history() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -446,7 +338,7 @@ mod tests {
         assert_eq!(collect_history(&state), vec!["unchanged".to_string()]);
     }
 
-    /// 履歴無効時は履歴に追加しないこと
+    /// 履歴無効時は履歴に追加しないであるようにすること
     #[test]
     fn record_outcome_skips_history_when_disabled() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -457,7 +349,7 @@ mod tests {
         assert_eq!(state.history_len(), 0);
     }
 
-    /// `NoText` エラー時は観測のみ記録し履歴に追加しないこと
+    /// `NoText` エラー時は観測のみ記録し履歴に追加しないであるようにすること
     #[test]
     fn record_outcome_no_text_observes_only() {
         let state = Arc::new(crate::tray::state::test_app_state());
@@ -486,20 +378,14 @@ mod tests {
     /// 連続記録モードでは元テキストを加工せず履歴へ記録すること
     #[test]
     fn continuous_record_stores_observed_text_without_processing() {
-        use crate::test_helpers::InMemoryTextClipboard;
-
         let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.continuous_record_enabled = true);
-        let snap = test_snapshot(vec![RefineMode::Trim], true, true);
         let mut clipboard = InMemoryTextClipboard::with_text("  raw  ");
 
-        assert!(!handle_clipboard_update(
-            &mut clipboard,
-            &state,
-            &snap,
-            false,
-            &RefineContext::default(),
-        ));
+        assert_eq!(
+            observe_continuous_record(&mut clipboard, &state),
+            ClipboardObserveResult::Observed
+        );
         assert_eq!(clipboard.text(), "  raw  ");
         assert_eq!(
             collect_continuous_record(&state),

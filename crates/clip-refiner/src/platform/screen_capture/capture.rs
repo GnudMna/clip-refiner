@@ -1,14 +1,12 @@
-use std::ptr;
-
 use super::types::{RgbaImage, ScreenRect};
 
 use anyhow::{Context, Result, bail};
-use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::Graphics::Gdi::{
+use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC,
     DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SRCCOPY, SelectObject,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::{
+use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
@@ -36,34 +34,42 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
     let height = i32::try_from(rect.height).context("キャプチャ高さが大きすぎる")?;
 
     unsafe {
-        let hdc_screen = GetDC(HWND::default());
-        if hdc_screen.is_null() {
+        let hdc_screen = GetDC(Some(HWND::default()));
+        if hdc_screen.is_invalid() {
             bail!("画面 DC の取得に失敗");
         }
 
-        let hdc_mem = CreateCompatibleDC(hdc_screen);
-        if hdc_mem.is_null() {
-            ReleaseDC(HWND::default(), hdc_screen);
+        let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+        if hdc_mem.is_invalid() {
+            let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
             bail!("互換 DC の作成に失敗");
         }
 
         let hbitmap = CreateCompatibleBitmap(hdc_screen, width, height);
-        if hbitmap.is_null() {
+        if hbitmap.is_invalid() {
             let _ = DeleteDC(hdc_mem);
-            ReleaseDC(HWND::default(), hdc_screen);
+            let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
             bail!("ビットマップの作成に失敗");
         }
 
-        let old_bitmap = SelectObject(hdc_mem, hbitmap);
+        let old_bitmap = SelectObject(hdc_mem, hbitmap.into());
         let blt_ok = BitBlt(
-            hdc_mem, 0, 0, width, height, hdc_screen, rect.x, rect.y, SRCCOPY,
+            hdc_mem,
+            0,
+            0,
+            width,
+            height,
+            Some(hdc_screen),
+            rect.x,
+            rect.y,
+            SRCCOPY,
         );
         SelectObject(hdc_mem, old_bitmap);
 
-        if blt_ok == 0 {
-            let _ = DeleteObject(hbitmap);
+        if blt_ok.is_err() {
+            let _ = DeleteObject(hbitmap.into());
             let _ = DeleteDC(hdc_mem);
-            ReleaseDC(HWND::default(), hdc_screen);
+            let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
             bail!("画面の BitBlt に失敗");
         }
 
@@ -74,7 +80,7 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
                 biHeight: -height,
                 biPlanes: 1,
                 biBitCount: 32,
-                biCompression: BI_RGB,
+                biCompression: BI_RGB.0,
                 biSizeImage: 0,
                 biXPelsPerMeter: 0,
                 biYPelsPerMeter: 0,
@@ -95,13 +101,13 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
             hbitmap,
             0,
             rect.height,
-            bgra.as_mut_ptr().cast(),
-            ptr::from_mut(&mut bmi),
+            Some(bgra.as_mut_ptr().cast()),
+            &raw mut bmi,
             DIB_RGB_COLORS,
         );
-        let _ = DeleteObject(hbitmap);
+        let _ = DeleteObject(hbitmap.into());
         let _ = DeleteDC(hdc_mem);
-        ReleaseDC(HWND::default(), hdc_screen);
+        let _ = ReleaseDC(Some(HWND::default()), hdc_screen);
 
         if lines == 0 {
             bail!("DIB データの取得に失敗");

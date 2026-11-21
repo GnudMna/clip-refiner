@@ -1,4 +1,3 @@
-use std::ptr;
 use std::sync::Once;
 use std::time::Instant;
 
@@ -10,15 +9,16 @@ use super::types::{
 };
 
 use anyhow::Result;
-use windows_sys::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, WPARAM};
-use windows_sys::Win32::Graphics::Gdi::ValidateRect;
-use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, VK_ESCAPE};
-use windows_sys::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GWLP_USERDATA, GetClientRect, GetWindowLongPtrW, IDC_ARROW, LoadCursorW,
+use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, WIN32_ERROR, WPARAM};
+use windows::Win32::Graphics::Gdi::{HBRUSH, ValidateRect};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, VK_ESCAPE};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DefWindowProcW, GWLP_USERDATA, GetClientRect, GetWindowLongPtrW, HICON, IDC_ARROW, LoadCursorW,
     RegisterClassW, SW_HIDE, SetWindowLongPtrW, ShowWindow, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WNDCLASSW,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WNDCLASS_STYLES, WNDCLASSW,
 };
+use windows::core::PCWSTR;
 
 // ======================================================================
 // ウィンドウ状態
@@ -45,20 +45,20 @@ pub(crate) fn register_overlay_class() -> Result<()> {
     REGISTER_OVERLAY_CLASS.call_once(|| {
         let class_name = str_to_wide(OVERLAY_CLASS_NAME);
         let wc = WNDCLASSW {
-            style: 0,
+            style: WNDCLASS_STYLES(0),
             lpfnWndProc: Some(overlay_wnd_proc),
             cbClsExtra: 0,
             cbWndExtra: 0,
-            hInstance: unsafe { GetModuleHandleW(ptr::null()) },
-            hIcon: ptr::null_mut(),
-            hCursor: unsafe { LoadCursorW(ptr::null_mut(), IDC_ARROW) },
-            hbrBackground: ptr::null_mut(),
-            lpszMenuName: ptr::null(),
-            lpszClassName: class_name.as_ptr(),
+            hInstance: unsafe { GetModuleHandleW(None).map(Into::into).unwrap_or_default() },
+            hIcon: HICON::default(),
+            hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
+            hbrBackground: HBRUSH::default(),
+            lpszMenuName: PCWSTR::null(),
+            lpszClassName: PCWSTR(class_name.as_ptr()),
         };
-        if unsafe { RegisterClassW(ptr::from_ref(&wc)) } == 0 {
+        if unsafe { RegisterClassW(&raw const wc) } == 0 {
             let err = unsafe { GetLastError() };
-            if err != ERROR_CLASS_ALREADY_EXISTS {
+            if err != WIN32_ERROR(ERROR_CLASS_ALREADY_EXISTS) {
                 failed = true;
             }
         }
@@ -83,55 +83,55 @@ unsafe extern "system" fn overlay_wnd_proc(
         }
 
         match msg {
-            WM_ERASEBKGND => return 1,
+            WM_ERASEBKGND => return LRESULT(1),
             WM_PAINT => {
                 let mut rect = std::mem::zeroed();
-                if GetClientRect(hwnd, ptr::from_mut(&mut rect)) != 0 {
-                    let _ = ValidateRect(hwnd, ptr::from_ref(&rect));
+                if GetClientRect(hwnd, &raw mut rect).is_ok() {
+                    let _ = ValidateRect(Some(hwnd), Some(&raw const rect));
                 }
-                return 0;
+                return LRESULT(0);
             }
             WM_LBUTTONDOWN => {
                 let cursor = (lparam_x(lparam), lparam_y(lparam));
-                SetCapture(hwnd);
+                let _ = SetCapture(hwnd);
                 (*state).selection.start = Some(cursor);
                 (*state).selection.cursor = Some(cursor);
                 redraw_overlay(state);
-                return 0;
+                return LRESULT(0);
             }
             WM_MOUSEMOVE => {
                 if (*state).selection.start.is_none() {
-                    return 0;
+                    return LRESULT(0);
                 }
                 (*state).selection.cursor = Some((lparam_x(lparam), lparam_y(lparam)));
                 let now = Instant::now();
                 if let Some(last) = (*state).last_redraw_at
                     && now.duration_since(last) < REDRAW_INTERVAL
                 {
-                    return 0;
+                    return LRESULT(0);
                 }
                 (*state).last_redraw_at = Some(now);
                 redraw_overlay(state);
-                return 0;
+                return LRESULT(0);
             }
             WM_LBUTTONUP => {
-                ReleaseCapture();
+                let _ = ReleaseCapture();
                 if (*state).selection.start.is_none() {
-                    return 0;
+                    return LRESULT(0);
                 }
                 (*state).selection.cursor = Some((lparam_x(lparam), lparam_y(lparam)));
                 finish_selection(hwnd, state);
-                return 0;
+                return LRESULT(0);
             }
             WM_KEYDOWN => {
-                if wparam == usize::from(VK_ESCAPE) {
+                if wparam.0 == usize::from(VK_ESCAPE.0) {
                     hide_overlay(hwnd, state);
                 }
-                return 0;
+                return LRESULT(0);
             }
             WM_DESTROY => {
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                return 0;
+                return LRESULT(0);
             }
             _ => {}
         }
@@ -183,11 +183,11 @@ pub(crate) unsafe fn hide_overlay(hwnd: HWND, state: *mut OverlayState) {
         (*state).selection = DragSelection::default();
         (*state).last_redraw_at = None;
         (*state).layered.last_preview = None;
-        ReleaseCapture();
-        ShowWindow(hwnd, SW_HIDE);
+        let _ = ReleaseCapture();
+        let _ = ShowWindow(hwnd, SW_HIDE);
         let mut rect = std::mem::zeroed();
-        if GetClientRect(hwnd, ptr::from_mut(&mut rect)) != 0 {
-            let _ = ValidateRect(hwnd, ptr::from_ref(&rect));
+        if GetClientRect(hwnd, &raw mut rect).is_ok() {
+            let _ = ValidateRect(Some(hwnd), Some(&raw const rect));
         }
     }
 }

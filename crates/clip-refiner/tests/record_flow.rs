@@ -3,7 +3,11 @@
 use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
 
-/// 連続記録モードでは加工せず元テキストをキューへ積むこと
+// ======================================================================
+// テスト
+// ======================================================================
+
+/// 連続記録モードでは加工せず元テキストをキューへ積むようにすること
 #[test]
 fn continuous_record_stores_raw_text_without_processing() {
     let mut harness = ClipboardHarness::with_text("  raw-text  ")
@@ -16,7 +20,7 @@ fn continuous_record_stores_raw_text_without_processing() {
     assert_eq!(harness.history_len(), 0);
 }
 
-/// 連続記録モードでは同一テキストの再コピーごとにキュー末尾へ積むこと
+/// 連続記録モードでは同一テキストの再コピーごとにキュー末尾へ積ようにすること
 #[test]
 fn continuous_record_keeps_duplicate_entries_in_fifo_order() {
     let mut harness = ClipboardHarness::with_text("same")
@@ -39,7 +43,7 @@ fn continuous_record_allows_manual_processing() {
     assert_eq!(harness.clipboard_text(), "manual");
 }
 
-/// キュー先頭取り出し直後は連続記録モードでも誤記録しないこと
+/// キュー先頭取り出し直後は連続記録モードでも誤記録しないようにすること
 #[test]
 fn continuous_record_skips_immediate_restore_echo() {
     let mut harness = ClipboardHarness::with_text("first")
@@ -55,7 +59,7 @@ fn continuous_record_skips_immediate_restore_echo() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// `Ctrl+V` 相当でキュー先頭をクリップボードへ載せ、FIFO 順に取り出すこと
+/// `Ctrl+V` 相当でキュー先頭をクリップボードへ載せ、FIFO 順に取り出ようにすること
 #[test]
 fn continuous_record_paste_discharges_front_on_ctrl_v() {
     let mut harness = ClipboardHarness::with_text("first")
@@ -72,7 +76,7 @@ fn continuous_record_paste_discharges_front_on_ctrl_v() {
     assert_eq!(harness.continuous_record_entries(), vec!["second"]);
 }
 
-/// `Ctrl+V` 相当はキュー先頭を取り出し、一致検索ではないこと
+/// `Ctrl+V` 相当はキュー先頭を取り出し、一致検索ではないようにすること
 #[test]
 fn continuous_record_paste_discharges_front_not_matching_clipboard() {
     let mut harness = ClipboardHarness::with_text("alpha")
@@ -94,7 +98,7 @@ fn continuous_record_paste_discharges_front_not_matching_clipboard() {
     assert_eq!(harness.continuous_record_entries(), vec!["beta", "gamma"]);
 }
 
-/// キューが空のときは `Ctrl+V` 相当でクリップボードを変更しないこと
+/// キューが空のときは `Ctrl+V` 相当でクリップボードを変更しないようにすること
 #[test]
 fn continuous_record_paste_skips_when_queue_empty() {
     let mut harness = ClipboardHarness::with_text("keep-me")
@@ -106,7 +110,7 @@ fn continuous_record_paste_skips_when_queue_empty() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// メニュー選択相当で指定位置の項目を取り出すこと
+/// メニュー選択相当で指定位置の項目を取り出ようにすること
 #[test]
 fn continuous_record_menu_discharge_removes_entry() {
     let mut harness = ClipboardHarness::with_text("first")
@@ -122,7 +126,7 @@ fn continuous_record_menu_discharge_removes_entry() {
     assert_eq!(harness.continuous_record_entries(), vec!["first"]);
 }
 
-/// 連続記録無効時は監視でもキューへ積まないこと
+/// 連続記録無効時は監視でもキューへ積まないようにすること
 #[test]
 fn monitor_skips_continuous_record_when_disabled() {
     let mut harness = ClipboardHarness::with_text("  x  ")
@@ -133,7 +137,7 @@ fn monitor_skips_continuous_record_when_disabled() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// 連続記録有効化直後に現在のクリップボードをキューへ積めること
+/// 連続記録有効化直後に現在のクリップボードをキューへ積めようにすること
 #[test]
 fn continuous_record_catch_up_enqueues_current_clipboard() {
     let mut harness = ClipboardHarness::with_text("already-on-clipboard")

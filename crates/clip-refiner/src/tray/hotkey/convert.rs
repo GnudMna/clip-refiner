@@ -109,7 +109,7 @@ mod tests {
 
     use clip_refiner_core::hotkey_binding::{HotkeyModifiers, parse_hotkey_binding};
 
-    /// core の解析結果が `global-hotkey` に変換できること
+    /// core の解析結果が `global-hotkey` に変換できるようにすること
     #[test]
     fn parse_global_hotkey_matches_core_parser() {
         let binding = "Alt+Shift+S";
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(hotkey, parse_global_hotkey(binding).expect("global"));
     }
 
-    /// 修飾キーが `HotkeyModifiers` から `Modifiers` へ反映されること
+    /// 修飾キーが `HotkeyModifiers` から `Modifiers` へ反映されるようにすること
     #[test]
     fn modifiers_are_mapped() {
         let parsed = ParsedHotkey {

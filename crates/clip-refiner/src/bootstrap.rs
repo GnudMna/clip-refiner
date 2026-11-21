@@ -8,6 +8,7 @@ use crate::refiner::{
     self, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
 };
 use crate::tray;
+use crate::user_error::fatal_startup;
 use crate::{log_error, log_info, log_warn};
 
 use anyhow::{Context, Result};
@@ -17,7 +18,7 @@ use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt as ts_fmt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
 // ======================================================================
 // エントリポイント
@@ -292,17 +293,80 @@ fn parse_refine_mode(value: &str) -> Result<RefineMode, String> {
 ///
 /// Windows の GUI ビルドではコンソールがないため、通知が主なフィードバックになる
 fn report_fatal_startup_error(context: &str, err: &anyhow::Error) {
-    let message = format!("{context}: {err:#}");
-    eprintln!("{message}");
-    platform::show_notification("起動エラー", &truncate_notification_body(&message, 240));
+    let notification = fatal_startup(context, err);
+    eprintln!("{}: {}", notification.title(), notification.body());
+    platform::show_notification(notification.title(), notification.body());
 }
 
-/// 通知本文の最大文字数に合わせて切り詰める
-fn truncate_notification_body(body: &str, max_chars: usize) -> String {
-    if body.chars().count() <= max_chars {
-        return body.to_string();
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::config::AppConfig;
+    use crate::refiner::RefineMode;
+
+    fn sample_args() -> Args {
+        Args {
+            mode: Some(RefineMode::Trim),
+            pipeline: Vec::new(),
+            regex_pattern: None,
+            regex_replacement: None,
+            regex_case_insensitive: false,
+            regex_multiline: false,
+        }
     }
 
-    let keep = max_chars.saturating_sub(3);
-    format!("{}...", body.chars().take(keep).collect::<String>())
+    /// `--mode` 指定時は単一モードのパイプラインになるようにすること
+    #[test]
+    fn resolve_oneshot_pipeline_from_mode() {
+        let args = sample_args();
+        let pipeline = resolve_oneshot_pipeline(&args).expect("pipeline");
+        assert_eq!(pipeline, vec![RefineMode::Trim]);
+    }
+
+    /// `--pipeline` 指定時は複数モードを順に適用すること
+    #[test]
+    fn resolve_oneshot_pipeline_from_pipeline_flag() {
+        let args = Args {
+            pipeline: vec![RefineMode::UrlDecode, RefineMode::Trim],
+            mode: Some(RefineMode::JsonFormat),
+            ..sample_args()
+        };
+        let pipeline = resolve_oneshot_pipeline(&args).expect("pipeline");
+        assert_eq!(pipeline, vec![RefineMode::UrlDecode, RefineMode::Trim]);
+    }
+
+    /// モード未指定時はエラーになるようにすること
+    #[test]
+    fn resolve_oneshot_pipeline_requires_mode_or_pipeline() {
+        let args = Args {
+            mode: None,
+            pipeline: Vec::new(),
+            ..sample_args()
+        };
+        assert!(resolve_oneshot_pipeline(&args).is_err());
+    }
+
+    /// CLI 引数が正規表現設定を上書きすること
+    #[test]
+    fn build_refinement_context_applies_regex_overrides() {
+        let config = AppConfig::default();
+        let args = Args {
+            regex_pattern: Some("foo".to_string()),
+            regex_replacement: Some("bar".to_string()),
+            regex_case_insensitive: true,
+            regex_multiline: true,
+            ..sample_args()
+        };
+
+        let ctx = build_refinement_context(&config, &args);
+
+        assert_eq!(ctx.regex.pattern, "foo");
+        assert_eq!(ctx.regex.replacement, "bar");
+        assert!(ctx.regex.case_insensitive);
+        assert!(ctx.regex.multiline);
+    }
 }

@@ -26,7 +26,7 @@ impl TrayMenu {
     /// * `history_enabled` - 履歴機能が有効かどうか
     ///
     /// # Returns
-    /// 成功した場合は `HistoryMenu` インスタンスを返し、失敗した場合は `Err` を返す
+    /// * `Result<HistoryMenu>` - 成功した場合は `HistoryMenu` インスタンス、失敗した場合は `Err`
     pub(super) fn build_history_menu(history_enabled: bool) -> Result<HistoryMenu> {
         let enabled_item = CheckMenuItem::new("履歴機能を有効にする", true, history_enabled, None);
         let clear_item = MenuItem::new("履歴をクリア", true, None);
@@ -113,14 +113,14 @@ mod tests {
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
     use crate::tray::state::LockExt;
 
-    /// 30 文字以下はそのまま返すこと
+    /// 30 文字以下はそのまま返すようにすること
     #[test]
     fn format_history_menu_label_within_limit() {
         let text = "あ".repeat(30);
         assert_eq!(format_history_menu_label(&text), text);
     }
 
-    /// 30 文字超は省略記号付きで 30 文字になること
+    /// 30 文字超は省略記号付きで 30 文字になるようにすること
     #[test]
     fn format_history_menu_label_truncates() {
         let text = "あ".repeat(35);
@@ -163,7 +163,7 @@ mod tests {
         );
     }
 
-    /// 履歴クリア後の `refresh_history` でレコードが空になること
+    /// 履歴クリア後の `refresh_history` でレコードが空になるようにすること
     #[test]
     fn refresh_history_clears_records_when_history_empty() {
         let (menu, state) = build_menu_and_state();

@@ -25,6 +25,14 @@ pub struct PasteWatcher {
 
 impl PasteWatcher {
     /// 貼り付け監視を開始する
+    ///
+    /// # Arguments
+    /// * `proxy` - イベント送信用プロキシ
+    /// * `state` - アプリケーションの共有状態
+    /// * `clipboard_worker` - クリップボード操作ワーカー
+    ///
+    /// # Returns
+    /// * `Self` - 貼り付け監視インスタンス
     pub fn start(
         proxy: EventLoopProxy<AppEvent>,
         state: Arc<AppState>,

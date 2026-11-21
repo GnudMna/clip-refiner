@@ -26,6 +26,12 @@ const LEGACY_IMAGE_EXT: &str = "png";
 /// 登録画像の保存ディレクトリを取得する
 ///
 /// 存在しない場合は作成し、所有者のみアクセス可能なパーミッションを設定する
+///
+/// # Returns
+/// * `Result<PathBuf>` - 登録画像ディレクトリのパス
+///
+/// # Errors
+/// 設定ディレクトリ取得、ディレクトリ作成、パーミッション設定のいずれかに失敗した場合
 pub fn registered_images_dir() -> Result<PathBuf> {
     let dir = get_config_dir()?.join(REGISTERED_IMAGES_DIR);
     if !dir.exists() {
@@ -36,6 +42,17 @@ pub fn registered_images_dir() -> Result<PathBuf> {
 }
 
 /// RGBA 画像を暗号化 PNG として保存し、設定に記録する相対ファイル名を返す
+///
+/// # Arguments
+/// * `width` - 画像幅 (ピクセル)
+/// * `height` - 画像高さ (ピクセル)
+/// * `rgba` - RGBA ピクセル列
+///
+/// # Returns
+/// * `Result<String>` - `registered-images` 内の相対ファイル名
+///
+/// # Errors
+/// バッファ検証、PNG エンコード、暗号化、ファイル書き込みのいずれかに失敗した場合
 pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<String> {
     validate_rgba_buffer(width, height, rgba)?;
 
@@ -64,12 +81,27 @@ pub fn save_registered_image(width: u32, height: u32, rgba: &[u8]) -> Result<Str
 }
 
 /// 登録画像ファイルを RGBA バッファとして読み込む
+///
+/// # Arguments
+/// * `relative_filename` - `registered-images` 内の相対ファイル名
+///
+/// # Returns
+/// * `Result<(u32, u32, Vec<u8>)>` - 幅、高さ、RGBA ピクセル列
+///
+/// # Errors
+/// ファイル名検証、読み込み、復号、PNG デコードのいずれかに失敗した場合
 pub fn load_registered_image(relative_filename: &str) -> Result<(u32, u32, Vec<u8>)> {
     let png = read_registered_image_png(relative_filename)?;
     decode_png(&png)
 }
 
 /// 登録画像ファイルが存在するかどうかを返す
+///
+/// # Arguments
+/// * `relative_filename` - `registered-images` 内の相対ファイル名
+///
+/// # Returns
+/// * `bool` - ファイルが存在する場合は `true`
 pub fn registered_image_exists(relative_filename: &str) -> bool {
     resolve_registered_image_path(relative_filename)
         .ok()
@@ -77,6 +109,11 @@ pub fn registered_image_exists(relative_filename: &str) -> bool {
 }
 
 /// 登録画像ファイルを削除する
+///
+/// パス解決に失敗した場合やファイルが無い場合は何もしない
+///
+/// # Arguments
+/// * `relative_filename` - `registered-images` 内の相対ファイル名
 pub fn delete_registered_image(relative_filename: &str) {
     if let Ok(path) = resolve_registered_image_path(relative_filename) {
         let _ = fs::remove_file(path);
@@ -86,6 +123,15 @@ pub fn delete_registered_image(relative_filename: &str) {
 /// v2 の平文 PNG を暗号化ファイルへ移行する
 ///
 /// 既に `.enc` の場合はファイル名をそのまま返す
+///
+/// # Arguments
+/// * `relative_filename` - 移行対象の相対ファイル名
+///
+/// # Returns
+/// * `Result<String>` - 暗号化後の相対ファイル名
+///
+/// # Errors
+/// ファイル名検証、読み込み、暗号化、書き込みのいずれかに失敗した場合
 pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<String> {
     if relative_filename.ends_with(&format!(".{ENCRYPTED_IMAGE_EXT}")) {
         return Ok(relative_filename.to_string());
@@ -117,6 +163,13 @@ pub fn migrate_plain_image_to_encrypted(relative_filename: &str) -> Result<Strin
 }
 
 /// 登録画像の表示用ラベルを生成する
+///
+/// # Arguments
+/// * `width` - 画像幅 (ピクセル)
+/// * `height` - 画像高さ (ピクセル)
+///
+/// # Returns
+/// * `String` - `[画像] {width}×{height}` 形式のラベル
 pub fn format_registered_image_label(width: u32, height: u32) -> String {
     format!("[画像] {width}×{height}")
 }
@@ -124,6 +177,13 @@ pub fn format_registered_image_label(width: u32, height: u32) -> String {
 /// セレクター表示用の JPEG サムネイル Data URL を生成する
 ///
 /// 生成に失敗した場合やサイズ上限を超える場合は `None` を返す
+///
+/// # Arguments
+/// * `relative_filename` - `registered-images` 内の相対ファイル名
+/// * `max_dimension` - サムネイルの最大辺長 (ピクセル)
+///
+/// # Returns
+/// * `Option<String>` - `data:image/jpeg;base64,...` 形式の Data URL
 pub fn registered_image_thumbnail_data_url(
     relative_filename: &str,
     max_dimension: u32,
@@ -136,6 +196,13 @@ pub fn registered_image_thumbnail_data_url(
 }
 
 /// セレクター hover プレビュー用の JPEG Data URL を生成する
+///
+/// # Arguments
+/// * `relative_filename` - `registered-images` 内の相対ファイル名
+/// * `max_dimension` - プレビューの最大辺長 (ピクセル)
+///
+/// # Returns
+/// * `Option<String>` - `data:image/jpeg;base64,...` 形式の Data URL
 pub fn registered_image_hover_preview_data_url(
     relative_filename: &str,
     max_dimension: u32,
@@ -295,7 +362,7 @@ mod tests {
         assert!(err.to_string().contains("RGBA"));
     }
 
-    /// PNG の往復で元の RGBA を復元できること
+    /// PNG の往復で元の RGBA を復元できるようにすること
     #[test]
     fn png_roundtrip_preserves_rgba() {
         let rgba = vec![1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255];
@@ -305,7 +372,7 @@ mod tests {
         assert_eq!(decoded, rgba);
     }
 
-    /// サムネイル Data URL を生成できること
+    /// サムネイル Data URL を生成できるようにすること
     #[test]
     fn thumbnail_data_url_starts_with_jpeg_prefix() {
         let rgba = vec![

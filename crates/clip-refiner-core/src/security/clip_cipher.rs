@@ -16,6 +16,9 @@ const NONCE_LEN: usize = 12;
 // ======================================================================
 /// ChaCha20-Poly1305 用のランダム鍵を生成する
 ///
+/// # Returns
+/// * `Result<[u8; CIPHER_KEY_LEN]>` - 生成した暗号化鍵
+///
 /// # Errors
 /// OS の乱数取得に失敗した場合
 pub fn generate_cipher_key() -> Result<[u8; CIPHER_KEY_LEN]> {
@@ -25,6 +28,9 @@ pub fn generate_cipher_key() -> Result<[u8; CIPHER_KEY_LEN]> {
 }
 
 /// 暗号化鍵をメモリ上からゼロ化する
+///
+/// # Arguments
+/// * `key` - ゼロ化対象の暗号化鍵
 pub fn zeroize_cipher_key(key: &mut [u8; CIPHER_KEY_LEN]) {
     key.zeroize();
 }
@@ -35,6 +41,13 @@ pub fn zeroize_cipher_key(key: &mut [u8; CIPHER_KEY_LEN]) {
 /// 平文バイト列を ChaCha20-Poly1305 で暗号化する
 ///
 /// 戻り値は `nonce (12 バイト) || ciphertext` 形式
+///
+/// # Arguments
+/// * `key` - 暗号化鍵
+/// * `plaintext` - 暗号化対象の平文
+///
+/// # Returns
+/// * `Result<Vec<u8>>` - ノンス付き暗号文
 ///
 /// # Errors
 /// ノンス生成または暗号化に失敗した場合
@@ -53,6 +66,13 @@ pub fn encrypt_bytes(key: &[u8; CIPHER_KEY_LEN], plaintext: &[u8]) -> Result<Vec
 }
 
 /// `encrypt_bytes` で生成したバイト列を復号する
+///
+/// # Arguments
+/// * `key` - 暗号化鍵
+/// * `blob` - ノンス付き暗号文
+///
+/// # Returns
+/// * `Result<Vec<u8>>` - 復号した平文
 ///
 /// # Errors
 /// 暗号文が短すぎる、または復号に失敗した場合

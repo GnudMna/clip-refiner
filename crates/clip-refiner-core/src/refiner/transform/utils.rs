@@ -78,7 +78,7 @@ where
 mod tests {
     use super::*;
 
-    /// CRLF / LF の改行コード判定
+    /// CRLF / LF の改行コード判定できるようにすること
     #[test]
     fn test_detect_line_ending() {
         // LF
@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(detect_line_ending("no newline"), "\n");
     }
 
-    /// `process_lines` の行単位変換と Borrowed 返却
+    /// `process_lines` の行単位変換と Borrowed 返却できるようにすること
     #[test]
     fn test_process_lines() {
         let input = "a\nb\nc";

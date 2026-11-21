@@ -221,7 +221,7 @@ pub fn regex_unescape(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 改行を含む文字列のエスケープと Borrowed 返却
+    /// 改行を含む文字列のエスケープと Borrowed 返却できるようにすること
     #[test]
     fn test_escape_string() {
         assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
@@ -229,7 +229,7 @@ mod tests {
         assert!(matches!(escape_string("plain"), Cow::Borrowed(_)));
     }
 
-    /// アンエスケープの基本動作
+    /// アンエスケープの基本動作できるようにすること
     #[test]
     fn test_unescape_string() {
         assert_eq!(unescape_string("hello\\nworld"), "hello\nworld");
@@ -237,7 +237,7 @@ mod tests {
         assert!(matches!(unescape_string("plain"), Cow::Borrowed(_)));
     }
 
-    /// \\uXXXX およびサロゲートペアのアンエスケープ
+    /// \\uXXXX およびサロゲートペアのアンエスケープできるようにすること
     #[test]
     fn test_unescape_unicode() {
         // 基本的な \uXXXX
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(unescape_string("\\uGHIJ"), "\\uGHIJ");
     }
 
-    /// `regex_escape` の基本動作
+    /// `regex_escape` の基本動作できるようにすること
     #[test]
     fn test_regex_escape() {
         assert_eq!(regex_escape("h.w"), "h\\.w");
@@ -261,7 +261,7 @@ mod tests {
         assert!(matches!(regex_escape("plain"), Cow::Borrowed(_)));
     }
 
-    /// `regex_unescape` の基本動作
+    /// `regex_unescape` の基本動作できるようにすること
     #[test]
     fn test_regex_unescape() {
         assert_eq!(regex_unescape("h\\.w"), "h.w");
@@ -269,7 +269,7 @@ mod tests {
         assert!(matches!(regex_unescape("plain"), Cow::Borrowed(_)));
     }
 
-    /// `escape_string`: すべての対象文字が正しくエスケープされること
+    /// `escape_string`: すべての対象文字が正しくエスケープされるようにすること
     #[test]
     fn test_escape_string_all_chars() {
         assert_eq!(escape_string("\""), "\\\"");
@@ -282,13 +282,13 @@ mod tests {
         assert_eq!(escape_string("\t"), "\\t");
     }
 
-    /// `escape_string`: 空文字列は Borrowed を返すこと
+    /// `escape_string`: 空文字列は Borrowed を返すようにすること
     #[test]
     fn test_escape_string_empty() {
         assert!(matches!(escape_string(""), Cow::Borrowed(_)));
     }
 
-    /// `unescape_string`: すべての対象シーケンスが正しくアンエスケープされること
+    /// `unescape_string`: すべての対象シーケンスが正しくアンエスケープされるようにすること
     #[test]
     fn test_unescape_string_all_sequences() {
         assert_eq!(unescape_string("\\\""), "\"");
@@ -301,20 +301,20 @@ mod tests {
         assert_eq!(unescape_string("\\t"), "\t");
     }
 
-    /// `unescape_string`: バックスラッシュを含まない文字列は Borrowed を返すこと
+    /// `unescape_string`: バックスラッシュを含まない文字列は Borrowed を返すようにすること
     #[test]
     fn test_unescape_string_no_backslash() {
         assert!(matches!(unescape_string("hello world"), Cow::Borrowed(_)));
     }
 
-    /// `regex_unescape`: メタ文字以外のバックスラッシュはそのまま残ること
+    /// `regex_unescape`: メタ文字以外のバックスラッシュはそのまま残るようにすること
     #[test]
     fn test_regex_unescape_non_meta() {
         // 'a' は正規表現メタ文字でないのでそのまま
         assert_eq!(regex_unescape("\\a"), "\\a");
     }
 
-    /// `regex_escape` / `regex_unescape` の往復変換
+    /// `regex_escape` / `regex_unescape` の往復変換できるようにすること
     #[test]
     fn test_regex_escape_unescape_roundtrip() {
         let original = "a.b*c+d?e";

@@ -51,14 +51,14 @@ pub fn trim_lines(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 文字列全体のトリムテスト
+    /// 文字列全体のトリムできるようにすること
     #[test]
     fn test_trim_text() {
         assert_eq!(trim_text("  hello  "), "hello");
         assert_eq!(trim_text("\n world \r\n"), "world");
     }
 
-    /// 各行ごとのトリムテスト(LF)
+    /// 各行ごとのLF 区切りで各行をトリムできるようにすること
     #[test]
     fn test_trim_lines_lf() {
         let input = "  hello  \n  world \n  rust ";
@@ -66,7 +66,7 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 各行ごとのトリムテスト(CRLF 保持)
+    /// 各行ごとのCRLF を保持して各行をトリムできるようにすること
     #[test]
     fn test_trim_lines_crlf() {
         let input = "  hello  \r\n  world \r\n  rust ";
@@ -74,7 +74,7 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 空文字列に対する行トリムテスト
+    /// 空文字列に対する行トリムできるようにすること
     #[test]
     fn test_trim_lines_empty() {
         let input = "";
@@ -82,8 +82,8 @@ mod tests {
         assert_eq!(trim_lines(input), expected);
     }
 
-    /// 空白文字のみの行に対するトリムテスト
-    /// 空行になることを確認
+    /// 空白文字のみの行に対するトリムできるようにすること
+    /// 空行になることを確認できるようにすること
     #[test]
     fn test_trim_lines_whitespace_only() {
         let input = "  \n\t\n";

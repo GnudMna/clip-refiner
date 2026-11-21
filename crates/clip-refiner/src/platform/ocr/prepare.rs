@@ -65,7 +65,7 @@ pub(crate) fn upscale_nearest(image: &RgbaImage, scale: u32) -> RgbaImage {
 mod tests {
     use super::*;
 
-    /// 短辺が小さい画像を拡大する
+    /// 短辺が小さい画像を拡大すること
     #[test]
     fn prepare_ocr_image_upscales_small_selection() {
         let image = RgbaImage {
@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(prepared.height, 80);
     }
 
-    /// 十分なサイズの画像は拡大しない
+    /// 十分なサイズの画像は拡大しないできるようにすること
     #[test]
     fn prepare_ocr_image_keeps_large_selection() {
         let image = RgbaImage {
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(prepared.height, 120);
     }
 
-    /// 最近傍拡大でピクセルが複製される
+    /// 最近傍拡大でピクセルが複製されるできるようにすること
     #[test]
     fn upscale_nearest_duplicates_pixels() {
         let image = RgbaImage {

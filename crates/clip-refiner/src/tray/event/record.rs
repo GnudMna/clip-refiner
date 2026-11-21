@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::super::clipboard_monitor::bump_monitor_generation;
+use super::super::clipboard_monitor::bump_monitor_generation_unchecked;
 use super::super::dispatch;
 use super::super::menu::TrayMenu;
 use super::super::state::{AppState, LockExt};
@@ -16,8 +16,12 @@ pub(crate) fn toggle_continuous_record(
     let enabled = !was_enabled;
     menu.continuous_record.enabled_item.set_checked(enabled);
     state.with_config_mut(|c| c.continuous_record_enabled = enabled);
+    if enabled {
+        // 有効化前の加工書き戻し指紋が、同一内容の再コピーを誤って抑止しないようクリアする
+        state.with_processed_state(|ps| ps.last_written = None);
+    }
     state.save_config();
-    bump_monitor_generation(state);
+    bump_monitor_generation_unchecked(state);
     if enabled {
         dispatch::send_clipboard_command(
             clipboard_worker,
@@ -27,6 +31,7 @@ pub(crate) fn toggle_continuous_record(
     if let Err(err) = menu.refresh_continuous_record(state) {
         dispatch::log_menu_operation_error("連続記録メニューの更新", err);
     }
+    menu.sync_auto_processing_state(state);
 }
 
 /// 連続記録に関連するメニューイベント(有効化切替、消去、過去項目の選択)を処理する

@@ -30,7 +30,7 @@ impl TrayMenu {
     /// * `continuous_record_enabled` - 連続記録が有効かどうか
     ///
     /// # Returns
-    /// 成功した場合は `ContinuousRecordMenu` インスタンスを返し、失敗した場合は `Err` を返す
+    /// * `Result<ContinuousRecordMenu>` - 成功した場合は `ContinuousRecordMenu` インスタンス、失敗した場合は `Err`
     pub(super) fn build_continuous_record_menu(
         continuous_record_enabled: bool,
     ) -> Result<ContinuousRecordMenu> {
@@ -119,14 +119,14 @@ mod tests {
     use crate::consts::SENSITIVE_SNIPPET_LABEL;
     use crate::tray::state::LockExt;
 
-    /// 30 文字以下は番号付きでそのまま返すこと
+    /// 30 文字以下は番号付きでそのまま返すようにすること
     #[test]
     fn format_record_menu_label_within_limit() {
         let text = "あ".repeat(30);
         assert_eq!(format_record_menu_label(0, &text), format!("1. {text}"));
     }
 
-    /// 30 文字超は省略記号付きで 30 文字になること
+    /// 30 文字超は省略記号付きで 30 文字になるようにすること
     #[test]
     fn format_record_menu_label_truncates() {
         let text = "あ".repeat(35);
@@ -173,7 +173,7 @@ mod tests {
         );
     }
 
-    /// 記録クリア後の `refresh_continuous_record` でレコードが空になること
+    /// 記録クリア後の `refresh_continuous_record` でレコードが空になるようにすること
     #[test]
     fn refresh_continuous_record_clears_records_when_empty() {
         let (menu, state) = build_menu_and_state();

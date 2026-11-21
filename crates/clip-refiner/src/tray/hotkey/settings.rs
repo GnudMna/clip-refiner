@@ -121,7 +121,7 @@ pub(crate) fn resolve_favorite_slot_hotkeys(
 mod tests {
     use super::*;
 
-    /// 固定ホットキーと重複するお気に入りスロットは除外されること
+    /// 固定ホットキーと重複するお気に入りスロットは除外されるようにすること
     #[test]
     fn resolve_favorite_slot_skips_duplicate_fixed_hotkeys() {
         let hotkeys = HotkeySettings {
@@ -136,7 +136,7 @@ mod tests {
         assert!(resolved.is_empty());
     }
 
-    /// 先に割り当てたスロットと重複するお気に入りスロットは除外されること
+    /// 先に割り当てたスロットと重複するお気に入りスロットは除外されるようにすること
     #[test]
     fn resolve_favorite_slot_skips_duplicate_among_slots() {
         let hotkeys = HotkeySettings {
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(resolved[0].0, 0);
     }
 
-    /// 空文字のスロット設定は無効としてスキップされること
+    /// 空文字のスロット設定は無効としてスキップされるようにすること
     #[test]
     fn resolve_favorite_slot_skips_empty_binding() {
         let hotkeys = HotkeySettings {
@@ -163,7 +163,7 @@ mod tests {
         assert!(resolved.is_empty());
     }
 
-    /// 重複するお気に入りホットキーは除外されること
+    /// 重複するお気に入りホットキーは除外されるようにすること
     #[test]
     fn resolve_favorite_slot_hotkeys_skips_duplicates() {
         let hotkeys = HotkeySettings {
@@ -175,5 +175,23 @@ mod tests {
         let resolved = resolve_favorite_slot_hotkeys(&hotkeys, 2, &reserved);
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].0, 1);
+    }
+
+    /// お気に入り登録後のショートカット一覧にスロットが反映されるようにすること
+    #[test]
+    fn shortcut_list_includes_registered_favorite_mode() {
+        let hotkeys = HotkeySettings {
+            favorite_mode_slots: vec!["Alt+Shift+F1".to_string()],
+            ..HotkeySettings::default()
+        };
+        let favorites = vec![RefineMode::JsonFormat];
+
+        let entries = shortcut_list_entries(&hotkeys, &favorites);
+
+        assert!(entries.iter().any(|entry| {
+            entry.binding == "Alt+Shift+F1"
+                && entry.label.contains("JSON")
+                && entry.label.contains("お気に入り")
+        }));
     }
 }

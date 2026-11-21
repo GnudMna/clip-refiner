@@ -29,6 +29,9 @@ thread_local! {
 ///
 /// 鍵ファイルが無い場合は新規生成して保存する
 ///
+/// # Returns
+/// * `Result<[u8; CIPHER_KEY_LEN]>` - 暗号化鍵。取得または生成に失敗した場合は `Err`
+///
 /// # Errors
 /// 設定ディレクトリ取得、鍵ファイル読み書き、DPAPI / パーミッション設定のいずれかに失敗した場合
 pub fn clip_store_key() -> Result<[u8; CIPHER_KEY_LEN]> {
@@ -59,6 +62,9 @@ fn thread_local_clip_store_key() -> Option<[u8; CIPHER_KEY_LEN]> {
 }
 
 /// 登録クリップ暗号化鍵を確実に存在させる
+///
+/// # Returns
+/// * `Result<()>` - 鍵の取得または生成に成功した場合は `Ok(())`
 ///
 /// # Errors
 /// [`clip_store_key`] と同様

@@ -46,7 +46,7 @@ fn create_event_loop() -> EventLoop<AppEvent> {
 mod tests {
     use super::*;
 
-    /// イベントループを生成できること
+    /// イベントループを生成できるようにすること
     #[test]
     fn create_event_loop_builds() {
         let _ = create_event_loop();

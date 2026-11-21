@@ -167,6 +167,14 @@ pub fn parse_hotkey_or_default(binding: &str, default_binding: &str) -> ParsedHo
 /// 設定値を解析し、失敗時はデフォルトへフォールバックする
 ///
 /// `label` はログ出力用の設定項目名
+///
+/// # Arguments
+/// * `binding` - 設定ファイルのホットキー文字列
+/// * `default_binding` - フォールバック先のデフォルト文字列
+/// * `label` - ログ出力用の設定項目名
+///
+/// # Returns
+/// * `ParsedHotkey` - 解析済みホットキー
 #[must_use]
 pub fn parse_hotkey_or_default_labeled(
     binding: &str,
@@ -312,7 +320,7 @@ mod tests {
 
     use crate::consts;
 
-    /// デフォルトホットキー文字列が解析できること
+    /// デフォルトホットキー文字列が解析できるようにすること
     #[test]
     fn test_parse_default_hotkeys() {
         for binding in [
@@ -344,14 +352,14 @@ mod tests {
         assert!(parse_hotkey_binding("Control+Shift+A").is_ok());
     }
 
-    /// 数字キーを解析できること
+    /// 数字キーを解析できるようにすること
     #[test]
     fn test_parse_digit_keys() {
         assert!(parse_hotkey_binding("Alt+Shift+1").is_ok());
         assert!(parse_hotkey_binding("Alt+Shift+0").is_ok());
     }
 
-    /// 不正なホットキーはエラーを返すこと
+    /// 不正なホットキーはエラーを返すようにすること
     #[test]
     fn test_parse_invalid_hotkey() {
         assert!(matches!(

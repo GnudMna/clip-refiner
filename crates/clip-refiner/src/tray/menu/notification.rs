@@ -16,7 +16,7 @@ impl TrayMenu {
     /// * `notify_pause` - 一時停止切替を通知するかどうか
     ///
     /// # Returns
-    /// 成功した場合は `NotificationMenu` インスタンスを返し、失敗した場合は `Err` を返す
+    /// * `Result<NotificationMenu>` - 成功した場合は `NotificationMenu` インスタンス、失敗した場合は `Err`
     #[allow(clippy::fn_params_excessive_bools)]
     pub(super) fn build_notification_menu(
         enabled: bool,
@@ -67,7 +67,7 @@ impl TrayMenu {
 mod tests {
     use super::*;
 
-    /// 成功通知 OFF 時も通知内容サブメニューは構築でき、各チェック状態が引数どおり反映されること
+    /// 成功通知 OFF 時も通知内容サブメニューは構築でき、各チェック状態が引数どおり反映されるようにすること
     #[test]
     fn build_notification_menu_creates_content_submenu() {
         let notification = TrayMenu::build_notification_menu(false, true, true, true)

@@ -34,6 +34,12 @@ pub enum ConfigReloadError {
 
 impl ConfigReloadError {
     /// ユーザー向けのエラーメッセージを返す
+    ///
+    /// # Arguments
+    /// * `self` - 再読み込みエラー
+    ///
+    /// # Returns
+    /// * `&str` - UI 表示用の固定メッセージ
     #[must_use]
     pub fn user_message(&self) -> &str {
         match self {
@@ -65,6 +71,12 @@ pub struct ConfigLoadFallback {
 
 impl ConfigLoadFallback {
     /// デスクトップ通知・CLI 向けのメッセージを返す
+    ///
+    /// # Arguments
+    /// * `self` - フォールバック理由
+    ///
+    /// # Returns
+    /// * `String` - エラー内容とバックアップ成否を含むメッセージ
     #[must_use]
     pub fn user_message(&self) -> String {
         let core = match &self.error {
@@ -218,8 +230,11 @@ impl AppConfig {
 
     /// 現在の設定をファイルへ保存する
     ///
+    /// # Arguments
+    /// * `self` - 保存対象の設定
+    ///
     /// # Returns
-    /// * `Result<()>` - 保存が成功した場合は `Ok(())`、失敗した場合は `Err` を返す
+    /// * `Result<()>` - 保存に成功した場合は `Ok(())`
     ///
     /// # Errors
     /// 設定パス取得、登録クリップ保存、TOML 書き出し、パーミッション設定のいずれかに失敗した場合
@@ -385,7 +400,7 @@ mod tests {
         });
     }
 
-    /// フォールバック理由からユーザー向けメッセージを組み立てられること
+    /// フォールバック理由からユーザー向けメッセージを組み立てられるようにすること
     #[test]
     fn config_load_fallback_user_message_includes_backup_hint() {
         let with_backup = ConfigLoadFallback {
@@ -412,7 +427,7 @@ mod tests {
         );
     }
 
-    /// `config.toml` の `[[clips]]` は別ファイルへ移行され、TOML から除去されること
+    /// `config.toml` の `[[clips]]` は別ファイルへ移行され、TOML から除去されるようにすること
     #[test]
     fn legacy_clips_in_config_toml_are_migrated_to_separate_file() {
         crate::test_helpers::with_temp_config_dir(|| {

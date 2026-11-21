@@ -113,6 +113,9 @@ impl Default for AppConfig {
 impl AppConfig {
     /// 読み込み直後の後処理: スキーマ移行・値クランプ・ホットキー検証
     ///
+    /// # Arguments
+    /// * `self` - 読み込み直後の設定
+    ///
     /// # Returns
     /// * `ConfigMigration` - 後処理済み設定と移行メタデータ
     pub fn prepare_loaded(self) -> super::super::migrate::ConfigMigration {
@@ -126,6 +129,9 @@ impl AppConfig {
     }
 
     /// 保存前の正規化: 数値クランプとスキーマバージョンを現行へ更新
+    ///
+    /// # Arguments
+    /// * `self` - 正規化対象の設定
     pub fn normalize(&mut self) {
         self.clamp_values();
         self.normalize_clips();
@@ -193,6 +199,12 @@ impl AppConfig {
     }
 
     /// 登録クリップをクイックセレクター向け JSON 配列へ変換する
+    ///
+    /// # Arguments
+    /// * `self` - 変換元の設定
+    ///
+    /// # Returns
+    /// * `String` - セレクター向け JSON 配列文字列
     pub fn clips_to_json_list(&self) -> String {
         use crate::security::format_public_snippet;
 
@@ -230,6 +242,15 @@ impl AppConfig {
     }
 
     /// 指定インデックスの登録クリップ本文を返す
+    ///
+    /// 画像登録の場合は `None` を返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    /// * `index` - 登録クリップのインデックス
+    ///
+    /// # Returns
+    /// * `Option<&str>` - テキスト登録の本文。範囲外または画像登録の場合は `None`
     pub fn registered_clip_text_at(&self, index: usize) -> Option<&str> {
         self.clips
             .get(index)
@@ -238,6 +259,13 @@ impl AppConfig {
     }
 
     /// 指定インデックスの登録クリップボード内容を返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    /// * `index` - 登録クリップのインデックス
+    ///
+    /// # Returns
+    /// * `Option<ResolvedClip>` - コピー用の解決済み内容。範囲外の場合は `None`
     pub fn resolve_registered_clip(&self, index: usize) -> Option<ResolvedClip> {
         let entry = self.clips.get(index)?;
         if let Some(ref image_file) = entry.image_file {
@@ -255,9 +283,12 @@ impl AppConfig {
 
     /// クリップボードの内容を登録クリップとして追加する
     ///
+    /// # Arguments
+    /// * `self` - 追加先の設定
+    /// * `text` - 登録するテキスト
+    ///
     /// # Returns
-    /// * `Ok(())` - 追加成功
-    /// * `Err(AddRegisteredClipError)` - 空文字・サイズ超過・件数上限
+    /// * `Result<(), AddRegisteredClipError>` - 追加に成功した場合は `Ok(())`
     ///
     /// # Errors
     /// 空文字、サイズ超過、件数上限のいずれか
@@ -289,9 +320,14 @@ impl AppConfig {
 
     /// クリップボードの画像を登録画像として追加する
     ///
+    /// # Arguments
+    /// * `self` - 追加先の設定
+    /// * `width` - 画像幅 (ピクセル)
+    /// * `height` - 画像高さ (ピクセル)
+    /// * `rgba` - RGBA ピクセル列
+    ///
     /// # Returns
-    /// * `Ok(())` - 追加成功
-    /// * `Err(AddRegisteredClipError)` - サイズ超過・件数上限・保存失敗
+    /// * `Result<(), AddRegisteredClipError>` - 追加に成功した場合は `Ok(())`
     ///
     /// # Errors
     /// 件数上限、画像サイズ超過、保存失敗のいずれか
@@ -328,8 +364,14 @@ impl AppConfig {
 
     /// 指定インデックスの登録クリップを削除する
     ///
+    /// 画像登録の場合は関連ファイルも削除する
+    ///
+    /// # Arguments
+    /// * `self` - 削除対象の設定
+    /// * `index` - 削除する登録クリップのインデックス
+    ///
     /// # Returns
-    /// * `bool` - 削除できた場合は `true`
+    /// * `bool` - 削除できた場合は `true`。範囲外の場合は `false`
     pub fn remove_registered_clip(&mut self, index: usize) -> bool {
         if index >= self.clips.len() {
             return false;
@@ -345,6 +387,12 @@ impl AppConfig {
     /// 監視時に適用する加工モード列を返す
     ///
     /// `pipeline` が空の場合は `mode` のみ、それ以外は `pipeline` をそのまま返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    ///
+    /// # Returns
+    /// * `Vec<RefineMode>` - 適用する加工モード列
     pub fn effective_pipeline(&self) -> Vec<RefineMode> {
         if self.pipeline.is_empty() {
             vec![self.mode]
@@ -354,6 +402,12 @@ impl AppConfig {
     }
 
     /// 加工パイプラインが有効かどうか (`pipeline` が空でない)
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    ///
+    /// # Returns
+    /// * `bool` - `pipeline` が 1 件以上ある場合は `true`
     pub fn is_pipeline_active(&self) -> bool {
         !self.pipeline.is_empty()
     }
@@ -396,14 +450,25 @@ impl AppConfig {
     }
 
     /// 指定モードがお気に入り登録済みかどうか
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    /// * `mode` - 判定対象の加工モード
+    ///
+    /// # Returns
+    /// * `bool` - お気に入り登録済みの場合は `true`
     pub fn is_favorite_mode(&self, mode: RefineMode) -> bool {
         self.favorite_modes.contains(&mode)
     }
 
     /// お気に入り変換モードの登録状態を切り替える
     ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `mode` - 切り替え対象の加工モード
+    ///
     /// # Returns
-    /// * `FavoriteToggleResult` - 切り替え結果
+    /// * `FavoriteToggleResult` - 追加、削除、上限到達のいずれか
     pub fn toggle_favorite_mode(&mut self, mode: RefineMode) -> FavoriteToggleResult {
         if let Some(index) = self.favorite_modes.iter().position(|m| *m == mode) {
             self.favorite_modes.remove(index);
@@ -417,6 +482,11 @@ impl AppConfig {
     }
 
     /// お気に入り変換モードの表示順を1つ移動する
+    ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `mode` - 移動対象の加工モード
+    /// * `direction` - 移動方向
     ///
     /// # Returns
     /// * `bool` - 移動できた場合は `true`
@@ -438,6 +508,12 @@ impl AppConfig {
     }
 
     /// クイックセレクター向けの変換モード JSON 配列を生成する
+    ///
+    /// # Arguments
+    /// * `self` - 参照元の設定
+    ///
+    /// # Returns
+    /// * `String` - お気に入り変換モードの JSON 配列文字列
     pub fn modes_to_json_list(&self) -> String {
         RefineMode::to_json_list(&self.favorite_modes)
     }

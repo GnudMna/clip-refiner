@@ -65,6 +65,7 @@ cargo test
 cargo test --test monitor_flow
 cargo test --test settings_flow
 cargo test --test clips_flow
+cargo test --test worker_recovery_flow
 
 # ライブラリ API のドキュメントを生成
 cargo doc --no-deps --open
@@ -84,8 +85,9 @@ assert_eq!(output, "hello world");
 
 | ファイル | 検証内容 |
 | :------- | :------- |
-| `monitor_flow.rs` | 監視加工、Undo、一時停止、履歴上限、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン |
+| `monitor_flow.rs` | 監視加工、Undo、一時停止、履歴上限、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン、連続記録中の自動加工停止 |
 | `worker_flow.rs` | 手動加工 (`ProcessMode`)、変更なし加工、Undo 空実行、履歴復元後の再加工抑制 (Polling / Event) |
+| `worker_recovery_flow.rs` | クリップボードワーカーの起動、`restart` による復旧、復旧メニュー表示 |
 | `history_flow.rs` | 暗号化履歴の記録・重複処理・復号 |
 | `regex_flow.rs` | `config` の正規表現設定、コンパイルキャッシュ、Event 方式 |
 | `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
@@ -93,6 +95,8 @@ assert_eq!(output, "hello world");
 | `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・パイプラインとデフォルトモード |
 | `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行。未インストール時はスキップ) |
+| `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行。未インストール時はスキップ) |
+| `oneshot_flow.rs` | ワンショット相当のパイプライン加工と正規表現 CLI オプション |
 | `library_api.rs` | クレートルート re-export と core 連携 |
 
 ### テスト用ヘルパー (`test_helpers`)
@@ -272,6 +276,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
+| 加工 | `REGEX_PREVIEW_SAMPLE`, `RegexPreviewResult`, `preview_regex_replace` | 正規表現置換のプレビュー (設定 UI と同一エンジン) |
 | クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
@@ -333,7 +338,10 @@ clip-refiner/
 │   │   ├── src/
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` など)
-│   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ・画面 OCR UI
+│   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
+│   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc, apply/, snapshot など)
+│   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ
+│   │   │   │   └── ...
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
 │   │   ├── tests/           # 統合テスト (`*_flow.rs`)
 │   │   └── build.rs
@@ -352,9 +360,20 @@ clip-refiner/
 └── wix/
 ```
 
-`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
+`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
 
-セレクター UI (`src/ui/`) は WebView 上で動作する。クイックセレクタ・登録クリップセレクタは `selector-common.js` に共通ロジックを集約している。設定ウィンドウ (`src/ui/settings/`) は `regex_preview.js`・`shared.js` などの分割 JS を Rust 側で組み立ててインライン展開する。
+セレクター UI (`src/ui/`) は WebView 上で動作する。`selector-common.js` に共通ロジックを集約し、クイックセレクタ・登録クリップセレクタはそれぞれ `quick_selector.js`・`clip_selector.js` に UI ロジックを分割している。Rust 側 (`tray/selector_window.rs`) で CSS / JS をインライン展開して `WebView` に渡す。
+
+設定ウィンドウ (`src/ui/settings/`) は `main.js` (エントリ)、`panels.js` (タブ描画)、`events.js` (入力イベント)、`shared.js` (状態同期・debounce)、`settings_patch.js` (パッチ組み立て)、`regex_preview.js` (プレビュー表示) に分割している。Rust 側 (`tray/settings/window.rs`) で順序通りにインライン結合する。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム) に分割されている。
+
+| モジュール (`tray/settings/`) | 責務 |
+| :---------------------------- | :--- |
+| `model` | `SettingsWritable` / `SettingsPatch` (マクロ定義による読み書き項目の一元化) |
+| `snapshot` | `SettingsSnapshot`, `SettingsLimits` (初期表示 JSON と UI 上限) |
+| `ipc` | WebView IPC メッセージの解析と適用待ちキュー |
+| `apply/` | パッチ適用のオーケストレーション (`patch/` でドメイン別、`feedback` でエラー通知) |
+| `regex_preview` | 正規表現プレビュー IPC 応答 (`REGEX_PREVIEW_SAMPLE` を使用) |
+| `window` | WebView の組み立てと表示制御 |
 
 ---
 

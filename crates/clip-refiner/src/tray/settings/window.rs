@@ -19,6 +19,7 @@ use crate::tray::selector_window::{WebSelectorWindow, WebViewWindowOptions};
 use crate::tray::state::{AppEvent, AppState};
 use crate::tray::webview_script;
 use crate::tray::worker::ClipboardWorkerHandle;
+use crate::user_error::titles;
 
 use anyhow::{Context, Result};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
@@ -48,6 +49,7 @@ fn log_unparsed_settings_ipc(msg: &str) {
 fn assemble_settings_js() -> String {
     const FRAGMENTS: &[&str] = &[
         include_str!("../../ui/settings/regex_preview.js"),
+        include_str!("../../ui/settings/settings_patch.js"),
         include_str!("../../ui/settings/shared.js"),
         include_str!("../../ui/settings/panels.js"),
         include_str!("../../ui/settings/events.js"),
@@ -84,6 +86,14 @@ pub struct SettingsWindow {
 
 impl SettingsWindow {
     /// 設定ウィンドウと `WebView` を初期化して生成する
+    ///
+    /// # Arguments
+    /// * `window` - ベースとなる `tao` ウィンドウ
+    /// * `proxy` - イベント送信用プロキシ
+    /// * `state` - アプリケーションの共有状態
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 成功時は `SettingsWindow`、失敗時はエラー
     pub fn new(
         window: Window,
         proxy: &EventLoopProxy<AppEvent>,
@@ -113,6 +123,9 @@ impl SettingsWindow {
     }
 
     /// 設定ウィンドウを表示し、スナップショットを読み込む
+    ///
+    /// # Arguments
+    /// * `snapshot_json` - 設定スナップショット JSON
     pub fn show(&self, snapshot_json: &str) {
         self.inner.window().set_visible(true);
         self.inner.window().set_focus();
@@ -120,16 +133,27 @@ impl SettingsWindow {
     }
 
     /// 前面へフォーカスを移す
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsWindow`
     pub fn focus(&self) {
         self.inner.window().set_focus();
     }
 
     /// JavaScript へスナップショットを渡す
+    ///
+    /// # Arguments
+    /// * `snapshot_json` - 設定スナップショット JSON
     pub fn load_snapshot(&self, snapshot_json: &str) {
         self.load_snapshot_with_options(snapshot_json, false, false);
     }
 
     /// JavaScript へスナップショットを渡す (`force` 時は編集中でも UI を再描画する)
+    ///
+    /// # Arguments
+    /// * `snapshot_json` - 設定スナップショット JSON
+    /// * `force` - 編集中でも強制的に UI を再描画するか
+    /// * `external_sync` - 外部同期由来の更新かどうか
     pub fn load_snapshot_with_options(
         &self,
         snapshot_json: &str,
@@ -153,6 +177,9 @@ impl SettingsWindow {
     }
 
     /// debounce 中の設定変更を即時送信する
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsWindow`
     pub fn flush_pending_apply(&self) {
         self.inner.evaluate_script(FLUSH_PENDING_APPLY_SCRIPT);
     }
@@ -171,7 +198,7 @@ impl SettingsWindow {
         }
 
         if should_notify_apply_error_via_desktop(self.is_visible(), feedback) {
-            crate::platform::show_notification("設定エラー", &feedback.message);
+            crate::platform::show_notification(titles::SETTINGS, &feedback.message);
         }
     }
 
@@ -188,6 +215,9 @@ impl SettingsWindow {
     }
 
     /// 設定ウィンドウを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsWindow`
     pub fn hide(&self) {
         self.flush_pending_apply();
         save_settings_window_geometry(self.inner.window());
@@ -195,11 +225,23 @@ impl SettingsWindow {
     }
 
     /// 設定ウィンドウが表示中かどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
         self.inner.is_visible()
     }
 
     /// ウィンドウ ID を返す
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsWindow`
+    ///
+    /// # Returns
+    /// * `tao::window::WindowId` - ウィンドウ ID
     pub fn id(&self) -> tao::window::WindowId {
         self.inner.id()
     }
@@ -298,6 +340,14 @@ fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) ->
 }
 
 /// 設定ウィンドウを初期化する
+///
+/// # Arguments
+/// * `event_loop` - ウィンドウ作成用のイベントループ
+/// * `proxy` - イベント送信用プロキシ
+/// * `state` - アプリケーションの共有状態
+///
+/// # Returns
+/// * `Result<SettingsWindow>` - 成功時は `SettingsWindow`、失敗時はエラー
 pub fn init_settings_window(
     event_loop: &EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
@@ -325,7 +375,7 @@ pub(crate) fn open_settings_window(state: &Arc<AppState>, settings: &SettingsWin
 mod tests {
     use super::assemble_settings_js;
 
-    /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれること
+    /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれるようにすること
     #[test]
     fn assembled_settings_js_includes_regex_preview_stale_guard() {
         let js = assemble_settings_js();

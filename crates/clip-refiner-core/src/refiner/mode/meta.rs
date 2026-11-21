@@ -11,6 +11,9 @@ use strum::{EnumMessage, EnumProperty, IntoEnumIterator};
 impl RefineCategory {
     /// カテゴリの表示名を取得する
     ///
+    /// # Arguments
+    /// * `self` - この `RefineCategory`
+    ///
     /// # Returns
     /// * `&'static str` - UIに表示するためのカテゴリ名
     pub fn label(self) -> &'static str {
@@ -36,6 +39,12 @@ impl RefineCategory {
     ];
 
     /// ルート直下の通常項目の後ろにサブメニューを遅延配置するカテゴリかどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `RefineCategory`
+    ///
+    /// # Returns
+    /// * `bool` - `Datetime` または `Number` の場合は `true`
     pub fn is_deferred_in_menu(self) -> bool {
         matches!(self, Self::Datetime | Self::Number)
     }
@@ -44,16 +53,24 @@ impl RefineCategory {
 impl RefineMode {
     /// UIに表示する名前を取得する
     ///
+    /// # Arguments
+    /// * `self` - この `RefineMode`
+    ///
     /// # Returns
     /// * `&'static str` - モードに対応する静的な文字列ラベル
     pub fn label(self) -> &'static str {
         self.get_message().unwrap_or("")
     }
 
-    /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
+    /// 所属するカテゴリを取得する
+    ///
+    /// トレイメニューの階層構築に利用される
     ///
     /// # Panics
     /// バリアントに `category` 属性が未定義、または値が不正な場合
+    ///
+    /// # Arguments
+    /// * `self` - この `RefineMode`
     ///
     /// # Returns
     /// * `RefineCategory` - モードが属するカテゴリ
@@ -66,6 +83,12 @@ impl RefineMode {
     }
 
     /// 画像をクリップボードへ書き込むモードかどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `RefineMode`
+    ///
+    /// # Returns
+    /// * `bool` - 画像出力モード (`ExcelToImage` など) の場合は `true`
     pub fn produces_image(self) -> bool {
         matches!(self, Self::ExcelToImage)
     }
@@ -151,7 +174,7 @@ mod tests {
 
     use strum::{EnumProperty, IntoEnumIterator};
 
-    /// `RefineMode` のラベルとカテゴリが期待どおりであること
+    /// `RefineMode` のラベルとカテゴリが期待どおりであようにすること
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
@@ -185,7 +208,7 @@ mod tests {
         assert_eq!(RefineMode::ExcelToImage.category(), RefineCategory::Excel);
     }
 
-    /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されていること
+    /// 全モードのカテゴリが `SUBMENU_ORDER` で網羅されていようにすること
     #[test]
     fn test_submenu_order_covers_all_categories() {
         use std::collections::HashSet;
@@ -202,7 +225,7 @@ mod tests {
         );
     }
 
-    /// 全 `RefineMode` の label が空でないこと
+    /// 全 `RefineMode` の label が空でないようにすること
     #[test]
     fn test_all_refine_modes_have_nonempty_labels() {
         for mode in RefineMode::iter() {
@@ -210,7 +233,7 @@ mod tests {
         }
     }
 
-    /// 全 `RefineMode` に category 属性が定義されていること
+    /// 全 `RefineMode` に category 属性が定義されていようにすること
     #[test]
     fn test_all_refine_modes_have_category_property() {
         for mode in RefineMode::iter() {
@@ -221,7 +244,7 @@ mod tests {
         }
     }
 
-    /// `is_deferred_in_menu` が Datetime / Number のみ true であること
+    /// `is_deferred_in_menu` が Datetime / Number のみ true であようにすること
     #[test]
     fn test_refine_category_is_deferred_in_menu() {
         use RefineCategory::*;
@@ -240,7 +263,7 @@ mod tests {
         }
     }
 
-    /// `to_json_list` が全モード分の有効な JSON を返すこと
+    /// `to_json_list` が全モード分の有効な JSON を返すようにすること
     #[test]
     fn test_to_json_list() {
         let json = RefineMode::to_json_list(&[RefineMode::UrlDecode, RefineMode::Trim]);
@@ -303,7 +326,7 @@ mod tests {
         assert!(json_format.get("favoriteIndex").is_none());
     }
 
-    /// kebab-case の CLI 名を `FromStr` で解析できること
+    /// kebab-case の CLI 名を `FromStr` で解析できるようにすること
     #[test]
     fn test_refine_mode_from_cli_name() {
         assert_eq!(
@@ -313,7 +336,7 @@ mod tests {
         assert_eq!(RefineMode::JsonFormat.to_string(), "json-format");
     }
 
-    /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すこと
+    /// `quick_selector_modes` が全モードをトレイメニュー相当の順序で返すようにすること
     #[test]
     fn test_quick_selector_modes_order() {
         let ordered = RefineMode::quick_selector_modes();
@@ -336,13 +359,13 @@ mod tests {
         assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
     }
 
-    /// `ExcelToImage` がクイックセレクタに含まれること
+    /// `ExcelToImage` がクイックセレクタに含まれるようにすること
     #[test]
     fn test_excel_to_image_in_quick_selector() {
         assert!(RefineMode::quick_selector_modes().contains(&RefineMode::ExcelToImage));
     }
 
-    /// `RefineMode` のバリアント数と主要バリアントの存在を確認すること
+    /// `ExcelToImage` がクイックセレクタに含まれるようにすること
     #[test]
     fn test_refine_mode_variants() {
         let variants: Vec<_> = RefineMode::iter().collect();

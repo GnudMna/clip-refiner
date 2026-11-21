@@ -26,7 +26,7 @@ mod tests {
     use crate::refiner::RefineMode;
     use crate::security::ContentFingerprint;
 
-    /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作
+    /// `with_config` / `with_processed_state` / `monitor_generation` の基本動作できるようにすること
     #[test]
     fn test_app_state_helpers() {
         let state = test_app_state();
@@ -50,7 +50,7 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 一時停止フラグの更新
+    /// 一時停止フラグの更新できるようにすること
     #[test]
     fn test_paused_accessor() {
         let state = test_app_state();
@@ -61,7 +61,7 @@ mod tests {
         assert!(!state.with_config(|c| c.is_paused));
     }
 
-    /// 履歴機能の更新
+    /// 履歴機能の更新できるようにすること
     #[test]
     fn test_history_enabled_accessor() {
         let state = test_app_state();
@@ -70,7 +70,7 @@ mod tests {
         assert!(state.with_config(|c| c.history_enabled));
     }
 
-    /// 通知設定の更新
+    /// 通知設定の更新できるようにすること
     #[test]
     fn test_notification_settings_accessor() {
         let state = test_app_state();
@@ -110,13 +110,31 @@ mod tests {
         assert!(snap.history_enabled);
     }
 
+    /// `auto_processing_enabled` が連続記録と一時停止の状態を反映すること
+    #[test]
+    fn test_auto_processing_enabled() {
+        let state = test_app_state();
+
+        let snap = state.monitor_snapshot();
+        assert!(snap.auto_processing_enabled());
+
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        assert!(!state.monitor_snapshot().auto_processing_enabled());
+
+        state.with_config_mut(|c| {
+            c.continuous_record_enabled = false;
+            c.is_paused = true;
+        });
+        assert!(!state.monitor_snapshot().auto_processing_enabled());
+    }
+
     fn collect_history(state: &AppState) -> Vec<String> {
         (0..state.history_len())
             .filter_map(|i| state.get_history_entry(i).map(|s| s.to_string()))
             .collect()
     }
 
-    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になる
+    /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になるできるようにすること
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
         let state = test_app_state();
@@ -153,7 +171,7 @@ mod tests {
             .collect()
     }
 
-    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になる
+    /// 連続記録追加: 空白は無視、重複を保持し、上限超過分は先頭から破棄、clear で空になるできるようにすること
     #[test]
     fn test_continuous_record_enqueue_limit_and_clear() {
         let state = test_app_state();
@@ -207,7 +225,7 @@ mod tests {
         assert_eq!(state.continuous_record_len(), 0);
     }
 
-    /// 加工成功時に書き戻し本文と観測済み本文が更新されること
+    /// 加工成功時に書き戻し本文と観測済み本文が更新されるようにすること
     #[test]
     fn test_record_processing_success() {
         let state = test_app_state();
@@ -218,7 +236,7 @@ mod tests {
         assert!(ps.matches_last_written("processed"));
     }
 
-    /// 観測のみの場合は `last_written` を変更しないこと
+    /// 観測のみの場合は `last_written` を変更しないであるようにすること
     #[test]
     fn test_record_clipboard_observed() {
         let state = test_app_state();
@@ -250,7 +268,7 @@ mod tests {
         assert!(ps.matches_last_written("restored"));
     }
 
-    /// 加工取り消し用テキストの記録と取得
+    /// 加工取り消し用テキストの記録と取得できるようにすること
     #[test]
     fn test_undo_source_record_and_take() {
         let state = test_app_state();
@@ -265,14 +283,14 @@ mod tests {
         assert!(state.take_undo_source().is_none());
     }
 
-    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
+    /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないであるようにすること
     #[test]
     fn test_app_state_disables_config_persistence() {
         let state = test_app_state();
         assert!(!state.is_config_persistence_enabled());
     }
 
-    /// ワーカー稼働状態の更新
+    /// ワーカー稼働状態の更新できるようにすること
     #[test]
     fn test_worker_alive_state() {
         let state = test_app_state();

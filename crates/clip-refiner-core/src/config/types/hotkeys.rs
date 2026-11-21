@@ -63,6 +63,13 @@ impl HotkeySettings {
     /// お気に入りスロットのホットキー文字列を返す
     ///
     /// 設定で空文字が指定されたスロットは `None` を返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元のホットキー設定
+    /// * `index` - お気に入りスロットのインデックス (0 始まり)
+    ///
+    /// # Returns
+    /// * `Option<String>` - 有効なホットキー文字列。無効または範囲外の場合は `None`
     pub fn favorite_slot_binding(&self, index: usize) -> Option<String> {
         if index >= consts::MAX_FAVORITE_MODES {
             return None;
@@ -77,6 +84,11 @@ impl HotkeySettings {
     }
 
     /// 不正なホットキー文字列をデフォルト値へ置き換える
+    ///
+    /// 重複解消もあわせて実行する
+    ///
+    /// # Arguments
+    /// * `self` - 修正対象のホットキー設定
     pub fn fix_invalid(&mut self) {
         fix_hotkey_field(
             &mut self.quick_selector,
@@ -108,8 +120,11 @@ impl HotkeySettings {
 
     /// 重複するホットキー割り当てを解消する
     ///
-    /// 固定割り当ては優先順で先勝ちとし、後続はデフォルトへ戻す。
+    /// 固定割り当ては優先順で先勝ちとし、後続はデフォルトへ戻す
     /// お気に入りスロットは固定割り当ておよび先に確定したスロットと重複した場合に無効化する
+    ///
+    /// # Arguments
+    /// * `self` - 修正対象のホットキー設定
     pub fn fix_duplicates(&mut self) {
         let mut used: HashMap<ParsedHotkey, &'static str> = HashMap::new();
 

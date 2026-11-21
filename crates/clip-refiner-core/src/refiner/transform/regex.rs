@@ -83,6 +83,13 @@ pub struct RegexPreviewResult {
 /// サンプル文字列へ正規表現置換を適用してプレビュー結果を返す
 ///
 /// 実行時の `regex_replace` と同じ `regex` クレートで評価する
+///
+/// # Arguments
+/// * `sample` - プレビュー対象のサンプル文字列
+/// * `settings` - 正規表現パターンと置換文字列
+///
+/// # Returns
+/// * `RegexPreviewResult` - パターンの有効性、状態メッセージ、置換後テキスト
 pub fn preview_regex_replace(sample: &str, settings: &RegexSettings) -> RegexPreviewResult {
     if settings.pattern.is_empty() {
         return RegexPreviewResult {
@@ -275,7 +282,7 @@ mod tests {
         RegexPatternCache::default()
     }
 
-    /// 置換の基本動作
+    /// 置換の基本動作できるようにすること
     #[test]
     fn test_regex_replace() {
         let mut cache = mut_cache();
@@ -289,7 +296,7 @@ mod tests {
         );
     }
 
-    /// キャプチャグループを使った置換
+    /// キャプチャグループを使った置換できるようにすること
     #[test]
     fn test_regex_replace_capture() {
         let mut cache = mut_cache();
@@ -303,7 +310,7 @@ mod tests {
         );
     }
 
-    /// 抽出の基本動作
+    /// 抽出の基本動作できるようにすること
     #[test]
     fn test_regex_extract() {
         let mut cache = mut_cache();
@@ -314,14 +321,14 @@ mod tests {
         assert_eq!(regex_extract("abc", &settings(r"\d+"), &mut cache), "abc");
     }
 
-    /// 削除の基本動作
+    /// 削除の基本動作できるようにすること
     #[test]
     fn test_regex_delete() {
         let mut cache = mut_cache();
         assert_eq!(regex_delete("a1b2c", &settings(r"\d"), &mut cache), "abc");
     }
 
-    /// 分割の基本動作
+    /// 分割の基本動作できるようにすること
     #[test]
     fn test_regex_split() {
         let mut cache = mut_cache();
@@ -332,7 +339,7 @@ mod tests {
         );
     }
 
-    /// 無効なパターンは元のテキストを返すこと
+    /// 無効なパターンは元のテキストを返すようにすること
     #[test]
     fn test_invalid_pattern_returns_original() {
         let invalid = RegexSettings {
@@ -346,7 +353,7 @@ mod tests {
         ));
     }
 
-    /// 空パターンは元のテキストを返すこと
+    /// 空パターンは元のテキストを返すようにすること
     #[test]
     fn test_empty_pattern_returns_original() {
         let mut cache = mut_cache();
@@ -356,7 +363,7 @@ mod tests {
         ));
     }
 
-    /// 大文字小文字を無視するフラグ
+    /// 大文字小文字を無視するフラグできるようにすること
     #[test]
     fn test_case_insensitive() {
         let settings = RegexSettings {
@@ -393,7 +400,7 @@ mod tests {
         );
     }
 
-    /// プレビューが置換結果とエラーを返すこと
+    /// プレビューが置換結果とエラーを返すようにすること
     #[test]
     fn test_preview_regex_replace() {
         let ok = preview_regex_replace(

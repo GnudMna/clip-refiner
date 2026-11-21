@@ -15,7 +15,11 @@ fn default_ctx() -> RefineContext {
     RefineContext::default()
 }
 
-/// 空文字列は `NoText` になること
+// ======================================================================
+// テスト
+// ======================================================================
+
+/// 空文字列は `NoText` になるようにすること
 #[test]
 fn apply_pipeline_rejects_empty_text() {
     assert_eq!(
@@ -24,7 +28,7 @@ fn apply_pipeline_rejects_empty_text() {
     );
 }
 
-/// 上限超過は `TextTooLarge` になること
+/// 上限超過は `TextTooLarge` になるようにすること
 #[test]
 fn apply_pipeline_rejects_oversized_text() {
     let oversized = "a".repeat(MAX_CLIPBOARD_TEXT_BYTES + 1);
@@ -34,7 +38,7 @@ fn apply_pipeline_rejects_oversized_text() {
     );
 }
 
-/// 上限ちょうどの入力は処理できること
+/// 上限ちょうどの入力は処理できるようにすること
 #[test]
 fn apply_pipeline_accepts_text_at_limit() {
     let at_limit = "a".repeat(MAX_CLIPBOARD_TEXT_BYTES);
@@ -45,7 +49,7 @@ fn apply_pipeline_accepts_text_at_limit() {
     );
 }
 
-/// 変更がない場合は `Unchanged` を返すこと
+/// 変更がない場合は `Unchanged` を返すようにすること
 #[test]
 fn apply_pipeline_returns_unchanged_when_no_op() {
     assert_eq!(
@@ -54,7 +58,7 @@ fn apply_pipeline_returns_unchanged_when_no_op() {
     );
 }
 
-/// 画像モードのみのパイプラインはテキスト API では `Unchanged` になること
+/// 画像モードのみのパイプラインはテキスト API では `Unchanged` になるようにすること
 #[test]
 fn apply_pipeline_image_only_yields_unchanged_for_text_api() {
     assert_eq!(
@@ -63,7 +67,7 @@ fn apply_pipeline_image_only_yields_unchanged_for_text_api() {
     );
 }
 
-/// テキスト加工後に末尾画像モードが分割されること
+/// テキスト加工後に末尾画像モードが分割されるようにすること
 #[test]
 fn split_pipeline_separates_trailing_image_mode() {
     let pipeline = vec![RefineMode::UrlDecode, RefineMode::ExcelToImage];
@@ -73,13 +77,13 @@ fn split_pipeline_separates_trailing_image_mode() {
     );
 }
 
-/// `apply_text_pipeline` が空モード列で `None` を返すこと
+/// `apply_text_pipeline` が空モード列で `None` を返すようにすること
 #[test]
 fn apply_text_pipeline_empty_modes_returns_none() {
     assert_eq!(apply_text_pipeline("hello", &[], &default_ctx()), None);
 }
 
-/// 設定の正規表現がパイプライン全体に効くこと
+/// 設定の正規表現がパイプライン全体に効ようにすること
 #[test]
 fn config_regex_applies_through_pipeline() {
     let mut config = AppConfig::default();
@@ -103,7 +107,7 @@ fn process_clipboard_io_rejects_empty_pipeline() {
     );
 }
 
-/// テキスト加工と Excel 画像書き込みを連鎖できること
+/// テキスト加工と Excel 画像書き込みを連鎖できるようにすること
 #[test]
 fn process_clipboard_io_chains_text_then_image() {
     let rgba = vec![255_u8; 4 * 2 * 2];
@@ -125,7 +129,7 @@ fn process_clipboard_io_chains_text_then_image() {
     assert_eq!(cb.written_image_size(), Some((2, 2)));
 }
 
-/// 読み取り失敗時に詳細付き `ReadFailed` になること
+/// 読み取り失敗時に詳細付き `ReadFailed` になるようにすること
 #[test]
 fn process_clipboard_io_surfaces_read_failure() {
     let mut cb = InMemoryTextClipboard::with_text("x").fail_on_read();
@@ -148,7 +152,7 @@ fn process_clipboard_io_surfaces_write_failure() {
     assert_eq!(cb.text(), "  x  ");
 }
 
-/// パーサー上限境界が公開 API で参照できること
+/// パーサー上限境界が公開 API で参照できるようにすること
 #[test]
 fn parser_limit_boundary_is_exposed() {
     let within = "x".repeat(clip_refiner_core::consts::MAX_PARSER_INPUT_BYTES);
@@ -157,7 +161,7 @@ fn parser_limit_boundary_is_exposed() {
     assert!(!is_within_parser_limit(&over));
 }
 
-/// 全モードが少なくとも 1 回はパイプライン API 経由で呼び出せること
+/// 全モードが少なくとも 1 回はパイプライン API 経由で呼び出せようにすること
 #[test]
 fn every_mode_runs_through_apply_pipeline_without_panic() {
     let ctx = default_ctx();

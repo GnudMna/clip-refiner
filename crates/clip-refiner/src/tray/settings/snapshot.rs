@@ -1,7 +1,8 @@
-use crate::config::{AppConfig, MonitorMode, NotificationSettings, RegexSettings};
+use super::model::SettingsWritable;
+
+use crate::config::AppConfig;
 use crate::consts;
-use crate::platform::autostart;
-use crate::refiner::RefineMode;
+use crate::refiner::{REGEX_PREVIEW_SAMPLE, RefineMode};
 use crate::tray::hotkey::settings::shortcut_list_entries;
 
 use serde::Serialize;
@@ -35,6 +36,9 @@ pub struct SettingsLimits {
 
 impl SettingsLimits {
     /// 定数から UI 制約を生成する
+    ///
+    /// # Returns
+    /// * `Self` - 設定ウィンドウ向けの件数・サイズ上限
     pub fn from_consts() -> Self {
         Self {
             history_min: consts::MIN_HISTORY_LIMIT,
@@ -54,31 +58,15 @@ impl SettingsLimits {
 // ======================================================================
 /// 設定ウィンドウの初期表示用データ
 ///
-/// JavaScript 向けの平坦な JSON 形のため、関連する bool 項目は個別フィールドのまま保持する
-#[allow(clippy::struct_excessive_bools)]
+/// 読み書き項目は `SettingsWritable` に集約し、表示専用項目のみここで保持する
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSnapshot {
-    /// 監視方式
-    pub monitor_mode: MonitorMode,
-    /// ポーリング間隔 (ミリ秒)
-    pub interval_ms: u64,
-    /// デフォルト加工モード (`pipeline` が空のときに使用)
-    pub mode: RefineMode,
-    /// 加工パイプライン
-    pub pipeline: Vec<RefineMode>,
-    /// 通知設定
-    pub notification_settings: NotificationSettings,
-    /// 履歴の有効状態
-    pub history_enabled: bool,
-    /// 履歴の最大保持件数
-    pub history_limit: usize,
-    /// 連続記録の有効状態
-    pub continuous_record_enabled: bool,
-    /// 連続記録の最大保持件数
-    pub continuous_record_limit: usize,
-    /// 正規表現設定
-    pub regex: RegexSettings,
+    /// 設定ウィンドウで読み書きする項目
+    #[serde(flatten)]
+    pub writable: SettingsWritable,
+    /// 正規表現プレビュー用サンプル文字列 (`REGEX_PREVIEW_SAMPLE` と同一)
+    pub regex_preview_sample: &'static str,
     /// お気に入り変換モード (登録順)
     pub favorite_modes: Vec<RefineMode>,
     /// 加工モード一覧 (クイックセレクタと同形式)
@@ -87,16 +75,18 @@ pub struct SettingsSnapshot {
     pub clips: serde_json::Value,
     /// グローバルホットキー一覧 (読み取り専用プレビュー)
     pub shortcuts: Vec<crate::tray::hotkey::settings::ShortcutEntry>,
-    /// ログイン時の自動起動 (レジストリ `Run` キー)
-    pub launch_at_login: bool,
-    /// クリップボード監視の一時停止
-    pub is_paused: bool,
     /// UI 向けの件数・サイズ上限
     pub limits: SettingsLimits,
 }
 
 impl SettingsSnapshot {
     /// 現在の設定からスナップショットを生成する
+    ///
+    /// # Arguments
+    /// * `config` - 現在のアプリケーション設定
+    ///
+    /// # Returns
+    /// * `Self` - 設定ウィンドウの初期表示用データ
     pub fn from_config(config: &AppConfig) -> Self {
         let modes: serde_json::Value =
             serde_json::from_str(&config.modes_to_json_list()).unwrap_or(serde_json::json!([]));
@@ -104,32 +94,34 @@ impl SettingsSnapshot {
             serde_json::from_str(&config.clips_to_json_list()).unwrap_or(serde_json::json!([]));
 
         Self {
-            monitor_mode: config.monitor_mode,
-            interval_ms: config.interval_ms,
-            mode: config.mode,
-            pipeline: config.pipeline.clone(),
-            notification_settings: config.notification_settings.clone(),
-            history_enabled: config.history_enabled,
-            history_limit: config.history_limit,
-            continuous_record_enabled: config.continuous_record_enabled,
-            continuous_record_limit: config.continuous_record_limit,
-            regex: config.regex.clone(),
+            writable: SettingsWritable::from_config(config),
+            regex_preview_sample: REGEX_PREVIEW_SAMPLE,
             favorite_modes: config.favorite_modes.clone(),
             modes,
             clips,
             shortcuts: shortcut_list_entries(&config.hotkeys, &config.favorite_modes),
-            launch_at_login: autostart::is_enabled(),
-            is_paused: config.is_paused,
             limits: SettingsLimits::from_consts(),
         }
     }
 
     /// JSON 文字列へシリアライズする
+    ///
+    /// # Arguments
+    /// * `self` - この `SettingsSnapshot`
+    ///
+    /// # Returns
+    /// * `String` - スナップショットの JSON 文字列 (失敗時は `"{}"`)
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
     }
 
     /// 登録クリップ一覧の JSON 文字列を生成する
+    ///
+    /// # Arguments
+    /// * `config` - 現在のアプリケーション設定
+    ///
+    /// # Returns
+    /// * `String` - 登録クリップ一覧 JSON
     pub fn clips_json(config: &AppConfig) -> String {
         serde_json::from_str::<serde_json::Value>(&config.clips_to_json_list())
             .unwrap_or(serde_json::json!([]))
@@ -137,6 +129,12 @@ impl SettingsSnapshot {
     }
 
     /// お気に入りとショートカット一覧の JSON 文字列を生成する
+    ///
+    /// # Arguments
+    /// * `config` - 現在のアプリケーション設定
+    ///
+    /// # Returns
+    /// * `String` - お気に入りモードとショートカット一覧 JSON
     pub fn favorites_and_shortcuts_json(config: &AppConfig) -> String {
         serde_json::json!({
             "favoriteModes": config.favorite_modes,
@@ -186,11 +184,12 @@ mod tests {
         assert_eq!(json["notificationSettings"]["notifyResult"], true);
         assert_eq!(json["regex"]["caseInsensitive"], true);
         assert_eq!(json["limits"]["historyMax"], consts::MAX_HISTORY_LIMIT);
+        assert_eq!(json["regexPreviewSample"], REGEX_PREVIEW_SAMPLE);
         assert!(json["notificationSettings"].get("notify_mode").is_none());
         assert!(json["regex"].get("case_insensitive").is_none());
     }
 
-    /// `clips_json` が登録クリップ一覧を JSON 配列として返すこと
+    /// `clips_json` が登録クリップ一覧を JSON 配列として返すようにすること
     #[test]
     fn clips_json_serializes_registered_clips() {
         let mut config = AppConfig::default();
@@ -205,7 +204,7 @@ mod tests {
         assert_eq!(json[0]["preview"], "hello");
     }
 
-    /// `favorites_and_shortcuts_json` がお気に入りとショートカットを返すこと
+    /// `favorites_and_shortcuts_json` がお気に入りとショートカットを返すようにすること
     #[test]
     fn favorites_and_shortcuts_json_contains_expected_fields() {
         let config = AppConfig {

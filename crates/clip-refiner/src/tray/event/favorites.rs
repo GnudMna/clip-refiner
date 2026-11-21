@@ -147,7 +147,7 @@ mod tests {
         TrayMenu::build(state).expect("テスト用トレイメニューの構築に失敗")
     }
 
-    /// お気に入り登録で設定とメニュー表示が更新されること
+    /// お気に入り登録で設定とメニュー表示が更新されるようにすること
     #[test]
     fn toggle_favorite_mode_adds_to_config_and_menu() {
         let state = Arc::new(test_app_state());
@@ -164,7 +164,7 @@ mod tests {
         assert!(menu.refine.remove_favorite_item.is_enabled());
     }
 
-    /// お気に入り解除で設定とメニュー表示が更新されること
+    /// お気に入り解除で設定とメニュー表示が更新されるようにすること
     #[test]
     fn toggle_favorite_mode_removes_from_config_and_menu() {
         let state = Arc::new(test_app_state());
@@ -207,7 +207,7 @@ mod tests {
         assert!(!menu.refine.add_favorite_item.is_enabled());
     }
 
-    /// 表示順変更が設定とお気に入りサブメニューへ反映されること
+    /// 表示順変更が設定とお気に入りサブメニューへ反映されるようにすること
     #[test]
     fn move_favorite_mode_updates_order() {
         let state = Arc::new(test_app_state());
@@ -235,7 +235,7 @@ mod tests {
         );
     }
 
-    /// トレイメニューの登録項目からお気に入りを追加できること
+    /// トレイメニューの登録項目からお気に入りを追加できるようにすること
     #[test]
     fn handle_favorites_event_adds_current_mode() {
         let state = Arc::new(test_app_state());
@@ -251,7 +251,7 @@ mod tests {
         assert!(state.with_config(|config| config.is_favorite_mode(RefineMode::JsonFormat)));
     }
 
-    /// 未登録モードの解除操作は no-op であること
+    /// 未登録モードの解除操作は no-op であるようにすること
     #[test]
     fn handle_favorites_event_remove_skips_unregistered_mode() {
         let state = Arc::new(test_app_state());

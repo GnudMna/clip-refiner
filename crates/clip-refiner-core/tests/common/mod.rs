@@ -9,6 +9,9 @@ use clip_refiner_core::{RefineContext, RefineMode, Refiner};
 
 use strum::IntoEnumIterator;
 
+// ======================================================================
+// 回帰ケース
+// ======================================================================
 /// 固定入出力で検証するテキスト加工モードのケース
 pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
     (
@@ -112,7 +115,17 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
     (RefineMode::ToScreamingSnakeCase, "fooBar", "FOO_BAR"),
 ];
 
+// ======================================================================
+// ヘルパー
+// ======================================================================
 /// 正規表現設定付きコンテキストを生成する
+///
+/// # Arguments
+/// * `pattern` - 正規表現パターン
+/// * `replacement` - 置換文字列
+///
+/// # Returns
+/// * `RefineContext` - 正規表現設定を含む加工コンテキスト
 pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
     RefineContext::with_regex(RegexSettings {
         pattern: pattern.to_string(),
@@ -121,6 +134,9 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
     })
 }
 
+// ======================================================================
+// アサーション
+// ======================================================================
 /// 全 `RefineMode` バリアントに回帰ケースが存在すること
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();

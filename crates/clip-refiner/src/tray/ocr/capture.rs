@@ -26,6 +26,14 @@ pub struct OcrCaptureWindow {
 // 初期化
 // ======================================================================
 /// 画面範囲選択オーバーレイを初期化して生成する
+///
+/// # Arguments
+/// * `event_loop` - ウィンドウ作成用のイベントループ
+/// * `proxy` - イベント送信用プロキシ
+/// * `worker` - クリップボード操作ワーカー
+///
+/// # Returns
+/// * `Result<OcrCaptureWindow>` - 成功時は `OcrCaptureWindow`、失敗時はエラー
 pub fn init_ocr_capture(
     event_loop: &EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
@@ -50,6 +58,9 @@ pub fn init_ocr_capture(
 // ======================================================================
 impl OcrCaptureWindow {
     /// 半透明オーバーレイを即座に表示する
+    ///
+    /// # Arguments
+    /// * `self` - この `OcrCaptureWindow`
     pub fn show(&self) {
         if let Ok(mut overlay) = self.overlay.try_borrow_mut() {
             overlay.show();
@@ -57,6 +68,9 @@ impl OcrCaptureWindow {
     }
 
     /// オーバーレイを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `OcrCaptureWindow`
     pub fn hide(&self) {
         if let Ok(mut overlay) = self.overlay.try_borrow_mut() {
             overlay.hide();
@@ -64,6 +78,12 @@ impl OcrCaptureWindow {
     }
 
     /// オーバーレイが表示中かどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `OcrCaptureWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
         self.overlay.borrow().is_visible()
     }

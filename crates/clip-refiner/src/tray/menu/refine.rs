@@ -43,7 +43,7 @@ impl TrayMenu {
     /// * `favorite_modes` - お気に入り登録済みモード
     ///
     /// # Returns
-    /// 成功した場合は `RefineMenu` インスタンスを返し、失敗した場合は `Err` を返す
+    /// * `Result<RefineMenu>` - 成功した場合は `RefineMenu` インスタンス、失敗した場合は `Err`
     pub(super) fn build_refine_menu(
         current_mode: RefineMode,
         active_modes: &std::collections::HashSet<RefineMode>,
@@ -163,6 +163,12 @@ impl TrayMenu {
     }
 
     /// お気に入り変換モードの表示を設定内容に合わせて更新する
+    ///
+    /// # Arguments
+    /// * `state` - アプリケーションの共有状態
+    ///
+    /// # Returns
+    /// * `Result<()>` - 成功時は `Ok(())`、失敗時はエラー
     pub fn refresh_favorites(&self, state: &AppState) -> Result<()> {
         let (current_mode, active_modes, favorite_modes, hotkeys) = state.with_config(|config| {
             (
@@ -189,6 +195,14 @@ impl TrayMenu {
 // ======================================================================
 impl RefineMenu {
     /// お気に入りサブメニューの内容を再構築する
+    ///
+    /// # Arguments
+    /// * `active_modes` - 有効な加工モード集合
+    /// * `favorite_modes` - お気に入り登録済みモード
+    /// * `hotkeys` - ホットキー設定
+    ///
+    /// # Returns
+    /// * `Result<()>` - 成功時は `Ok(())`、失敗時はエラー
     pub fn rebuild_favorites(
         &self,
         active_modes: &HashSet<RefineMode>,
@@ -234,6 +248,10 @@ impl RefineMenu {
     }
 
     /// お気に入り登録・解除項目の有効状態を同期する
+    ///
+    /// # Arguments
+    /// * `current_mode` - 現在選択されている変換モード
+    /// * `favorite_modes` - お気に入り登録済みモード
     pub fn sync_favorite_actions(&self, current_mode: RefineMode, favorite_modes: &[RefineMode]) {
         let is_favorite = favorite_modes.contains(&current_mode);
         let at_limit = favorite_modes.len() >= crate::consts::MAX_FAVORITE_MODES;
@@ -244,6 +262,9 @@ impl RefineMenu {
     }
 
     /// 各モード項目のラベルへお気に入り印を反映する
+    ///
+    /// # Arguments
+    /// * `favorite_modes` - お気に入り登録済みモード
     pub fn sync_mode_labels(&self, favorite_modes: &[RefineMode]) {
         let favorite_set: HashSet<RefineMode> = favorite_modes.iter().copied().collect();
 

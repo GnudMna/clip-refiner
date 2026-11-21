@@ -51,3 +51,32 @@ pub(super) fn handle_app_control(
         false
     }
 }
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    use crate::tray::menu::TrayMenu;
+    use crate::tray::state::test_app_state;
+
+    use tao::event_loop::ControlFlow;
+
+    /// 監視再開メニューで `RestartClipboardWorker` をキューすること
+    #[test]
+    fn handle_app_control_retry_sends_restart_event() {
+        let state = Arc::new(test_app_state());
+        let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+        let mut control_flow = ControlFlow::Wait;
+
+        let id = menu.retry_clipboard_worker_item.id();
+        let handled = handle_app_control(id, &menu, &state, &mut control_flow);
+
+        assert!(handled);
+        assert!(matches!(control_flow, ControlFlow::Wait));
+    }
+}

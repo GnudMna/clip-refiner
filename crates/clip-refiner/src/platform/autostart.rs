@@ -15,6 +15,9 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 // パブリック関数
 // ======================================================================
 /// ログイン時の自動起動が有効かどうかを返す
+///
+/// # Returns
+/// * `bool` - 現在の実行ファイルが Run キーに登録されている場合は `true`
 pub fn is_enabled() -> bool {
     let Ok(exe_path) = current_exe_path() else {
         return false;
@@ -95,7 +98,7 @@ mod tests {
 
     use super::*;
 
-    /// パス比較が大文字小文字を区別しないこと
+    /// パス比較が大文字小文字を区別しないであるようにすること
     #[test]
     fn paths_match_ignore_case_on_windows() {
         assert!(paths_match(
@@ -111,7 +114,7 @@ mod tests {
         assert!(paths_match(path, path));
     }
 
-    /// 異なるパスは一致しないこと
+    /// 異なるパスは一致しないであるようにすること
     #[test]
     fn paths_match_different_paths() {
         assert!(!paths_match(

@@ -3,6 +3,10 @@
 use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
 
+// ======================================================================
+// テスト
+// ======================================================================
+
 /// 加工成功時に履歴へ結果が記録され、重複は先頭へ移動すること
 #[test]
 fn monitor_records_history_and_moves_duplicates_to_front() {
@@ -22,7 +26,7 @@ fn monitor_records_history_and_moves_duplicates_to_front() {
     assert_eq!(harness.history_entries(), vec!["alpha", "beta"]);
 }
 
-/// 履歴無効時は監視加工でも履歴へ追加しないこと
+/// 履歴無効時は監視加工でも履歴へ追加しないようにすること
 #[test]
 fn monitor_skips_history_when_disabled() {
     let mut harness = ClipboardHarness::with_text("  x  ")

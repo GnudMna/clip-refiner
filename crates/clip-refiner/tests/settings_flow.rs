@@ -6,9 +6,13 @@ use clip_refiner::consts;
 use clip_refiner::test_helpers::SettingsTestContext;
 
 // ======================================================================
+// テスト
+// ======================================================================
+// ======================================================================
 // IPC キュー
 // ======================================================================
-/// debounce 相当の連続 `apply` IPC がキューでマージされること
+
+/// debounce 相当の連続 `apply` IPC がキューでマージされるようにすること
 #[test]
 fn sequential_apply_ipc_messages_merge_in_queue() {
     let ctx = SettingsTestContext::new();
@@ -25,7 +29,7 @@ fn sequential_apply_ipc_messages_merge_in_queue() {
     assert_eq!(patch["continuousRecordEnabled"], true);
 }
 
-/// ネスト項目の部分更新が JSON マージで兄弟フィールドを保持すること
+/// ネスト項目の部分更新が JSON マージで兄弟フィールドを保持できるようにすること
 #[test]
 fn partial_notification_ipc_merge_preserves_sibling_fields() {
     let ctx = SettingsTestContext::new();
@@ -50,7 +54,7 @@ fn partial_notification_ipc_merge_preserves_sibling_fields() {
 // ======================================================================
 // パッチ適用
 // ======================================================================
-/// IPC `apply` から設定とトレイメニューへ反映されること
+/// IPC `apply` から設定とトレイメニューへ反映されるようにすること
 #[test]
 fn apply_ipc_updates_config_and_tray_menu() {
     let ctx = SettingsTestContext::new();
@@ -62,7 +66,7 @@ fn apply_ipc_updates_config_and_tray_menu() {
     assert!(ctx.menu().history.enabled_item.is_checked());
 }
 
-/// 履歴件数パッチが `normalize` で上限へクランプされること
+/// 履歴件数パッチが `normalize` で上限へクランプされるようにすること
 #[test]
 fn apply_ipc_clamps_history_limit() {
     let ctx = SettingsTestContext::new();
@@ -94,7 +98,7 @@ fn apply_ipc_updates_default_mode_when_pipeline_active() {
     );
 }
 
-/// パイプライン変更が設定へ反映されること
+/// パイプライン変更が設定へ反映されるようにすること
 #[test]
 fn apply_ipc_updates_pipeline() {
     let ctx = SettingsTestContext::new();
@@ -108,7 +112,7 @@ fn apply_ipc_updates_pipeline() {
     assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::Trim);
 }
 
-/// キューに積んだパッチを取り出して適用できること
+/// キューに積んだパッチを取り出して適用できるようにすること
 #[test]
 fn dequeue_and_apply_merged_patch() {
     let ctx = SettingsTestContext::new();

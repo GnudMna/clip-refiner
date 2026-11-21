@@ -49,6 +49,8 @@ pub(crate) fn position_window_on_monitor(window: &Window, align: WindowVerticalA
 const SELECTOR_CSS_IMPORT: &str = r#"@import url("selector.css");"#;
 const CLIP_SELECTOR_CSS_IMPORT: &str = r#"@import url("clip_selector.css");"#;
 const SELECTOR_COMMON_JS_TAG: &str = r#"<script src="selector-common.js"></script>"#;
+const QUICK_SELECTOR_JS_TAG: &str = r#"<script src="quick_selector.js"></script>"#;
+const CLIP_SELECTOR_JS_TAG: &str = r#"<script src="clip_selector.js"></script>"#;
 
 /// セレクター HTML 内の共通アセット (CSS / JS) をインライン展開する
 pub(crate) fn embed_selector_assets(html: &str) -> String {
@@ -61,10 +63,25 @@ pub(crate) fn embed_selector_assets(html: &str) -> String {
     )
 }
 
-/// 登録クリップセレクター専用 CSS をインライン展開する
+/// クイックセレクター用 HTML 内のアセットをインライン展開する
+pub(crate) fn embed_quick_selector_assets(html: &str) -> String {
+    let quick_js = include_str!("../ui/quick_selector.js");
+    embed_selector_assets(html).replace(
+        QUICK_SELECTOR_JS_TAG,
+        &format!("<script>\n{quick_js}\n</script>"),
+    )
+}
+
+/// 登録クリップセレクター用 HTML 内のアセットをインライン展開する
 pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
     let clip_css = include_str!("../ui/clip_selector.css");
-    embed_selector_assets(html).replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
+    let clip_js = include_str!("../ui/clip_selector.js");
+    embed_selector_assets(html)
+        .replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
+        .replace(
+            CLIP_SELECTOR_JS_TAG,
+            &format!("<script>\n{clip_js}\n</script>"),
+        )
 }
 
 // ======================================================================
@@ -107,6 +124,9 @@ impl WebSelectorWindow {
     /// * `html` - 初期表示 HTML
     /// * `ipc_handler` - JavaScript からの IPC コールバック
     /// * `options` - 透明化などの表示オプション
+    ///
+    /// # Returns
+    /// * `anyhow::Result<Self>` - 成功時は `WebSelectorWindow`、失敗時はエラー
     pub fn build(
         window: Window,
         webview_data_dir_suffix: &str,
@@ -136,6 +156,9 @@ impl WebSelectorWindow {
     }
 
     /// ウィンドウを表示し、JavaScript を実行する
+    ///
+    /// # Arguments
+    /// * `script` - 表示直後に実行する JavaScript
     pub fn show_with_script(&self, script: &str) {
         self.window.set_visible(true);
         self.window.set_focus();
@@ -143,21 +166,39 @@ impl WebSelectorWindow {
     }
 
     /// JavaScript を実行する
+    ///
+    /// # Arguments
+    /// * `script` - 実行する JavaScript
     pub fn evaluate_script(&self, script: &str) {
         webview_script::evaluate_script(&self.webview, "WebView", script);
     }
 
     /// ウィンドウを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `WebSelectorWindow`
     pub fn hide(&self) {
         self.window.set_visible(false);
     }
 
     /// ウィンドウが表示中かどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `WebSelectorWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
         self.window.is_visible()
     }
 
     /// ウィンドウ ID を返す
+    ///
+    /// # Arguments
+    /// * `self` - この `WebSelectorWindow`
+    ///
+    /// # Returns
+    /// * `WindowId` - ウィンドウ ID
     pub fn id(&self) -> WindowId {
         self.window.id()
     }
@@ -200,7 +241,7 @@ pub(crate) fn build_hidden_selector_window(
 mod tests {
     use super::*;
 
-    /// 共通 CSS / JS がインライン展開されること
+    /// 共通 CSS / JS がインライン展開されるようにすること
     #[test]
     fn embed_selector_assets_inlines_common_files() {
         let html = embed_selector_assets(
@@ -212,13 +253,26 @@ mod tests {
         assert!(html.contains("--bg-color"));
     }
 
-    /// 登録クリップセレクター専用 CSS がインライン展開されること
+    /// クイックセレクター専用 JS がインライン展開されるようにすること
     #[test]
-    fn embed_clip_selector_assets_inlines_clip_css() {
+    fn embed_quick_selector_assets_inlines_quick_js() {
+        let html = embed_quick_selector_assets(
+            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script><script src="quick_selector.js"></script>"#,
+        );
+        assert!(!html.contains(QUICK_SELECTOR_JS_TAG));
+        assert!(html.contains("window.refreshModes"));
+        assert!(html.contains("FAVORITES_CATEGORY"));
+    }
+
+    /// 登録クリップセレクター専用 CSS / JS がインライン展開されるようにすること
+    #[test]
+    fn embed_clip_selector_assets_inlines_clip_assets() {
         let html = embed_clip_selector_assets(
-            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style>"#,
+            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style><script src="selector-common.js"></script><script src="clip_selector.js"></script>"#,
         );
         assert!(!html.contains(CLIP_SELECTOR_CSS_IMPORT));
+        assert!(!html.contains(CLIP_SELECTOR_JS_TAG));
         assert!(html.contains("#image-hover-preview"));
+        assert!(html.contains("window.refreshItems"));
     }
 }

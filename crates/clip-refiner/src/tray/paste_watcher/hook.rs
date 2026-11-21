@@ -6,12 +6,12 @@ use std::thread::{self, JoinHandle};
 use super::super::state::{AppEvent, AppState};
 
 use tao::event_loop::EventLoopProxy;
-use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows_sys::Win32::System::Threading::GetCurrentThreadId;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VK_CONTROL, VK_LCONTROL, VK_RCONTROL, VK_V,
 };
-use windows_sys::Win32::UI::WindowsAndMessaging::{
+use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, HC_ACTION, KBDLLHOOKSTRUCT, MSG,
     PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN,
     WM_QUIT, WM_SYSKEYDOWN,
@@ -33,7 +33,7 @@ impl Drop for PasteWatcherStop {
         let thread_id = self.thread_id.load(Ordering::Acquire);
         if thread_id != 0 {
             unsafe {
-                let _ = PostThreadMessageW(thread_id, WM_QUIT, 0, 0);
+                let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
             }
         }
         if let Some(thread) = self.thread.take() {
@@ -58,6 +58,14 @@ thread_local! {
 // スレッド起動
 // ======================================================================
 /// Windows 向け低レベルキーボードフックで貼り付けを検知する
+///
+/// # Arguments
+/// * `_proxy` - イベント送信用プロキシ (将来の拡張用)
+/// * `state` - アプリケーションの共有状態
+/// * `_clipboard_worker` - クリップボード操作ワーカー (将来の拡張用)
+///
+/// # Returns
+/// * `PasteWatcherStop` - フック停止制御用ハンドル
 pub fn start(
     _proxy: EventLoopProxy<AppEvent>,
     state: Arc<AppState>,
@@ -89,28 +97,28 @@ fn run_hook_loop(state: Arc<AppState>, stop: &Arc<AtomicBool>, thread_id: &Arc<A
         SetWindowsHookExW(
             WH_KEYBOARD_LL,
             Some(low_level_keyboard_proc),
-            std::ptr::null_mut(),
+            Some(HINSTANCE::default()),
             0,
         )
     };
-    if hook.is_null() {
+    let Ok(hook) = hook else {
         crate::log_warn!("貼り付け監視フックの登録に失敗");
         HOOK_CTX.with(|cell| *cell.borrow_mut() = None);
         return;
-    }
+    };
 
     let mut msg = MSG {
-        hwnd: std::ptr::null_mut(),
+        hwnd: HWND::default(),
         message: 0,
-        wParam: 0,
-        lParam: 0,
+        wParam: WPARAM(0),
+        lParam: LPARAM(0),
         time: 0,
-        pt: windows_sys::Win32::Foundation::POINT { x: 0, y: 0 },
+        pt: POINT { x: 0, y: 0 },
     };
 
     while !stop.load(Ordering::Relaxed) {
-        let result = unsafe { GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) };
-        if result == 0 || result == -1 {
+        let result = unsafe { GetMessageW(&raw mut msg, None, 0, 0) };
+        if !result.as_bool() {
             break;
         }
         unsafe {
@@ -133,12 +141,12 @@ unsafe extern "system" fn low_level_keyboard_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     if code == HC_ACTION.cast_signed() {
-        let Ok(msg) = u32::try_from(wparam) else {
-            return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) };
+        let Ok(msg) = u32::try_from(wparam.0) else {
+            return unsafe { CallNextHookEx(None, code, wparam, lparam) };
         };
         if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && ctrl_pressed() {
-            let kb = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
-            if kb.vkCode == u32::from(VK_V) {
+            let kb = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            if kb.vkCode == u32::from(VK_V.0) {
                 HOOK_CTX.with(|cell| {
                     if let Some(ctx) = cell.borrow().as_ref()
                         && !ctx.stop.load(Ordering::Relaxed)
@@ -151,13 +159,13 @@ unsafe extern "system" fn low_level_keyboard_proc(
         }
     }
 
-    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
 fn ctrl_pressed() -> bool {
     key_pressed(VK_LCONTROL) || key_pressed(VK_RCONTROL) || key_pressed(VK_CONTROL)
 }
 
-fn key_pressed(vk: u16) -> bool {
-    unsafe { GetAsyncKeyState(i32::from(vk)).cast_unsigned() & 0x8000 != 0 }
+fn key_pressed(vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY) -> bool {
+    unsafe { GetAsyncKeyState(i32::from(vk.0)).cast_unsigned() & 0x8000 != 0 }
 }

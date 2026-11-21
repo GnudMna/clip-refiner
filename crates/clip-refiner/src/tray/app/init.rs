@@ -1,14 +1,15 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::super::clipboard_monitor::bump_monitor_generation;
+use super::super::clipboard_monitor::{bump_monitor_generation, bump_monitor_generation_unchecked};
+use super::super::dispatch;
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::paste_watcher::PasteWatcher;
 use super::super::selector_ui::SelectorUi;
 use super::super::settings::init_settings_window;
 use super::super::state::{AppEvent, AppState};
-use super::super::worker::ClipboardWorkerHandle;
+use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
 use super::App;
 
 use anyhow::Result;
@@ -52,7 +53,19 @@ impl App {
         let hotkey_listener = HotkeyHandler::start_event_listener(proxy.clone());
         menu.refresh_history(&state)?;
         menu.refresh_continuous_record(&state)?;
-        bump_monitor_generation(&state);
+        if state.with_config(|c| c.is_paused) {
+            if state.with_config(|c| c.continuous_record_enabled) {
+                bump_monitor_generation_unchecked(&state);
+            }
+        } else {
+            bump_monitor_generation(&state);
+        }
+        if state.with_config(|c| c.continuous_record_enabled) {
+            dispatch::send_clipboard_command(
+                &clipboard_worker,
+                ClipboardCommand::CatchUpContinuousRecord,
+            );
+        }
 
         Ok(Self {
             state,

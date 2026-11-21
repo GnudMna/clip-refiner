@@ -35,6 +35,9 @@ struct RegisteredClipsPayload {
 ///
 /// # Returns
 /// * `Result<Vec<RegisteredClip>>` - 復号・解析済みの登録クリップ一覧
+///
+/// # Errors
+/// 鍵取得、ファイル読み込み、復号、JSON 解析のいずれかに失敗した場合
 pub fn load_registered_clips() -> Result<Vec<RegisteredClip>> {
     ensure_clip_store_key()?;
 
@@ -59,6 +62,15 @@ pub fn load_registered_clips() -> Result<Vec<RegisteredClip>> {
 /// 登録クリップ一覧を暗号化ファイルへ保存する
 ///
 /// 空の場合はファイルを削除する
+///
+/// # Arguments
+/// * `clips` - 保存する登録クリップ一覧
+///
+/// # Returns
+/// * `Result<()>` - 保存または削除に成功した場合は `Ok(())`
+///
+/// # Errors
+/// 鍵取得、シリアライズ、暗号化、ファイル書き込みのいずれかに失敗した場合
 pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     ensure_clip_store_key()?;
 
@@ -94,6 +106,9 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
 }
 
 /// レガシー `.png` 登録画像を暗号化 `.enc` へ移行する
+///
+/// # Arguments
+/// * `clips` - 移行対象の登録クリップ一覧
 ///
 /// # Returns
 /// * `bool` - 1 件以上移行した場合は `true`
@@ -141,7 +156,7 @@ fn is_encrypted_image_filename(filename: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// 暗号化ファイルの往復で平文 JSON が残らないこと
+    /// 暗号化ファイルの往復で平文 JSON が残らないであるようにすること
     #[test]
     fn save_and_load_do_not_persist_plaintext() {
         crate::test_helpers::with_temp_config_dir(|| {

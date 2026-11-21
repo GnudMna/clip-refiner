@@ -179,7 +179,7 @@ fn is_numeric_input(text: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// 3桁区切りのカンマを追加する基本的なテスト
+    /// 3桁区切りのカンマを追加すること
     #[test]
     fn test_add_commas() {
         assert_eq!(add_commas("1234"), "1,234");
@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(add_commas(""), "");
     }
 
-    /// カンマを除去する基本的なテスト
+    /// カンマを除去すること
     #[test]
     fn test_remove_commas() {
         assert_eq!(remove_commas("1,234"), "1234");
@@ -203,22 +203,22 @@ mod tests {
         assert_eq!(remove_commas(""), "");
     }
 
-    /// ゼロに対するカンマ追加のテスト
+    /// ゼロに対するカンマ追加できるようにすること
     #[test]
     fn test_add_commas_zero() {
         assert_eq!(add_commas("0"), "0");
         assert_eq!(add_commas("0.0"), "0.0");
     }
 
-    /// 負の数に対するカンマ追加のテスト
+    /// 負の数に対するカンマ追加できるようにすること
     #[test]
     fn test_add_commas_negative() {
         assert_eq!(add_commas("-1234.56"), "-1,234.56");
         assert_eq!(add_commas("-.5"), "-.5");
     }
 
-    /// 数値判定ロジックのテスト
-    /// 数字、カンマ、ピリオド、マイナス記号以外が含まれる場合はfalseとなることを確認
+    /// 数値判定ロジックできるようにすること
+    /// 数字、カンマ、ピリオド、マイナス記号以外が含まれる場合はfalseとなることを確認できるようにすること
     #[test]
     fn test_is_numeric_input_check() {
         assert!(!is_numeric_input("abc"));
@@ -226,7 +226,7 @@ mod tests {
         assert!(is_numeric_input("-1,234.5"));
     }
 
-    /// カンマ位置の不正パターンを弾くこと
+    /// カンマ位置の不正パターンを弾くとすること
     #[test]
     fn test_is_numeric_input_invalid_comma() {
         assert!(!is_numeric_input(",123"), "先頭カンマは不正");
@@ -236,7 +236,7 @@ mod tests {
         assert!(!is_numeric_input("1,.2"), "カンマ直後の小数点は不正");
     }
 
-    /// 正当なパターンを通過させること
+    /// 正当なパターンを通過させるようにすること
     #[test]
     fn test_is_numeric_input_valid() {
         assert!(is_numeric_input("1234"));
@@ -249,33 +249,33 @@ mod tests {
         assert!(is_numeric_input("0"));
     }
 
-    /// 小数点のみ (整数部なし) の処理
+    /// 小数点のみ (整数部なし) の処理できるようにすること
     #[test]
     fn test_add_commas_decimal_only() {
         assert_eq!(add_commas(".5"), ".5");
         assert_eq!(add_commas("-.5"), "-.5");
     }
 
-    /// 末尾に小数点がある値の処理
+    /// 末尾に小数点がある値の処理できるようにすること
     #[test]
     fn test_add_commas_trailing_dot() {
         assert_eq!(add_commas("1234."), "1,234.");
     }
 
-    /// スペース前後のトリムが効くこと
+    /// スペース前後のトリムが効くとすること
     #[test]
     fn test_add_commas_trimmed_input() {
         assert_eq!(add_commas("  5678  "), "5,678");
     }
 
-    /// `remove_commas`: カンマがない場合は Borrowed を返すこと
+    /// `remove_commas`: カンマがない場合は Borrowed を返すようにすること
     #[test]
     fn test_remove_commas_no_comma_returns_borrowed() {
         let input = "1234";
         assert!(matches!(remove_commas(input), Cow::Borrowed(_)));
     }
 
-    /// `remove_commas`: 空文字列は Borrowed を返すこと
+    /// `remove_commas`: 空文字列は Borrowed を返すようにすること
     #[test]
     fn test_remove_commas_empty() {
         assert!(matches!(remove_commas(""), Cow::Borrowed(_)));

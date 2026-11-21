@@ -1,6 +1,7 @@
 use super::dispatch;
 use super::selector_window::{
-    WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window, embed_selector_assets,
+    WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
+    embed_quick_selector_assets,
 };
 use super::state::AppEvent;
 
@@ -55,7 +56,7 @@ pub(crate) fn parse_quick_selector_ipc_message(msg: &str) -> Option<QuickSelecto
 
 /// クイックセレクター用 HTML を組み立てる
 pub(crate) fn assemble_quick_selector_html(modes_json: &str) -> String {
-    embed_selector_assets(include_str!("../ui/quick_selector.html")).replace(
+    embed_quick_selector_assets(include_str!("../ui/quick_selector.html")).replace(
         r#"<script type="application/json" id="modes-data">[]</script>"#,
         &format!(r#"<script type="application/json" id="modes-data">{modes_json}</script>"#),
     )
@@ -91,10 +92,10 @@ impl QuickSelectorWindow {
     ///
     /// # Arguments
     /// * `window` - ベースとなる `tao` ウィンドウ
-    /// * `proxy` - UIスレッド(イベントループ)へメッセージを送信するためのプロキシ
+    /// * `proxy` - UI スレッド (イベントループ) へメッセージを送信するプロキシ
     ///
     /// # Returns
-    /// * `anyhow::Result<Self>` - 生成に成功した場合は `QuickSelectorWindow` インスタンス、失敗した場合はエラー内容を返す
+    /// * `anyhow::Result<Self>` - 成功時は `QuickSelectorWindow`、失敗時はエラー
     pub fn new(window: Window, proxy: &EventLoopProxy<AppEvent>) -> anyhow::Result<Self> {
         let modes_json = RefineMode::to_json_list(&[]);
         let html = assemble_quick_selector_html(&modes_json);
@@ -153,22 +154,41 @@ impl QuickSelectorWindow {
     }
 
     /// モード一覧を再描画する
+    ///
+    /// # Arguments
+    /// * `modes_json` - モード一覧 JSON
+    /// * `current_mode` - 現在選択されている加工モード
     pub fn refresh_modes(&self, modes_json: &str, current_mode: RefineMode) {
         let script = quick_selector_refresh_script(current_mode, modes_json);
         self.inner.evaluate_script(&script);
     }
 
     /// クイックセレクターを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `QuickSelectorWindow`
     pub fn hide(&self) {
         self.inner.hide();
     }
 
     /// クイックセレクターが現在表示されているかどうかを確認する
+    ///
+    /// # Arguments
+    /// * `self` - この `QuickSelectorWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 表示中なら `true`
     pub fn is_visible(&self) -> bool {
         self.inner.is_visible()
     }
 
     /// クイックセレクターウィンドウの内部 ID を取得する
+    ///
+    /// # Arguments
+    /// * `self` - この `QuickSelectorWindow`
+    ///
+    /// # Returns
+    /// * `tao::window::WindowId` - ウィンドウ ID
     pub fn id(&self) -> tao::window::WindowId {
         self.inner.id()
     }
@@ -179,14 +199,14 @@ impl QuickSelectorWindow {
 // ======================================================================
 /// クイックセレクターウィンドウを初期化して、非表示状態のインスタンスを作成する
 ///
-/// ウィンドウの各種属性(透明度、フレームなしなど)を設定し、画面中央に配置する
+/// ウィンドウの各種属性 (透明度、フレームなしなど) を設定し、画面中央に配置する
 ///
 /// # Arguments
 /// * `event_loop` - ウィンドウ作成用のイベントループ
 /// * `proxy` - イベント送信用プロキシ
 ///
 /// # Returns
-/// * `anyhow::Result<QuickSelectorWindow>` - 初期化に成功した場合は `QuickSelectorWindow` インスタンス、失敗した場合はエラー内容を返す
+/// * `anyhow::Result<QuickSelectorWindow>` - 成功時は `QuickSelectorWindow`、失敗時はエラー
 pub fn init_quick_selector(
     event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
     proxy: &EventLoopProxy<AppEvent>,
@@ -207,7 +227,7 @@ pub fn init_quick_selector(
 mod tests {
     use super::*;
 
-    /// `select:` プレフィックス付きメッセージからモードを復元できること
+    /// `select:` プレフィックス付きメッセージからモードを復元できるようにすること
     #[test]
     fn parse_ipc_select_mode() {
         assert_eq!(
@@ -216,7 +236,7 @@ mod tests {
         );
     }
 
-    /// `toggle-favorite:` プレフィックス付きメッセージを解釈できること
+    /// `toggle-favorite:` プレフィックス付きメッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_toggle_favorite() {
         assert_eq!(
@@ -225,7 +245,7 @@ mod tests {
         );
     }
 
-    /// `move-favorite:` プレフィックス付きメッセージを解釈できること
+    /// `move-favorite:` プレフィックス付きメッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_move_favorite() {
         assert_eq!(
@@ -244,7 +264,7 @@ mod tests {
         );
     }
 
-    /// `close` メッセージを解釈できること
+    /// `close` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_close() {
         assert_eq!(
@@ -253,7 +273,7 @@ mod tests {
         );
     }
 
-    /// 不正なメッセージは `None` を返すこと
+    /// 不正なメッセージは `None` を返すようにすること
     #[test]
     fn parse_ipc_unknown_returns_none() {
         assert_eq!(parse_quick_selector_ipc_message("invalid"), None);
@@ -268,19 +288,20 @@ mod tests {
         );
     }
 
-    /// 生成 HTML にモード JSON と CSS が埋め込まれること
+    /// 生成 HTML にモード JSON と CSS が埋め込まれようにすること
     #[test]
     fn assemble_quick_selector_html_embeds_modes_and_css() {
         let html = assemble_quick_selector_html(r#"[{"id":"trim"}]"#);
         assert!(html.contains(r#"[{"id":"trim"}]"#));
         assert!(!html.contains(r#"@import url("selector.css");"#));
         assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(!html.contains(r#"<script src="quick_selector.js"></script>"#));
         assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("focusInput"));
         assert!(html.contains("クイックセレクター"));
     }
 
-    /// フォーカス用スクリプトに現在モードと一覧 JSON が含まれること
+    /// フォーカス用スクリプトに現在モードと一覧 JSON が含まれるようにすること
     #[test]
     fn quick_selector_focus_script_contains_mode_json() {
         let script = quick_selector_focus_script(RefineMode::JsonFormat, "[]");

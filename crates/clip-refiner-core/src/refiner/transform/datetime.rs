@@ -99,7 +99,7 @@ pub fn datetime_string_to_timestamp(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 有効な Unix タイムスタンプをローカル日時文字列に変換できること
+    /// 有効な Unix タイムスタンプをローカル日時文字列に変換できるようにすること
     #[test]
     fn test_timestamp_to_datetime_string_success() {
         let timestamp = 1_672_531_200;
@@ -108,7 +108,7 @@ mod tests {
         assert_eq!(timestamp_to_datetime_string("1672531200"), expected);
     }
 
-    /// 不正なタイムスタンプは元の文字列を返すこと
+    /// 不正なタイムスタンプは元の文字列を返すようにすること
     #[test]
     fn test_timestamp_to_datetime_string_invalid() {
         assert_eq!(
@@ -117,7 +117,7 @@ mod tests {
         );
     }
 
-    /// ローカル日時文字列を Unix タイムスタンプに変換できること
+    /// ローカル日時文字列を Unix タイムスタンプに変換できるようにすること
     #[test]
     fn test_datetime_string_to_timestamp_success() {
         let sample =
@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(datetime_string_to_timestamp(&sample), expected);
     }
 
-    /// 不正な日時文字列は元の文字列を返すこと
+    /// 不正な日時文字列は元の文字列を返すようにすること
     #[test]
     fn test_datetime_string_to_timestamp_invalid() {
         assert_eq!(
@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(parsed, timestamp);
     }
 
-    /// Local と UTC で異なる文字列になること (タイムゾーン差の確認)
+    /// Local と UTC で異なる文字列になること (タイムゾーン差の確認)できるようにすること
     #[test]
     fn test_local_and_utc_differ_when_offset_nonzero() {
         let timestamp = 0_i64;

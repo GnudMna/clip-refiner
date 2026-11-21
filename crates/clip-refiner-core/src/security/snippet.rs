@@ -39,6 +39,12 @@ static BARE_SECRET_TOKEN: LazyLock<Regex> =
 /// テキストが機密情報を含む可能性があるか判定する
 ///
 /// 誤検知を避けるため、既知パターンと資格情報らしい行形式のみを対象とする
+///
+/// # Arguments
+/// * `text` - 判定対象のテキスト
+///
+/// # Returns
+/// * `bool` - 機密情報の可能性がある場合は `true`
 pub fn looks_sensitive(text: &str) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -66,6 +72,9 @@ pub fn looks_sensitive(text: &str) -> bool {
 /// # Arguments
 /// * `text` - 表示対象テキスト
 /// * `max_chars` - 最大文字数 (`...` 含む)
+///
+/// # Returns
+/// * `String` - 切り詰めまたはマスク済みの表示用文字列
 pub fn format_public_snippet(text: &str, max_chars: usize) -> String {
     if looks_sensitive(text) {
         return SENSITIVE_SNIPPET_LABEL.to_string();
@@ -91,7 +100,7 @@ fn truncate_chars(text: &str, max_chars: usize) -> String {
 mod tests {
     use super::*;
 
-    /// 通常テキストは機密と判定しないこと
+    /// 通常テキストは機密と判定しないであるようにすること
     #[test]
     fn looks_sensitive_allows_plain_text() {
         assert!(!looks_sensitive("hello world"));
@@ -134,7 +143,7 @@ mod tests {
         assert_eq!(masked, SENSITIVE_SNIPPET_LABEL);
     }
 
-    /// 通常テキストは切り詰めること
+    /// 通常テキストは切り詰めるようにすること
     #[test]
     fn format_public_snippet_truncates() {
         let input = "あ".repeat(51);

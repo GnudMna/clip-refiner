@@ -139,6 +139,12 @@ pub fn to_camel_case(text: &str) -> Cow<'_, str> {
 }
 
 /// `snake_case` へ変換する
+///
+/// # Arguments
+/// * `text` - 変換対象の識別子文字列 (複数行可)
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_snake_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
         let words = split_identifier(line);
@@ -150,6 +156,12 @@ pub fn to_snake_case(text: &str) -> Cow<'_, str> {
 }
 
 /// `PascalCase` へ変換する
+///
+/// # Arguments
+/// * `text` - 変換対象の識別子文字列 (複数行可)
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_pascal_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
         let words = split_identifier(line);
@@ -161,6 +173,12 @@ pub fn to_pascal_case(text: &str) -> Cow<'_, str> {
 }
 
 /// `kebab-case` へ変換する
+///
+/// # Arguments
+/// * `text` - 変換対象の識別子文字列 (複数行可)
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_kebab_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
         let words = split_identifier(line);
@@ -172,6 +190,12 @@ pub fn to_kebab_case(text: &str) -> Cow<'_, str> {
 }
 
 /// `SCREAMING_SNAKE_CASE` へ変換する
+///
+/// # Arguments
+/// * `text` - 変換対象の識別子文字列 (複数行可)
+///
+/// # Returns
+/// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_screaming_snake_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
         let words = split_identifier(line);
@@ -208,7 +232,7 @@ mod tests {
         assert_eq!(split_identifier("URL"), vec!["url"]);
     }
 
-    /// `to_camel_case` の基本変換
+    /// `to_camel_case` の基本変換できるようにすること
     #[test]
     fn test_to_camel_case() {
         assert_eq!(to_camel_case("foo_bar"), "fooBar");
@@ -217,7 +241,7 @@ mod tests {
         assert_eq!(to_camel_case("getHTTPResponse"), "getHttpResponse");
     }
 
-    /// `to_snake_case` の基本変換
+    /// `to_snake_case` の基本変換できるようにすること
     #[test]
     fn test_to_snake_case() {
         assert_eq!(to_snake_case("fooBar"), "foo_bar");
@@ -226,7 +250,7 @@ mod tests {
         assert_eq!(to_snake_case("getHTTPResponse"), "get_http_response");
     }
 
-    /// `to_pascal_case` の基本変換
+    /// `to_pascal_case` の基本変換できるようにすること
     #[test]
     fn test_to_pascal_case() {
         assert_eq!(to_pascal_case("foo_bar"), "FooBar");
@@ -234,7 +258,7 @@ mod tests {
         assert_eq!(to_pascal_case("foo-bar"), "FooBar");
     }
 
-    /// `to_kebab_case` の基本変換
+    /// `to_kebab_case` の基本変換できるようにすること
     #[test]
     fn test_to_kebab_case() {
         assert_eq!(to_kebab_case("fooBar"), "foo-bar");
@@ -242,7 +266,7 @@ mod tests {
         assert_eq!(to_kebab_case("FooBar"), "foo-bar");
     }
 
-    /// `to_screaming_snake_case` の基本変換
+    /// `to_screaming_snake_case` の基本変換できるようにすること
     #[test]
     fn test_to_screaming_snake_case() {
         assert_eq!(to_screaming_snake_case("fooBar"), "FOO_BAR");
@@ -263,7 +287,7 @@ mod tests {
         assert_eq!(to_snake_case("fooBar\n\nbazQux"), "foo_bar\n\nbaz_qux");
     }
 
-    /// 変更がない場合は Borrowed を返すこと
+    /// 変更がない場合は Borrowed を返すようにすること
     #[test]
     fn test_no_change_returns_borrowed() {
         let input = "foo_bar";

@@ -49,12 +49,16 @@ fn config_base_dir() -> Result<PathBuf, ConfigError> {
 }
 
 /// テスト用に設定ディレクトリを上書きする
+///
+/// # Arguments
+/// * `dir` - 上書き先の設定ディレクトリパス
 #[cfg(any(test, debug_assertions))]
 pub fn set_test_config_dir(dir: PathBuf) {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = Some(dir));
 }
 
 /// テスト用設定ディレクトリの上書きを解除する
+///
 #[cfg(any(test, debug_assertions))]
 pub fn clear_test_config_dir() {
     TEST_CONFIG_DIR.with(|cell| *cell.borrow_mut() = None);
@@ -127,4 +131,57 @@ fn open_path_in_default_application(path: &Path) -> Result<(), ConfigError> {
         .spawn()
         .map_err(ConfigError::Open)?;
     Ok(())
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    use crate::config::{clear_test_config_dir, set_test_config_dir};
+    use crate::test_helpers::with_temp_config_dir;
+
+    /// テスト用上書き時は上書き先ディレクトリをそのまま返すようにすること
+    #[test]
+    fn get_config_dir_uses_test_override() {
+        let dir =
+            std::env::temp_dir().join(format!("clip-refiner-path-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        set_test_config_dir(dir.clone());
+        let resolved = get_config_dir().expect("get_config_dir");
+        clear_test_config_dir();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(resolved, dir);
+    }
+
+    /// 設定ファイルパスは `config.toml` を指すようにすること
+    #[test]
+    fn get_config_file_path_points_to_config_toml() {
+        with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("get_config_file_path");
+            assert_eq!(
+                path.file_name().and_then(|n| n.to_str()),
+                Some("config.toml")
+            );
+            assert!(path.parent().is_some_and(std::path::Path::exists));
+        });
+    }
+
+    /// 未作成の設定ファイルは更新時刻 `None` を返すようにすること
+    #[test]
+    fn config_file_modified_time_none_when_missing() {
+        with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("get_config_file_path");
+            if path.exists() {
+                fs::remove_file(&path).expect("remove config");
+            }
+            assert_eq!(config_file_modified_time().expect("mtime"), None);
+        });
+    }
 }

@@ -6,6 +6,9 @@
 /// イベント監視が利用可能かどうか
 ///
 /// `seq_num()` が取得できない場合は `false`
+///
+/// # Returns
+/// * `bool` - クリップボードシーケンストークンを取得できる場合は `true`
 pub fn supports_event_monitor() -> bool {
     token().is_some()
 }
@@ -13,6 +16,9 @@ pub fn supports_event_monitor() -> bool {
 /// クリップボード変更を表すトークンを取得する
 ///
 /// 本文を読み取らずに呼び出せる軽量な値。変更がない間は同じ値を返す
+///
+/// # Returns
+/// * `Option<u64>` - 取得できた場合は `Some(トークン)`、未対応環境では `None`
 pub fn token() -> Option<u64> {
     use clipboard_win::raw::seq_num;
 
@@ -26,13 +32,13 @@ pub fn token() -> Option<u64> {
 mod tests {
     use super::*;
 
-    /// トークンを読み取れること
+    /// トークンを読み取れるようにすること
     #[test]
     fn clipboard_seq_reads_token() {
         let _ = token();
     }
 
-    /// 連続呼び出しでトークンが安定すること (変更がなければ同値)
+    /// 連続呼び出しでトークンが安定すること (変更がなければ同値)できるようにすること
     #[test]
     fn consecutive_tokens_are_stable_when_unchanged() {
         if let (Some(first), Some(second)) = (token(), token()) {

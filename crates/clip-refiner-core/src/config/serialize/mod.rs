@@ -17,6 +17,13 @@ use toml_edit::DocumentMut;
 ///
 /// 既存ファイルがない、または解析できない場合は説明コメント付きの新規フォーマットを生成する
 ///
+/// # Arguments
+/// * `config` - 書き出す設定
+/// * `existing` - 既存 `config.toml` の内容 (`None` の場合は新規生成)
+///
+/// # Returns
+/// * `Result<String>` - コメント付き TOML 文字列
+///
 /// # Errors
 /// ドキュメント更新または新規 TOML 生成に失敗した場合
 pub fn config_to_toml(config: &AppConfig, existing: Option<&str>) -> Result<String> {
@@ -49,7 +56,7 @@ mod tests {
     use crate::config::NotificationSettings;
     use crate::consts;
 
-    /// 新規ファイル向けに説明コメント付き TOML が生成されること
+    /// 新規ファイル向けに説明コメント付き TOML が生成されるようにすること
     #[test]
     fn test_config_to_toml_new_file_uses_template() {
         let config = AppConfig::default();
@@ -59,7 +66,7 @@ mod tests {
         assert!(content.contains("# 設定スキーマのバージョン"));
     }
 
-    /// 既存ファイルのユーザー追記コメントが保存後も維持されること
+    /// 既存ファイルのユーザー追記コメントが保存後も維持されるようにすること
     #[test]
     fn test_config_to_toml_preserves_user_comments() {
         let existing = r#"
@@ -97,7 +104,7 @@ enabled = false
         assert_eq!(decoded.version, config.version);
     }
 
-    /// 不足キーを挿入する際に説明コメントが付与されること
+    /// 不足キーを挿入する際に説明コメントが付与されるようにすること
     #[test]
     fn test_config_to_toml_inserts_missing_keys_with_comments() {
         let existing = r#"
@@ -127,7 +134,7 @@ interval_ms = 1000
         assert_eq!(decoded.regex, config.regex);
     }
 
-    /// コメント付き TOML に各項目の説明が含まれること
+    /// コメント付き TOML に各項目の説明が含まれるようにすること
     #[test]
     fn test_commented_toml_contains_field_descriptions() {
         let config = AppConfig::default();

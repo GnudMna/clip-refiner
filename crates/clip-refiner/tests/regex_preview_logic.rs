@@ -8,7 +8,7 @@ use std::process::Command;
 // ======================================================================
 /// `regex_preview.js` の純粋ロジックが Node.js 上で期待どおり動作すること
 ///
-/// Node.js が未インストールの環境ではスキップする
+/// Node.js が未インストールの環境ではスキップすること
 #[test]
 fn regex_preview_js_logic_tests() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

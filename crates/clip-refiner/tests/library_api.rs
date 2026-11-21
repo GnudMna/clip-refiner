@@ -8,7 +8,11 @@ use clip_refiner::{
 };
 use clip_refiner_core::consts::MAX_CLIPBOARD_TEXT_BYTES;
 
-/// クレートルートから加工パイプライン API を呼び出せること
+// ======================================================================
+// テスト
+// ======================================================================
+
+/// クレートルートから加工パイプライン API を呼び出せるようにすること
 #[test]
 fn crate_root_pipeline_api() {
     let ctx = RefineContext::default();
@@ -42,7 +46,7 @@ fn config_drives_refine_context() {
     assert_eq!(CONFIG_VERSION, config.version);
 }
 
-/// re-export された型が core 経由と同じ結果を返すこと
+/// re-export された型が core 経由と同じ結果を返すようにすること
 #[test]
 fn reexports_match_core_types() {
     let input = "a%2Fb";
@@ -52,7 +56,7 @@ fn reexports_match_core_types() {
     assert_eq!(facade, core);
 }
 
-/// 空入力は `NoText` エラーになること
+/// 空入力は `NoText` エラーになるようにすること
 #[test]
 fn apply_pipeline_rejects_empty_via_reexport() {
     assert_eq!(
@@ -61,7 +65,7 @@ fn apply_pipeline_rejects_empty_via_reexport() {
     );
 }
 
-/// 上限超過は `TextTooLarge` エラーになること
+/// 上限超過は `TextTooLarge` エラーになるようにすること
 #[test]
 fn apply_pipeline_rejects_oversized_via_reexport() {
     let oversized = "a".repeat(MAX_CLIPBOARD_TEXT_BYTES + 1);
@@ -72,7 +76,7 @@ fn apply_pipeline_rejects_oversized_via_reexport() {
     );
 }
 
-/// `ClipboardProcessError` のユーザー向けメッセージが re-export 経由で参照できること
+/// `ClipboardProcessError` のユーザー向けメッセージが re-export 経由で参照できるようにすること
 #[test]
 fn clipboard_error_user_messages() {
     assert_eq!(
@@ -85,7 +89,7 @@ fn clipboard_error_user_messages() {
     );
 }
 
-/// 公開エラー型が `Error` へ変換できること
+/// 公開エラー型が `Error` へ変換できるようにすること
 #[test]
 fn public_errors_convert_to_crate_error() {
     let clipboard: Error = ClipboardProcessError::NoText.into();

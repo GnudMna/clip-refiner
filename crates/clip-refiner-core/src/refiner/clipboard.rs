@@ -55,6 +55,12 @@ pub enum ClipboardProcessError {
 
 impl ClipboardProcessError {
     /// ユーザー向けのエラーメッセージを返す
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipboardProcessError`
+    ///
+    /// # Returns
+    /// * `&str` - 各エラー種別に対応する表示用文字列
     #[must_use]
     pub fn user_message(&self) -> &str {
         match self {
@@ -310,6 +316,17 @@ pub(crate) fn process_clipboard_io<C: TextClipboard + ImageClipboard>(
 
 /// テキスト・画像クリップボード実装に対して加工パイプラインを適用する
 ///
+/// # Arguments
+/// * `clipboard` - テキスト・画像クリップボード実装
+/// * `pipeline` - 適用する加工モード列
+/// * `ctx` - 設定依存の加工パラメータ
+///
+/// # Returns
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Ok(ClipboardProcessOutcome::ImageProcessed)` - 画像をクリップボードへ書き込んだ
+/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+///
 /// # Errors
 /// パイプラインが空、クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
 pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard>(
@@ -366,7 +383,7 @@ mod tests {
         RefineContext::default()
     }
 
-    /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
+    /// `ClipboardProcessError` がユーザー向けメッセージを返すようにすること
     #[test]
     fn test_clipboard_process_error_user_message() {
         assert_eq!(
@@ -391,7 +408,7 @@ mod tests {
         );
     }
 
-    /// 空文字列は `NoText` エラーになること
+    /// 空文字列は `NoText` エラーになるようにすること
     #[test]
     fn apply_refinement_to_text_rejects_empty() {
         assert_eq!(
@@ -400,7 +417,7 @@ mod tests {
         );
     }
 
-    /// 上限超過は `TextTooLarge` エラーになること
+    /// 上限超過は `TextTooLarge` エラーになるようにすること
     #[test]
     fn apply_refinement_to_text_rejects_oversized() {
         let oversized = "a".repeat(crate::consts::MAX_CLIPBOARD_TEXT_BYTES + 1);
@@ -410,7 +427,7 @@ mod tests {
         );
     }
 
-    /// 変更がある場合は `Processed` を返すこと
+    /// 変更がある場合は `Processed` を返すようにすること
     #[test]
     fn apply_refinement_to_text_returns_processed() {
         assert_eq!(
@@ -419,7 +436,7 @@ mod tests {
         );
     }
 
-    /// 変更がない場合は `Unchanged` を返すこと
+    /// 変更がない場合は `Unchanged` を返すようにすること
     #[test]
     fn apply_refinement_to_text_returns_unchanged() {
         assert_eq!(
@@ -428,7 +445,7 @@ mod tests {
         );
     }
 
-    /// 加工パイプラインが順に適用されること
+    /// 加工パイプラインが順に適用されるようにすること
     #[test]
     fn apply_pipeline_to_text_chains_modes() {
         let input = "  %E3%81%82  ";
@@ -442,7 +459,7 @@ mod tests {
         );
     }
 
-    /// 加工パイプラインで変更がない場合は `Unchanged` を返すこと
+    /// 加工パイプラインで変更がない場合は `Unchanged` を返すようにすること
     #[test]
     fn apply_pipeline_to_text_returns_unchanged() {
         assert_eq!(
@@ -451,7 +468,7 @@ mod tests {
         );
     }
 
-    /// 加工してクリップボードへ書き戻すこと
+    /// 加工してクリップボードへ書き戻すようにすること
     #[test]
     fn process_clipboard_trims_and_writes_back() {
         let mut cb = InMemoryTextClipboard::with_text("  hello  ");
@@ -463,7 +480,7 @@ mod tests {
         assert_eq!(cb.text(), "hello");
     }
 
-    /// 変更がない場合はクリップボードを更新しないこと
+    /// 変更がない場合はクリップボードを更新しないようにすること
     #[test]
     fn process_clipboard_leaves_unchanged_text() {
         let mut cb = InMemoryTextClipboard::with_text("hello");
@@ -475,7 +492,7 @@ mod tests {
         assert_eq!(cb.text(), "hello");
     }
 
-    /// 読み取り失敗時は `ReadFailed` を返すこと
+    /// 読み取り失敗時は `ReadFailed` を返すようにすること
     #[test]
     fn process_clipboard_read_failure() {
         let mut cb = InMemoryTextClipboard::with_text("x").fail_on_read();
@@ -500,7 +517,7 @@ mod tests {
         assert_eq!(cb.text(), "  x  ");
     }
 
-    /// TSV 形式だが描画画像がない場合は `NoImage` を返すこと
+    /// TSV 形式だが描画画像がない場合は `NoImage` を返すようにすること
     #[test]
     fn process_image_clipboard_returns_no_image_without_bitmap() {
         let mut cb = InMemoryTextClipboard::with_text("A\tB\n1\t2");
@@ -511,7 +528,7 @@ mod tests {
         );
     }
 
-    /// 描画画像がある場合はクリップボードへ書き込むこと
+    /// 描画画像がある場合はクリップボードへ書き込ようにすること
     #[test]
     fn process_image_clipboard_writes_excel_bitmap() {
         let rgba = vec![255_u8; 4 * 2 * 2];
@@ -527,7 +544,7 @@ mod tests {
         assert_eq!(cb.written_image_size(), Some((2, 2)));
     }
 
-    /// Unicode テキストが無くても描画画像があれば書き込むこと
+    /// Unicode テキストが無くても描画画像があれば書き込ようにすること
     #[test]
     fn process_image_clipboard_succeeds_when_text_unavailable() {
         let rgba = vec![255_u8; 4 * 2 * 2];
@@ -545,7 +562,7 @@ mod tests {
         assert_eq!(cb.written_image_size(), Some((2, 2)));
     }
 
-    /// Unicode テキストも描画画像も無い場合は `NoText` を返すこと
+    /// Unicode テキストも描画画像も無い場合は `NoText` を返すようにすること
     #[test]
     fn process_image_clipboard_returns_no_text_without_bitmap() {
         let mut cb = InMemoryTextClipboard::with_text("unused").fail_on_read();
@@ -556,7 +573,7 @@ mod tests {
         );
     }
 
-    /// Excel TSV 判定の境界値
+    /// Excel TSV 判定の境界ようにすること
     #[test]
     fn is_excel_tsv_detects_tabular_and_single_cell() {
         assert!(!is_excel_tsv(""));

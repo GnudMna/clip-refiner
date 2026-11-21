@@ -45,7 +45,10 @@ impl HotkeyHandler {
     /// 受信したイベントは `proxy` を介してメインのイベントループへ転送される
     ///
     /// # Arguments
-    /// * `proxy` - UIスレッド(イベントループ)へイベントを送信するためのプロキシ
+    /// * `proxy` - UI スレッド (イベントループ) へイベントを送信するためのプロキシ
+    ///
+    /// # Returns
+    /// * `HotkeyListenerStop` - リスナースレッドの停止制御
     pub fn start_event_listener(proxy: EventLoopProxy<AppEvent>) -> HotkeyListenerStop {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_for_thread = Arc::clone(&stop);
@@ -145,7 +148,7 @@ mod tests {
         }
     }
 
-    /// ホットキーイベント処理の一連の挙動を検証する
+    /// ホットキーイベント処理の一連の挙動を検検証すること
     ///
     /// グローバルホットキーは OS に残るため 1 テストにまとめる
     #[test]
@@ -302,7 +305,7 @@ mod tests {
         assert!(ctx.menu.notification.enabled_item.is_checked());
     }
 
-    /// `reload` でホットキー ID が更新されること
+    /// `reload` でホットキー ID が更新されるようにすること
     #[test]
     fn reload_updates_registered_hotkey_ids() {
         let initial = HotkeySettings {

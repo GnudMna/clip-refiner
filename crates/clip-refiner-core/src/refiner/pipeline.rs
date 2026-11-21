@@ -71,20 +71,20 @@ pub fn apply_text_pipeline(
 mod tests {
     use super::*;
 
-    /// 空パイプラインは分割結果が空であること
+    /// 空パイプラインは分割結果が空であるようにすること
     #[test]
     fn split_empty_pipeline() {
         assert_eq!(split_pipeline(&[]), (Vec::new(), None));
     }
 
-    /// テキストのみのパイプラインは画像モードなしで返ること
+    /// テキストのみのパイプラインは画像モードなしで返るようにすること
     #[test]
     fn split_text_only_pipeline() {
         let pipeline = vec![RefineMode::UrlDecode, RefineMode::Trim];
         assert_eq!(split_pipeline(&pipeline), (pipeline.clone(), None));
     }
 
-    /// 末尾の画像モードは分割されること
+    /// 末尾の画像モードは分割されるようにすること
     #[test]
     fn split_trailing_image_mode() {
         let pipeline = vec![RefineMode::Trim, RefineMode::ExcelToImage];
@@ -94,7 +94,7 @@ mod tests {
         );
     }
 
-    /// テキスト加工パイプラインが順に適用されること
+    /// テキスト加工パイプラインが順に適用されるようにすること
     #[test]
     fn apply_text_pipeline_chains_modes() {
         let ctx = RefineContext::default();
@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(result, Some("あ".to_string()));
     }
 
-    /// 変更がない場合は `None` を返すこと
+    /// 変更がない場合は `None` を返すようにすること
     #[test]
     fn apply_text_pipeline_returns_none_when_unchanged() {
         let ctx = RefineContext::default();

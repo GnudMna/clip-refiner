@@ -22,10 +22,29 @@ pub struct MonitorSnapshot {
 
 impl MonitorSnapshot {
     /// パイプライン末尾が画像出力モードかどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `MonitorSnapshot`
+    ///
+    /// # Returns
+    /// * `bool` - 末尾モードが画像出力の場合は `true`
     pub fn produces_image(&self) -> bool {
         self.pipeline
             .last()
             .is_some_and(|mode| mode.produces_image())
+    }
+
+    /// コピー監視による自動加工が有効かどうか
+    ///
+    /// 連続記録モード中と一時停止中は `false`
+    ///
+    /// # Arguments
+    /// * `self` - この `MonitorSnapshot`
+    ///
+    /// # Returns
+    /// * `bool` - 自動加工が有効な場合は `true`
+    pub fn auto_processing_enabled(&self) -> bool {
+        !self.is_paused && !self.continuous_record_enabled
     }
 }
 
@@ -42,11 +61,23 @@ pub struct ProcessedState {
 
 impl ProcessedState {
     /// 指定テキストが `last_seen` と一致するか判定する
+    ///
+    /// # Arguments
+    /// * `text` - 比較対象のクリップボード本文
+    ///
+    /// # Returns
+    /// * `bool` - `last_seen` と一致する場合は `true`
     pub fn matches_last_seen(&self, text: &str) -> bool {
         self.last_seen.matches(text)
     }
 
     /// 指定テキストが `last_written` と一致するか判定する
+    ///
+    /// # Arguments
+    /// * `text` - 比較対象のクリップボード本文
+    ///
+    /// # Returns
+    /// * `bool` - `last_written` と一致する場合は `true`
     pub fn matches_last_written(&self, text: &str) -> bool {
         self.last_written.is_some_and(|fp| fp.matches(text))
     }

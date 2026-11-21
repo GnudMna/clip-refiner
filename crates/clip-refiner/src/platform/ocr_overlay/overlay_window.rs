@@ -10,13 +10,13 @@ use super::wndproc::{OverlayState, hide_overlay, register_overlay_class};
 use crate::platform::screen_capture::virtual_screen_bounds;
 
 use anyhow::{Context, Result, bail};
-use windows_sys::Win32::Foundation::HWND;
-use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
-use windows_sys::Win32::UI::WindowsAndMessaging::{
+use windows::Win32::Foundation::HWND;
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, GWLP_USERDATA, HWND_TOPMOST, IsWindowVisible, SW_SHOW,
-    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_EX_LAYERED,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
 // ======================================================================
@@ -30,6 +30,12 @@ pub(crate) struct OverlayWindow {
 
 impl OverlayWindow {
     /// 仮想デスクトップ全体を覆うオーバーレイウィンドウを生成する
+    ///
+    /// # Arguments
+    /// * `on_complete` - 範囲選択完了時に呼ばれるコールバック
+    ///
+    /// # Returns
+    /// * `Result<Self>` - 生成した `OverlayWindow`。ウィンドウ生成やレイヤー初期化失敗時は `Err`
     pub fn create(on_complete: OverlayCompleteFn) -> Result<Self> {
         register_overlay_class()?;
 
@@ -42,22 +48,19 @@ impl OverlayWindow {
         let hwnd = unsafe {
             CreateWindowExW(
                 WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-                class_name.as_ptr(),
-                ptr::null(),
+                windows::core::PCWSTR(class_name.as_ptr()),
+                windows::core::PCWSTR::null(),
                 WS_POPUP,
                 virt_x,
                 virt_y,
                 i32::try_from(width).context("幅の変換に失敗")?,
                 i32::try_from(height).context("高さの変換に失敗")?,
-                HWND::default(),
-                HWND::default(),
-                GetModuleHandleW(ptr::null()),
-                ptr::null_mut(),
+                Some(HWND::default()),
+                None,
+                GetModuleHandleW(None).ok().map(Into::into),
+                None,
             )
-        };
-        if hwnd.is_null() {
-            bail!("オーバーレイウィンドウの作成に失敗");
-        }
+        }?;
 
         let layered = LayeredOverlay::new(hwnd, width, height)?;
         let mut state = Box::new(OverlayState {
@@ -81,6 +84,9 @@ impl OverlayWindow {
     }
 
     /// オーバーレイを表示する
+    ///
+    /// # Arguments
+    /// * `self` - この `OverlayWindow`
     pub fn show(&mut self) {
         self.state.selection = DragSelection::default();
         self.state.last_redraw_at = None;
@@ -88,23 +94,24 @@ impl OverlayWindow {
             crate::log_warn!("オーバーレイの初期描画に失敗: {err:#}");
         }
         unsafe {
-            ShowWindow(self.hwnd, SW_SHOW);
-            SetWindowPos(
+            let _ = ShowWindow(self.hwnd, SW_SHOW);
+            let _ = SetWindowPos(
                 self.hwnd,
-                HWND_TOPMOST,
+                Some(HWND_TOPMOST),
                 0,
                 0,
                 0,
                 0,
-                windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
-                    | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
-                    | windows_sys::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
             );
-            SetForegroundWindow(self.hwnd);
+            let _ = SetForegroundWindow(self.hwnd);
         }
     }
 
     /// オーバーレイを非表示にする
+    ///
+    /// # Arguments
+    /// * `self` - この `OverlayWindow`
     pub fn hide(&mut self) {
         unsafe {
             hide_overlay(self.hwnd, self.state.as_mut());
@@ -112,8 +119,14 @@ impl OverlayWindow {
     }
 
     /// オーバーレイが表示中かどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `OverlayWindow`
+    ///
+    /// # Returns
+    /// * `bool` - ウィンドウが表示中の場合は `true`
     pub fn is_visible(&self) -> bool {
-        unsafe { IsWindowVisible(self.hwnd) != 0 }
+        unsafe { IsWindowVisible(self.hwnd).as_bool() }
     }
 }
 
@@ -121,8 +134,8 @@ impl Drop for OverlayWindow {
     fn drop(&mut self) {
         unsafe {
             SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
-            ReleaseCapture();
-            DestroyWindow(self.hwnd);
+            let _ = ReleaseCapture();
+            let _ = DestroyWindow(self.hwnd);
         }
     }
 }

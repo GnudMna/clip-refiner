@@ -110,7 +110,7 @@ mod tests {
 
     use super::*;
 
-    /// 保持期間を超えたログファイルが削除されること
+    /// 保持期間を超えたログファイルが削除されるようにすること
     #[test]
     fn test_cleanup_old_logs_removes_expired_files() {
         let base = std::env::temp_dir().join(format!(

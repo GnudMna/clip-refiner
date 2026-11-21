@@ -2,7 +2,7 @@ use super::types::SelectionRect;
 
 use crate::platform::screen_capture::ScreenRect;
 
-use windows_sys::Win32::Foundation::LPARAM;
+use windows::Win32::Foundation::LPARAM;
 
 // ======================================================================
 // 座標変換
@@ -14,12 +14,12 @@ pub(crate) fn str_to_wide(value: &str) -> Vec<u16> {
 
 /// `LPARAM` からクライアント X 座標を取り出す
 pub(crate) fn lparam_x(lparam: LPARAM) -> i32 {
-    i32::from(u16::try_from(lparam & 0xFFFF).unwrap_or(0))
+    i32::from(u16::try_from(lparam.0 & 0xFFFF).unwrap_or(0))
 }
 
 /// `LPARAM` からクライアント Y 座標を取り出す
 pub(crate) fn lparam_y(lparam: LPARAM) -> i32 {
-    let high = u32::try_from(lparam).unwrap_or(0) >> 16;
+    let high = u32::try_from(lparam.0).unwrap_or(0) >> 16;
     i32::from(u16::try_from(high).unwrap_or(0))
 }
 
@@ -101,7 +101,7 @@ pub(crate) fn clamp_rect(
 mod tests {
     use super::*;
 
-    /// 2点から正規化矩形を作る
+    /// 2点から正規化矩形を作るできるようにすること
     #[test]
     fn normalize_rect_orders_corners() {
         let rect = normalize_rect((30, 40), (10, 20));
@@ -111,7 +111,7 @@ mod tests {
         assert_eq!(rect.height, 20);
     }
 
-    /// クライアント座標から仮想デスクトップ座標への変換を検証する
+    /// クライアント座標から仮想デスクトップ座標への変換を検検証すること
     #[test]
     fn map_client_rect_to_screen_adds_virtual_origin() {
         let rect = map_client_rect_to_screen(

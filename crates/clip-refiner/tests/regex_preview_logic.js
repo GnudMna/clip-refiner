@@ -1,3 +1,6 @@
+/**
+ * `RegexPreview` 純粋ロジックの Node テスト
+ */
 'use strict';
 
 const assert = require('node:assert/strict');
@@ -10,6 +13,7 @@ const RegexPreview = require(path.join(
 
 const MAX_PATTERN_BYTES = 8 * 1024;
 
+/** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
 const validSettings = {
     pattern: '\\d+',
     replacement: '',
@@ -17,6 +21,7 @@ const validSettings = {
     multiline: false,
 };
 
+/** @type {import('../src/ui/settings/regex_preview').RegexSettings} */
 const invalidSettings = {
     pattern: '[\\d+',
     replacement: '',
@@ -24,11 +29,20 @@ const invalidSettings = {
     multiline: false,
 };
 
+/**
+ * プレビュー IPC 応答のテスト用ペイロードを組み立てる
+ *
+ * @param {number} requestId
+ * @param {boolean} valid
+ * @param {string} message
+ * @param {string|null} result
+ * @returns {import('../src/ui/settings/regex_preview').RegexPreviewPayload}
+ */
 function previewPayload(requestId, valid, message, result) {
     return { requestId, valid, message, result };
 }
 
-// 応答到着時に DOM がリクエスト送信時から変わっている場合は stale となること
+/** 応答到着時に DOM がリクエスト送信時から変わっている場合は stale となること */
 function test_stale_response_when_dom_changed() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'Hello world #'),
@@ -41,7 +55,7 @@ function test_stale_response_when_dom_changed() {
     assert.equal(result.lastRegexPreview, undefined);
 }
 
-// DOM が一致する場合のみキャッシュと UI が更新されること
+/** DOM が一致する場合のみキャッシュと UI が更新されること */
 function test_apply_response_when_dom_matches_request() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(2, true, 'パターンは有効です', 'Hello world #'),
@@ -57,7 +71,7 @@ function test_apply_response_when_dom_matches_request() {
     assert.equal(result.ui.fieldInvalid, false);
 }
 
-// 古い requestId の応答は無視されること
+/** 古い requestId の応答は無視されること */
 function test_ignore_outdated_response() {
     const result = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'x'),
@@ -69,7 +83,7 @@ function test_ignore_outdated_response() {
     assert.equal(result.action, 'ignore');
 }
 
-// stale 応答後も validateRegexSettings が pending を返すこと (誤った valid:true を使わない)
+/** stale 応答後も validateRegexSettings が pending を返すこと (誤った valid:true を使わない) */
 function test_validate_pending_after_stale_response() {
     const stale = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(1, true, 'パターンは有効です', 'x'),
@@ -88,7 +102,7 @@ function test_validate_pending_after_stale_response() {
     assert.equal(validation.valid, true);
 }
 
-// 正常応答後はキャッシュが validateRegexSettings に使えること
+/** 正常応答後はキャッシュが validateRegexSettings に使えること */
 function test_validate_uses_cache_after_apply() {
     const applied = RegexPreview.resolveRegexPreviewResponse({
         payload: previewPayload(3, false, 'パターンが無効です: ...', null),
@@ -107,7 +121,7 @@ function test_validate_uses_cache_after_apply() {
     assert.equal(validation.status, 'error');
 }
 
-// 空パターンの UI 状態
+/** 空パターンの UI 状態 */
 function test_build_preview_ui_empty_pattern() {
     const ui = RegexPreview.buildPreviewUi(
         previewPayload(1, true, 'パターンが空です (マッチしません)', 'sample'),
@@ -117,7 +131,7 @@ function test_build_preview_ui_empty_pattern() {
     assert.equal(ui.fieldInvalid, false);
 }
 
-// regexSettingsEqual の基本動作
+/** regexSettingsEqual の基本動作 */
 function test_regex_settings_equal() {
     assert.equal(RegexPreview.regexSettingsEqual(validSettings, validSettings), true);
     assert.equal(

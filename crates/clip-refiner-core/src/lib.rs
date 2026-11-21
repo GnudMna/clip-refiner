@@ -1,6 +1,6 @@
 //! クリップボード加工ロジックと設定型を提供する GUI 非依存クレート
 //!
-//! デスクトップ常駐 UI は [`clip-refiner`](https://github.com/) パッケージ (feature `app`) を参照。
+//! デスクトップ常駐 UI は [`clip-refiner`](https://github.com/) パッケージ (feature `app`) を参照
 //! 加工 API の利用例はクレートルートのドキュメントコメントを参照
 //!
 //! # 単一モードの加工

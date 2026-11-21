@@ -22,6 +22,12 @@ pub struct ConfigMigration {
 /// 保存済み設定を現行スキーマ (`CONFIG_VERSION`) へ順次移行する
 ///
 /// `version` が現行より新しい場合は既存項目を維持し、`version` 番号のみ現行へ揃える
+///
+/// # Arguments
+/// * `config` - 移行対象の設定
+///
+/// # Returns
+/// * `ConfigMigration` - 移行後の設定と移行メタデータ
 pub fn migrate_config(config: AppConfig) -> ConfigMigration {
     if config.version > consts::CONFIG_VERSION {
         let saved_version = config.version;
@@ -86,6 +92,10 @@ fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
     config
 }
 
+// ======================================================================
+// テスト
+// ======================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,7 +103,7 @@ mod tests {
     use crate::consts;
     use crate::refiner::RefineMode;
 
-    /// 現行バージョンの設定は移行不要
+    /// 現行バージョンの設定は移行不要であるようにすること
     #[test]
     fn migrate_current_version_is_noop() {
         let config = AppConfig::default();
@@ -120,7 +130,7 @@ mod tests {
         assert!(result.config.history_enabled);
     }
 
-    /// v0 設定の移行後は `favorite_modes` が空配列であること
+    /// v0 設定の移行後は `favorite_modes` が空配列であようにすること
     #[test]
     fn migrate_v0_to_v1_initializes_favorite_modes() {
         let config = AppConfig {
@@ -132,7 +142,7 @@ mod tests {
         assert!(result.config.favorite_modes.is_empty());
     }
 
-    /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃える
+    /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃えようにすること
     #[test]
     fn migrate_newer_version_clamps_version_and_preserves_settings() {
         let config = AppConfig {
@@ -151,7 +161,7 @@ mod tests {
         assert!(result.config.history_enabled);
     }
 
-    /// 現行 version 指定時は `migrated` にならないこと
+    /// 現行 version 指定時は `migrated` にならなようにすること
     #[test]
     fn migrate_at_current_version_does_not_mark_migrated() {
         let config = AppConfig {
@@ -181,5 +191,24 @@ mod tests {
             vec![RefineMode::UrlDecode, RefineMode::Trim]
         );
         assert_eq!(result.config.interval_ms, 333);
+    }
+
+    /// v0 設定は現行バージョンまで連鎖移行できるようにすること
+    #[test]
+    fn migrate_v0_to_current_preserves_settings() {
+        let config = AppConfig {
+            version: 0,
+            mode: RefineMode::UrlEncode,
+            interval_ms: 777,
+            history_enabled: true,
+            ..Default::default()
+        };
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert_eq!(result.config.mode, RefineMode::UrlEncode);
+        assert_eq!(result.config.interval_ms, 777);
+        assert!(result.config.history_enabled);
+        assert!(result.config.favorite_modes.is_empty());
     }
 }

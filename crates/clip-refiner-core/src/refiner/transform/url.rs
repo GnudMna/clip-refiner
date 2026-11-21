@@ -116,46 +116,46 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 英数字のURLエンコードテスト
-    /// 変更されないことを確認
+    /// 英数字のURLエンコードできるようにすること
+    /// 変更されないことを確認できるようにすること
     #[test]
     fn test_url_encode_alphanumeric() {
         assert_eq!(url_encode("abc123"), "abc123");
     }
 
-    /// 記号のURLエンコードテスト
+    /// 記号のURLエンコードできるようにすること
     #[test]
     fn test_url_encode_symbols() {
         assert_eq!(url_encode(" "), "%20");
         assert_eq!(url_encode("\""), "%22");
     }
 
-    /// 英数字のURLデコードテスト
+    /// 英数字のURLデコードできるようにすること
     #[test]
     fn test_url_decode_alphanumeric() {
         assert_eq!(url_decode("abc123").unwrap(), "abc123");
     }
 
-    /// 記号のURLデコードテスト
+    /// 記号のURLデコードできるようにすること
     #[test]
     fn test_url_decode_symbols() {
         assert_eq!(url_decode("%20").unwrap(), " ");
     }
 
-    /// マルチバイト文字のURLデコードテスト
+    /// マルチバイト文字のURLデコードできるようにすること
     #[test]
     fn test_url_decode_multibyte() {
         assert_eq!(url_decode("%E3%81%82%E3%81%84%E3%81%86").unwrap(), "あいう");
     }
 
-    /// 不正なUTF-8シーケンスのURLデコードテスト
-    /// エラーになることを確認
+    /// 不正なUTF-8シーケンスのURLデコードできるようにすること
+    /// エラーになることを確認できるようにすること
     #[test]
     fn test_url_decode_bad_utf8() {
         assert!(url_decode("%FF").is_err());
     }
 
-    /// UTMパラメータ削除のテスト(基本)
+    /// UTMパラメータ削除のテスト(基本)できるようにすること
     #[test]
     fn test_remove_utm_params() {
         assert_eq!(
@@ -181,8 +181,8 @@ mod tests {
         assert_eq!(remove_utm_params("?utm_source=a"), "");
     }
 
-    /// スペースや特殊文字が含まれる場合のURLエンコードテスト
-    /// `プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認`
+    /// スペースや特殊文字が含まれる場合のURLエンコードできるようにすること
+    /// `プラス記号などはENCODE_SETに含まれないためそのまま残る挙動などを確認`できるようにすること
     #[test]
     fn test_url_encode_space_special() {
         assert_eq!(url_encode("foo bar"), "foo%20bar");
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(url_encode("foo+bar"), "foo+bar");
     }
 
-    /// UTMパラメータが他のパラメータと混在している場合のテスト
+    /// UTMパラメータが他のパラメータと混在している場合できるようにすること
     #[test]
     fn test_remove_utm_params_complex() {
         assert_eq!(
@@ -204,7 +204,7 @@ mod tests {
         );
     }
 
-    /// フラグメント(#)がある場合のUTMパラメータ削除テスト
+    /// フラグメント(#)がある場合のUTMパラメータ削除できるようにすること
     #[test]
     fn test_remove_utm_params_with_fragment() {
         // UTMパラメータ削除後もフラグメントが保持されること

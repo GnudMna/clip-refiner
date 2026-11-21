@@ -2,7 +2,11 @@
 
 use clip_refiner::test_helpers::ClipboardHarness;
 
-/// `SetOcrText` でクリップボードへ OCR 結果が書き込まれること
+// ======================================================================
+// テスト
+// ======================================================================
+
+/// `SetOcrText` でクリップボードへ OCR 結果が書き込まれるようにすること
 #[test]
 fn ocr_set_text_writes_clipboard() {
     let mut harness = ClipboardHarness::with_text("before-ocr");
@@ -11,7 +15,7 @@ fn ocr_set_text_writes_clipboard() {
     assert_eq!(harness.clipboard_text(), "recognized text");
 }
 
-/// OCR 結果書き込み直後のポーリングでは再加工しないこと
+/// OCR 結果書き込み直後のポーリングでは再加工しないようにすること
 #[test]
 fn ocr_set_text_avoids_immediate_reprocess() {
     let mut harness = ClipboardHarness::with_text("  hello  ");
@@ -21,7 +25,7 @@ fn ocr_set_text_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "  hello  ");
 }
 
-/// OCR 結果は外部設定として1回分のエコーとして記録されること
+/// OCR 結果は外部設定として1回分のエコーとして記録されるようにすること
 #[test]
 fn ocr_set_text_marks_echo_for_one_monitor_tick() {
     let mut harness = ClipboardHarness::with_text("old");

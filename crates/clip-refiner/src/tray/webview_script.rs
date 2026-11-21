@@ -69,7 +69,7 @@ pub(crate) fn evaluate_script(webview: &WebView, context: &str, script: &str) {
 mod tests {
     use super::*;
 
-    /// 設定スナップショット注入が `JSON.parse` 経由であること
+    /// 設定スナップショット注入が `JSON.parse` 経由であるようにすること
     #[test]
     fn settings_load_script_uses_json_parse() {
         let script = settings_load_script(r#"{"mode":"Trim"}"#, false, false);
@@ -77,7 +77,7 @@ mod tests {
         assert!(!script.contains("loadSettings({"));
     }
 
-    /// 設定値に `'` や `\` が含まれても `JSON.parse` 引数としてエスケープされること
+    /// 設定値に `'` や `\` が含まれても `JSON.parse` 引数としてエスケープされるようにすること
     #[test]
     fn settings_load_script_escapes_special_characters() {
         let json = r#"{"regex":{"pattern":"it's \\ tricky"}}"#;
@@ -86,7 +86,7 @@ mod tests {
         assert!(!script.contains(r#"pattern":"it's"#));
     }
 
-    /// 改行を含む JSON でもシングルクォート文字列リテラルが壊れないこと
+    /// 改行を含む JSON でもシングルクォート文字列リテラルが壊れないであるようにすること
     #[test]
     fn settings_load_script_escapes_newlines() {
         let json = "{\"regex\":{\"pattern\":\"a\nb\"}}";
@@ -95,7 +95,7 @@ mod tests {
         assert!(!script.contains("parse('{\"regex\":{\"pattern\":\"a\nb"));
     }
 
-    /// 外部同期オプションが JavaScript へ渡されること
+    /// 外部同期オプションが JavaScript へ渡されるようにすること
     #[test]
     fn settings_load_script_passes_external_sync_option() {
         let script = settings_load_script(r#"{"mode":"Trim"}"#, false, true);

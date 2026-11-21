@@ -23,6 +23,12 @@ pub(super) struct ResolvedHotkeys {
 
 impl ResolvedHotkeys {
     /// 設定から各ホットキーを解決する
+    ///
+    /// # Arguments
+    /// * `hotkeys` - 設定ファイルから読み込んだホットキー割り当て
+    ///
+    /// # Returns
+    /// * `Self` - 解決済み固定ホットキー割り当て
     pub fn from_settings(hotkeys: &HotkeySettings) -> Self {
         Self {
             quick_selector: resolve_hotkey(

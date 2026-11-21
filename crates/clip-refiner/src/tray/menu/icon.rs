@@ -73,19 +73,19 @@ pub(crate) fn app_icon_png_data_url() -> String {
 mod tests {
     use super::*;
 
-    /// 埋め込み PNG からトレイアイコンを生成できること
+    /// 埋め込み PNG からトレイアイコンを生成できるようにすること
     #[test]
     fn create_icon_from_embedded_png() {
         let _icon = create_icon().expect("トレイアイコンの作成に失敗");
     }
 
-    /// 埋め込み PNG からウィンドウアイコンを生成できること
+    /// 埋め込み PNG からウィンドウアイコンを生成できるようにすること
     #[test]
     fn create_window_icon_from_embedded_png() {
         let _icon = create_window_icon().expect("ウィンドウアイコンの作成に失敗");
     }
 
-    /// データ URL が PNG 形式であること
+    /// データ URL が PNG 形式であるようにすること
     #[test]
     fn app_icon_png_data_url_is_png_data_uri() {
         let data_url = app_icon_png_data_url();

@@ -107,7 +107,7 @@ mod tests {
     use crate::tray::menu::TrayMenu;
     use crate::tray::state::{LockExt, test_app_state};
 
-    /// お気に入りサブメニューの `MenuId` からモードを解決できること
+    /// お気に入りサブメニューの `MenuId` からモードを解決できるようにすること
     #[test]
     fn resolve_favorite_mode_from_menu_id() {
         let state = Arc::new(test_app_state());

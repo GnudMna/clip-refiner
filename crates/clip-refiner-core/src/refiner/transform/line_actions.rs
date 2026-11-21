@@ -244,7 +244,7 @@ fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
 mod tests {
     use super::*;
 
-    /// プレーンテキスト行の昇順ソート
+    /// プレーンテキスト行の昇順ソートできるようにすること
     #[test]
     fn test_sort_plain_lines() {
         let input = "banana\nApple\ncherry";
@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), expected);
     }
 
-    /// プレーンテキスト行の降順ソート
+    /// プレーンテキスト行の降順ソートできるようにすること
     #[test]
     fn test_sort_plain_lines_descending() {
         let input = "banana\nApple\ncherry";
@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), expected);
     }
 
-    /// クォート内改行を含む CSV のソート
+    /// クォート内改行を含む CSV のソートできるようにすること
     #[test]
     fn test_sort_csv_with_newlines() {
         let input = "z,\"cell\nwith\nnewline\",3\na,\"simple\",1";
@@ -279,7 +279,7 @@ mod tests {
         assert!(output.contains("z,\"cell\nwith\nnewline\",3"));
     }
 
-    /// 空行削除の基本動作
+    /// 空行削除の基本動作できるようにすること
     #[test]
     fn test_remove_empty_lines() {
         let input = "line1\n\n  \nline2\n\t\nline3";
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(remove_empty_lines(input), expected);
     }
 
-    /// 重複行削除(出現順序維持)
+    /// 重複行削除(出現順序維持)できるようにすること
     #[test]
     fn test_remove_duplicate_lines() {
         let input = "line1\nline2\nline1\nline3\nline2";
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(remove_duplicate_lines(input), expected);
     }
 
-    /// 空文字列は変更なしで返ること
+    /// 空文字列は変更なしで返るようにすること
     #[test]
     fn test_sort_empty() {
         assert!(matches!(sort_lines("", false), Cow::Borrowed(_)));
@@ -303,7 +303,7 @@ mod tests {
         assert!(matches!(remove_duplicate_lines(""), Cow::Borrowed(_)));
     }
 
-    /// 既にソート済みの場合は Borrowed を返す (変更なし)
+    /// 既にソート済みの場合は Borrowed を返す (変更なし)できるようにすること
     #[test]
     fn test_sort_already_sorted_returns_borrowed() {
         let input = "apple\nbanana\ncherry";
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), "single");
     }
 
-    /// `is_likely_csv`: カンマ区切りで複数列かつ行数が一致すればCSV判定
+    /// `is_likely_csv`: カンマ区切りで複数列かつ行数が一致すればCSV判定できるようにすること
     #[test]
     fn test_is_likely_csv_true() {
         // 2列 × 2行
@@ -328,27 +328,27 @@ mod tests {
         assert!(is_likely_csv("banana,2\napple,1\ncherry,3"));
     }
 
-    /// `is_likely_csv`: 1列しかない場合はCSVでない
+    /// `is_likely_csv`: 1列しかない場合はCSVでないできるようにすること
     #[test]
     fn test_is_likely_csv_false_single_column() {
         assert!(!is_likely_csv("apple\nbanana\ncherry"));
     }
 
-    /// `is_likely_csv`: 1行だけではCSVと断定しない
+    /// `is_likely_csv`: 1行だけではCSVと断定しないできるようにすること
     #[test]
     fn test_is_likely_csv_false_single_row() {
         assert!(!is_likely_csv("a,b,c"));
         assert!(!is_likely_csv("hello,world"));
     }
 
-    /// `is_likely_csv`: 列数が揃っていない場合はCSVでない
+    /// `is_likely_csv`: 列数が揃っていない場合はCSVでないできるようにすること
     #[test]
     fn test_is_likely_csv_false_inconsistent_columns() {
         assert!(!is_likely_csv("a,b,c\nd,e"));
         assert!(!is_likely_csv("1,2\n3,4,5"));
     }
 
-    /// CSVレコードの昇順ソート
+    /// CSVレコードの昇順ソートできるようにすること
     #[test]
     fn test_sort_csv_records_asc() {
         let input = "banana,2\napple,1\ncherry,3";
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(lines[2], "cherry,3");
     }
 
-    /// CSVレコードの降順ソート
+    /// CSVレコードの降順ソートできるようにすること
     #[test]
     fn test_sort_csv_records_desc() {
         let input = "banana,2\napple,1\ncherry,3";
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(lines[2], "apple,1");
     }
 
-    /// CRLF 入力で空行削除しても CRLF が保持されること
+    /// CRLF 入力で空行削除しても CRLF が保持されるようにすること
     #[test]
     fn test_remove_empty_lines_crlf() {
         let input = "line1\r\n\r\nline2\r\n";
@@ -378,7 +378,7 @@ mod tests {
         assert_eq!(output, "line1\r\nline2");
     }
 
-    /// CRLF 入力で重複行削除しても CRLF が保持されること
+    /// CRLF 入力で重複行削除しても CRLF が保持されるようにすること
     #[test]
     fn test_remove_duplicate_lines_crlf() {
         let input = "line1\r\nline2\r\nline1\r\n";

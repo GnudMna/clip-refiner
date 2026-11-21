@@ -38,6 +38,12 @@ impl Clone for RefineContext {
 
 impl RefineContext {
     /// 設定ファイルの内容からコンテキストを生成する
+    ///
+    /// # Arguments
+    /// * `config` - アプリケーション設定
+    ///
+    /// # Returns
+    /// * `RefineContext` - 設定から構築した加工コンテキスト
     pub fn from_config(config: &AppConfig) -> Self {
         Self {
             regex: config.regex.clone(),
@@ -46,6 +52,12 @@ impl RefineContext {
     }
 
     /// 正規表現設定のみを指定してコンテキストを生成する
+    ///
+    /// # Arguments
+    /// * `regex` - 正規表現加工用の設定
+    ///
+    /// # Returns
+    /// * `RefineContext` - 指定した正規表現設定を持つ加工コンテキスト
     pub fn with_regex(regex: RegexSettings) -> Self {
         Self {
             regex,
@@ -67,7 +79,7 @@ mod tests {
     use super::*;
     use crate::refiner::{RefineMode, Refiner};
 
-    /// `with_regex` で正規表現設定を渡せること
+    /// `with_regex` で正規表現設定を渡せるようにすること
     #[test]
     fn with_regex_applies_pattern() {
         let ctx = RefineContext::with_regex(RegexSettings {

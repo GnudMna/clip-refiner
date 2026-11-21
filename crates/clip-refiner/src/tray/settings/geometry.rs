@@ -143,7 +143,7 @@ fn geometry_file_path() -> Result<PathBuf, crate::config::ConfigError> {
 mod tests {
     use super::*;
 
-    /// 範囲外のサイズがクランプされること
+    /// 範囲外のサイズがクランプされるようにすること
     #[test]
     fn geometry_clamps_size() {
         let geometry = SettingsWindowGeometry {
@@ -157,7 +157,7 @@ mod tests {
         assert!((geometry.height - MIN_HEIGHT).abs() < f64::EPSILON);
     }
 
-    /// デフォルト幾何が既定サイズであること
+    /// デフォルト幾何が既定サイズであるようにすること
     #[test]
     fn default_geometry_matches_initial_window_size() {
         let geometry = SettingsWindowGeometry::default();

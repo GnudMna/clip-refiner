@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-07
+
+### Added
+
+- 統合テスト `worker_recovery_flow.rs` (クリップボードワーカーの起動・復旧)、`settings_ui_logic.rs` (設定 UI パッチマージ JS)、`oneshot_flow.rs` (ワンショット相当パイプライン)
+
+### Changed
+
+- 連続記録 ON 時はトレイメニュー・ツールチップ・設定ウィンドウでコピー時の自動加工停止を明示 (変換モードメニューは無効化、監視タブの加工設定は無効表示)
+- 設定ウィンドウ: DOM 更新と適用エラー通知を改善
+- 設定パッチ適用をドメイン別サブモジュール (`tray/settings/apply/patch/`) へ分割
+- 設定ウィンドウの読み書きモデル (`SettingsWritable` / `SettingsPatch`) と正規表現プレビュー用サンプル文字列 (`REGEX_PREVIEW_SAMPLE`) を一元化
+- Windows API バインディングを `windows` クレートへ統一
+- セレクター HTML のインライン JS を `quick_selector.js` / `clip_selector.js` へ抽出
+- WebView UI の JavaScript に JSDoc を追加
+
+### Fixed
+
+- 連続記録 ON かつ一時停止 OFF でも監視経路で自動加工が実行される問題
+
 ## [0.12.0] - 2026-07-06
 
 ### Added
@@ -307,7 +327,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...develop
+[0.12.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...v0.12.1
 [0.12.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...v0.12.0
 [0.11.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...v0.11.0
 [0.10.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.9.0...v0.10.0

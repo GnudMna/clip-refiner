@@ -43,7 +43,7 @@ mod tests {
 
     use crate::config::RegexSettings;
 
-    /// 有効なパターンでプレビュー応答が生成されること
+    /// 有効なパターンでプレビュー応答が生成されるようにすること
     #[test]
     fn preview_response_contains_replace_result() {
         let response = RegexPreviewResponse::from_request(&RegexPreviewRequest {

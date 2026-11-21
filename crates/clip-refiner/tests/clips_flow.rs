@@ -3,7 +3,11 @@
 use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::ClipboardHarness;
 
-/// クリップボード内容を登録クリップとして保存できること
+// ======================================================================
+// テスト
+// ======================================================================
+
+/// クリップボード内容を登録クリップとして保存できるようにすること
 #[test]
 fn register_clip_from_clipboard_saves_text() {
     let mut harness = ClipboardHarness::with_text("  saved-clip  ");
@@ -16,7 +20,7 @@ fn register_clip_from_clipboard_saves_text() {
     );
 }
 
-/// 登録クリップをコピーするとクリップボードへ反映されること
+/// 登録クリップをコピーするとクリップボードへ反映されるようにすること
 #[test]
 fn copy_registered_clip_writes_to_clipboard() {
     let mut harness = ClipboardHarness::with_text("registered-value");
@@ -28,7 +32,7 @@ fn copy_registered_clip_writes_to_clipboard() {
     assert_eq!(harness.clipboard_text(), "registered-value");
 }
 
-/// 登録クリップコピー直後の監視では再加工しないこと
+/// 登録クリップコピー直後の監視では再加工しないようにすること
 #[test]
 fn copy_registered_clip_avoids_immediate_reprocess() {
     let mut harness = ClipboardHarness::with_text("  clip  ").with_mode(RefineMode::Trim);
@@ -42,7 +46,7 @@ fn copy_registered_clip_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "  clip  ");
 }
 
-/// 空クリップボードは登録されないこと
+/// 空クリップボードは登録されないようにすること
 #[test]
 fn register_clip_skips_empty_clipboard() {
     let mut harness = ClipboardHarness::with_text("   ");

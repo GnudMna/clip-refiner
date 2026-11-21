@@ -21,11 +21,27 @@ pub struct RegisteredClip {
 
 impl RegisteredClip {
     /// 画像登録かどうかを返す
+    ///
+    /// # Arguments
+    /// * `self` - 判定対象の登録クリップ
+    ///
+    /// # Returns
+    /// * `bool` - `image_file` が設定されている場合は `true`
     pub fn is_image(&self) -> bool {
         self.image_file.is_some()
     }
 
     /// 登録クリップセレクター向けの JSON オブジェクトを生成する
+    ///
+    /// # Arguments
+    /// * `self` - 変換元の登録クリップ
+    /// * `index` - セレクター内のインデックス
+    /// * `preview` - 一覧表示用プレビュー文字列
+    /// * `thumbnail` - サムネイル Data URL (`None` の場合は省略)
+    /// * `hover_preview` - hover プレビュー Data URL (`None` の場合は省略)
+    ///
+    /// # Returns
+    /// * `serde_json::Value` - セレクター向け JSON オブジェクト
     pub fn to_clip_selector_json(
         &self,
         index: usize,
@@ -93,6 +109,12 @@ pub enum AddRegisteredClipError {
 
 impl AddRegisteredClipError {
     /// ユーザー向けのエラーメッセージを返す
+    ///
+    /// # Arguments
+    /// * `self` - 追加失敗理由
+    ///
+    /// # Returns
+    /// * `&'static str` - UI 表示用の固定メッセージ
     #[must_use]
     pub fn user_message(&self) -> &'static str {
         match self {

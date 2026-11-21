@@ -81,7 +81,7 @@ pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
-    /// 有効な YAML を JSON に変換できること
+    /// 有効な YAML を JSON に変換できるようにすること
     #[test]
     fn test_yaml_to_json_valid() {
         let input = "b: 1\na: 2\n";
@@ -89,14 +89,14 @@ mod tests {
         assert!(output.contains("\"a\": 2"));
     }
 
-    /// 不正な YAML は元の文字列を返すこと
+    /// 不正な YAML は元の文字列を返すようにすること
     #[test]
     fn test_yaml_to_json_invalid() {
         let input = "a: 1\n  b: 2";
         assert_eq!(yaml_to_json(input), input);
     }
 
-    /// 有効な YAML をキー順序を維持した JSON に変換できること
+    /// 有効な YAML をキー順序を維持した JSON に変換できるようにすること
     #[test]
     fn test_yaml_to_json_preserve_order_valid() {
         let input = "b: 1\na: 2\n";
@@ -106,7 +106,7 @@ mod tests {
         assert!(b_pos < a_pos, "YAML のキー順序が維持されていない");
     }
 
-    /// 不正な YAML (キー順序保持版) は元の文字列を返すこと
+    /// 不正な YAML (キー順序保持版) は元の文字列を返すようにすること
     #[test]
     fn test_yaml_to_json_preserve_order_invalid() {
         let input = "a: 1\n  b: 2";
