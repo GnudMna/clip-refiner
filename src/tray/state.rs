@@ -1,6 +1,7 @@
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, atomic::AtomicU64};
 
 use crate::config::AppConfig;
+use crate::history_store::EncryptedHistoryStore;
 use crate::refiner::RefineMode;
 
 use tao::event_loop::EventLoopProxy;
@@ -21,16 +22,13 @@ pub enum AppEvent {
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }
 
-/// 履歴の最大保持数
-pub const HISTORY_LIMIT: usize = 10;
-
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
-/// 1ループあたり `config` RwLock の取得を1回に削減するために使用します。
+/// 1ループあたり `config` RwLock の取得を1回に削減するために使用する
 pub struct MonitorSnapshot {
     /// 現在の加工モード
     pub mode: RefineMode,
-    /// ポーリング間隔（ミリ秒）
+    /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,
     /// 一時停止中かどうか
     pub is_paused: bool,
@@ -43,16 +41,16 @@ pub struct MonitorSnapshot {
 pub struct ProcessedState {
     /// ポーリングで前回観測したクリップボード本文
     pub last_seen_text: String,
-    /// 直近の加工でクリップボードへ書き戻した本文（自身の変更イベントを1回無視）
+    /// 直近の加工でクリップボードへ書き戻した本文(自身の変更イベントを1回無視)
     pub last_written_text: Option<String>,
 }
 
 // ======================================================================
 // ロック拡張
 // ======================================================================
-/// `Mutex` のポイズニング（パニックによる汚染）を無視して強制的にロックを取得するための拡張
+/// `Mutex` のポイズニング(パニックによる汚染)を無視して強制的にロックを取得するための拡張
 pub trait LockExt<T> {
-    /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得します。
+    /// ロックを取得する。ポイズニングされている場合は汚染された状態のままデータを取得する。
     fn lock_ignore_poison(&self) -> MutexGuard<'_, T>;
 }
 
@@ -85,7 +83,7 @@ impl<T> RwLockExt<T> for RwLock<T> {
 // ======================================================================
 /// アプリケーション全体で共有され、スレッド間で安全に読み書きされる状態管理構造体
 ///
-/// 設定、クリップボードの最終処理内容、履歴などを保持します。
+/// 設定、クリップボードの最終処理内容、暗号化履歴などを保持する
 pub struct AppState {
     /// 永続化設定データ
     pub config: RwLock<AppConfig>,
@@ -93,8 +91,8 @@ pub struct AppState {
     pub monitor_generation: AtomicU64,
     /// 二重加工防止用の監視状態
     processed_state: Mutex<ProcessedState>,
-    /// クリップボードの履歴リスト
-    pub history: Mutex<Vec<String>>,
+    /// 暗号化されたクリップボード履歴 (セッション限定、メモリ内のみ)
+    history_store: Mutex<EncryptedHistoryStore>,
     /// メインのイベントループへメッセージを送るためのプロキシ
     pub proxy: EventLoopProxy<AppEvent>,
 }
@@ -106,19 +104,19 @@ impl AppState {
     /// デフォルトの設定を読み込んで新しい状態を生成する
     ///
     /// # Returns
-    /// * `Self` - 新しく生成された `AppState` インスタンス。
+    /// * `Self` - 新しく生成された `AppState` インスタンス
     pub fn new(proxy: EventLoopProxy<AppEvent>) -> Self {
         let config = AppConfig::load();
         Self {
             config: RwLock::new(config),
             monitor_generation: AtomicU64::new(0),
             processed_state: Mutex::new(ProcessedState::default()),
-            history: Mutex::new(Vec::new()),
+            history_store: Mutex::new(EncryptedHistoryStore::new()),
             proxy,
         }
     }
 
-    /// 現在の設定をファイルへ保存する。
+    /// 現在の設定をファイルへ保存する
     pub fn save_config(&self) {
         if let Err(e) = self.with_config(|c| c.save()) {
             crate::log_error!("設定の保存に失敗: {:?}", e);
@@ -142,7 +140,7 @@ impl AppState {
 impl AppState {
     /// 監視ループ向けに設定フィールドをまとめて一括取得する
     ///
-    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減します。
+    /// `config` RwLock の取得を1回に抑えることで、ループ毎の細粒度ロックを削減する
     pub fn monitor_snapshot(&self) -> MonitorSnapshot {
         self.with_config(|config| MonitorSnapshot {
             mode: config.mode,
@@ -180,41 +178,80 @@ impl AppState {
         });
     }
 
-    /// 履歴を取得する
+    /// 履歴を復号してすべて取得する
+    ///
+    /// メニュー表示など、一時的に平文が必要な場合に使用する
+    ///
+    /// # Returns
+    /// * `Vec<String>` - 新しい順に並んだ復号済み履歴
     pub fn get_history(&self) -> Vec<String> {
-        self.history.lock_ignore_poison().clone()
+        self.history_store.lock_ignore_poison().entries_decrypted()
+    }
+
+    /// 指定インデックスの履歴を復号して取得する
+    ///
+    /// # Arguments
+    /// * `index` - 履歴ストア内のインデックス (0 が最新)
+    ///
+    /// # Returns
+    /// * `Option<String>` - 復号成功時は `Some(本文)`、範囲外や復号失敗時は `None`
+    pub fn get_history_entry(&self, index: usize) -> Option<String> {
+        self.history_store.lock_ignore_poison().entry_at(index)
     }
 
     /// 履歴をクリアする
     pub fn clear_history(&self) {
-        self.history.lock_ignore_poison().clear();
+        self.history_store.lock_ignore_poison().clear();
     }
 
     /// クリップボード履歴に新しいテキストを追加する
     ///
-    /// 空文字やトリム後に空になる文字列は無視されます。
-    /// 既にある文字列はリストの先頭に移動し、最大保持数（ `HISTORY_LIMIT` ）を超えた分は削除されます。
-    /// 追加完了後、UIスレッドへ履歴更新イベントを通知します。
+    /// 空文字やトリム後に空になる文字列は無視される
+    /// 既にある文字列はリストの先頭に移動し、設定の `history_limit` を超えた分は削除される
+    /// 本文はメモリ上で暗号化して保持し、再起動時には破棄される
+    /// 追加完了後、UIスレッドへ履歴更新イベントを通知する
+    ///
+    /// # Arguments
+    /// * `text` - 履歴へ追加するクリップボード本文
     pub fn add_to_history(&self, text: String) {
         if text.trim().is_empty() {
             return;
         }
 
-        let mut history = self.history.lock_ignore_poison();
-
-        // 二重登録防止: すでに存在すれば削除して最上位へ
-        if let Some(pos) = history.iter().position(|x| x == &text) {
-            history.remove(pos);
-        }
-
-        history.insert(0, text);
-
-        // 最大10件
-        if history.len() > HISTORY_LIMIT {
-            history.truncate(HISTORY_LIMIT);
-        }
+        let limit = self.with_config(|c| c.history_limit);
+        self.history_store.lock_ignore_poison().add(text, limit);
 
         let _ = self.proxy.send_event(AppEvent::RefreshHistory);
+    }
+}
+
+// ======================================================================
+// テスト用ヘルパー
+// ======================================================================
+/// ユニットテスト用の `AppState` を生成する
+#[cfg(test)]
+pub(crate) fn test_app_state() -> AppState {
+    use crate::config::AppConfig;
+    use tao::event_loop::EventLoopBuilder;
+    #[cfg(windows)]
+    use tao::platform::windows::EventLoopBuilderExtWindows;
+
+    #[cfg(windows)]
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
+        .with_any_thread(true)
+        .build();
+    #[cfg(not(windows))]
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+
+    let mut config = AppConfig::default();
+    config.mode = RefineMode::Trim;
+
+    AppState {
+        config: RwLock::new(config),
+        monitor_generation: AtomicU64::new(0),
+        processed_state: Mutex::new(ProcessedState::default()),
+        history_store: Mutex::new(EncryptedHistoryStore::new()),
+        proxy: event_loop.create_proxy(),
     }
 }
 
@@ -224,43 +261,13 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::MonitorMode;
     use std::sync::atomic::Ordering;
-    use tao::event_loop::EventLoopBuilder;
-    #[cfg(windows)]
-    use tao::platform::windows::EventLoopBuilderExtWindows;
 
-    fn create_test_state() -> AppState {
-        #[cfg(windows)]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
-            .with_any_thread(true)
-            .build();
-        #[cfg(not(windows))]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-
-        AppState {
-            config: RwLock::new(AppConfig {
-                mode: RefineMode::Trim,
-                is_paused: false,
-                monitor_mode: MonitorMode::Polling,
-                interval_ms: 1000,
-                history_enabled: false,
-                notification_settings: crate::config::NotificationSettings {
-                    enabled: false,
-                    notify_mode: true,
-                    notify_result: true,
-                    notify_pause: true,
-                },
-            }),
-            monitor_generation: AtomicU64::new(0),
-            processed_state: Mutex::new(ProcessedState::default()),
-            history: Mutex::new(Vec::new()),
-            proxy: event_loop.create_proxy(),
-        }
-    }
-
+    /// with_config / with_processed_state / monitor_generation の基本動作
     #[test]
     fn test_app_state_helpers() {
-        let state = create_test_state();
+        let state = test_app_state();
 
         assert_eq!(state.with_config(|c| c.mode), RefineMode::Trim);
         state.with_config_mut(|c| c.mode = RefineMode::UrlEncode);
@@ -285,7 +292,7 @@ mod tests {
     /// 一時停止フラグの更新
     #[test]
     fn test_paused_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
         assert!(!state.with_config(|c| c.is_paused));
         state.with_config_mut(|c| c.is_paused = true);
         assert!(state.with_config(|c| c.is_paused));
@@ -296,7 +303,7 @@ mod tests {
     /// 履歴機能の更新
     #[test]
     fn test_history_enabled_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
         assert!(!state.with_config(|c| c.history_enabled));
         state.with_config_mut(|c| c.history_enabled = true);
         assert!(state.with_config(|c| c.history_enabled));
@@ -305,7 +312,7 @@ mod tests {
     /// 通知設定の更新
     #[test]
     fn test_notification_settings_accessor() {
-        let state = create_test_state();
+        let state = test_app_state();
 
         assert!(!state.with_config(|c| c.notification_settings.enabled));
         state.with_config_mut(|c| c.notification_settings.enabled = true);
@@ -327,7 +334,7 @@ mod tests {
     /// `monitor_snapshot` が設定値を正しく反映すること
     #[test]
     fn test_monitor_snapshot_values() {
-        let state = create_test_state();
+        let state = test_app_state();
         state.with_config_mut(|c| {
             c.mode = RefineMode::UrlEncode;
             c.interval_ms = 1500;
@@ -345,7 +352,8 @@ mod tests {
     /// 履歴追加: 空白は無視、重複は先頭移動、上限超過分は削除、clear で空になる
     #[test]
     fn test_history_add_dedup_limit_and_clear() {
-        let state = create_test_state();
+        let state = test_app_state();
+        let limit = crate::consts::DEFAULT_HISTORY_LIMIT;
 
         // 空白は無視
         state.add_to_history("   ".to_string());
@@ -360,18 +368,58 @@ mod tests {
         assert_eq!(h[1], "second");
         assert_eq!(h.len(), 2);
 
-        // HISTORY_LIMIT を超えた分は切り捨てられる
-        for i in 0..(HISTORY_LIMIT + 5) {
+        // history_limit を超えた分は切り捨てられる
+        for i in 0..(limit + 5) {
             state.add_to_history(format!("item-{i}"));
         }
-        assert_eq!(state.get_history().len(), HISTORY_LIMIT);
-        assert_eq!(
-            state.get_history()[0],
-            format!("item-{}", HISTORY_LIMIT + 4)
-        );
+        assert_eq!(state.get_history().len(), limit);
+        assert_eq!(state.get_history()[0], format!("item-{}", limit + 4));
 
-        // clear で履歴が消える
+        // clear_history で履歴が空になること
         state.clear_history();
         assert!(state.get_history().is_empty());
+    }
+
+    /// 加工成功時に書き戻し本文と観測済み本文が更新されること
+    #[test]
+    fn test_record_processing_success() {
+        let state = test_app_state();
+        state.record_processing_success("processed");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "processed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("processed"));
+    }
+
+    /// 観測のみの場合は last_written_text を変更しないこと
+    #[test]
+    fn test_record_clipboard_observed() {
+        let state = test_app_state();
+        state.with_processed_state(|ps| {
+            ps.last_written_text = Some("written".to_string());
+            ps.last_seen_text = "old".to_string();
+        });
+
+        state.record_clipboard_observed("observed");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "observed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("written"));
+    }
+
+    /// 履歴復元など外部設定時は書き戻しフラグをクリアすること
+    #[test]
+    fn test_record_clipboard_set() {
+        let state = test_app_state();
+        state.with_processed_state(|ps| {
+            ps.last_written_text = Some("written".to_string());
+            ps.last_seen_text = "old".to_string();
+        });
+
+        state.record_clipboard_set("restored");
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "restored");
+        assert_eq!(ps.last_written_text, None);
     }
 }

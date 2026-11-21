@@ -1,56 +1,47 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::thread;
-use std::time::Duration;
 
-use super::clipboard_change::ChangeWatcher;
 use super::notifier;
 use super::state::{AppState, MonitorSnapshot, ProcessedState};
 use crate::config::MonitorMode;
 use crate::notification;
-use crate::refiner::process_clipboard;
+use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, process_clipboard};
 
-use anyhow::{Context, Result};
 use arboard::Clipboard;
 
 // ======================================================================
 // 監視スレッド管理
 // ======================================================================
-/// クリップボード監視スレッドを開始する
+/// クリップボード監視の世代カウンタを進め、ワーカーに監視状態のリセットを通知する
 ///
-/// 現在の監視モード設定（ポーリングまたはイベント）に基づいて、適切な監視スレッドを起動します。
-/// 一時停止中（`is_paused == true`）の場合はスレッドを起動しません。
-/// スレッドの世代管理を行い、設定変更時に古いスレッドが自動的に終了するように制御します。
+/// 監視処理自体はクリップボードワーカースレッド内で実行される
+/// 一時停止中 (`is_paused == true`) の場合は何もしない
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
-pub fn spawn_monitor_thread(state: Arc<AppState>) {
+pub fn bump_monitor_generation(state: Arc<AppState>) {
     if state.with_config(|c| c.is_paused) {
         return;
     }
 
-    let monitor_mode = state.with_config(|c| c.monitor_mode);
-    let generation = state.monitor_generation.fetch_add(1, Ordering::SeqCst) + 1;
-
-    match monitor_mode {
-        MonitorMode::Polling => spawn_polling_monitor_thread(state, generation),
-        MonitorMode::Event => {
-            if ChangeWatcher::new().is_supported() {
-                spawn_event_monitor_thread(state, generation);
-            } else {
-                crate::log_warn!(
-                    "イベント監視が利用できないため、ポーリング監視にフォールバックします"
-                );
-                spawn_polling_monitor_thread(state, generation);
-            }
-        }
-    }
+    state.monitor_generation.fetch_add(1, Ordering::SeqCst);
 }
 
 // ======================================================================
 // クリップボード更新処理
 // ======================================================================
+/// ポーリングスリープを分割するチック間隔(ミリ秒)
+pub(crate) const POLL_TICK_MS: u64 = 50;
+
+/// イベント監視ループのスリープ間隔(ミリ秒)
+pub(crate) const EVENT_POLL_MS: u64 = 100;
+
 /// 加工を試みるべきか判定する。スキップする場合は `processed_state` を更新する。
+///
+/// # Arguments
+/// * `ps` - 前回の加工状態
+/// * `text` - 現在のクリップボードテキスト
+/// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
 ///
 /// # Returns
 /// * `true` - 加工を試みる
@@ -81,8 +72,8 @@ pub(crate) fn should_process_clipboard(
 
 /// クリップボードの内容更新を検知し、必要に応じて加工処理を行う
 ///
-/// 内容に変更があった場合、現在の加工モードを適用し、結果をクリップボードに書き戻します。
-/// 通知の表示や履歴への追加もここで行われます。
+/// 内容に変更があった場合、現在の加工モードを適用し、結果をクリップボードに書き戻す
+/// 通知の表示や履歴への追加もここで行われる
 ///
 /// # Arguments
 /// * `clipboard` - クリップボード操作用のインスタンス
@@ -91,8 +82,8 @@ pub(crate) fn should_process_clipboard(
 /// * `event_driven` - イベント駆動監視の場合は `true`、ポーリングの場合は `false`
 ///
 /// # Returns
-/// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返します。
-pub fn handle_clipboard_update(
+/// * `bool` - 加工が実行され、クリップボードが更新された場合は `true`、それ以外は `false` を返す
+pub(crate) fn handle_clipboard_update(
     clipboard: &mut Clipboard,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
@@ -109,178 +100,75 @@ pub fn handle_clipboard_update(
         return false;
     }
 
-    if let Some(processed) = process_clipboard(clipboard, snap.mode) {
-        state.record_processing_success(&processed);
-        notifier::show_process_notification(state, snap.mode, &processed);
+    let outcome = process_clipboard(clipboard, snap.mode);
+    let updated = record_clipboard_outcome(state, snap, &outcome, &text);
 
-        if snap.history_enabled {
-            state.add_to_history(processed);
+    match &outcome {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            notifier::show_process_notification(state, snap.mode, processed);
         }
-        return true;
+        Ok(ClipboardProcessOutcome::Unchanged) => {}
+        Err(ClipboardProcessError::NoText) => {}
+        Err(e) => {
+            crate::log_error!("クリップボード加工エラー: {} ({:?})", e.user_message(), e);
+            notification::show_notification("加工エラー", e.user_message());
+        }
     }
 
-    state.record_clipboard_observed(&text);
-
-    if snap.history_enabled {
-        state.add_to_history(text);
-    }
-
-    false
+    updated
 }
 
-// ======================================================================
-// ポーリング監視
-// ======================================================================
-/// ポーリングスリープを分割するチック間隔（ミリ秒）
-///
-/// この値ごとに停止条件を確認するため、スレッド停止の最大遅延がこの値に抑えられます。
-const POLL_TICK_MS: u64 = 50;
-
-/// イベント監視ループのスリープ間隔（ミリ秒）
-const EVENT_POLL_MS: u64 = 100;
-
-/// ポーリング（定時確認）方式でクリップボードを監視するスレッドを開始する
-///
-/// 一定間隔（デフォルト1秒など）でクリップボードの内容を確認します。
+/// 加工結果に応じて共有状態と履歴を更新する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
-/// * `generation` - このスレッドの世代番号。最新でない世代のスレッドは自動終了します。
-pub fn spawn_polling_monitor_thread(state: Arc<AppState>, generation: u64) {
-    thread::spawn(move || {
-        let mut clipboard = match init_clipboard() {
-            Ok(cb) => cb,
-            Err(e) => {
-                crate::log_error!("ポーリング監視スレッド初期化エラー: {:?}", e);
-                notification::show_notification(
-                    "監視スレッドエラー",
-                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
-                );
-                return;
-            }
-        };
-
-        {
-            let current_text = clipboard.get_text().unwrap_or_default();
-            state.record_clipboard_observed(&current_text);
-        }
-
-        loop {
-            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
-            if state.monitor_generation.load(Ordering::SeqCst) != generation {
-                break;
-            }
-
-            // config RwLock を1回のみ取得してスナップショットを作成
-            let snap = state.monitor_snapshot();
-            if snap.is_paused {
-                break;
-            }
-
-            // interval_ms を POLL_TICK_MS 刻みで分割してスリープし、
-            // 各チックで停止条件を確認することでスレッド停止の最大遅延を POLL_TICK_MS に抑える
-            let mut elapsed = 0u64;
-            while elapsed < snap.interval_ms {
-                let tick = POLL_TICK_MS.min(snap.interval_ms - elapsed);
-                thread::sleep(Duration::from_millis(tick));
-                elapsed += tick;
-                if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.with_config(|c| c.is_paused)
-                {
-                    return;
-                }
-            }
-
-            handle_clipboard_update(&mut clipboard, &state, &snap, false);
-        }
-    });
-}
-
-// ======================================================================
-// イベント監視
-// ======================================================================
-/// OSの変更トークンを利用してクリップボードを監視するスレッドを開始する
-///
-/// クリップボード本文の定期読み取りを避け、変更トークンの変化時のみ内容を取得します。
-/// ポーリングより低遅延かつ低CPU負荷で動作します。
-///
-/// # Arguments
-/// * `state` - アプリケーションの共有状態
-/// * `generation` - このスレッドの世代番号。
-pub fn spawn_event_monitor_thread(state: Arc<AppState>, generation: u64) {
-    thread::spawn(move || {
-        let watcher = ChangeWatcher::new();
-
-        let mut clipboard = match init_clipboard() {
-            Ok(cb) => cb,
-            Err(e) => {
-                crate::log_error!("イベント監視スレッド初期化エラー: {:?}", e);
-                notification::show_notification(
-                    "監視スレッドエラー",
-                    "クリップボードへのアクセスに失敗しました。クリップボード監視は停止します。",
-                );
-                return;
-            }
-        };
-
-        let current_text = clipboard.get_text().unwrap_or_default();
-        state.record_clipboard_observed(&current_text);
-        let mut last_token = watcher.token().unwrap_or(0);
-
-        loop {
-            // 監視モード変更時にスレッドを終了（最新の世代でないなら終了）
-            if state.monitor_generation.load(Ordering::SeqCst) != generation {
-                break;
-            }
-
-            // config RwLock を1回のみ取得してスナップショットを作成
-            let snap = state.monitor_snapshot();
-            if snap.is_paused {
-                break;
-            }
-
-            if let Some(token) = watcher.token()
-                && token != last_token
-            {
-                last_token = token;
-
-                // クリップボードの更新を処理し、加工が行われたかチェック
-                if handle_clipboard_update(&mut clipboard, &state, &snap, true) {
-                    // 加工が実行された場合、クリップボードが変更されたのでトークンを再取得して更新
-                    last_token = watcher.token().unwrap_or(last_token);
-                }
-            }
-
-            // 変化がない時のCPU負荷を抑えつつ、停止条件を定期的に確認する
-            let mut elapsed = 0u64;
-            while elapsed < EVENT_POLL_MS {
-                let tick = POLL_TICK_MS.min(EVENT_POLL_MS - elapsed);
-                thread::sleep(Duration::from_millis(tick));
-                elapsed += tick;
-                if state.monitor_generation.load(Ordering::SeqCst) != generation
-                    || state.with_config(|c| c.is_paused)
-                {
-                    return;
-                }
-            }
-        }
-    });
-}
-
-// ======================================================================
-// ユーティリティ
-// ======================================================================
-/// クリップボード機能への初期アクセスを確立する
+/// * `snap` - 監視設定スナップショット
+/// * `outcome` - `process_clipboard` の結果
+/// * `observed_text` - 加工前に観測したクリップボード本文
 ///
 /// # Returns
-/// * `Result<Clipboard>` - 初期化された `Clipboard` インスタンス。失敗した場合はエラーを返します。
-pub fn init_clipboard() -> Result<Clipboard> {
-    Clipboard::new().context("クリップボードのアクセスに失敗しました")
+/// * `bool` - クリップボードが加工更新された場合は `true`
+pub(crate) fn record_clipboard_outcome(
+    state: &Arc<AppState>,
+    snap: &MonitorSnapshot,
+    outcome: &Result<ClipboardProcessOutcome, ClipboardProcessError>,
+    observed_text: &str,
+) -> bool {
+    match outcome {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            state.record_processing_success(processed);
+            if snap.history_enabled {
+                state.add_to_history(processed.clone());
+            }
+            true
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => {
+            state.record_clipboard_observed(observed_text);
+            if snap.history_enabled {
+                state.add_to_history(observed_text.to_string());
+            }
+            false
+        }
+        Err(ClipboardProcessError::NoText) => {
+            state.record_clipboard_observed(observed_text);
+            false
+        }
+        Err(_) => {
+            state.record_clipboard_observed(observed_text);
+            if snap.history_enabled {
+                state.add_to_history(observed_text.to_string());
+            }
+            false
+        }
+    }
 }
 
+// ======================================================================
+// UI更新
+// ======================================================================
 /// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
 ///
-/// 例えば、イベントモード時は「監視周期」の設定メニューを無効化します。
+/// 例えば、イベントモード時は「監視周期」の設定メニューを無効化する
 ///
 /// # Arguments
 /// * `menu` - トレイメニュー構造体
@@ -298,7 +186,28 @@ pub fn update_monitor_mode_impl(menu: &super::menu::TrayMenu, monitor_mode: Moni
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::refiner::RefineMode;
 
+    /// 空文字列は加工対象外とすること
+    #[test]
+    fn empty_text_is_not_processed() {
+        let mut ps = ProcessedState::default();
+        assert!(!should_process_clipboard(&mut ps, "", false));
+        assert!(!should_process_clipboard(&mut ps, "", true));
+    }
+
+    /// ポーリング時は新しいテキストを加工対象とすること
+    #[test]
+    fn polling_processes_new_text() {
+        let mut ps = ProcessedState {
+            last_seen_text: "old".to_string(),
+            last_written_text: None,
+        };
+
+        assert!(should_process_clipboard(&mut ps, "new", false));
+    }
+
+    /// 自身の書き戻しによる変更イベントを1回スキップすること
     #[test]
     fn should_skip_own_write_back_echo() {
         let mut ps = ProcessedState {
@@ -311,6 +220,7 @@ mod tests {
         assert_eq!(ps.last_seen_text, "output");
     }
 
+    /// ポーリング時は同一テキストをスキップし、イベント時は再処理すること
     #[test]
     fn polling_skips_unchanged_text() {
         let mut ps = ProcessedState {
@@ -322,6 +232,7 @@ mod tests {
         assert!(should_process_clipboard(&mut ps, "same", true));
     }
 
+    /// イベント駆動時は加工済みテキストの再コピーも処理対象とすること
     #[test]
     fn event_mode_allows_recopy_of_processed_output() {
         let mut ps = ProcessedState {
@@ -329,10 +240,11 @@ mod tests {
             last_written_text: None,
         };
 
-        // 加工結果と同じ文字列の再コピー（イベント駆動）も加工対象とする
+        // 加工結果と同じ文字列の再コピー(イベント駆動)も加工対象とする
         assert!(should_process_clipboard(&mut ps, "processed", true));
     }
 
+    /// イベント駆動時は元テキストの再コピーも処理対象とすること
     #[test]
     fn event_mode_allows_recopy_of_source_text() {
         let mut ps = ProcessedState {
@@ -343,25 +255,150 @@ mod tests {
         assert!(should_process_clipboard(&mut ps, "  source  ", true));
     }
 
+    /// 一時停止中は bump_monitor_generation が世代を進めないこと
     #[test]
-    fn spawn_monitor_thread_skips_when_paused() {
-        use crate::tray::state::AppEvent;
-        use std::sync::{Arc, atomic::Ordering};
-        use tao::event_loop::EventLoopBuilder;
-        #[cfg(windows)]
-        use tao::platform::windows::EventLoopBuilderExtWindows;
+    fn bump_monitor_generation_skips_when_paused() {
+        use std::sync::atomic::Ordering;
 
-        #[cfg(windows)]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event()
-            .with_any_thread(true)
-            .build();
-        #[cfg(not(windows))]
-        let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-
-        let state = Arc::new(AppState::new(event_loop.create_proxy()));
+        let state = Arc::new(crate::tray::state::test_app_state());
         state.with_config_mut(|c| c.is_paused = true);
 
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
+    }
+
+    /// 監視中は bump_monitor_generation が世代カウンタをインクリメントすること
+    #[test]
+    fn bump_monitor_generation_increments_when_active() {
+        use std::sync::atomic::Ordering;
+
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.is_paused = false);
+
+        bump_monitor_generation(Arc::clone(&state));
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 1);
+
+        bump_monitor_generation(Arc::clone(&state));
+        assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 2);
+    }
+
+    fn test_snapshot(mode: RefineMode, history_enabled: bool) -> MonitorSnapshot {
+        MonitorSnapshot {
+            mode,
+            interval_ms: 1000,
+            is_paused: false,
+            history_enabled,
+        }
+    }
+
+    /// 加工成功時に processed_state と履歴が更新されること
+    #[test]
+    fn record_outcome_processed_updates_state_and_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Ok(ClipboardProcessOutcome::Processed("trimmed".to_string()));
+
+        assert!(record_clipboard_outcome(
+            &state,
+            &snap,
+            &outcome,
+            "  trimmed  "
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "trimmed");
+        assert_eq!(ps.last_written_text.as_deref(), Some("trimmed"));
+        assert_eq!(state.get_history(), vec!["trimmed".to_string()]);
+    }
+
+    /// 変更なし時は観測のみ記録し、履歴に元テキストを追加すること
+    #[test]
+    fn record_outcome_unchanged_observes_and_adds_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Ok(ClipboardProcessOutcome::Unchanged);
+
+        assert!(!record_clipboard_outcome(
+            &state,
+            &snap,
+            &outcome,
+            "unchanged"
+        ));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "unchanged");
+        assert_eq!(ps.last_written_text, None);
+        assert_eq!(state.get_history(), vec!["unchanged".to_string()]);
+    }
+
+    /// 履歴無効時は履歴に追加しないこと
+    #[test]
+    fn record_outcome_skips_history_when_disabled() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, false);
+        let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
+
+        record_clipboard_outcome(&state, &snap, &outcome, "x");
+        assert!(state.get_history().is_empty());
+    }
+
+    /// NoText エラー時は観測のみ記録し履歴に追加しないこと
+    #[test]
+    fn record_outcome_no_text_observes_only() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Err(ClipboardProcessError::NoText);
+
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
+
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "");
+        assert!(state.get_history().is_empty());
+    }
+
+    /// 読み取り失敗時は観測を記録し履歴に追加すること
+    #[test]
+    fn record_outcome_read_error_observes_and_adds_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(RefineMode::Trim, true);
+        let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
+
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
+
+        assert_eq!(state.get_history(), vec!["source".to_string()]);
+    }
+
+    /// クリップボード更新の統合テスト
+    ///
+    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
+    /// 手動実行: `cargo test test_handle_clipboard_update_integration -- --ignored`
+    #[test]
+    #[ignore = "システムクリップボードへのアクセスが必要"]
+    fn test_handle_clipboard_update_integration() {
+        let mut clipboard = Clipboard::new().expect("クリップボードの初期化に失敗");
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.mode = RefineMode::Trim);
+
+        let input = "  clip_refiner_monitor_test  ";
+        clipboard
+            .set_text(input.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+
+        let snap = test_snapshot(RefineMode::Trim, false);
+        assert!(handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            false
+        ));
+
+        assert_eq!(
+            clipboard
+                .get_text()
+                .expect("クリップボードの読み取りに失敗"),
+            "clip_refiner_monitor_test"
+        );
+        let ps = state.with_processed_state(|s| s.clone());
+        assert_eq!(ps.last_seen_text, "clip_refiner_monitor_test");
     }
 }

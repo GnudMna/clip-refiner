@@ -2,17 +2,17 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::notifier;
 use super::selector::SelectorWindow;
 use super::state::{AppEvent, AppState};
+use crate::config::HotkeySettings;
+use crate::consts;
+use crate::hotkey_binding::resolve_hotkey;
 use crate::notification;
 
 use anyhow::Result;
-use global_hotkey::{
-    GlobalHotKeyEvent, GlobalHotKeyManager,
-    hotkey::{Code, HotKey, Modifiers},
-};
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::HotKey};
 use tao::event_loop::{ControlFlow, EventLoopProxy};
 
 // ======================================================================
@@ -21,17 +21,17 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 /// グローバルホットキーの登録と管理を行う構造体
 ///
 /// アプリケーションが非アクティブな状態でも、特定のキー入力を監視して
-/// モード選択UIの表示や設定の切り替えなどを実行します。
+/// モード選択UIの表示や設定の切り替えなどを実行する
 pub struct HotkeyHandler {
     /// ホットキーマネージャーのインスタンス保持用
     _manager: GlobalHotKeyManager,
-    /// セレクタ表示・非表示用ホットキー (Alt+Shift+S)
+    /// セレクタ表示・非表示用ホットキー
     selector_hotkey: HotKey,
-    /// 通知有効・無効切替用ホットキー (Alt+Shift+N)
+    /// 通知有効・無効切替用ホットキー
     notification_hotkey: HotKey,
-    /// 一時停止・再開用ホットキー (Alt+Shift+P)
+    /// 一時停止・再開用ホットキー
     pause_hotkey: HotKey,
-    /// アプリケーション終了用ホットキー (Alt+Shift+Q)
+    /// アプリケーション終了用ホットキー
     quit_hotkey: HotKey,
 }
 
@@ -41,14 +41,26 @@ pub struct HotkeyHandler {
 impl HotkeyHandler {
     /// ホットキーハンドラを初期化し、各種ショートカットをシステムに登録する
     ///
+    /// # Arguments
+    /// * `hotkeys` - 設定ファイルから読み込んだホットキー割り当て
+    ///
     /// # Returns
-    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返します。
-    pub fn new() -> Result<Self> {
+    /// * `Result<Self>` - 初期化された `HotkeyHandler` インスタンス。登録に失敗した場合はエラーを返す
+    pub fn new(hotkeys: &HotkeySettings) -> Result<Self> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
-        let selector_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS);
-        let notification_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN);
-        let pause_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyP);
-        let quit_hotkey = HotKey::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyQ);
+
+        let selector_hotkey = resolve_hotkey(
+            &hotkeys.selector,
+            consts::DEFAULT_HOTKEY_SELECTOR,
+            "selector",
+        );
+        let notification_hotkey = resolve_hotkey(
+            &hotkeys.notification,
+            consts::DEFAULT_HOTKEY_NOTIFICATION,
+            "notification",
+        );
+        let pause_hotkey = resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause");
+        let quit_hotkey = resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit");
 
         let register = |hotkey| manager.register(hotkey).map_err(|e| anyhow::anyhow!(e));
 
@@ -73,10 +85,10 @@ impl HotkeyHandler {
 impl HotkeyHandler {
     /// ホットキーイベントを受信するためのバックグラウンドスレッドを開始する
     ///
-    /// 受信したイベントは `proxy` を介してメインのイベントループへ転送されます。
+    /// 受信したイベントは `proxy` を介してメインのイベントループへ転送される
     ///
     /// # Arguments
-    /// * `proxy` - UIスレッド（イベントループ）へイベントを送信するためのプロキシ
+    /// * `proxy` - UIスレッド(イベントループ)へイベントを送信するためのプロキシ
     pub fn start_event_listener(&self, proxy: EventLoopProxy<AppEvent>) {
         std::thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
@@ -99,7 +111,7 @@ impl HotkeyHandler {
     /// * `menu` - トレイメニュー構造体
     /// * `selector` - セレクタウィンドウのインスタンス
     /// * `control_flow` - イベントループの制御フロー
-    /// * `last_selector_show` - セレクタが最後に表示された時刻（更新用）
+    /// * `last_selector_show` - セレクタが最後に表示された時刻(更新用)
     pub fn handle_event(
         &self,
         event: GlobalHotKeyEvent,
@@ -141,7 +153,7 @@ impl HotkeyHandler {
                 menu.pause_item.set_checked(new_paused);
                 state.save_config();
                 notifier::show_pause_notification(state, new_paused, "ショートカット");
-                spawn_monitor_thread(Arc::clone(state));
+                bump_monitor_generation(Arc::clone(state));
             } else if event.id == self.quit_hotkey.id() {
                 *control_flow = ControlFlow::Exit;
             }

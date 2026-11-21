@@ -5,7 +5,7 @@ use std::time::Instant;
 use super::event;
 use super::hotkey::HotkeyHandler;
 use super::menu::TrayMenu;
-use super::monitor::spawn_monitor_thread;
+use super::monitor::bump_monitor_generation;
 use super::selector::{SelectorWindow, init_selector};
 use super::state::{AppEvent, AppState};
 
@@ -19,8 +19,8 @@ use tray_icon::menu::MenuEvent;
 // ======================================================================
 /// アプリケーション全体のコンテキストとメインロジックを管理する構造体
 ///
-/// 各コンポーネント（状態、メニュー、UI、ホットキー、ワーカー）を保持し、
-/// イベントループからのメッセージを処理します。
+/// 各コンポーネント(状態、メニュー、UI、ホットキー、ワーカー)を保持し、
+/// イベントループからのメッセージを処理する
 pub struct App {
     /// アプリケーションの共有状態
     pub state: Arc<AppState>,
@@ -32,7 +32,7 @@ pub struct App {
     pub hotkey_handler: HotkeyHandler,
     /// クリップボード処理ワーカーへの送信チャネル
     pub clipboard_tx: Sender<super::worker::ClipboardCommand>,
-    /// 最後にセレクタを表示した時刻（連打防止用）
+    /// 最後にセレクタを表示した時刻(連打防止用)
     pub last_selector_show: Instant,
 }
 
@@ -42,24 +42,25 @@ pub struct App {
 impl App {
     /// アプリケーションを初期化する
     ///
-    /// 必要なコンポーネントをすべて生成し、ホットキーやクリップボードの監視を開始します。
+    /// 必要なコンポーネントをすべて生成し、ホットキーやクリップボードの監視を開始する
     ///
     /// # Arguments
     /// * `event_loop` - ウィンドウを作成するためのイベントループ
     /// * `proxy` - UIスレッドへイベントを送信するためのプロキシ
     ///
     /// # Returns
-    /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合はエラーを返します。
+    /// * `Result<Self>` - 初期化された `App` インスタンス。失敗した場合はエラーを返す。
     pub fn new(event_loop: &EventLoop<AppEvent>, proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
         let state = Arc::new(AppState::new(proxy.clone()));
         let menu = TrayMenu::build(&state)?;
-        let hotkey_handler = HotkeyHandler::new()?;
+        let hotkeys = state.with_config(|c| c.hotkeys.clone());
+        let hotkey_handler = HotkeyHandler::new(&hotkeys)?;
         let selector = init_selector(event_loop, proxy.clone())?;
         let clipboard_tx = super::worker::spawn_clipboard_worker(Arc::clone(&state));
 
         hotkey_handler.start_event_listener(proxy);
         menu.refresh_history(&state)?;
-        spawn_monitor_thread(Arc::clone(&state));
+        bump_monitor_generation(Arc::clone(&state));
 
         Ok(Self {
             state,
@@ -78,7 +79,7 @@ impl App {
 impl App {
     /// メインループからのイベントを受信し、適切に振り分けて処理する
     ///
-    /// ユーザーイベント、ウィンドウイベント、メニューイベントなどを各ハンドラに委譲します。
+    /// ユーザーイベント、ウィンドウイベント、メニューイベントなどを各ハンドラに委譲する
     ///
     /// # Arguments
     /// * `event` - 受信したイベント
@@ -111,7 +112,7 @@ impl App {
 
     /// アプリケーション独自のユーザーイベント (`AppEvent`) を処理する
     ///
-    /// モード変更要求、ホットキー通知、履歴の更新などを処理します。
+    /// モード変更要求、ホットキー通知、履歴の更新などを処理する
     ///
     /// # Arguments
     /// * `event` - 処理対象の `AppEvent`

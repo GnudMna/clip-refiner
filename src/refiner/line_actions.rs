@@ -6,15 +6,15 @@ use csv::{ReaderBuilder, WriterBuilder};
 // ======================================================================
 /// 行またはCSVレコード単位でテキストを並び替える
 ///
-/// テキストの内容（プレーンテキストの行、またはCSV形式のレコード）を自動判別し、
-/// アルファベット順（大文字小文字無視）でソートします。
+/// テキストの内容(プレーンテキストの行、またはCSV形式のレコード)を自動判別し、
+/// アルファベット順(大文字小文字無視)でソートする
 ///
 /// # Arguments
 /// * `text` - 並び替える対象のテキスト
 /// * `descending` - 降順にする場合は `true`、昇順にする場合は `false`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - 並び替え後のテキスト。変更がない場合は元の文字列への参照を返す。
 pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -34,14 +34,14 @@ pub fn sort_lines(text: &str, descending: bool) -> Cow<'_, str> {
 // ======================================================================
 /// テキストから空行を削除する
 ///
-/// 改行のみの行、または空白文字（スペース、タブなど）のみの行を取り除きます。
-/// 元の改行形式（LF または CRLF）は維持されます。
+/// 改行のみの行、または空白文字(スペース、タブなど)のみの行を取り除く
+/// 元の改行形式(LF または CRLF)は維持される
 ///
 /// # Arguments
 /// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 空行が削除されたテキスト。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - 空行が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
 pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -61,16 +61,16 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// 重複行を削除する（出現順序を維持する）
+/// 重複行を削除する(出現順序を維持する)
 ///
-/// テキスト内の重複する行を特定し、最初に出現した行のみを残して他を削除します。
-/// セット（HashSet）を使用して効率的に重複を判定します。
+/// テキスト内の重複する行を特定し、最初に出現した行のみを残して他を削除する
+/// セット(HashSet)を使用して効率的に重複を判定する
 ///
 /// # Arguments
 /// * `text` - 処理対象のテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 重複行が削除されたテキスト。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - 重複行が削除されたテキスト。変更がない場合は元の文字列への参照を返す。
 pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
     if text.is_empty() {
         return Cow::Borrowed(text);
@@ -99,16 +99,16 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// テキストがCSVである可能性が高いか判定する
 ///
-/// 以下の条件をすべて満たす場合に CSV と判定します。
+/// 以下の条件をすべて満たす場合に CSV と判定する
 /// 1. カラム数が 2 以上
-/// 2. 行数が 2 以上（1行のみでは断定しない）
+/// 2. 行数が 2 以上(1行のみでは断定しない)
 /// 3. すべての行でカラム数が一致する(不一致・パースエラーは`false`)
 ///
 /// # Arguments
 /// * `text` - 判定対象のテキスト
 ///
 /// # Returns
-/// * `bool` - CSVとみなせる場合は`true`、そうでない場合は`false`。
+/// * `bool` - CSVとみなせる場合は`true`、そうでない場合は`false`
 fn is_likely_csv(text: &str) -> bool {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
@@ -155,8 +155,8 @@ fn is_likely_csv(text: &str) -> bool {
 // ======================================================================
 /// CSVレコードとしてテキストを並び替える
 ///
-/// レコード全体をカンマで結合した文字列に基づいてソートを行います。
-/// クォートで囲まれた改行を含むレコードも正しく処理します。
+/// レコード全体をカンマで結合した文字列に基づいてソートを行う
+/// クォートで囲まれた改行を含むレコードも正しく処理する
 ///
 /// # Arguments
 /// * `text` - 並び替える対象のCSVテキスト
@@ -164,7 +164,7 @@ fn is_likely_csv(text: &str) -> bool {
 /// * `descending` - 降順にする場合は `true`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - レコード単位で並び替えられたCSVテキスト。
+/// * `Cow<'_, str>` - レコード単位で並び替えられたCSVテキスト
 fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
     let mut rdr = ReaderBuilder::new()
         .has_headers(false)
@@ -217,7 +217,7 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
 
 /// 単純なテキスト行として並び替える
 ///
-/// 各行を文字列として比較し、ソートを行います。比較時は大文字小文字を区別しません。
+/// 各行を文字列として比較し、ソートを行う。比較時は大文字小文字を区別しない。
 ///
 /// # Arguments
 /// * `text` - 並び替える対象のテキスト
@@ -225,7 +225,7 @@ fn sort_csv_records<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
 /// * `descending` - 降順にする場合は `true`
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 行単位で並び替えられたテキスト。
+/// * `Cow<'_, str>` - 行単位で並び替えられたテキスト
 fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> Cow<'a, str> {
     let mut lines: Vec<&str> = text.lines().collect();
     if descending {
@@ -248,6 +248,7 @@ fn sort_plain_lines<'a>(text: &'a str, line_ending: &str, descending: bool) -> C
 mod tests {
     use super::*;
 
+    /// プレーンテキスト行の昇順ソート
     #[test]
     fn test_sort_plain_lines() {
         let input = "banana\nApple\ncherry";
@@ -255,6 +256,7 @@ mod tests {
         assert_eq!(sort_lines(input, false), expected);
     }
 
+    /// プレーンテキスト行の降順ソート
     #[test]
     fn test_sort_plain_lines_descending() {
         let input = "banana\nApple\ncherry";
@@ -262,6 +264,7 @@ mod tests {
         assert_eq!(sort_lines(input, true), expected);
     }
 
+    /// CRLF 入力でソート後も CRLF を保持すること
     #[test]
     fn test_sort_lines_preserve_crlf() {
         let input = "banana\r\nApple\r\ncherry";
@@ -269,16 +272,18 @@ mod tests {
         assert_eq!(sort_lines(input, false), expected);
     }
 
+    /// クォート内改行を含む CSV のソート
     #[test]
     fn test_sort_csv_with_newlines() {
         let input = "z,\"cell\nwith\nnewline\",3\na,\"simple\",1";
-        // csv crate handles quotes and escapes.
-        // Sorting will put 'a' row first.
+        // csv クレートがクォート内改行を処理する
+        // 'a' 行が先頭になること
         let output = sort_lines(input, false);
         assert!(output.starts_with("a,simple,1"));
         assert!(output.contains("z,\"cell\nwith\nnewline\",3"));
     }
 
+    /// 空行削除の基本動作
     #[test]
     fn test_remove_empty_lines() {
         let input = "line1\n\n  \nline2\n\t\nline3";
@@ -286,6 +291,7 @@ mod tests {
         assert_eq!(remove_empty_lines(input), expected);
     }
 
+    /// 重複行削除(出現順序維持)
     #[test]
     fn test_remove_duplicate_lines() {
         let input = "line1\nline2\nline1\nline3\nline2";

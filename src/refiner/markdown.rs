@@ -7,14 +7,14 @@ use pulldown_cmark::{Options, Parser, html};
 // ======================================================================
 /// MarkdownをHTMLへ変換する
 ///
-/// 入力されたMarkdownテキストを解析し、HTML形式の文字列に変換します。
-/// テーブル、脚注、取り消し線、タスクリスト、スマートパンクチュエーションなどの拡張機能をサポートしています。
+/// 入力されたMarkdownテキストを解析し、HTML形式の文字列に変換する
+/// テーブル、脚注、取り消し線、タスクリスト、スマートパンクチュエーションなどの拡張機能をサポートしている
 ///
 /// # Arguments
 /// * `text` - 変換対象のMarkdownテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - 変換後のHTML文字列。変更がない場合は元の文字列への参照を返す。
 pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -40,15 +40,15 @@ pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// Excel(TSV)形式のテキストをMarkdownの表形式へ変換する
 ///
-/// タブ区切り（TSV）のテキストを解析し、Markdownのテーブル形式に変換します。
-/// セル内の改行は `<br>` タグに置換され、パイプ記号（`|`）はエスケープされます。
-/// 1行目はヘッダーとして扱われます。
+/// タブ区切り(TSV)のテキストを解析し、Markdownのテーブル形式に変換する
+/// セル内の改行は `<br>` タグに置換され、パイプ記号(`|`)はエスケープされる
+/// 1行目はヘッダーとして扱う
 ///
 /// # Arguments
 /// * `text` - 変換対象のTSVテキスト
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。パースに失敗した場合は元の文字列を返します。
+/// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。パースに失敗した場合は元の文字列を返す。
 pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b'\t')
@@ -80,7 +80,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 
     let mut markdown = String::new();
 
-    // Header row
+    // 1行目をヘッダー行として出力
     let header_row = &records[0];
     markdown.push('|');
     for i in 0..max_cols {
@@ -93,14 +93,14 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     }
     markdown.push('\n');
 
-    // Separator
+    // 区切り行(`|---|`)を出力
     markdown.push('|');
     for _ in 0..max_cols {
         markdown.push_str("---|");
     }
     markdown.push('\n');
 
-    // Data rows
+    // 2行目以降をデータ行として出力
     for record in records.iter().skip(1) {
         markdown.push('|');
         for i in 0..max_cols {
@@ -129,6 +129,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 mod tests {
     use super::*;
 
+    /// 見出しと太字の基本的な Markdown→HTML 変換
     #[test]
     fn test_markdown_to_html_basic() {
         let input = "# Header\n**bold**";
@@ -144,14 +145,14 @@ mod tests {
         assert!(output.contains("<em>italic</em>"));
     }
 
-    /// 取り消し線の変換（ENABLE_STRIKETHROUGH）
+    /// 取り消し線の変換(ENABLE_STRIKETHROUGH)
     #[test]
     fn test_markdown_to_html_strikethrough() {
         let output = markdown_to_html("~~strike~~");
         assert!(output.contains("<del>strike</del>"));
     }
 
-    /// テーブルの変換（ENABLE_TABLES）
+    /// テーブルの変換(ENABLE_TABLES)
     #[test]
     fn test_markdown_to_html_table() {
         let input = "| A | B |\n|---|---|\n| 1 | 2 |";

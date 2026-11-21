@@ -1,3 +1,7 @@
+//! クリップボード加工モードの定義と、各モードへのディスパッチを提供するモジュール
+//!
+//! `RefineMode` による加工処理の統合と、クリップボードへの読み書きを担当する
+
 pub mod datetime;
 pub mod escape;
 pub mod json;
@@ -23,9 +27,9 @@ use strum::{EnumIter, EnumMessage, IntoEnumIterator, IntoStaticStr};
 // ======================================================================
 /// クリップボードのテキストを加工する各モードの定義
 ///
-/// 各バリアントは特定のテキスト加工処理（エンコード、デコード、整形、変換など）に対応しています。
-/// `strum` マクロを使用して UI 表示用のラベルを保持しています。
-/// カテゴリへの所属は `RefineMode::category()` で定義します。
+/// 各バリアントは特定のテキスト加工処理(エンコード、デコード、整形、変換など)に対応している
+/// `strum` マクロを使用して UI 表示用のラベルを保持している
+/// カテゴリへの所属は `RefineMode::category()` で定義する
 #[derive(
     Copy,
     Clone,
@@ -116,11 +120,11 @@ pub enum RefineMode {
     #[value(help = "正規表現のアンエスケープ")]
     #[strum(message = "正規表現アンエスケープ")]
     RegexUnescape,
-    /// JSON形式をインデント整形する（キーの順序はパース時に不定となる）
+    /// JSON形式をインデント整形する(キーの順序はパース時に不定となる)
     #[value(help = "JSON形式を整形(キー順序不同)")]
     #[strum(message = "JSON整形(キー順序不同)")]
     JsonFormat,
-    /// JSON形式をインデント整形する（元のキー順序を維持する）
+    /// JSON形式をインデント整形する(元のキー順序を維持する)
     #[value(help = "JSON形式を整形(キー順序保持)")]
     #[strum(message = "JSON整形(キー順序保持)")]
     JsonFormatPreserveOrder,
@@ -128,7 +132,7 @@ pub enum RefineMode {
     #[value(help = "YAML形式をJSON形式へ変換(キー順序不同)")]
     #[strum(message = "YAML→JSON(キー順序不同)")]
     YamlToJson,
-    /// YAML形式をJSON形式へ変換する（元のキー順序を維持する）
+    /// YAML形式をJSON形式へ変換する(元のキー順序を維持する)
     #[value(help = "YAML形式をJSON形式へ変換(キー順序保持)")]
     #[strum(message = "YAML→JSON(キー順序保持)")]
     YamlToJsonPreserveOrder,
@@ -136,7 +140,7 @@ pub enum RefineMode {
     #[value(help = "JSON形式をYAML形式へ変換(キー順序不同)")]
     #[strum(message = "JSON→YAML(キー順序不同)")]
     JsonToYaml,
-    /// JSON形式をYAML形式へ変換する（元のキー順序を維持する）
+    /// JSON形式をYAML形式へ変換する(元のキー順序を維持する)
     #[value(help = "JSON形式をYAML形式へ変換(キー順序保持)")]
     #[strum(message = "JSON→YAML(キー順序保持)")]
     JsonToYamlPreserveOrder,
@@ -156,11 +160,11 @@ pub enum RefineMode {
     #[value(help = "日時文字列をUnixタイムスタンプへ変換")]
     #[strum(message = "日時文字列→Unixタイムスタンプ")]
     DatetimeToTimestamp,
-    /// 数値に対して3桁ごとのカンマを付与する（例: 1000 -> 1,000）
+    /// 数値に対して3桁ごとのカンマを付与する(例: 1000 -> 1,000)
     #[value(help = "カンマ無し数値をカンマ区切りの数値に")]
     #[strum(message = "カンマ追加")]
     AddComma,
-    /// 数値からカンマを削除する（例: 1,000 -> 1000）
+    /// 数値からカンマを削除する(例: 1,000 -> 1000)
     #[value(help = "カンマ区切りの数値をカンマ無し数値に")]
     #[strum(message = "カンマ除去")]
     RemoveComma,
@@ -171,7 +175,7 @@ pub enum RefineMode {
 // ======================================================================
 /// トレイメニューの階層化に使用されるカテゴリ
 ///
-/// 多くの加工モードを整理するために、関連するモードをグループ化します。
+/// 多くの加工モードを整理するために、関連するモードをグループ化する
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, EnumIter, EnumMessage, IntoStaticStr)]
 pub enum RefineCategory {
     /// 通常の単独メニュー
@@ -216,16 +220,16 @@ impl RefineCategory {
     /// カテゴリの表示名を取得する
     ///
     /// # Returns
-    /// * `&'static str` - UIに表示するためのカテゴリ名。
+    /// * `&'static str` - UIに表示するためのカテゴリ名
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
 
-    /// トレイメニューのサブメニュー表示順（`Normal` を除く）
+    /// トレイメニューのサブメニュー表示順(`Normal` を除く)
     pub const SUBMENU_ORDER: [Self; 10] = [
+        Self::LineActions,
         Self::UrlActions,
         Self::Path,
-        Self::LineActions,
         Self::Trim,
         Self::Escape,
         Self::JsonFormat,
@@ -245,7 +249,7 @@ impl RefineMode {
     /// UIに表示する名前を取得する
     ///
     /// # Returns
-    /// * `&'static str` - モードに対応する静的な文字列ラベル。
+    /// * `&'static str` - モードに対応する静的な文字列ラベル
     pub fn label(&self) -> &'static str {
         self.get_message().unwrap_or("")
     }
@@ -253,7 +257,7 @@ impl RefineMode {
     /// 所属するカテゴリを取得する。トレイメニューの階層構築に利用される
     ///
     /// # Returns
-    /// * `RefineCategory` - モードが属するカテゴリ。
+    /// * `RefineCategory` - モードが属するカテゴリ
     pub fn category(&self) -> RefineCategory {
         use RefineCategory as C;
         match self {
@@ -279,14 +283,36 @@ impl RefineMode {
         }
     }
 
-    /// UI（Webview）に渡すためのモード情報のJSONリストを生成する
+    /// クイックセレクタ向けのモード表示順を返す
+    ///
+    /// トレイメニューと同様に、通常項目を先頭に、続けてカテゴリ順で並べる
+    ///
+    /// # Returns
+    /// * `Vec<RefineMode>` - 表示順に並んだモード一覧
+    pub fn selector_modes() -> Vec<Self> {
+        let mut ordered = Vec::new();
+        ordered.extend(Self::iter().filter(|m| m.category() == RefineCategory::Normal));
+        for category in RefineCategory::SUBMENU_ORDER {
+            ordered.extend(Self::iter().filter(|m| m.category() == category));
+        }
+        ordered
+    }
+
+    /// UI(Webview)に渡すためのモード情報のJSONリストを生成する
+    ///
+    /// # Returns
+    /// * `String` - モード ID・ラベル・カテゴリ・CLI 名を含む JSON 配列文字列
     pub fn to_json_list() -> String {
-        let list: Vec<serde_json::Value> = RefineMode::iter()
+        let list: Vec<serde_json::Value> = Self::selector_modes()
+            .iter()
             .map(|m| {
                 serde_json::json!({
                     "id": m,
                     "label": m.label(),
                     "category": m.category().label(),
+                    "value": m.to_possible_value()
+                        .map(|v| v.get_name().to_string())
+                        .unwrap_or_default(),
                 })
             })
             .collect();
@@ -299,16 +325,22 @@ impl RefineMode {
 // ======================================================================
 /// JSONやYAMLのパース時にキーの順序を保持するための値構造
 ///
-/// `serde_json::Value` と似ていますが、オブジェクトの保持に `IndexMap` を使用し、
-/// データの順序を維持したままシリアライズ・デシリアライズが可能です。
+/// `serde_json::Value` と似ているが、オブジェクトの保持に `IndexMap` を使用し、
+/// データの順序を維持したままシリアライズ・デシリアライズが可能
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OrderedValue {
+    /// JSON の null 値
     Null,
+    /// 真偽値
     Bool(bool),
+    /// 数値
     Number(serde_json::Number),
+    /// 文字列
     String(String),
+    /// 配列
     Array(Vec<OrderedValue>),
+    /// キー順序を保持するオブジェクト
     Object(IndexMap<String, OrderedValue>),
 }
 
@@ -323,7 +355,7 @@ pub trait Refiner {
     /// * `text` - 加工前のテキスト
     ///
     /// # Returns
-    /// * `Cow<'a, str>` - 加工後のテキスト（変更がない場合は元のテキストを借用）
+    /// * `Cow<'a, str>` - 加工後のテキスト(変更がない場合は元のテキストを借用)
     fn refine<'a>(&self, text: &'a str) -> Cow<'a, str>;
 }
 
@@ -370,36 +402,72 @@ impl Refiner for RefineMode {
 // ======================================================================
 // クリップボード処理
 // ======================================================================
+/// クリップボード加工の成功結果
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardProcessOutcome {
+    /// 加工してクリップボードへ書き戻した
+    Processed(String),
+    /// テキストに変更がなかった
+    Unchanged,
+}
+
+/// クリップボード加工の失敗理由
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardProcessError {
+    /// クリップボードが空、またはテキスト形式ではない
+    NoText,
+    /// クリップボードの読み取りに失敗
+    ReadFailed(String),
+    /// クリップボードへの書き込みに失敗
+    WriteFailed(String),
+}
+
+impl ClipboardProcessError {
+    /// ユーザー向けのエラーメッセージを返す
+    pub fn user_message(&self) -> &str {
+        match self {
+            Self::NoText => "クリップボードにテキストがありません",
+            Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
+            Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
+        }
+    }
+}
+
 /// クリップボードのテキストを取得し、指定されたモードで加工して書き戻す
 ///
-/// テキストが変更された場合のみクリップボードを更新し、その内容を返します。
+/// テキストが変更された場合のみクリップボードを更新する
 ///
 /// # Arguments
 /// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
 /// * `mode` - 適用する加工モード (`RefineMode`)
 ///
 /// # Returns
-/// * `Option<String>` - テキストが加工された場合は `Some(加工後テキスト)` を返し、
-///   変更がなかった場合や空の場合は `None` を返します。
-pub fn process_clipboard(clipboard: &mut Clipboard, mode: RefineMode) -> Option<String> {
-    let text = clipboard.get_text().ok()?;
+/// * `Ok(ClipboardProcessOutcome::Processed)` - 加工して書き戻した
+/// * `Ok(ClipboardProcessOutcome::Unchanged)` - 変更がなかった
+/// * `Err(ClipboardProcessError)` - 読み取り・書き込み失敗、またはテキストがない
+pub fn process_clipboard(
+    clipboard: &mut Clipboard,
+    mode: RefineMode,
+) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
+    let text = clipboard
+        .get_text()
+        .map_err(|e| ClipboardProcessError::ReadFailed(e.to_string()))?;
+
     if text.is_empty() {
-        return None;
+        return Err(ClipboardProcessError::NoText);
     }
 
     let refined = mode.refine(&text);
 
-    // 変更がない場合は更新しない
     if refined == text {
-        return None;
+        return Ok(ClipboardProcessOutcome::Unchanged);
     }
 
     let result = refined.into_owned();
-    if clipboard.set_text(result.clone()).is_ok() {
-        Some(result)
-    } else {
-        None
-    }
+    clipboard
+        .set_text(result.clone())
+        .map_err(|e| ClipboardProcessError::WriteFailed(e.to_string()))?;
+    Ok(ClipboardProcessOutcome::Processed(result))
 }
 
 // ======================================================================
@@ -410,6 +478,7 @@ mod tests {
     use super::*;
     use arboard::Clipboard;
 
+    /// RefineMode のラベルとカテゴリが期待どおりであること
     #[test]
     fn test_refine_mode_metadata() {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
@@ -454,6 +523,75 @@ mod tests {
         );
     }
 
+    /// 全 RefineMode の label が空でないこと
+    #[test]
+    fn test_all_refine_modes_have_nonempty_labels() {
+        for mode in RefineMode::iter() {
+            assert!(!mode.label().is_empty(), "{mode:?} の label が空です");
+        }
+    }
+
+    /// is_deferred_in_menu が Datetime / Number のみ true であること
+    #[test]
+    fn test_refine_category_is_deferred_in_menu() {
+        use RefineCategory::*;
+
+        assert!(Datetime.is_deferred_in_menu());
+        assert!(Number.is_deferred_in_menu());
+
+        for category in RefineCategory::iter() {
+            if matches!(category, Datetime | Number) {
+                continue;
+            }
+            assert!(
+                !category.is_deferred_in_menu(),
+                "{category:?} は遅延配置対象ではない"
+            );
+        }
+    }
+
+    /// to_json_list が全モード分の有効な JSON を返すこと
+    #[test]
+    fn test_to_json_list() {
+        let json = RefineMode::to_json_list();
+        let parsed: Vec<serde_json::Value> =
+            serde_json::from_str(&json).expect("to_json_list の出力が JSON として不正");
+
+        assert_eq!(parsed.len(), RefineMode::iter().count());
+
+        for item in parsed {
+            assert!(item.get("id").is_some());
+            assert!(item.get("label").is_some());
+            assert!(item.get("category").is_some());
+            assert!(item.get("value").is_some());
+        }
+    }
+
+    /// selector_modes が全モードをトレイメニュー相当の順序で返すこと
+    #[test]
+    fn test_selector_modes_order() {
+        let ordered = RefineMode::selector_modes();
+        assert_eq!(ordered.len(), RefineMode::iter().count());
+
+        let normal_count = RefineMode::iter()
+            .filter(|m| m.category() == RefineCategory::Normal)
+            .count();
+        assert!(normal_count > 0);
+        for mode in &ordered[..normal_count] {
+            assert_eq!(mode.category(), RefineCategory::Normal);
+        }
+
+        let mut seen_categories = Vec::new();
+        for mode in ordered.iter().skip(normal_count) {
+            let category = mode.category();
+            if seen_categories.last() != Some(&category) {
+                seen_categories.push(category);
+            }
+        }
+        assert_eq!(seen_categories, RefineCategory::SUBMENU_ORDER.to_vec());
+    }
+
+    /// RefineMode のバリアント数と主要バリアントの存在を確認すること
     #[test]
     fn test_refine_mode_variants() {
         let variants: Vec<_> = RefineMode::iter().collect();
@@ -464,251 +602,189 @@ mod tests {
         assert_eq!(variants.len(), 31);
     }
 
-    /// クリップボード処理の統合テスト
-    /// 実際のクリップボード操作を伴うため、実行環境によってはスキップされる可能性がある
+    /// `ClipboardProcessError` がユーザー向けメッセージを返すこと
     #[test]
-    fn test_process_clipboard_integration() {
-        // 並列実行による干渉を避けるため、1つのテストケースにまとめる
-        if let Ok(mut cb) = Clipboard::new() {
-            // Case 1: 変化あり
-            let unique_str_1 = "  clip_refiner_test_1  ";
-            let _ = cb.set_text(unique_str_1.to_string());
-            // システムのクリップボードへの反映を待つ必要がある場合があるが、まずはそのまま
-            if let Ok(current) = cb.get_text() {
-                if current == unique_str_1 {
-                    let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert_eq!(result, Some("clip_refiner_test_1".to_string()));
-                } else {
-                    eprintln!(
-                        "Clipboard content mismatch for unique_str_1. Expected: '{}', Got: '{}'",
-                        unique_str_1, current
-                    );
-                }
-            } else {
-                eprintln!("Failed to get clipboard text for unique_str_1.");
-            }
+    fn test_clipboard_process_error_user_message() {
+        assert_eq!(
+            ClipboardProcessError::NoText.user_message(),
+            "クリップボードにテキストがありません"
+        );
+        assert_eq!(
+            ClipboardProcessError::ReadFailed("detail".to_string()).user_message(),
+            "クリップボードの読み取りに失敗しました"
+        );
+        assert_eq!(
+            ClipboardProcessError::WriteFailed("detail".to_string()).user_message(),
+            "クリップボードへの書き込みに失敗しました"
+        );
+    }
 
-            // Case 2: 変化なし
-            let unique_str_2 = "clip_refiner_test_2";
-            let _ = cb.set_text(unique_str_2.to_string());
-            if let Ok(current) = cb.get_text() {
-                if current == unique_str_2 {
-                    let result = process_clipboard(&mut cb, RefineMode::Trim);
-                    assert!(result.is_none());
-                } else {
-                    eprintln!(
-                        "Clipboard content mismatch for unique_str_2. Expected: '{}', Got: '{}'",
-                        unique_str_2, current
-                    );
-                }
-            } else {
-                eprintln!("Failed to get clipboard text for unique_str_2.");
-            }
-        } else {
-            eprintln!("Failed to initialize clipboard. Skipping clipboard integration tests.");
-        }
+    /// クリップボード処理の統合テスト
+    ///
+    /// システムクリップボードへのアクセスが必要なため、通常の `cargo test` では除外される
+    /// 手動実行: `cargo test test_process_clipboard_integration -- --ignored`
+    #[test]
+    #[ignore = "システムクリップボードへのアクセスが必要"]
+    fn test_process_clipboard_integration() {
+        let mut cb = Clipboard::new().expect("クリップボードの初期化に失敗");
+
+        let unique_str_1 = "  clip_refiner_test_1  ";
+        cb.set_text(unique_str_1.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+        assert_eq!(
+            cb.get_text().expect("クリップボードの読み取りに失敗"),
+            unique_str_1
+        );
+        assert_eq!(
+            process_clipboard(&mut cb, RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Processed(
+                "clip_refiner_test_1".to_string()
+            ))
+        );
+
+        let unique_str_2 = "clip_refiner_test_2";
+        cb.set_text(unique_str_2.to_string())
+            .expect("クリップボードへの書き込みに失敗");
+        assert_eq!(
+            cb.get_text().expect("クリップボードの読み取りに失敗"),
+            unique_str_2
+        );
+        assert_eq!(
+            process_clipboard(&mut cb, RefineMode::Trim),
+            Ok(ClipboardProcessOutcome::Unchanged)
+        );
     }
 
     /// 全てのRefineModeバリアントを網羅するテーブル駆動テスト
     /// 各モードが正しく配線され、期待通りの加工を行うかを確認する
     #[test]
     fn test_all_refine_modes() {
-        struct TestCase {
-            mode: RefineMode,
-            input: &'static str,
-            expected: &'static str,
-        }
-
-        let cases = vec![
-            TestCase {
-                mode: RefineMode::UrlEncode,
-                input: "あいう",
-                expected: "%E3%81%82%E3%81%84%E3%81%86",
-            },
-            TestCase {
-                mode: RefineMode::UrlDecode,
-                input: "%E3%81%82%E3%81%84%E3%81%86",
-                expected: "あいう",
-            },
-            TestCase {
-                mode: RefineMode::RemoveUtm,
-                input: "http://example.com/?utm_source=test",
-                expected: "http://example.com/",
-            },
-            TestCase {
-                mode: RefineMode::ExtractBasename,
-                input: "C:\\path\\to\\file.txt",
-                expected: "file.txt",
-            },
-            TestCase {
-                mode: RefineMode::ExtractBasenameQuoted,
-                input: "C:\\path\\to\\file.txt",
-                expected: "\"file.txt\"",
-            },
-            TestCase {
-                mode: RefineMode::AddPathQuotes,
-                input: "C:\\path\\to\\file.txt",
-                expected: "\"C:\\path\\to\\file.txt\"",
-            },
-            TestCase {
-                mode: RefineMode::RemovePathQuotes,
-                input: "\"C:\\path\\to\\file.txt\"",
-                expected: "C:\\path\\to\\file.txt",
-            },
-            TestCase {
-                mode: RefineMode::PathToSlash,
-                input: "C:\\path\\to\\file.txt",
-                expected: "C:/path/to/file.txt",
-            },
-            TestCase {
-                mode: RefineMode::PathToBackslash,
-                input: "C:/path/to/file.txt",
-                expected: "C:\\path\\to\\file.txt",
-            },
-            TestCase {
-                mode: RefineMode::SortLinesAsc,
-                input: "c\na\nb",
-                expected: "a\nb\nc",
-            },
-            TestCase {
-                mode: RefineMode::SortLinesDesc,
-                input: "a\nc\nb",
-                expected: "c\nb\na",
-            },
-            TestCase {
-                mode: RefineMode::RemoveEmptyLines,
-                input: "a\n\nb",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::RemoveDuplicateLines,
-                input: "a\na\nb",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::Trim,
-                input: "  abc  ",
-                expected: "abc",
-            },
-            TestCase {
-                mode: RefineMode::TrimLines,
-                input: " a \n b ",
-                expected: "a\nb",
-            },
-            TestCase {
-                mode: RefineMode::Escape,
-                input: "\"",
-                expected: "\\\"",
-            },
-            TestCase {
-                mode: RefineMode::Unescape,
-                input: "\\\"",
-                expected: "\"",
-            },
-            TestCase {
-                mode: RefineMode::RegexEscape,
-                input: "(.*)",
-                expected: "\\(\\.\\*\\)",
-            },
-            TestCase {
-                mode: RefineMode::RegexUnescape,
-                input: "\\(\\.\\*\\)",
-                expected: "(.*)",
-            },
-            TestCase {
-                mode: RefineMode::JsonFormat,
-                input: "{\"b\":1,\"a\":2}",
-                expected: "{\n  \"a\": 2,\n  \"b\": 1\n}",
-            },
-            TestCase {
-                mode: RefineMode::JsonFormatPreserveOrder,
-                input: "{\"b\":1,\"a\":2}",
-                expected: "{\n  \"b\": 1,\n  \"a\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::YamlToJson,
-                input: "a: 1\nb: 2",
-                expected: "{\n  \"a\": 1,\n  \"b\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::YamlToJsonPreserveOrder,
-                input: "a: 1\nb: 2",
-                expected: "{\n  \"a\": 1,\n  \"b\": 2\n}",
-            },
-            TestCase {
-                mode: RefineMode::JsonToYaml,
-                input: "{\"a\":1}",
-                expected: "a: 1\n",
-            },
-            TestCase {
-                mode: RefineMode::JsonToYamlPreserveOrder,
-                input: "{\"a\":1}",
-                expected: "a: 1\n",
-            },
-            TestCase {
-                mode: RefineMode::MarkdownToHtml,
-                input: "**bold**",
-                expected: "<p><strong>bold</strong></p>",
-            },
-            TestCase {
-                mode: RefineMode::ExcelToMarkdown,
-                input: "A\tB\n1\t2",
-                expected: "| A | B |\n|---|---|\n| 1 | 2 |",
-            },
-            TestCase {
-                mode: RefineMode::TimestampToDatetime,
-                input: "0",
-                expected: "1970-01-01 09:00:00", // JST想定(環境依存だが固定値チェックのため)
-            },
-            TestCase {
-                mode: RefineMode::DatetimeToTimestamp,
-                input: "1970-01-01 09:00:00",
-                expected: "0",
-            },
-            TestCase {
-                mode: RefineMode::AddComma,
-                input: "1000",
-                expected: "1,000",
-            },
-            TestCase {
-                mode: RefineMode::RemoveComma,
-                input: "1,000",
-                expected: "1000",
-            },
+        const CASES: &[(RefineMode, &str, &str)] = &[
+            (
+                RefineMode::UrlEncode,
+                "あいう",
+                "%E3%81%82%E3%81%84%E3%81%86",
+            ),
+            (
+                RefineMode::UrlDecode,
+                "%E3%81%82%E3%81%84%E3%81%86",
+                "あいう",
+            ),
+            (
+                RefineMode::RemoveUtm,
+                "http://example.com/?utm_source=test",
+                "http://example.com/",
+            ),
+            (
+                RefineMode::ExtractBasename,
+                "C:\\path\\to\\file.txt",
+                "file.txt",
+            ),
+            (
+                RefineMode::ExtractBasenameQuoted,
+                "C:\\path\\to\\file.txt",
+                "\"file.txt\"",
+            ),
+            (
+                RefineMode::AddPathQuotes,
+                "C:\\path\\to\\file.txt",
+                "\"C:\\path\\to\\file.txt\"",
+            ),
+            (
+                RefineMode::RemovePathQuotes,
+                "\"C:\\path\\to\\file.txt\"",
+                "C:\\path\\to\\file.txt",
+            ),
+            (
+                RefineMode::PathToSlash,
+                "C:\\path\\to\\file.txt",
+                "C:/path/to/file.txt",
+            ),
+            (
+                RefineMode::PathToBackslash,
+                "C:/path/to/file.txt",
+                "C:\\path\\to\\file.txt",
+            ),
+            (RefineMode::SortLinesAsc, "c\na\nb", "a\nb\nc"),
+            (RefineMode::SortLinesDesc, "a\nc\nb", "c\nb\na"),
+            (RefineMode::RemoveEmptyLines, "a\n\nb", "a\nb"),
+            (RefineMode::RemoveDuplicateLines, "a\na\nb", "a\nb"),
+            (RefineMode::Trim, "  abc  ", "abc"),
+            (RefineMode::TrimLines, " a \n b ", "a\nb"),
+            (RefineMode::Escape, "\"", "\\\""),
+            (RefineMode::Unescape, "\\\"", "\""),
+            (RefineMode::RegexEscape, "(.*)", "\\(\\.\\*\\)"),
+            (RefineMode::RegexUnescape, "\\(\\.\\*\\)", "(.*)"),
+            (
+                RefineMode::JsonFormat,
+                "{\"b\":1,\"a\":2}",
+                "{\n  \"a\": 2,\n  \"b\": 1\n}",
+            ),
+            (
+                RefineMode::JsonFormatPreserveOrder,
+                "{\"b\":1,\"a\":2}",
+                "{\n  \"b\": 1,\n  \"a\": 2\n}",
+            ),
+            (
+                RefineMode::YamlToJson,
+                "a: 1\nb: 2",
+                "{\n  \"a\": 1,\n  \"b\": 2\n}",
+            ),
+            (
+                RefineMode::YamlToJsonPreserveOrder,
+                "a: 1\nb: 2",
+                "{\n  \"a\": 1,\n  \"b\": 2\n}",
+            ),
+            (RefineMode::JsonToYaml, "{\"a\":1}", "a: 1\n"),
+            (RefineMode::JsonToYamlPreserveOrder, "{\"a\":1}", "a: 1\n"),
+            (
+                RefineMode::MarkdownToHtml,
+                "**bold**",
+                "<p><strong>bold</strong></p>",
+            ),
+            (
+                RefineMode::ExcelToMarkdown,
+                "A\tB\n1\t2",
+                "| A | B |\n|---|---|\n| 1 | 2 |",
+            ),
+            (RefineMode::AddComma, "1000", "1,000"),
+            (RefineMode::RemoveComma, "1,000", "1000"),
         ];
 
-        // 全モードが網羅されているかチェック
-        let all_variants: Vec<_> = RefineMode::iter().collect();
         assert_eq!(
-            cases.len(),
-            all_variants.len(),
-            "TestCase count does not match RefineMode variants count. Please add missing test cases."
+            CASES.len() + 2,
+            RefineMode::iter().count(),
+            "固定ケースと日時モード2件の合計が RefineMode バリアント数と一致しません"
         );
 
-        for case in cases {
-            // TimestampToDatetime はローカルタイムゾーンに依存するため、環境によって結果が変わる可能性がある
-            // ここでは簡易的に、変換が成功して入力と異なる結果になることだけを確認する（変換失敗時は入力が返るため）
-            if matches!(case.mode, RefineMode::TimestampToDatetime) {
-                let result = case.mode.refine(case.input);
-                assert_ne!(result, case.input, "TimestampToDatetime failed to convert");
-                // JST環境なら一致するはずだが、CI環境などでUTCの場合は一致しない。
-                // 厳密なチェックは datetime.rs のテストに任せる
-                continue;
+        for mode in RefineMode::iter() {
+            match mode {
+                RefineMode::TimestampToDatetime => {
+                    let input = "1672531200";
+                    let actual = mode.refine(input);
+                    let expected = datetime::timestamp_to_datetime_string(input);
+                    assert_eq!(actual, expected);
+                    assert_ne!(actual.as_ref(), input);
+                }
+                RefineMode::DatetimeToTimestamp => {
+                    let datetime_input = datetime::timestamp_to_datetime_string("1672531200");
+                    let actual = mode.refine(&datetime_input);
+                    assert_eq!(actual, "1672531200");
+                }
+                other => {
+                    let (input, expected) = CASES
+                        .iter()
+                        .find(|(m, _, _)| *m == other)
+                        .map(|(_, input, expected)| (*input, *expected))
+                        .unwrap_or_else(|| panic!("TestCase missing for {:?}", other));
+                    let actual = other.refine(input);
+                    assert_eq!(
+                        actual, expected,
+                        "Failed at mode: {:?}\nInput: {}\nExpected: {}\nActual: {}",
+                        other, input, expected, actual
+                    );
+                }
             }
-
-            // DatetimeToTimestamp も同様
-            if matches!(case.mode, RefineMode::DatetimeToTimestamp) {
-                let result = case.mode.refine(case.input);
-                assert_ne!(result, case.input, "DatetimeToTimestamp failed to convert");
-                continue;
-            }
-
-            let actual = case.mode.refine(case.input);
-            assert_eq!(
-                actual, case.expected,
-                "Failed at mode: {:?}\nInput: {}\nExpected: {}\nActual: {}",
-                case.mode, case.input, case.expected, actual
-            );
         }
     }
 }

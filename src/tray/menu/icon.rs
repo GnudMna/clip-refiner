@@ -7,7 +7,7 @@ use tray_icon::Icon;
 /// 埋め込まれたアセットからトレイ用のアイコンを作成する
 ///
 /// # Returns
-/// * `Result<Icon>` - 作成されたアイコン。失敗した場合はエラーを返します。
+/// * `Result<Icon>` - 作成されたアイコン。失敗した場合はエラーを返す。
 pub fn create_icon() -> Result<Icon> {
     use std::io::Cursor;
 

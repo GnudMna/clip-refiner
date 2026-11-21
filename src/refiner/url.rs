@@ -3,6 +3,9 @@ use std::borrow::Cow;
 use anyhow::Result;
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 
+// ======================================================================
+// エンコードセット
+// ======================================================================
 /// 「ASCII の制御文字 + 非英数字」を全部エンコードするセット
 const ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
@@ -19,29 +22,29 @@ const ENCODE_SET: &AsciiSet = &CONTROLS
 // ======================================================================
 // URL エンコード・デコード
 // ======================================================================
-/// 文字列をURLエンコード（パーセントエンコーディング）する
+/// 文字列をURLエンコード(パーセントエンコーディング)する
 ///
-/// 入力文字列内の特殊文字を `%XX` 形式に変換します。
-/// 英数字以外の多くの文字がエンコード対象となります。
+/// 入力文字列内の特殊文字を `%XX` 形式に変換する
+/// 英数字以外の多くの文字がエンコード対象となる
 ///
 /// # Arguments
 /// * `input` - エンコード対象の文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - URLエンコードされた文字列。
+/// * `Cow<'_, str>` - URLエンコードされた文字列
 pub fn url_encode(input: &str) -> Cow<'_, str> {
     utf8_percent_encode(input, ENCODE_SET).into()
 }
 
 /// URLエンコードされた文字列をデコードする
 ///
-/// `%XX` 形式の記述を元の文字に戻します。結果はUTF-8として解釈されます。
+/// `%XX` 形式の記述を元の文字に戻す。結果はUTF-8として解釈される。
 ///
 /// # Arguments
 /// * `input` - デコード対象の文字列
 ///
 /// # Returns
-/// * `Result<String>` - デコードされた文字列。不正なエンコードやUTF-8として不正な場合は `Err` を返します。
+/// * `Result<String>` - デコードされた文字列。不正なエンコードやUTF-8として不正な場合は `Err` を返す。
 pub fn url_decode(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
@@ -49,16 +52,16 @@ pub fn url_decode(input: &str) -> Result<String> {
 // ======================================================================
 // UTM パラメータ削除
 // ======================================================================
-/// URLからUTMパラメータ（計測用パラメータ）を除去する
+/// URLからUTMパラメータ(計測用パラメータ)を除去する
 ///
-/// URLのクエリ文字列（?以降）に含まれる `utm_` で始まるパラメータをすべて取り除きます。
-/// 他のパラメータは維持されます。
+/// URLのクエリ文字列(?以降)に含まれる `utm_` で始まるパラメータをすべて取り除く
+/// 他のパラメータは維持される
 ///
 /// # Arguments
 /// * `input` - 対象のURL文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。変更がない場合は元の文字列への参照を返します。
+/// * `Cow<'_, str>` - UTMパラメータが除去されたURL文字列。変更がない場合は元の文字列への参照を返す。
 pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     let mut parts = input.splitn(2, '?');
     let base = parts.next().unwrap_or("");
@@ -67,7 +70,7 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
         None => return Cow::Borrowed(input),
     };
 
-    // クエリ文字列とフラグメント（#以降）を分離する
+    // クエリ文字列とフラグメント(#以降)を分離する
     let (query, fragment) = match query_and_fragment.split_once('#') {
         Some((q, f)) => (q, Some(f)),
         None => (query_and_fragment, None),
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn test_url_encode_space_special() {
         assert_eq!(url_encode("foo bar"), "foo%20bar");
-        // ENCODE_SET does not include '+', so it remains as '+'
+        // ENCODE_SET に '+' は含まれないためそのまま残る
         assert_eq!(url_encode("foo+bar"), "foo+bar");
     }
 
@@ -192,15 +195,14 @@ mod tests {
             remove_utm_params("http://example.com?a=1&utm_source=s&b=2"),
             "http://example.com?a=1&b=2"
         );
-        // Case sensitive check? utm_ is usually lowercase.
-        // My implementation assumes lowercase "utm_".
+        // utm_ は小文字のみ対象。大文字の UTM_SOURCE は削除しない
         assert_eq!(
             remove_utm_params("http://example.com?UTM_SOURCE=S"),
             "http://example.com?UTM_SOURCE=S"
         );
     }
 
-    /// フラグメント（#）がある場合のUTMパラメータ削除テスト
+    /// フラグメント(#)がある場合のUTMパラメータ削除テスト
     #[test]
     fn test_remove_utm_params_with_fragment() {
         // UTMパラメータ削除後もフラグメントが保持されること
@@ -218,7 +220,7 @@ mod tests {
             remove_utm_params("https://example.com/?id=123#section"),
             "https://example.com/?id=123#section"
         );
-        // フラグメントのみ（クエリなし）はそのまま
+        // フラグメントのみ(クエリなし)はそのまま
         assert_eq!(
             remove_utm_params("https://example.com/#section"),
             "https://example.com/#section"
