@@ -209,6 +209,11 @@ td.list-actions > * + * {
     color: var(--text-muted);
 }
 
+.clip-counter-badge {
+    background: rgba(90, 168, 255, 0.14);
+    color: var(--accent-color);
+}
+
 .clip-template.is-active {
     border-color: var(--accent-color);
     color: var(--accent-color);
@@ -220,11 +225,65 @@ td.list-actions > * + * {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 320px;
+    max-width: 100%;
 }
 
+/*
+ * ラベル列は幅の下限を持たせず、操作列を除いた残りに収めて長いプレビューを省略する
+ * (下限があると操作列が押し出され、はみ出した分が .list-table-wrap の overflow で切れる)
+ */
 .clip-table td:first-child {
     width: auto;
+    max-width: 0;
+}
+
+/*
+ * 内容領域が狭いときは操作列を行の下へ回し、ボタンを折り返して全部見えるようにする
+ * (内容領域はウィンドウ幅からサイドバーと余白を引いた幅。最小幅 640px でも収まる)
+ */
+@media (max-width: 860px) {
+    .clip-table thead {
+        display: none;
+    }
+
+    .clip-table,
+    .clip-table tbody,
+    .clip-table tr,
+    .clip-table td {
+        display: block;
+    }
+
+    .clip-table tr {
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .clip-table tr:last-child {
+        border-bottom: none;
+    }
+
+    .clip-table td,
+    .clip-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .clip-table td:first-child {
+        max-width: none;
+        padding-bottom: 4px;
+    }
+
+    .clip-table td.list-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+        width: auto;
+        padding-top: 4px;
+        white-space: normal;
+    }
+
+    .clip-table td.list-actions > * + * {
+        margin-left: 0;
+    }
 }
 
 #clip-register-btn.is-loading,

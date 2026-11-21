@@ -30,6 +30,8 @@ pub use monitor::MonitorMode;
 pub use notification::NotificationSettings;
 pub use regex::{RegexPreset, RegexSettings, RegexStep};
 #[cfg(feature = "config")]
-pub use registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
+pub use registered_clip::{
+    AddRegisteredClipError, RegisteredClip, ResolvedClip, UpdateRegisteredClipError,
+};
 #[cfg(feature = "config")]
 pub use selector_webview::SelectorWebviewRetention;

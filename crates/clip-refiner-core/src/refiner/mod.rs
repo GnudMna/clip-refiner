@@ -15,6 +15,7 @@
 //! assert_eq!(RefineMode::Trim.refine("  a  ", &ctx), "a");
 //! ```
 
+mod base64_clipboard;
 mod clipboard;
 mod context;
 mod dispatch;
@@ -36,7 +37,7 @@ pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
 #[cfg(feature = "clipboard")]
-pub use owned_clipboard::OwnedClipboard;
+pub use owned_clipboard::{OwnedClipboard, remove_stale_image_files};
 pub use pipeline::{apply_text_pipeline, split_pipeline};
 pub use text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 pub use transform::regex::{

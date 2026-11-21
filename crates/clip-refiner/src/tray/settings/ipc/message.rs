@@ -1,9 +1,12 @@
-use serde::Deserialize;
+use std::fmt;
+
+use serde::{Deserialize, Deserializer};
 
 use super::super::model::SettingsPatch;
 use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
+use crate::security::{SecretString, secret_from};
 
 // ======================================================================
 // IPC メッセージ
@@ -54,6 +57,25 @@ enum SettingsIpcMessage {
         /// テンプレートとして展開するかどうか
         enabled: bool,
     },
+    /// 登録クリップの `{counter}` の連番を最初に戻す
+    ClipCounterReset {
+        /// 登録クリップのインデックス
+        index: usize,
+    },
+    /// 登録クリップの編集用に本文を要求する
+    ClipEditOpen {
+        /// 登録クリップのインデックス
+        index: usize,
+    },
+    /// 登録クリップのラベルと本文を更新する
+    ClipEdit {
+        /// 登録クリップのインデックス
+        index: usize,
+        /// 新しい表示ラベル
+        label: String,
+        /// 新しい本文
+        text: IpcSecretText,
+    },
     /// クリップボード内容を登録クリップとして追加する
     ClipRegister,
     /// お気に入り変換モードの登録状態を切り替える
@@ -83,6 +105,25 @@ enum SettingsIpcMessage {
     CheckUpdate,
     /// 確認済みの更新をダウンロードして適用する
     ApplyUpdate,
+}
+
+/// IPC で受け取る本文 (破棄時にゼロ化し、`Debug` では内容を出さない)
+#[derive(Clone)]
+pub(crate) struct IpcSecretText(pub(crate) SecretString);
+
+impl fmt::Debug for IpcSecretText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("IpcSecretText(...)")
+    }
+}
+
+impl<'de> Deserialize<'de> for IpcSecretText {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(|text| Self(secret_from(text)))
+    }
 }
 
 /// IPC 向けの同梱文書の指定
@@ -152,6 +193,12 @@ pub(crate) enum SettingsIpcAction {
     ClipMove(usize, FavoriteMoveDirection),
     /// 登録クリップのテンプレート展開を切り替える
     ClipTemplate(usize, bool),
+    /// 登録クリップの `{counter}` の連番を最初に戻す
+    ClipCounterReset(usize),
+    /// 登録クリップの編集用に本文を要求する
+    ClipEditOpen(usize),
+    /// 登録クリップのラベルと本文を更新する
+    ClipEdit(usize, String, IpcSecretText),
     /// クリップボード内容を登録クリップとして追加する
     ClipRegister,
     /// お気に入り変換モードの登録状態を切り替える
@@ -182,6 +229,11 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
             }
             SettingsIpcMessage::ClipTemplate { index, enabled } => {
                 Self::ClipTemplate(index, enabled)
+            }
+            SettingsIpcMessage::ClipCounterReset { index } => Self::ClipCounterReset(index),
+            SettingsIpcMessage::ClipEditOpen { index } => Self::ClipEditOpen(index),
+            SettingsIpcMessage::ClipEdit { index, label, text } => {
+                Self::ClipEdit(index, label, text)
             }
             SettingsIpcMessage::ClipRegister => Self::ClipRegister,
             SettingsIpcMessage::FavoriteToggle { mode } => Self::FavoriteToggle(mode),

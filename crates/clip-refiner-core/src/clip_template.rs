@@ -37,6 +37,8 @@ pub struct ClipTemplateContext<'a> {
     pub clipboard: Option<&'a str>,
     /// `{user}` に差し込むユーザー名。`None` は空文字として扱う
     pub user_name: Option<&'a str>,
+    /// `{counter}` に差し込む連番 (今回のコピーで払い出す値)
+    pub counter: u64,
 }
 
 /// テンプレート展開の失敗理由
@@ -59,7 +61,8 @@ pub enum ClipTemplateError {
 /// テンプレートを展開する
 ///
 /// 対応するプレースホルダは `{date}` `{time}` `{datetime}` (`{date:%Y/%m/%d}` のように
-/// chrono の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`。
+/// chrono の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`、`{counter}`。
+/// `{counter}` は 1 回の展開の中ではすべて同じ値になる。
 /// `{{` / `}}` は `{` / `}` になる。未知の名前や閉じていない `{` は書かれたまま残す
 ///
 /// # Arguments
@@ -105,6 +108,19 @@ pub fn clip_template_uses_clipboard(source: &str) -> bool {
     Tokens::new(source).any(|token| matches!(token, Token::Placeholder(Placeholder::Clipboard)))
 }
 
+/// テンプレートが `{counter}` を含むか判定する
+///
+/// 連番を進めるのは `{counter}` を含むテンプレートをコピーしたときだけにするために使う
+///
+/// # Arguments
+/// * `source` - 判定するテンプレート本文
+///
+/// # Returns
+/// * `bool` - `{counter}` を含む場合は `true`
+pub fn clip_template_uses_counter(source: &str) -> bool {
+    Tokens::new(source).any(|token| matches!(token, Token::Placeholder(Placeholder::Counter)))
+}
+
 // ======================================================================
 // 字句解析
 // ======================================================================
@@ -134,6 +150,8 @@ enum Placeholder<'a> {
     Uuid,
     /// Windows のユーザー名
     User,
+    /// コピーのたびに 1 ずつ増える連番
+    Counter,
 }
 
 /// テンプレート本文を先頭から `Token` に分割するイテレータ
@@ -203,6 +221,7 @@ fn parse_placeholder(rest: &str) -> Option<(Placeholder<'_>, usize)> {
         ("clipboard", None) => Placeholder::Clipboard,
         ("uuid", None) => Placeholder::Uuid,
         ("user", None) => Placeholder::User,
+        ("counter", None) => Placeholder::Counter,
         _ => return None,
     };
     Some((placeholder, close + 1))
@@ -239,6 +258,10 @@ fn render_placeholder(
         }
         Placeholder::User => {
             out.push_str(ctx.user_name.unwrap_or_default());
+            Ok(())
+        }
+        Placeholder::Counter => {
+            let _ = write!(out, "{}", ctx.counter);
             Ok(())
         }
         Placeholder::Uuid => {
@@ -300,6 +323,7 @@ mod tests {
                 .expect("datetime"),
             clipboard,
             user_name,
+            counter: 7,
         }
     }
 
@@ -419,5 +443,24 @@ mod tests {
         assert!(clip_template_uses_clipboard("前置き {clipboard}"));
         assert!(!clip_template_uses_clipboard("{{clipboard}} {date}"));
         assert!(!clip_template_uses_clipboard("{clipboard:x}"));
+    }
+
+    /// `{counter}` を 1 回の展開の中で同じ値に展開すること
+    #[test]
+    fn expands_counter_with_same_value() {
+        assert_eq!(
+            expand("No.{counter} / {counter}").expect("expand"),
+            "No.7 / 7"
+        );
+        // 引数付きは未対応のため書かれたまま残す
+        assert_eq!(expand("{counter:3}").expect("expand"), "{counter:3}");
+    }
+
+    /// `{counter}` を含むかどうかを判定できること
+    #[test]
+    fn detects_counter_placeholder() {
+        assert!(clip_template_uses_counter("No.{counter}"));
+        assert!(!clip_template_uses_counter("{{counter}} {date}"));
+        assert!(!clip_template_uses_counter("{counter:x}"));
     }
 }

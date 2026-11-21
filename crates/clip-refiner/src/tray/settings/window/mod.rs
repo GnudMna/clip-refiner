@@ -179,6 +179,45 @@ impl SettingsWindow {
         inner.evaluate_script(&script);
     }
 
+    /// 登録クリップの編集ダイアログを開く
+    ///
+    /// ウィンドウ非表示時は何もしない
+    ///
+    /// # Arguments
+    /// * `index` - 登録クリップのインデックス
+    /// * `label` - 現在の表示ラベル
+    /// * `text` - 現在の本文
+    pub(crate) fn show_clip_editor(&self, index: usize, label: &str, text: &str) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
+        let payload = serde_json::json!({ "index": index, "label": label, "text": text });
+        inner.evaluate_script(&json_parse_call_script(
+            "showClipEditor",
+            &payload.to_string(),
+        ));
+    }
+
+    /// 登録クリップの編集結果を JavaScript へ通知する
+    ///
+    /// ウィンドウ非表示時は何もしない
+    ///
+    /// # Arguments
+    /// * `ok` - 成功した場合は `true`
+    /// * `message` - 失敗時に表示する理由
+    pub(crate) fn notify_clip_edit_result(&self, ok: bool, message: &str) {
+        let inner = self.inner.borrow();
+        let Some(inner) = inner.as_ref() else {
+            return;
+        };
+        let payload = serde_json::json!({ "ok": ok, "message": message });
+        inner.evaluate_script(&json_parse_call_script(
+            "onClipEditResult",
+            &payload.to_string(),
+        ));
+    }
+
     /// お気に入りとショートカット一覧のみ JavaScript へ反映する
     pub(crate) fn update_favorites_and_shortcuts(&self, json: &str) {
         let inner = self.inner.borrow();

@@ -5,7 +5,9 @@ use super::hotkeys::HotkeySettings;
 use super::monitor::MonitorMode;
 use super::notification::NotificationSettings;
 use super::regex::RegexSettings;
-use super::registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
+use super::registered_clip::{
+    AddRegisteredClipError, RegisteredClip, ResolvedClip, UpdateRegisteredClipError,
+};
 use super::selector_webview::{SelectorWebviewRetention, default_selector_webview_idle_minutes};
 use crate::consts;
 use crate::refiner::RefineMode;
@@ -316,6 +318,7 @@ impl AppConfig {
             text_ciphertext,
             image_file: None,
             template: false,
+            counter: 0,
         });
         self.normalize_clips();
         Ok(())
@@ -362,6 +365,7 @@ impl AppConfig {
             text_ciphertext: Vec::new(),
             image_file: Some(image_file),
             template: false,
+            counter: 0,
         });
         self.normalize_clips();
         Ok(())
@@ -389,6 +393,57 @@ impl AppConfig {
         true
     }
 
+    /// 指定インデックスのテキスト登録クリップのラベルと本文を更新する
+    ///
+    /// 検証後に本文を暗号化し、プレビューを作り直す。暗号化に失敗した場合は元の内容を保つ
+    /// ラベルが空白のみの場合は、新しいプレビューから補完する。テンプレート指定と表示順は変えない
+    ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `index` - 対象の登録クリップのインデックス
+    /// * `label` - 新しい表示ラベル
+    /// * `text` - 新しい本文
+    ///
+    /// # Returns
+    /// * `Result<(), UpdateRegisteredClipError>` - 更新に成功した場合は `Ok(())`
+    ///
+    /// # Errors
+    /// 範囲外、画像登録、空文字、サイズ超過、暗号化失敗のいずれか
+    pub fn update_registered_clip(
+        &mut self,
+        index: usize,
+        label: &str,
+        text: &str,
+    ) -> Result<(), UpdateRegisteredClipError> {
+        use crate::security::is_within_clipboard_limit;
+
+        let Some(clip) = self.clips.get(index) else {
+            return Err(UpdateRegisteredClipError::NotFound);
+        };
+        if clip.is_image() {
+            return Err(UpdateRegisteredClipError::ImageClip);
+        }
+        if text.trim().is_empty() {
+            return Err(UpdateRegisteredClipError::Empty);
+        }
+        if !is_within_clipboard_limit(text) {
+            return Err(UpdateRegisteredClipError::TooLarge);
+        }
+
+        let (text_ciphertext, preview) =
+            super::super::registered_clips::encrypt_registered_clip_text(text).map_err(|err| {
+                tracing::error!("登録クリップの暗号化に失敗: {:?}", err);
+                UpdateRegisteredClipError::EncryptFailed
+            })?;
+
+        let clip = &mut self.clips[index];
+        clip.label = label.trim().to_string();
+        clip.preview = preview;
+        clip.text_ciphertext = text_ciphertext;
+        self.normalize_clips();
+        Ok(())
+    }
+
     /// 指定インデックスのテキスト登録クリップのテンプレート展開を切り替える
     ///
     /// # Arguments
@@ -406,6 +461,28 @@ impl AppConfig {
             return false;
         }
         clip.template = enabled;
+        true
+    }
+
+    /// 指定インデックスのテキスト登録クリップの `{counter}` の連番を設定する
+    ///
+    /// コピーで払い出した値の記録と、0 へのリセットの両方に使う
+    ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `index` - 対象の登録クリップのインデックス
+    /// * `value` - 最後に払い出した連番 (0 はリセット)
+    ///
+    /// # Returns
+    /// * `bool` - 変更した場合は `true`。範囲外・画像登録・値が同じ場合は `false`
+    pub fn set_registered_clip_counter(&mut self, index: usize, value: u64) -> bool {
+        let Some(clip) = self.clips.get_mut(index) else {
+            return false;
+        };
+        if clip.is_image() || clip.counter == value {
+            return false;
+        }
+        clip.counter = value;
         true
     }
 

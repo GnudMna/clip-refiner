@@ -70,6 +70,14 @@ pub enum ClipsEvent {
     RequestMove(usize, FavoriteMoveDirection),
     /// 登録クリップのテンプレート展開の切り替え要求
     RequestSetTemplate(usize, bool),
+    /// 登録クリップの `{counter}` の連番を最初に戻す要求
+    RequestResetCounter(usize),
+    /// 登録クリップセレクターのホバー表示用に本文の全文を返す要求
+    RequestFullText(usize),
+    /// 設定ウィンドウの編集用に本文の全文を返す要求
+    RequestEditOpen(usize),
+    /// 設定ウィンドウから預かった編集内容の保存要求
+    RequestEditApply,
     /// 登録クリップメニュー / UI の再構築要求
     Refresh,
 }

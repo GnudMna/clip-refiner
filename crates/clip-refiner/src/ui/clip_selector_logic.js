@@ -13,6 +13,7 @@ const ClipSelectorLogic = (function () {
      * @property {string} [preview]
      * @property {string} kind
      * @property {boolean} [template] - コピー時にプレースホルダを展開するか
+     * @property {number} [counter] - `{counter}` で最後に払い出した連番 (未使用は 0)
      * @property {string} [thumbnail]
      * @property {string} [hover_preview]
      */
@@ -196,6 +197,77 @@ const ClipSelectorLogic = (function () {
     }
 
     /**
+     * 連番リセット IPC メッセージを組み立てる
+     *
+     * @param {string} id
+     * @returns {string}
+     */
+    function counterResetMessage(id) {
+        return 'counter-reset:' + id;
+    }
+
+    /**
+     * 選択行の連番をリセットするときの要求内容を返す
+     *
+     * @param {number} selectedIndex
+     * @param {ClipSelectorItem[]} filtered
+     * @returns {{ id: string }|null} 連番が未使用のクリップ・画像・登録行・範囲外は `null`
+     */
+    function resolveCounterReset(selectedIndex, filtered) {
+        const item = filtered[selectedIndex];
+        if (!item || item.kind === 'image' || !item.counter) {
+            return null;
+        }
+        return { id: item.id };
+    }
+
+    /**
+     * 連番バッジの表示文字列を返す
+     *
+     * @param {ClipSelectorItem} item
+     * @returns {string} 連番が未使用のときは空文字
+     */
+    function counterBadgeText(item) {
+        return item.counter > 0 ? '連番 ' + item.counter : '';
+    }
+
+    /**
+     * 全文取得 IPC メッセージを組み立てる
+     *
+     * @param {string} id
+     * @returns {string}
+     */
+    function fullTextMessage(id) {
+        return 'full:' + id;
+    }
+
+    /**
+     * 全文のホバー表示を要求できるクリップかどうか
+     *
+     * @param {ClipSelectorItem} item
+     * @returns {boolean}
+     */
+    function canRequestFullText(item) {
+        return item.kind !== 'image';
+    }
+
+    /**
+     * ホバー表示する全文を求める
+     *
+     * 一覧のプレビューと同じ内容なら重ねて表示する意味がないため表示しない
+     *
+     * @param {ClipSelectorItem} item
+     * @param {unknown} text - Rust から受け取った全文
+     * @returns {string|null} 表示しない場合は `null`
+     */
+    function fullTextToShow(item, text) {
+        if (typeof text !== 'string' || !text || text === item.preview) {
+            return null;
+        }
+        return text;
+    }
+
+    /**
      * 並べ替えボタンを表示するかどうか
      *
      * 検索中は表示順と保存順が一致しないため並べ替えを無効にする
@@ -263,7 +335,13 @@ const ClipSelectorLogic = (function () {
         deleteMessage,
         moveMessage,
         templateMessage,
+        fullTextMessage,
+        canRequestFullText,
+        fullTextToShow,
         resolveTemplateToggle,
+        counterResetMessage,
+        resolveCounterReset,
+        counterBadgeText,
         canReorder,
         moveTargetIndex,
         buildRegisterRowInnerHtml,

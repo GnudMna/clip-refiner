@@ -2,6 +2,13 @@
 // 設定画面 描画・Rust 連携エントリ
 // ======================================================================
 
+import {
+    bindClipEditor,
+    closeClipEditorIfStale,
+    isClipEditorOpen,
+    onClipEditResult,
+    showClipEditor,
+} from './clip_editor.js';
 import { bindConfirmDialog } from './confirm_dialog.js';
 import { ctx } from './ctx.js';
 import { bindActivePanelEvents, bindContentDelegation } from './events.js';
@@ -102,6 +109,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
     }
 
     ctx.state = snapshot;
+    closeClipEditorIfStale(snapshot.clips);
 
     if (opts.externalSync) {
         showApplyFeedback({
@@ -149,10 +157,14 @@ window.updateClips = function updateClips(clips) {
     }
     ctx.state.clips = clips;
     ctx.clipRegisterPending = false;
+    closeClipEditorIfStale(clips);
     if (ctx.activeTab === 'clipboard') {
         refreshActivePanel();
     }
 };
+
+window.showClipEditor = showClipEditor;
+window.onClipEditResult = onClipEditResult;
 
 /**
  * お気に入りとショートカット一覧の差分更新
@@ -258,6 +270,8 @@ window.onUpdateApply = function onUpdateApply(payload) {
 };
 
 bindConfirmDialog();
+// Escape をこのダイアログで消費させるため、下の設定ウィンドウ用 keydown より先に登録する
+bindClipEditor();
 document.getElementById('open-config-btn').addEventListener('click', openConfigFile);
 document.getElementById('close-btn').addEventListener('click', closeWindow);
 
@@ -268,7 +282,7 @@ document.addEventListener('keydown', (event) => {
     const dialog = document.getElementById('confirm-dialog');
     if (
         !SettingsSharedLogic.shouldCloseSettingsOnEscape({
-            dialogVisible: Boolean(dialog && !dialog.hidden),
+            dialogVisible: Boolean(dialog && !dialog.hidden) || isClipEditorOpen(),
             isEditing: isContentEditing(),
         })
     ) {

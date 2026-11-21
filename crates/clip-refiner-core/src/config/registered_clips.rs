@@ -60,6 +60,8 @@ struct RegisteredClipWire {
     image_file: Option<String>,
     #[serde(default)]
     template: bool,
+    #[serde(default)]
+    counter: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -302,6 +304,7 @@ pub(crate) fn registered_clip_from_plain_text(label: String, text: &str) -> Resu
         text_ciphertext,
         image_file: None,
         template: false,
+        counter: 0,
     })
 }
 
@@ -380,6 +383,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
                 text_ciphertext: Vec::new(),
                 image_file: wire.image_file,
                 template: false,
+                counter: 0,
             },
             false,
         ));
@@ -398,6 +402,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
             text_ciphertext,
             image_file: None,
             template: wire.template,
+            counter: wire.counter,
         };
         let mut migrated = false;
         if clip.preview.is_empty()
@@ -469,6 +474,29 @@ mod tests {
             let bytes = fs::read(registered_clips_path().expect("path")).expect("read");
             let inner = String::from_utf8(decrypt_bytes(&key, &bytes).expect("dec")).expect("utf8");
             assert_eq!(inner.matches("\"template\"").count(), 1);
+        });
+    }
+
+    /// 連番を保存・読み込みで維持し、`counter` キーの無い旧データは未使用 (0) として読むこと
+    #[test]
+    fn save_and_load_preserve_counter() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut used = registered_clip_from_plain_text("u".into(), "{counter}").expect("enc");
+            used.counter = 12;
+            let fresh = registered_clip_from_plain_text("f".into(), "body").expect("enc");
+
+            save_registered_clips(&[used, fresh]).expect("save");
+            let (loaded, migrated) = load_registered_clips().expect("load");
+            assert!(!migrated);
+            assert_eq!(loaded[0].counter, 12);
+            assert_eq!(loaded[1].counter, 0);
+
+            // `counter` キーの無い旧形式 (ここでは `template` のみ) も 0 として読める
+            let legacy_json =
+                br#"{"clips":[{"label":"old","text_ciphertext":"","template":true}]}"#;
+            let wire: RegisteredClipsPayloadWire =
+                serde_json::from_slice(legacy_json).expect("wire");
+            assert_eq!(wire.clips[0].counter, 0);
         });
     }
 

@@ -372,6 +372,47 @@ mod tests {
         ));
     }
 
+    /// `clip-counter-reset` メッセージを解釈できるようにすること
+    #[test]
+    fn parse_ipc_clip_counter_reset() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"clip-counter-reset","index":4}"#),
+            Some(SettingsIpcAction::ClipCounterReset(4))
+        ));
+    }
+
+    /// `clip-edit-open` メッセージを解釈できるようにすること
+    #[test]
+    fn parse_ipc_clip_edit_open() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"clip-edit-open","index":3}"#),
+            Some(SettingsIpcAction::ClipEditOpen(3))
+        ));
+    }
+
+    /// `clip-edit` メッセージを解釈でき、`Debug` が本文を出力しないこと
+    #[test]
+    fn parse_ipc_clip_edit() {
+        let action = parse_settings_ipc_message(
+            r#"{"type":"clip-edit","index":1,"label":"見出し","text":"secret\nbody"}"#,
+        );
+        let Some(SettingsIpcAction::ClipEdit(index, label, text)) = &action else {
+            panic!("ClipEdit アクションとして解釈されること");
+        };
+        assert_eq!((*index, label.as_str()), (1, "見出し"));
+        assert_eq!(text.0.as_str(), "secret\nbody");
+        assert!(!format!("{action:?}").contains("secret"));
+
+        // 本文が無い・文字列でないメッセージは解釈しない
+        assert!(
+            parse_settings_ipc_message(r#"{"type":"clip-edit","index":1,"label":"a"}"#).is_none()
+        );
+        assert!(
+            parse_settings_ipc_message(r#"{"type":"clip-edit","index":1,"label":"a","text":1}"#)
+                .is_none()
+        );
+    }
+
     /// `clip-register` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clip_register() {

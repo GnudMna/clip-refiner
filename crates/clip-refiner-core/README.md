@@ -38,6 +38,7 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace, validate_regex_settings}` | 正規表現置換のプレビューと設定検証 (設定 UI と同一エンジン) |
 | クリップボード | `OwnedClipboard` (feature `clipboard`), `process_clipboard`, `process_clipboard_pipeline` | OS クリップボード本文 I/O の所有者と、トレイト経由の加工 API |
 | クリップボード | `refiner::{TextClipboard, ImageClipboard, HtmlClipboard}` | 加工 API が使うクリップボード I/O のトレイト (テキスト / 画像 / HTML 形式)。テスト用の差し替えにも使う |
+| クリップボード | `refiner::remove_stale_image_files` (feature `clipboard`) | 画像のファイル貼り付け用に書き出した PNG のうち、保持時間 (1 時間) を過ぎたものを削除する。常駐の起動時に呼ぶ |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `RegexSettings`, `RegexPreset`, `RegexStep` | 正規表現加工用 (feature 不要) |
 | 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `MonitorMode`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |
@@ -45,10 +46,10 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | 設定 | `get_config_dir`, `is_portable_mode`, `open_config_file`, `disk_config_modified_time`, `disk_config_content_fingerprint` (`ConfigFileFingerprint`) | 設定ディレクトリ・ファイル操作。内容指紋は外部編集検知用。feature `config` |
 | 設定 | `format_hotkey_fixes_message` | ホットキーの不正・重複補正を UI 向け文言にする。feature `config` |
 | 設定 | `RefineContext::from_config` (feature `config`), `RefineContext::with_regex` | 加工時コンテキスト構築 |
-| テンプレート | `expand_clip_template`, `ClipTemplateContext`, `ClipTemplateError`, `clip_template_uses_clipboard` | 登録クリップのテンプレート展開 (`{date}` / `{clipboard}` など)。feature 不要 |
+| テンプレート | `expand_clip_template`, `ClipTemplateContext`, `ClipTemplateError`, `clip_template_uses_clipboard`, `clip_template_uses_counter` | 登録クリップのテンプレート展開 (`{date}` / `{clipboard}` / `{counter}` など) と、使うプレースホルダの判定。feature 不要 |
 | ホットキー | `parse_hotkey_binding`, `parse_hotkey_or_default`, `parse_hotkey_or_default_labeled`, `ParsedHotkey`, `HotkeyModifiers`, `HotkeyKey` | `Alt+Shift+S` 形式の文字列の解釈。feature 不要 |
 | エラー | `Error`, `ClipboardProcessError`, `ClipboardIoError`, `HotkeyParseError` | 加工・ホットキーの失敗理由 |
-| エラー | `ConfigError`, `CipherError`, `ConfigReloadError`, `AddRegisteredClipError` | 設定 I/O・AEAD の失敗理由。feature `config` |
+| エラー | `ConfigError`, `CipherError`, `ConfigReloadError`, `AddRegisteredClipError`, `UpdateRegisteredClipError` | 設定 I/O・AEAD の失敗理由。feature `config` |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン。feature `config` |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |
 

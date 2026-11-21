@@ -118,6 +118,16 @@ function handleContentClick(event) {
         return;
     }
 
+    if (resolved.type === 'clip-counter-reset') {
+        postIpcEnvelope({ type: 'clip-counter-reset', index: resolved.index });
+        return;
+    }
+
+    if (resolved.type === 'clip-edit') {
+        postIpcEnvelope({ type: 'clip-edit-open', index: resolved.index });
+        return;
+    }
+
     if (resolved.type === 'clip-copy') {
         postIpcEnvelope({ type: 'clip-copy', index: resolved.index });
         return;

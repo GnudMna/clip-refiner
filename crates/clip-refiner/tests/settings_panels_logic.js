@@ -133,6 +133,33 @@ function test_render_clip_row() {
     assert.ok(!imageHtml.includes('title="上へ" disabled'));
     assert.ok(imageHtml.includes('title="下へ" disabled'));
     assert.ok(imageHtml.includes('clip-thumbnail'));
+
+    // 連番は払い出し済みのテキストだけに表示し、リセットボタンは他のボタンより前に置く
+    assert.ok(!textHtml.includes('clip-counter'));
+    assert.ok(!templateHtml.includes('clip-counter'));
+    const counterHtml = SettingsPanelsLogic.renderClipRow(
+        {
+            id: '3',
+            label: '請求書',
+            preview: 'No.{counter}',
+            kind: 'text',
+            template: true,
+            counter: 5,
+        },
+        SettingsSharedLogic.escapeHtml,
+        0,
+        3
+    );
+    assert.ok(counterHtml.includes('連番 5'));
+    assert.ok(counterHtml.includes('clip-counter-reset'));
+    assert.ok(counterHtml.indexOf('clip-counter-reset') < counterHtml.indexOf('clip-template'));
+    const imageCounterHtml = SettingsPanelsLogic.renderClipRow(
+        { id: '4', label: '画像', kind: 'image', counter: 2 },
+        SettingsSharedLogic.escapeHtml,
+        0,
+        3
+    );
+    assert.ok(!imageCounterHtml.includes('clip-counter'));
 }
 
 /** お気に入り行 HTML を組み立てられること */
@@ -232,6 +259,17 @@ function test_resolve_content_click_action() {
         }),
         { type: 'clip-template', index: 2, enabled: true }
     );
+    assert.deepEqual(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'clip-counter-reset';
+                },
+            },
+            dataset: { index: '4' },
+        }),
+        { type: 'clip-counter-reset', index: 4 }
+    );
     assert.equal(
         SettingsPanelsLogic.resolveContentClickAction({
             classList: {
@@ -257,6 +295,89 @@ function test_clip_register_button_state() {
         label: '登録中...',
         disabled: true,
     });
+}
+
+/** 編集ボタンがテキスト行だけにあり、↑↓ より前に置かれること */
+function test_render_clip_row_edit_button() {
+    const textHtml = SettingsPanelsLogic.renderClipRow(
+        { id: '4', label: 'メモ', preview: 'hello', kind: 'text' },
+        SettingsSharedLogic.escapeHtml,
+        0,
+        2
+    );
+    assert.ok(textHtml.includes('clip-edit" data-index="4"'));
+    assert.ok(textHtml.indexOf('clip-edit') < textHtml.indexOf('clip-up'));
+
+    const imageHtml = SettingsPanelsLogic.renderClipRow(
+        { id: '5', label: '画像', kind: 'image' },
+        SettingsSharedLogic.escapeHtml,
+        1,
+        2
+    );
+    assert.ok(!imageHtml.includes('clip-edit'));
+}
+
+/** 編集ボタンのクリックを編集要求へ解決できること */
+function test_resolve_content_click_action_clip_edit() {
+    assert.deepEqual(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'clip-edit';
+                },
+            },
+            dataset: { index: '6' },
+        }),
+        { type: 'clip-edit', index: 6 }
+    );
+}
+
+/** 登録クリップの編集内容を保存前に検証できること */
+function test_validate_clip_edit() {
+    assert.deepEqual(SettingsPanelsLogic.validateClipEdit('', 'body', 64), { ok: true });
+    assert.deepEqual(SettingsPanelsLogic.validateClipEdit('  ', ' a ', 64), { ok: true });
+
+    // 本文が空白のみなら保存できない
+    const emptyText = SettingsPanelsLogic.validateClipEdit('label', ' \n\t ', 64);
+    assert.equal(emptyText.ok, false);
+    assert.equal(emptyText.field, 'text');
+
+    // ラベルは前後の空白を除いたコードポイント数で上限を判定する
+    assert.equal(
+        SettingsPanelsLogic.validateClipEdit(' ' + 'あ'.repeat(64) + ' ', 'b', 64).ok,
+        true
+    );
+    assert.equal(SettingsPanelsLogic.validateClipEdit('😀'.repeat(64), 'b', 64).ok, true);
+    const tooLong = SettingsPanelsLogic.validateClipEdit('あ'.repeat(65), 'b', 64);
+    assert.equal(tooLong.ok, false);
+    assert.equal(tooLong.field, 'label');
+    assert.ok(tooLong.message.includes('64'));
+}
+
+/** 編集対象が開いた時点のままかを一覧から判定できること */
+function test_clip_editor_target_unchanged() {
+    const editor = { index: 1, label: 'b', preview: 'pb' };
+    const clips = [
+        { label: 'a', preview: 'pa', kind: 'text' },
+        { label: 'b', preview: 'pb', kind: 'text' },
+    ];
+    assert.equal(SettingsPanelsLogic.clipEditorTargetUnchanged(editor, clips), true);
+
+    // 削除・並べ替えで別のクリップがそのインデックスへ来た場合は変更扱い
+    assert.equal(
+        SettingsPanelsLogic.clipEditorTargetUnchanged(editor, [clips[1], clips[0]]),
+        false
+    );
+    assert.equal(SettingsPanelsLogic.clipEditorTargetUnchanged(editor, [clips[0]]), false);
+    assert.equal(
+        SettingsPanelsLogic.clipEditorTargetUnchanged(editor, [
+            clips[0],
+            { label: 'b', preview: 'pb', kind: 'image' },
+        ]),
+        false
+    );
+    assert.equal(SettingsPanelsLogic.clipEditorTargetUnchanged(null, clips), false);
+    assert.equal(SettingsPanelsLogic.clipEditorTargetUnchanged(editor, undefined), false);
 }
 
 /** バイト数表示を単位付きで整形できること */
@@ -334,6 +455,10 @@ const tests = [
     test_favorite_slot_display,
     test_resolve_content_click_action,
     test_clip_register_button_state,
+    test_render_clip_row_edit_button,
+    test_resolve_content_click_action_clip_edit,
+    test_validate_clip_edit,
+    test_clip_editor_target_unchanged,
     test_format_bytes,
     test_render_update_status_html,
 ];

@@ -21,7 +21,7 @@ pub(crate) use clipboard_session::UndoLookup;
 pub use lock_ext::LockExt;
 pub use menu_snapshot::MenuSnapshot;
 pub use monitor_snapshot::{MonitorSnapshot, ProcessedState};
-pub(crate) use settings_pending::RegexPreviewRequest;
+pub(crate) use settings_pending::{ClipEditRequest, RegexPreviewRequest};
 
 // ======================================================================
 // テスト

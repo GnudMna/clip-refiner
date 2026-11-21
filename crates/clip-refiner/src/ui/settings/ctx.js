@@ -34,6 +34,14 @@ export const ctx = {
     lastRegexPreview: { settings: null, valid: true, message: '' },
     /** @type {(() => void)|null} */
     confirmDialogOnConfirm: null,
+    /**
+     * 編集ダイアログで開いている登録クリップ (閉じている間は `null`)
+     *
+     * `label` / `preview` は開いた時点の値で、一覧が他の操作で変わったかの判定に使う
+     *
+     * @type {{ index: number, label: string, preview: string, saving: boolean }|null}
+     */
+    clipEditor: null,
     /** @type {Record<string, number>} */
     tabScrollPositions: {},
     /** @type {boolean} 一般タブの詳細設定を展開しているか (再描画後も維持する) */

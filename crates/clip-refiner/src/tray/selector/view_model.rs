@@ -6,6 +6,7 @@ use image::{DynamicImage, ImageBuffer, ImageFormat};
 use crate::config::{AppConfig, RegisteredClip, ResolvedClip};
 use crate::consts;
 use crate::refiner::RefineMode;
+use crate::security::looks_sensitive;
 
 // ======================================================================
 // セレクター表示モデル
@@ -75,6 +76,28 @@ pub(crate) fn clip_selector_value(config: &AppConfig) -> serde_json::Value {
     )
 }
 
+/// 登録クリップ本文をホバー表示用に整える
+///
+/// 機密情報らしい本文と空白のみの本文は表示しない。長い本文は
+/// `REGISTERED_CLIP_HOVER_TEXT_MAX_CHARS` 文字で切り詰め、末尾に `...` を付ける
+///
+/// # Arguments
+/// * `text` - 復号した本文
+///
+/// # Returns
+/// * `Option<String>` - 表示できる場合は整形後の本文、表示しない場合は `None`
+pub(crate) fn clip_hover_text(text: &str) -> Option<String> {
+    if text.trim().is_empty() || looks_sensitive(text) {
+        return None;
+    }
+
+    let max_chars = consts::REGISTERED_CLIP_HOVER_TEXT_MAX_CHARS;
+    match text.char_indices().nth(max_chars) {
+        Some((end, _)) => Some(format!("{}...", &text[..end])),
+        None => Some(text.to_string()),
+    }
+}
+
 // ======================================================================
 // プライベート関数
 // ======================================================================
@@ -96,6 +119,7 @@ fn clip_selector_item(
         "preview": preview,
         "kind": if clip.is_image() { "image" } else { "text" },
         "template": clip.template,
+        "counter": clip.counter,
     });
 
     if clip.is_image()
@@ -190,6 +214,7 @@ mod tests {
                 text_ciphertext: vec![1, 2, 3],
                 image_file: None,
                 template: false,
+                counter: 3,
             }],
             ..AppConfig::default()
         };
@@ -201,6 +226,7 @@ mod tests {
         assert_eq!(item["preview"], "プレビュー");
         assert_eq!(item["kind"], "text");
         assert_eq!(item["template"], false);
+        assert_eq!(item["counter"], 3);
         assert!(item.get("text_ciphertext").is_none());
     }
 
@@ -214,6 +240,7 @@ mod tests {
                 text_ciphertext: Vec::new(),
                 image_file: Some("missing.enc".to_string()),
                 template: false,
+                counter: 0,
             }],
             ..AppConfig::default()
         };
@@ -224,6 +251,33 @@ mod tests {
         assert_eq!(item["kind"], "image");
         assert!(item.get("thumbnail").is_none());
         assert!(item.get("hover_preview").is_none());
+    }
+
+    /// 通常の本文はそのままホバー表示用に返すこと
+    #[test]
+    fn clip_hover_text_keeps_plain_text() {
+        let text = "1 行目\n2 行目 with  spaces";
+        assert_eq!(clip_hover_text(text).as_deref(), Some(text));
+    }
+
+    /// 機密情報らしい本文と空白のみの本文はホバー表示しないこと
+    #[test]
+    fn clip_hover_text_hides_sensitive_and_blank() {
+        assert_eq!(clip_hover_text("api_key=supersecret"), None);
+        assert_eq!(clip_hover_text("  \n\t"), None);
+    }
+
+    /// 上限を超える本文は文字境界で切り詰めて `...` を付けること
+    #[test]
+    fn clip_hover_text_truncates_at_char_boundary() {
+        let max = consts::REGISTERED_CLIP_HOVER_TEXT_MAX_CHARS;
+
+        let exact = "あ".repeat(max);
+        assert_eq!(clip_hover_text(&exact).as_deref(), Some(exact.as_str()));
+
+        let over = "あ".repeat(max + 1);
+        let truncated = clip_hover_text(&over).expect("truncated");
+        assert_eq!(truncated, format!("{}...", "あ".repeat(max)));
     }
 
     /// 画像プレビューを JPEG Data URL へ変換すること

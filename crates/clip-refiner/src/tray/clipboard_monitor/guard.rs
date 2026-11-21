@@ -132,6 +132,18 @@ impl<C: TextClipboard + ImageClipboard> ImageClipboard for ObservedClipboard<'_,
         self.accept_own_write();
         Ok(())
     }
+
+    fn set_image_as_file(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
+        self.ensure_unchanged()?;
+        self.inner.set_image_as_file(width, height, rgba)?;
+        self.accept_own_write();
+        Ok(())
+    }
 }
 
 impl<C: TextClipboard + HtmlClipboard> HtmlClipboard for ObservedClipboard<'_, C> {

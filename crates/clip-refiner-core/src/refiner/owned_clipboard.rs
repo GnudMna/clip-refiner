@@ -7,6 +7,18 @@
 use super::text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 
 // ======================================================================
+// 画像ファイルの掃除
+// ======================================================================
+/// 貼り付け用に書き出した画像ファイルのうち、保持時間を過ぎたものを削除する
+///
+/// 画像をエクスプローラへ貼り付けられるよう `set_image_as_file` が一時フォルダへ書き出した PNG が対象。
+/// 保持時間内のファイルは、クリップボードが参照している可能性があるため残す。
+/// 常駐の起動時に呼ぶ想定で、フォルダが無い場合や削除できない場合は何もしない
+pub fn remove_stale_image_files() {
+    crate::native::clipboard_file::remove_stale_image_files();
+}
+
+// ======================================================================
 // 所有クリップボード
 // ======================================================================
 /// ワーカー (またはワンショット) が保持する OS クリップボード接続
@@ -62,6 +74,15 @@ impl ImageClipboard for OwnedClipboard {
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
         ImageClipboard::set_image(&mut self.inner, width, height, rgba)
+    }
+
+    fn set_image_as_file(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
+        ImageClipboard::set_image_as_file(&mut self.inner, width, height, rgba)
     }
 }
 

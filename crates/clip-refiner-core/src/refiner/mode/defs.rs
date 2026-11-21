@@ -35,6 +35,18 @@ pub enum RefineMode {
     /// URLから utm_ で始まるパラメータと広告のクリックID (fbclid / gclid など) を削除する
     #[strum(message = "UTM除去")]
     RemoveUtm,
+    /// Base64 (標準アルファベット・パディングあり) へエンコードする。文字列は UTF-8 のバイト列として扱う
+    ///
+    /// テキストが無く画像だけがクリップボードにあるときは、画像を PNG にして Base64 へエンコードする
+    #[strum(message = "Base64エンコード")]
+    Base64Encode,
+    /// Base64 文字列をデコードする。失敗した場合は元のテキストを維持する
+    ///
+    /// 空白・改行は無視し、URL セーフ形式 (`-` `_`)・パディングの省略・data URI も受け付ける。
+    /// デコード結果が PNG / JPEG / BMP の画像なら、テキストではなくクリップボードの画像として書き込む。
+    /// 画像以外で UTF-8 として不正な場合は失敗として扱う
+    #[strum(message = "Base64デコード")]
+    Base64Decode,
     /// パスからベースネームを抽出する
     #[strum(message = "ベースネーム抽出")]
     ExtractBasename,
@@ -223,6 +235,9 @@ pub enum RefineCategory {
     /// URL操作サブメニュー内
     #[strum(message = "URL操作")]
     UrlActions,
+    /// Base64サブメニュー内
+    #[strum(message = "Base64")]
+    Base64,
     /// パス操作サブメニュー内
     #[strum(message = "ファイルパス")]
     Path,

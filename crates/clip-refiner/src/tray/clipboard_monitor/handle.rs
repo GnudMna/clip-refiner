@@ -299,7 +299,8 @@ pub(crate) fn record_clipboard_outcome(
             | ClipboardProcessError::TextTooLarge
             | ClipboardProcessError::RegexTimedOut
             | ClipboardProcessError::ParserInputTooLarge
-            | ClipboardProcessError::HtmlNestingTooDeep,
+            | ClipboardProcessError::HtmlNestingTooDeep
+            | ClipboardProcessError::ImageTooLarge,
         ) => {
             state
                 .clipboard_session()

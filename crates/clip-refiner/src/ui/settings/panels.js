@@ -626,7 +626,7 @@ function renderAboutPanel() {
 /**
  * 登録クリップ 1 行分のテーブル行 HTML
  *
- * @param {{ id: string, label?: string, preview?: string, kind: string, thumbnail?: string }} clip
+ * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string }} clip
  * @param {number} index
  * @param {number} count
  * @returns {string}

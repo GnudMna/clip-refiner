@@ -14,6 +14,7 @@ use clap::Parser;
 
 use crate::log_error;
 use crate::platform;
+use crate::refiner;
 use crate::tray;
 use crate::user_error::fatal_startup;
 use args::{Args, is_oneshot};
@@ -78,6 +79,8 @@ fn run_application(args: &Args) -> Result<()> {
     if is_oneshot(args) {
         run_once(args)
     } else {
+        // 前回の起動で書き出した、貼り付け用の画像ファイルのうち古いものを削除する
+        refiner::remove_stale_image_files();
         tray::run_loop(args.e2e_window)
     }
 }

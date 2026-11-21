@@ -378,6 +378,54 @@ function test_clip_selector_ipc_messages() {
     assert.equal(ClipSelectorLogic.moveMessage('3', 'up'), 'move:3:up');
     assert.equal(ClipSelectorLogic.templateMessage('3', true), 'template:3:on');
     assert.equal(ClipSelectorLogic.templateMessage('3', false), 'template:3:off');
+    assert.equal(ClipSelectorLogic.counterResetMessage('3'), 'counter-reset:3');
+}
+
+/** 連番のリセット要求と表示を、連番を払い出し済みのテキストクリップだけで返すこと */
+function test_clip_counter_reset_and_badge() {
+    const clips = [
+        {
+            id: '0',
+            label: '請求書',
+            preview: 'No.{counter}',
+            kind: 'text',
+            template: true,
+            counter: 4,
+        },
+        {
+            id: '1',
+            label: '未使用',
+            preview: '{counter}',
+            kind: 'text',
+            template: true,
+            counter: 0,
+        },
+        { id: '2', label: '画像', preview: '', kind: 'image', counter: 0 },
+    ];
+    assert.deepEqual(ClipSelectorLogic.resolveCounterReset(0, clips), { id: '0' });
+    // 未使用・画像・登録行 (範囲外) は対象外
+    assert.equal(ClipSelectorLogic.resolveCounterReset(1, clips), null);
+    assert.equal(ClipSelectorLogic.resolveCounterReset(2, clips), null);
+    assert.equal(ClipSelectorLogic.resolveCounterReset(3, clips), null);
+    assert.equal(ClipSelectorLogic.counterBadgeText(clips[0]), '連番 4');
+    assert.equal(ClipSelectorLogic.counterBadgeText(clips[1]), '');
+    assert.equal(ClipSelectorLogic.counterBadgeText({ id: '9', label: 'x', kind: 'text' }), '');
+}
+
+/** 全文ホバー表示の要求対象と表示内容を解決できること */
+function test_clip_full_text_hover() {
+    assert.equal(ClipSelectorLogic.fullTextMessage('3'), 'full:3');
+    // 画像は対象外
+    assert.equal(ClipSelectorLogic.canRequestFullText(SAMPLE_CLIPS[0]), true);
+    assert.equal(ClipSelectorLogic.canRequestFullText(SAMPLE_CLIPS[1]), false);
+    // 一覧のプレビューと同じ内容・空・文字列以外は表示しない
+    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], 'hello world'), null);
+    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], ''), null);
+    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], null), null);
+    assert.equal(
+        ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], 'hello world\nsecond line'),
+        'hello world\nsecond line'
+    );
 }
 
 /** 並べ替えの移動先を検索中・登録行・端を除いて求められること */
@@ -437,6 +485,8 @@ const tests = [
     test_clip_resolve_activate_selection,
     test_clip_selector_ipc_messages,
     test_clip_resolve_template_toggle,
+    test_clip_counter_reset_and_badge,
+    test_clip_full_text_hover,
     test_clip_move_target_index,
     test_build_category_header_inner_html,
     test_build_register_row_inner_html,

@@ -6,11 +6,16 @@ use crate::refiner::text_clipboard::{
 // インメモリクリップボード
 // ======================================================================
 /// 単体・統合テスト用のインメモリクリップボード
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "実クリップボードの失敗や形式の有無を `bool` のフラグで再現する"
+)]
 pub struct InMemoryTextClipboard {
     text: String,
     html: Option<String>,
     source_image: Option<(u32, u32, Vec<u8>)>,
     written_image: Option<(u32, u32, Vec<u8>)>,
+    image_written_as_file: bool,
     fail_on_read: bool,
     fail_on_write: bool,
     excluded_from_monitoring: bool,
@@ -39,6 +44,7 @@ impl InMemoryTextClipboard {
             html: None,
             source_image: None,
             written_image: None,
+            image_written_as_file: false,
             fail_on_read: false,
             fail_on_write: false,
             excluded_from_monitoring: false,
@@ -181,6 +187,19 @@ impl InMemoryTextClipboard {
     }
 }
 
+impl InMemoryTextClipboard {
+    /// 直近の画像が、ファイルとしても貼り付けられる形で書き込まれたかを返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元のインメモリクリップボード
+    ///
+    /// # Returns
+    /// * `bool` - `set_image_as_file` で書き込まれた場合は `true`。`set_image` のみの場合は `false`
+    pub fn image_written_as_file(&self) -> bool {
+        self.image_written_as_file
+    }
+}
+
 impl TextClipboard for InMemoryTextClipboard {
     fn get_text(&mut self) -> Result<String, ClipboardIoError> {
         if self.fail_on_read {
@@ -230,7 +249,19 @@ impl ImageClipboard for InMemoryTextClipboard {
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
         self.written_image = Some((width, height, rgba));
+        self.image_written_as_file = false;
         self.change_token += 1;
+        Ok(())
+    }
+
+    fn set_image_as_file(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
+        self.set_image(width, height, rgba)?;
+        self.image_written_as_file = true;
         Ok(())
     }
 }

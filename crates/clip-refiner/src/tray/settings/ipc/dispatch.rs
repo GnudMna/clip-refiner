@@ -6,7 +6,8 @@ use super::message::SettingsIpcAction;
 use super::queue::enqueue_settings_patch;
 use crate::tray::dispatch;
 use crate::tray::state::{
-    AppEvent, AppState, ClipsEvent, FavoritesEvent, RegexPreviewRequest, SettingsEvent,
+    AppEvent, AppState, ClipEditRequest, ClipsEvent, FavoritesEvent, RegexPreviewRequest,
+    SettingsEvent,
 };
 use crate::user_error;
 
@@ -56,6 +57,20 @@ pub(crate) fn dispatch_settings_ipc(
         }
         SettingsIpcAction::ClipTemplate(index, enabled) => {
             dispatch::send_app_event(proxy, ClipsEvent::RequestSetTemplate(index, enabled).into());
+        }
+        SettingsIpcAction::ClipCounterReset(index) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestResetCounter(index).into());
+        }
+        SettingsIpcAction::ClipEditOpen(index) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestEditOpen(index).into());
+        }
+        SettingsIpcAction::ClipEdit(index, label, text) => {
+            state.settings_pending().push_clip_edit(ClipEditRequest {
+                index,
+                label,
+                text: text.0,
+            });
+            dispatch::send_app_event(proxy, ClipsEvent::RequestEditApply.into());
         }
         SettingsIpcAction::ClipRegister => {
             dispatch::send_app_event(proxy, ClipsEvent::RequestRegister.into());

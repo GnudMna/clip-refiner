@@ -93,6 +93,98 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#confirm-dialog')).toBeHidden();
   });
 
+  test('登録クリップの編集ダイアログで検証・Esc 閉じ・失敗表示ができる', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
+    // 実ストアは空のため、一覧は画面側にだけ差し込む。画像行には編集ボタンが出ない
+    await page.evaluate(() => {
+      (window as any).updateClips([
+        { id: '0', label: 'メモ', preview: 'hello', kind: 'text' },
+        { id: '1', label: '画像', preview: '', kind: 'image' },
+      ]);
+    });
+    await expect(page.locator('.clip-edit')).toHaveCount(1);
+
+    // 存在しないクリップの編集要求は Rust が拒否し、バナーで伝える
+    await page.locator('.clip-edit').click();
+    await expect(page.locator('#apply-feedback')).toHaveText('登録クリップが見つかりません');
+    await expect(page.locator('#clip-editor')).toBeHidden();
+
+    await page.evaluate(() => {
+      (window as any).showClipEditor({ index: 0, label: 'メモ', text: 'hello\nworld' });
+    });
+    await expect(page.locator('#clip-editor')).toBeVisible();
+    await expect(page.locator('#clip-editor-label')).toHaveValue('メモ');
+    await expect(page.locator('#clip-editor-text')).toHaveValue('hello\nworld');
+    await expect(page.locator('#clip-editor-text')).toBeFocused();
+
+    // 本文が空白のみなら保存せず、ダイアログ内にエラーを出す
+    await page.locator('#clip-editor-text').fill('   ');
+    await page.locator('#clip-editor-save').click();
+    await expect(page.locator('#clip-editor-error')).toHaveText('本文を入力してください');
+    await expect(page.locator('#clip-editor')).toBeVisible();
+
+    // 保存の失敗 (対象が実ストアに無い) はダイアログを閉じずに理由を表示する
+    await page.locator('#clip-editor-text').fill('changed');
+    await page.locator('#clip-editor-save').click();
+    await expect(page.locator('#clip-editor-error')).toHaveText('登録クリップが見つかりません。一覧を開き直してください');
+    await expect(page.locator('#clip-editor-save')).toBeEnabled();
+
+    // Esc はダイアログだけを閉じ、設定ウィンドウは閉じない。入力した本文も残さない
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#clip-editor')).toBeHidden();
+    await expect(page.locator('#clip-editor-text')).toHaveValue('');
+    await expect(page.locator('#app')).toBeVisible();
+  });
+
+  test('登録クリップ一覧の操作ボタンは最小幅でも見切れない', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
+    const longPreview = 'とても長いプレビュー '.repeat(20);
+    await page.evaluate((preview) => {
+      (window as any).updateClips([
+        { id: '0', label: '請求書', preview, kind: 'text', template: true, counter: 12 },
+        { id: '1', label: 'メモ', preview, kind: 'text' },
+        { id: '2', label: '画像', preview: '', kind: 'image' },
+      ]);
+    }, longPreview);
+    await expect(page.locator('.clip-counter-reset')).toHaveCount(1);
+
+    // 設定ウィンドウの既定幅 (960) と最小幅 (640) で、全ボタンが一覧の枠内に収まる
+    for (const width of [960, 640]) {
+      await page.setViewportSize({ width, height: 640 });
+      const overflow = await page.evaluate(() => {
+        const wrap = document.querySelector('.list-table-wrap') as HTMLElement;
+        const frame = wrap.getBoundingClientRect();
+        return Array.from(wrap.querySelectorAll('button'))
+          .map((button) => button.getBoundingClientRect())
+          .filter((rect) => rect.left < frame.left - 0.5 || rect.right > frame.right + 0.5)
+          .length;
+      });
+      expect(overflow, `幅 ${width}px で枠からはみ出したボタン数`).toBe(0);
+    }
+  });
+
+  test('編集中に一覧が変わったらダイアログを閉じる', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
+    const clips = [
+      { id: '0', label: 'a', preview: 'pa', kind: 'text' },
+      { id: '1', label: 'b', preview: 'pb', kind: 'text' },
+    ];
+    await page.evaluate((list) => {
+      (window as any).updateClips(list);
+      (window as any).showClipEditor({ index: 1, label: 'b', text: 'pb' });
+    }, clips);
+    await expect(page.locator('#clip-editor')).toBeVisible();
+
+    // 同じ内容の再送では閉じない
+    await page.evaluate((list) => (window as any).updateClips(list), clips);
+    await expect(page.locator('#clip-editor')).toBeVisible();
+
+    // 先頭が削除されて別のクリップがそのインデックスへ来たら閉じる
+    await page.evaluate((list) => (window as any).updateClips(list.slice(0, 1)), clips);
+    await expect(page.locator('#clip-editor')).toBeHidden();
+    await expect(page.locator('#apply-feedback')).toContainText('編集を閉じました');
+  });
+
   test('ショートカットタブに入力欄がある', async ({ page }) => {
     await page.locator('#sidebar .nav-btn[data-tab="shortcuts"]').click();
     await expect(page.locator('#hotkey-quick-selector')).toBeVisible();

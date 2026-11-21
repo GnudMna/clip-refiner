@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use super::base64_clipboard::{write_base64_image, write_image_as_base64};
 use super::context::{RefineContext, RefineSkipReason};
 use super::mode::RefineMode;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
@@ -60,6 +61,9 @@ pub enum ClipboardProcessError {
     /// クリップボードに Excel の描画画像がない
     #[error("クリップボードに Excel の描画画像がありません")]
     NoImage,
+    /// Base64 と相互変換する画像が辺長またはピクセル数の上限を超えている
+    #[error("画像が処理上限を超えています")]
+    ImageTooLarge,
 }
 
 impl ClipboardProcessError {
@@ -87,6 +91,9 @@ impl ClipboardProcessError {
             Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
             Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
             Self::NoImage => "クリップボードに Excel の描画画像がありません",
+            Self::ImageTooLarge => {
+                "画像が処理上限 (8192 px / 4096×4096 ピクセル) を超えているため変換しませんでした"
+            }
         }
     }
 
@@ -105,6 +112,7 @@ impl ClipboardProcessError {
                 | Self::RegexTimedOut
                 | Self::ParserInputTooLarge
                 | Self::HtmlNestingTooDeep
+                | Self::ImageTooLarge
         )
     }
 }
@@ -243,7 +251,7 @@ pub(crate) fn process_image_clipboard<C: TextClipboard + ImageClipboard>(
         Err(()) => return Ok(ClipboardProcessOutcome::Unchanged),
     };
 
-    clipboard.set_image(width, height, rgba)?;
+    clipboard.set_image_as_file(width, height, rgba)?;
 
     Ok(ClipboardProcessOutcome::ImageProcessed { width, height })
 }
@@ -330,13 +338,31 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlCli
     } else {
         None
     };
-    let text = match clipboard.get_text() {
+    let text_result = clipboard.get_text();
+
+    // テキストが無く画像だけがあるときは、画像を Base64 テキストへ変換する
+    if image_tail.is_none()
+        && html_source.is_none()
+        && text_result.as_ref().map_or(true, String::is_empty)
+        && let Some(outcome) = write_image_as_base64(clipboard, &text_modes, ctx)?
+    {
+        return Ok(outcome);
+    }
+
+    let text = match text_result {
         Ok(text) => text,
         // HTML 形式だけのコピーでも変換できるようにする
         Err(_) if html_source.is_some() => String::new(),
         Err(e) => return Err(e.into()),
     };
     let source = html_source.as_deref().unwrap_or(&text);
+
+    // Base64 デコードの結果が画像なら、テキストではなく画像として書き込む
+    if image_tail.is_none()
+        && let Some(outcome) = write_base64_image(clipboard, source, &text_modes, ctx)?
+    {
+        return Ok(outcome);
+    }
 
     let text_outcome = if text_modes
         .last()
@@ -469,6 +495,13 @@ mod tests {
         assert_eq!(
             ClipboardProcessError::NoImage.user_message(),
             "クリップボードに Excel の描画画像がありません"
+        );
+        assert!(ClipboardProcessError::ImageTooLarge.is_skip());
+        // 案内文の上限値は定数と一致させる
+        assert!(
+            ClipboardProcessError::ImageTooLarge
+                .user_message()
+                .contains(&format!("{} px", crate::consts::MAX_BASE64_IMAGE_DIMENSION))
         );
         assert!(ClipboardProcessError::TextTooLarge.is_skip());
         assert!(ClipboardProcessError::RegexTimedOut.is_skip());
@@ -618,6 +651,8 @@ mod tests {
             })
         );
         assert_eq!(cb.written_image_size(), Some((2, 2)));
+        // エクスプローラへ貼り付けられるよう、ファイルとしても載せる
+        assert!(cb.image_written_as_file());
     }
 
     /// Unicode テキストが無くても描画画像があれば書き込ようにすること

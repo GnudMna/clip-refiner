@@ -49,15 +49,16 @@ pub mod refiner;
 pub mod security;
 
 pub use clip_template::{
-    ClipTemplateContext, ClipTemplateError, clip_template_uses_clipboard, expand_clip_template,
+    ClipTemplateContext, ClipTemplateError, clip_template_uses_clipboard,
+    clip_template_uses_counter, expand_clip_template,
 };
 #[cfg(feature = "config")]
 pub use config::{
     AppConfig, CONFIG_VERSION, ConfigDiskReload, ConfigFileFingerprint, ConfigLoadFallback,
     ConfigLoadOutcome, ConfigReloadError, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
     HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, ResolvedClip,
-    SelectorWebviewRetention, disk_config_content_fingerprint, disk_config_modified_time,
-    format_hotkey_fixes_message, format_unknown_config_keys_message,
+    SelectorWebviewRetention, UpdateRegisteredClipError, disk_config_content_fingerprint,
+    disk_config_modified_time, format_hotkey_fixes_message, format_unknown_config_keys_message,
     format_unsupported_config_version_message, get_config_dir, is_portable_mode, open_config_file,
 };
 pub use config::{RegexPreset, RegexSettings, RegexStep};

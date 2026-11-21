@@ -79,6 +79,23 @@ pub trait ImageClipboard {
     /// クリップボードへの書き込みに失敗した場合
     fn set_image(&mut self, width: u32, height: u32, rgba: Vec<u8>)
     -> Result<(), ClipboardIoError>;
+
+    /// クリップボードへ RGBA 画像を書き込み、エクスプローラへもファイルとして貼り付けられるようにする
+    ///
+    /// ビットマップに加えて、PNG ファイルのパス (`CF_HDROP`) を同時に載せる実装向け。
+    /// ファイルを載せられない実装 (既定) はビットマップのみを書き込む。
+    /// 登録クリップのように、平文のファイルを残したくない画像には使わない
+    ///
+    /// # Errors
+    /// ビットマップの書き込みに失敗した場合。ファイルの書き出しに失敗してもビットマップは残し、エラーにしない
+    fn set_image_as_file(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
+        self.set_image(width, height, rgba)
+    }
 }
 
 /// HTML 形式 (`CF_HTML`) のクリップボード読み書き
@@ -118,6 +135,23 @@ impl TextClipboard for arboard::Clipboard {
 
 #[cfg(feature = "clipboard")]
 impl ImageClipboard for arboard::Clipboard {
+    fn set_image_as_file(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> Result<(), ClipboardIoError> {
+        let png = crate::native::clipboard_file::encode_png(width, height, &rgba);
+        ImageClipboard::set_image(self, width, height, rgba)?;
+
+        // ビットマップは書き込み済み。ファイルを添えられなくても処理は成功とする
+        match png.and_then(|png| crate::native::clipboard_file::attach_png_file(&png)) {
+            Ok(path) => tracing::debug!("画像ファイルをクリップボードへ添付: {}", path.display()),
+            Err(e) => tracing::warn!("画像ファイルをクリップボードへ添付できませんでした: {e}"),
+        }
+        Ok(())
+    }
+
     fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
         read_rgba_image(self)
     }

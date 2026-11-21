@@ -157,6 +157,9 @@ pub const MAX_REGISTERED_CLIP_LABEL_CHARS: usize = 64;
 /// 登録クリッププレビューの最大文字数 (UI 表示用)
 pub const REGISTERED_CLIP_PREVIEW_MAX_CHARS: usize = 40;
 
+/// 登録クリップセレクターのホバー表示に使う本文の最大文字数
+pub const REGISTERED_CLIP_HOVER_TEXT_MAX_CHARS: usize = 4000;
+
 /// 登録クリップの暗号化ファイル最大バイト数 (256 MiB)
 pub const MAX_REGISTERED_CLIPS_FILE_BYTES: usize = 256 * 1024 * 1024;
 
@@ -171,6 +174,17 @@ pub const MAX_REGISTERED_IMAGE_DIMENSION: u32 = 8192;
 
 /// 登録画像の最大ピクセル数 (`4096×4096`)
 pub const MAX_REGISTERED_IMAGE_PIXELS: u64 = 16_777_216;
+
+/// Base64 と相互変換する画像の最大辺長 (ピクセル)
+pub const MAX_BASE64_IMAGE_DIMENSION: u32 = 8192;
+
+/// Base64 と相互変換する画像の最大ピクセル数 (`4096×4096`)
+pub const MAX_BASE64_IMAGE_PIXELS: u64 = 16_777_216;
+
+/// エクスプローラへ貼り付けるために書き出した画像ファイルの保持時間 (秒)
+///
+/// 次の書き出し時に、これより古いファイルを削除する
+pub const CLIPBOARD_IMAGE_FILE_RETENTION_SECS: u64 = 60 * 60;
 
 /// セレクター用画像プレビューの最大辺長 (ピクセル)
 pub const SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION: u32 = 64;

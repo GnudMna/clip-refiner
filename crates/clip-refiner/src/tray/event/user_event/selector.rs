@@ -9,8 +9,9 @@ use crate::tray::dispatch;
 use crate::tray::e2e;
 use crate::tray::event::{
     AppEventContext, apply_refine_once, copy_registered_clip, delete_registered_clip,
-    move_favorite_mode, move_registered_clip, refresh_clips_views, select_auto_refine_mode,
-    set_registered_clip_template, toggle_favorite_mode,
+    move_favorite_mode, move_registered_clip, refresh_clips_views, registered_clip_for_edit,
+    reset_registered_clip_counter, select_auto_refine_mode, set_registered_clip_template,
+    show_registered_clip_full_text, toggle_favorite_mode, update_registered_clip,
 };
 use crate::tray::selector::{
     clip_selector_json, hide_with_retention, quick_selector_current_mode, quick_selector_json,
@@ -63,6 +64,12 @@ pub(super) fn handle_clips(ctx: &mut AppEventContext<'_>, event: ClipsEvent) {
         ClipsEvent::RequestSetTemplate(index, enabled) => {
             handle_clip_set_template(ctx, index, enabled);
         }
+        ClipsEvent::RequestResetCounter(index) => handle_clip_reset_counter(ctx, index),
+        ClipsEvent::RequestFullText(index) => {
+            show_registered_clip_full_text(ctx.state, &ctx.selectors.clip, index);
+        }
+        ClipsEvent::RequestEditOpen(index) => handle_clip_edit_open(ctx, index),
+        ClipsEvent::RequestEditApply => handle_clip_edit_apply(ctx),
         ClipsEvent::Refresh => {
             refresh_clips_views(ctx.state, ctx.menu, &ctx.selectors.clip);
             refresh_settings_clips(ctx.state, ctx.settings);
@@ -144,6 +151,35 @@ fn handle_clip_move(ctx: &mut AppEventContext<'_>, index: usize, direction: Favo
 fn handle_clip_set_template(ctx: &mut AppEventContext<'_>, index: usize, enabled: bool) {
     set_registered_clip_template(ctx.state, ctx.menu, &ctx.selectors.clip, index, enabled);
     refresh_settings_clips(ctx.state, ctx.settings);
+}
+
+/// 登録クリップの連番リセット要求を処理する
+fn handle_clip_reset_counter(ctx: &mut AppEventContext<'_>, index: usize) {
+    reset_registered_clip_counter(ctx.state, ctx.menu, &ctx.selectors.clip, index);
+    refresh_settings_clips(ctx.state, ctx.settings);
+}
+
+/// 登録クリップの編集開始要求を処理し、設定ウィンドウへ本文を渡す
+fn handle_clip_edit_open(ctx: &mut AppEventContext<'_>, index: usize) {
+    match registered_clip_for_edit(ctx.state, index) {
+        Ok((label, text)) => ctx.settings.show_clip_editor(index, &label, &text),
+        Err(message) => ctx.settings.notify_clip_edit_result(false, message),
+    }
+}
+
+/// 設定ウィンドウから預かった登録クリップの編集内容をすべて保存する
+fn handle_clip_edit_apply(ctx: &mut AppEventContext<'_>) {
+    while let Some(request) = ctx.state.settings_pending().take_clip_edit() {
+        match update_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, &request) {
+            Ok(()) => {
+                refresh_settings_clips(ctx.state, ctx.settings);
+                ctx.settings.notify_clip_edit_result(true, "");
+            }
+            Err(err) => ctx
+                .settings
+                .notify_clip_edit_result(false, err.user_message()),
+        }
+    }
 }
 
 /// お気に入り変換モードの登録切替要求を処理する

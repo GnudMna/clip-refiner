@@ -15,8 +15,8 @@ pub use quick::QuickSelectorWindow;
 pub(crate) use retention::{apply_idle_control_flow, hide_with_retention, sync_selector_retention};
 pub use ui::SelectorUi;
 pub(crate) use view_model::{
-    clip_selector_json, clip_selector_value, quick_selector_current_mode, quick_selector_json,
-    quick_selector_value,
+    clip_hover_text, clip_selector_json, clip_selector_value, quick_selector_current_mode,
+    quick_selector_json, quick_selector_value,
 };
 #[cfg(test)]
 pub(crate) use webview_policy::assert_inline_scripts_allowed_by_csp;

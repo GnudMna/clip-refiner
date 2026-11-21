@@ -29,6 +29,37 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-15
+
+### Added
+
+- 登録クリップのテンプレートに、コピーのたびに 1 ずつ増える連番 `{counter}` を追加
+  - 連番はクリップごとに数え、再起動しても続きから数える
+  - 登録クリップセレクターの `Ctrl+R`、または設定ウィンドウ「クリップボード」タブの「連番リセット」で 1 から数え直せる
+- 変換モードに Base64 エンコード (`base64-encode`) とデコード (`base64-decode`) を追加
+  - デコードは空白・改行を無視し、URL セーフ形式・パディングの省略・data URI も受け付ける
+  - デコードできない入力は変更しない
+  - 画像 (PNG / JPEG / BMP) にも対応
+    - `base64-decode` は、デコード結果が画像ならクリップボードの画像として書き込む
+    - `base64-encode` は、画像だけがクリップボードにあるとき、PNG の Base64 文字列へ変換する
+    - 画像は辺長 8192 px、16777216 ピクセルまで
+- Excel→画像 (`excel-to-image`) と Base64 デコードで書き込んだ画像を、エクスプローラへファイルとして貼り付け可能に
+  - ビットマップと同時に PNG ファイルを載せるため、ペイントなどへの貼り付けは従来どおり
+  - PNG は `%TEMP%\ClipRefiner\clipboard-images\` に暗号化せず書き出し、1 時間を過ぎたものは常駐の起動時と次の書き出し時に削除
+  - 登録クリップの画像はファイルを書き出さない
+- 登録クリップセレクターで、テキストの行にカーソルを置くと全文を表示
+  - 機密情報らしい本文は、これまでの一覧表示と同じく全文も表示しない
+  - 長い本文は 4000 文字までで切り詰める
+- 設定ウィンドウ「クリップボード」タブで、登録クリップのラベルと本文を編集する機能を追加
+  - テキスト行の「編集」ボタンから開き、`Ctrl+Enter` で保存、`Esc` で取り消す
+  - ラベルを空にすると、新しい本文から付け直す。一覧内の位置とテンプレートの指定は変わらない
+
+### Fixed
+
+- 設定ウィンドウの登録クリップ一覧で、ウィンドウが狭いと右端の操作ボタンが見切れる問題を修正
+  - 幅が足りないときは、操作ボタンを行の下へ折り返して表示する
+  - 長いプレビューは省略記号で切り詰め、ボタンを押し出さない
+
 ## [2.0.0] - 2026-10-14
 
 ### Breaking changes
@@ -948,7 +979,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.0.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...develop
+[2.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.0.0...v2.1.0
 [2.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.2...v2.0.0
 [1.4.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.1...v1.4.2
 [1.4.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.0...v1.4.1

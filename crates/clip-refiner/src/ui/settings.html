@@ -34,6 +34,27 @@
             </div>
         </div>
     </div>
+    <div id="clip-editor" class="confirm-dialog" hidden>
+        <div class="confirm-dialog__backdrop" data-clip-editor-cancel></div>
+        <div class="confirm-dialog__panel confirm-dialog__panel--wide" role="dialog" aria-modal="true" aria-labelledby="clip-editor-title">
+            <h2 id="clip-editor-title" class="confirm-dialog__title">登録クリップを編集</h2>
+            <div class="field">
+                <label for="clip-editor-label">ラベル</label>
+                <input type="text" id="clip-editor-label" autocomplete="off" spellcheck="false">
+                <p class="field-hint">空にすると本文から付け直す</p>
+            </div>
+            <div class="field">
+                <label for="clip-editor-text">本文</label>
+                <textarea id="clip-editor-text" spellcheck="false"></textarea>
+            </div>
+            <p id="clip-editor-error" class="field-feedback clip-editor__error" role="alert" hidden></p>
+            <div class="confirm-dialog__actions">
+                <span class="clip-editor__shortcut">Ctrl+Enter で保存</span>
+                <button type="button" id="clip-editor-cancel" class="ghost-btn" data-clip-editor-cancel>キャンセル</button>
+                <button type="button" id="clip-editor-save" class="primary-btn">保存</button>
+            </div>
+        </div>
+    </div>
     <script src="settings.js"></script>
 </body>
 

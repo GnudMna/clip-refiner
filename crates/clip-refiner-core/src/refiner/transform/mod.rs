@@ -1,5 +1,7 @@
 //! 各 `RefineMode` に対応するテキスト変換処理
 
+pub(crate) mod base64;
+pub(crate) mod base64_image;
 pub(crate) mod case_convert;
 pub(crate) mod datetime;
 pub(crate) mod escape;

@@ -20,6 +20,8 @@ pub(super) const FIXED_CASES: &[(RefineMode, &str, &str)] = &[
         "http://example.com/?utm_source=test",
         "http://example.com/",
     ),
+    (RefineMode::Base64Encode, "あいう", "44GC44GE44GG"),
+    (RefineMode::Base64Decode, "44GC44GE44GG", "あいう"),
     (
         RefineMode::ExtractBasename,
         "C:\\path\\to\\file.txt",

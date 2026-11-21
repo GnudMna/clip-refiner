@@ -29,6 +29,9 @@ pub struct RegisteredClip {
     /// コピー時に `{date}` などのプレースホルダを展開するか。画像登録では常に `false`
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub template: bool,
+    /// `{counter}` で最後に払い出した連番。未使用は 0 で、次のコピーで 1 から始まる
+    #[serde(default)]
+    pub counter: u64,
 }
 
 impl fmt::Debug for RegisteredClip {
@@ -46,6 +49,7 @@ impl fmt::Debug for RegisteredClip {
             )
             .field("image_file", &self.image_file)
             .field("template", &self.template)
+            .field("counter", &self.counter)
             .finish()
     }
 }
@@ -142,6 +146,49 @@ impl fmt::Debug for ResolvedClip {
                 .field("height", height)
                 .field("rgba_len", &rgba.len())
                 .finish(),
+        }
+    }
+}
+
+// ======================================================================
+// 登録クリップの更新
+// ======================================================================
+/// 登録クリップの本文・ラベル更新に失敗した理由
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum UpdateRegisteredClipError {
+    /// 指定した登録クリップが存在しない
+    #[error("登録クリップが見つかりません")]
+    NotFound,
+    /// 画像登録は本文を編集できない
+    #[error("画像の登録クリップは編集できません")]
+    ImageClip,
+    /// 空文字または空白のみ
+    #[error("登録クリップが空です")]
+    Empty,
+    /// クリップボード上限を超える
+    #[error("登録クリップのサイズが上限を超えています")]
+    TooLarge,
+    /// 本文の暗号化に失敗
+    #[error("登録クリップの暗号化に失敗しました")]
+    EncryptFailed,
+}
+
+impl UpdateRegisteredClipError {
+    /// ユーザー向けのエラーメッセージを返す
+    ///
+    /// # Arguments
+    /// * `self` - 更新失敗理由
+    ///
+    /// # Returns
+    /// * `&'static str` - UI 表示用の固定メッセージ
+    #[must_use]
+    pub fn user_message(&self) -> &'static str {
+        match self {
+            Self::NotFound => "登録クリップが見つかりません。一覧を開き直してください",
+            Self::ImageClip => "画像の登録クリップは編集できません",
+            Self::Empty => "本文が空のため保存できません",
+            Self::TooLarge => "本文が長すぎるため保存できません",
+            Self::EncryptFailed => "登録クリップの暗号化に失敗しました",
         }
     }
 }

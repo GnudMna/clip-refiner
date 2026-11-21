@@ -335,6 +335,15 @@ proptest! {
         prop_assert_eq!(&decoded, &input);
     }
 
+    /// Base64 エンコード後にデコードすると元の文字列に戻るようにすること
+    #[test]
+    fn base64_encode_decode_roundtrip(input in "\\PC+") {
+        let ctx = RefineContext::default();
+        let encoded = RefineMode::Base64Encode.refine(&input, &ctx);
+        let decoded = RefineMode::Base64Decode.refine(&encoded, &ctx);
+        prop_assert_eq!(&decoded, &input);
+    }
+
     /// JSON エスケープ後にアンエスケープすると元の文字列に戻るようにすること
     #[test]
     fn escape_unescape_roundtrip(input in "[\\x20-\\x7E]*") {

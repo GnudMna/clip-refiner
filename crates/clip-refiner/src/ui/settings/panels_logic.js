@@ -152,7 +152,7 @@ const SettingsPanelsLogic = (function () {
     /**
      * 登録クリップ 1 行分のテーブル行 HTML を組み立てる
      *
-     * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, thumbnail?: string }} clip
+     * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string }} clip
      * @param {(text: string) => string} escapeHtml
      * @param {number} index - 一覧内の位置 (先頭は上へ移動を無効にする)
      * @param {number} count - 一覧の件数 (末尾は下へ移動を無効にする)
@@ -188,6 +188,25 @@ const SettingsPanelsLogic = (function () {
                   '" aria-pressed="' +
                   (clip.template ? 'true' : 'false') +
                   '" title="コピー時に {date} などを展開する">テンプレート</button>';
+        // 本文とラベルの編集もテキストのみ。テンプレートと同じ理由で ↑↓ の前に置く
+        const editButton =
+            clip.kind === 'image'
+                ? ''
+                : '<button type="button" class="ghost-btn clip-edit" data-index="' +
+                  escapeHtml(clip.id) +
+                  '" title="ラベルと本文を編集する">編集</button>';
+        // 連番は払い出し済みのテキストだけに出す。リセットはその横のボタンで行う
+        const hasCounter = clip.kind !== 'image' && clip.counter > 0;
+        const counterBadge = hasCounter
+            ? '<span class="clip-kind clip-counter-badge" title="{counter} で最後に使った連番">連番 ' +
+              escapeHtml(String(clip.counter)) +
+              '</span>'
+            : '';
+        const counterResetButton = hasCounter
+            ? '<button type="button" class="ghost-btn clip-counter-reset" data-index="' +
+              escapeHtml(clip.id) +
+              '" title="次のコピーで {counter} を 1 から数え直す">連番リセット</button>'
+            : '';
         const previewHtml =
             clip.preview && clip.preview !== label
                 ? '<span class="clip-preview">' + escapeHtml(clip.preview) + '</span>'
@@ -200,10 +219,13 @@ const SettingsPanelsLogic = (function () {
             escapeHtml(label) +
             '</span>' +
             kindBadge +
+            counterBadge +
             '</div>' +
             previewHtml +
             '</div></div></td><td class="list-actions">' +
+            counterResetButton +
             templateButton +
+            editButton +
             '<button type="button" class="icon-btn clip-up" data-index="' +
             escapeHtml(clip.id) +
             '" title="上へ"' +
@@ -342,6 +364,12 @@ const SettingsPanelsLogic = (function () {
                 enabled: button.dataset.enabled === 'true',
             };
         }
+        if (button.classList.contains('clip-counter-reset')) {
+            return { type: 'clip-counter-reset', index: Number(button.dataset.index) };
+        }
+        if (button.classList.contains('clip-edit')) {
+            return { type: 'clip-edit', index: Number(button.dataset.index) };
+        }
         if (button.classList.contains('clip-copy')) {
             return { type: 'clip-copy', index: Number(button.dataset.index) };
         }
@@ -363,6 +391,52 @@ const SettingsPanelsLogic = (function () {
             label: pending ? '登録中...' : 'クリップボードから登録',
             disabled: !!pending,
         };
+    }
+
+    /**
+     * 登録クリップの編集内容を保存前に検証する
+     *
+     * 本文のバイト数上限は Rust 側で検証する。ラベルは空でもよい (本文から補完される)
+     *
+     * @param {string} label
+     * @param {string} text
+     * @param {number} maxLabelChars
+     * @returns {{ ok: true } | { ok: false, field: 'label'|'text', message: string }}
+     */
+    function validateClipEdit(label, text, maxLabelChars) {
+        if (String(text).trim() === '') {
+            return { ok: false, field: 'text', message: '本文を入力してください' };
+        }
+        if (Array.from(String(label).trim()).length > maxLabelChars) {
+            return {
+                ok: false,
+                field: 'label',
+                message: 'ラベルは ' + maxLabelChars + ' 文字以内にしてください',
+            };
+        }
+        return { ok: true };
+    }
+
+    /**
+     * 編集中の登録クリップが一覧上で開いた時点のままか判定する
+     *
+     * 他の操作で削除・並べ替えされると、保存先のインデックスがずれて別のクリップを上書きするため
+     *
+     * @param {{ index: number, label: string, preview: string }|null} editor
+     * @param {Array<{ label?: string, preview?: string, kind: string }>} clips
+     * @returns {boolean}
+     */
+    function clipEditorTargetUnchanged(editor, clips) {
+        if (!editor || !Array.isArray(clips)) {
+            return false;
+        }
+        const clip = clips[editor.index];
+        return (
+            !!clip &&
+            clip.kind === 'text' &&
+            (clip.label ?? '') === editor.label &&
+            (clip.preview ?? '') === editor.preview
+        );
     }
 
     /**
@@ -454,6 +528,8 @@ const SettingsPanelsLogic = (function () {
         favoriteSlotDisplay,
         resolveContentClickAction,
         clipRegisterButtonState,
+        validateClipEdit,
+        clipEditorTargetUnchanged,
         formatBytes,
         renderUpdateStatusHtml,
     };

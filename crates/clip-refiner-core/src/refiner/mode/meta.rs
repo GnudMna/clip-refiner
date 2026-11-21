@@ -20,9 +20,10 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 15] = [
+    pub const SUBMENU_ORDER: [Self; 16] = [
         Self::LineActions,
         Self::UrlActions,
+        Self::Base64,
         Self::Path,
         Self::Markdown,
         Self::Excel,
@@ -75,6 +76,7 @@ impl RefineMode {
     pub fn category(self) -> RefineCategory {
         match self {
             Self::UrlEncode | Self::UrlDecode | Self::RemoveUtm => RefineCategory::UrlActions,
+            Self::Base64Encode | Self::Base64Decode => RefineCategory::Base64,
             Self::ExtractBasename
             | Self::ExtractBasenameQuoted
             | Self::AddPathQuotes
@@ -400,6 +402,35 @@ mod tests {
         assert_eq!(RefineMode::JsonFormat.to_string(), "json-format");
     }
 
+    /// Base64 モードの CLI 名・設定値・ラベル・カテゴリが期待どおりであること
+    #[test]
+    fn test_base64_modes_metadata() {
+        for (mode, cli, serde_name, label) in [
+            (
+                RefineMode::Base64Encode,
+                "base64-encode",
+                "Base64Encode",
+                "Base64エンコード",
+            ),
+            (
+                RefineMode::Base64Decode,
+                "base64-decode",
+                "Base64Decode",
+                "Base64デコード",
+            ),
+        ] {
+            assert_eq!(mode.to_string(), cli);
+            assert_eq!(RefineMode::from_str(cli).expect("CLI 名"), mode);
+            assert_eq!(
+                serde_json::to_string(&mode).expect("シリアライズ"),
+                format!("\"{serde_name}\"")
+            );
+            assert_eq!(mode.label(), label);
+            assert_eq!(mode.category(), RefineCategory::Base64);
+        }
+        assert_eq!(RefineCategory::Base64.label(), "Base64");
+    }
+
     /// 改名した日時変換モードの旧名 (CLI 名・設定値) を受け付け、書き出しは新名にすること
     #[test]
     fn test_renamed_datetime_modes_accept_old_names() {
@@ -472,6 +503,6 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesNaturalAsc));
         assert!(variants.contains(&RefineMode::SortLinesNaturalDesc));
         assert!(variants.contains(&RefineMode::ToDatetimeString));
-        assert_eq!(variants.len(), 53);
+        assert_eq!(variants.len(), 55);
     }
 }

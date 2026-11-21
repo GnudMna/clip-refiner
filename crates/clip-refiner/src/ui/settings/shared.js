@@ -95,6 +95,11 @@ export function maxRegisteredClips() {
     return limits().maxRegisteredClips ?? 100;
 }
 
+/** @returns {number} 登録クリップのラベルの最大文字数 */
+export function maxRegisteredClipLabelChars() {
+    return limits().maxRegisteredClipLabelChars ?? 64;
+}
+
 /** @returns {number} 正規表現パターンの最大バイト数 */
 export function maxRegexPatternBytes() {
     return limits().maxRegexPatternBytes ?? 8 * 1024;

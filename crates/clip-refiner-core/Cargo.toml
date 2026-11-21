@@ -23,11 +23,9 @@ default = ["clipboard", "config"]
 clipboard = ["dep:arboard", "dep:clipboard-win"]
 # 設定永続化・DPAPI・登録クリップ暗号 (Windows)
 config = [
-    "dep:base64",
     "dep:blake3",
     "dep:chacha20poly1305",
     "dep:getrandom",
-    "dep:image",
     "dep:toml",
     "dep:toml_edit",
     "dep:windows",
@@ -37,14 +35,14 @@ test-helpers = []
 
 [dependencies]
 arboard = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
+base64.workspace = true
 blake3 = { workspace = true, optional = true }
 chacha20poly1305 = { workspace = true, optional = true }
 chrono.workspace = true
 csv.workspace = true
 getrandom = { workspace = true, optional = true }
 htmd.workspace = true
-image = { workspace = true, optional = true }
+image.workspace = true
 indexmap.workspace = true
 percent-encoding.workspace = true
 pulldown-cmark.workspace = true

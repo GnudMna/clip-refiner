@@ -12,7 +12,8 @@ use super::super::notify::{
 use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent, UndoLookup};
 use super::command::ClipboardCommand;
 use crate::clip_template::{
-    ClipTemplateContext, clip_template_uses_clipboard, expand_clip_template,
+    ClipTemplateContext, clip_template_uses_clipboard, clip_template_uses_counter,
+    expand_clip_template,
 };
 use crate::config::{AddRegisteredClipError, ResolvedClip};
 use crate::ipc::OneshotProcessResult;
@@ -307,30 +308,37 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
 /// 登録済みクリップボード内容をクリップボードへコピーする
 ///
 /// テンプレート指定のテキストはプレースホルダを展開してからコピーする。
-/// 展開に失敗した場合はクリップボードを変更せず通知する
+/// 展開に失敗した場合はクリップボードを変更せず通知する。
+/// `{counter}` を含むテンプレートは、コピーに成功したときだけ連番を 1 進めて保存する
 fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     index: usize,
 ) {
-    let (clip, template) = state.with_config(|config| {
+    let (clip, template, counter) = state.with_config(|config| {
+        let entry = config.clips.get(index);
         (
             config.resolve_registered_clip(index),
-            config.clips.get(index).is_some_and(|entry| entry.template),
+            entry.is_some_and(|entry| entry.template),
+            entry.map_or(0, |entry| entry.counter),
         )
     });
     match clip {
         Some(ResolvedClip::Text(source)) => {
-            let text = if template {
-                match expand_registered_clip_template(clipboard, &source) {
-                    Ok(text) => text,
+            let next_counter = counter.saturating_add(1);
+            let (text, issued_counter) = if template {
+                match expand_registered_clip_template(clipboard, &source, next_counter) {
+                    Ok(text) => (
+                        text,
+                        clip_template_uses_counter(source.as_str()).then_some(next_counter),
+                    ),
                     Err(notification) => {
                         notification.notify();
                         return;
                     }
                 }
             } else {
-                source
+                (source, None)
             };
             if let Err(e) = clipboard.set_text(text.to_string()) {
                 ClipboardWriteContext::RegisteredClip
@@ -340,6 +348,9 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
                 state
                     .clipboard_session()
                     .record_clipboard_set(text.as_str());
+                if let Some(issued) = issued_counter {
+                    record_issued_counter(state, index, issued);
+                }
                 show_category_notification(
                     state,
                     NotificationCategory::RegisteredClip,
@@ -370,6 +381,14 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
     }
 }
 
+/// 払い出した連番を登録クリップへ記録し、保存して一覧を更新する
+fn record_issued_counter(state: &Arc<AppState>, index: usize, counter: u64) {
+    if state.with_config_mut(|c| c.set_registered_clip_counter(index, counter)) {
+        state.save_config();
+        dispatch::send_app_event(&state.proxy, ClipsEvent::Refresh.into());
+    }
+}
+
 /// 登録クリップのテンプレートを展開する
 ///
 /// `{clipboard}` を含む場合だけ現在のクリップボードのテキストを読む (テキストが無ければ空文字)
@@ -377,12 +396,14 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
 /// # Arguments
 /// * `clipboard` - `{clipboard}` の読み取りに使うクリップボード
 /// * `source` - 復号済みのテンプレート本文
+/// * `counter` - `{counter}` に差し込む連番 (今回払い出す値)
 ///
 /// # Returns
 /// * `Result<SecretString, UserNotification>` - 展開後のテキスト。失敗時は案内用の通知
 fn expand_registered_clip_template<C: TextClipboard>(
     clipboard: &mut C,
     source: &SecretString,
+    counter: u64,
 ) -> Result<SecretString, UserNotification> {
     let current = if clip_template_uses_clipboard(source.as_str()) {
         clipboard.get_text().ok().map(secret_from)
@@ -394,6 +415,7 @@ fn expand_registered_clip_template<C: TextClipboard>(
         now: Local::now().fixed_offset(),
         clipboard: current.as_deref().map(String::as_str),
         user_name: user_name.as_deref(),
+        counter,
     };
     expand_clip_template(source.as_str(), &ctx, random_uuid_bytes)
         .map(secret_from)

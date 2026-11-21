@@ -56,7 +56,7 @@ pub use persistence::{
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
     HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegisteredClip, ResolvedClip,
-    SelectorWebviewRetention, format_hotkey_fixes_message,
+    SelectorWebviewRetention, UpdateRegisteredClipError, format_hotkey_fixes_message,
 };
 #[cfg(feature = "config")]
 pub use unknown_keys::format_unknown_config_keys_message;
@@ -570,6 +570,116 @@ history_enabled = true
 
             assert!(config.set_registered_clip_template(0, false));
             assert!(!config.clips[0].template);
+        });
+    }
+
+    /// `set_registered_clip_counter` がテキスト登録だけを更新し、並び替えと本文編集で連番を保つこと
+    #[test]
+    fn test_set_registered_clip_counter() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("No.{counter}").expect("add");
+            config.add_registered_clip("other").expect("add");
+            config
+                .add_registered_image(1, 1, &[0, 0, 0, 255])
+                .expect("add image");
+
+            assert!(config.set_registered_clip_counter(0, 5));
+            assert_eq!(config.clips[0].counter, 5);
+            // 同じ値・画像登録・範囲外は変更しない
+            assert!(!config.set_registered_clip_counter(0, 5));
+            assert!(!config.set_registered_clip_counter(2, 1));
+            assert!(!config.set_registered_clip_counter(3, 1));
+
+            // 並び替えと本文編集では連番を引き継ぐ
+            assert!(config.move_registered_clip(0, FavoriteMoveDirection::Down));
+            assert_eq!(config.clips[1].counter, 5);
+            config
+                .update_registered_clip(1, "", "No.{counter} v2")
+                .expect("update");
+            assert_eq!(config.clips[1].counter, 5);
+
+            assert!(config.set_registered_clip_counter(1, 0));
+            assert_eq!(config.clips[1].counter, 0);
+        });
+    }
+
+    /// `update_registered_clip` が本文・ラベル・プレビューを更新し、テンプレート指定と位置を保つこと
+    #[test]
+    fn test_update_registered_clip() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("first").expect("add");
+            config.add_registered_clip("second").expect("add");
+            assert!(config.set_registered_clip_template(1, true));
+
+            assert_eq!(
+                config.update_registered_clip(1, "  新ラベル  ", "  updated body  "),
+                Ok(())
+            );
+            assert_eq!(config.clips.len(), 2);
+            assert_eq!(config.clips[1].label, "新ラベル");
+            assert_eq!(config.clips[1].preview, "  updated body  ");
+            assert!(config.clips[1].template);
+            match config.resolve_registered_clip(1).expect("resolve") {
+                super::ResolvedClip::Text(text) => assert_eq!(text.as_str(), "  updated body  "),
+                super::ResolvedClip::Image { .. } => panic!("text expected"),
+            }
+            // 他の項目は変わらない
+            match config.resolve_registered_clip(0).expect("resolve") {
+                super::ResolvedClip::Text(text) => assert_eq!(text.as_str(), "first"),
+                super::ResolvedClip::Image { .. } => panic!("text expected"),
+            }
+
+            // 空白のみのラベルは新しいプレビューから補完し、長いラベルは上限で切り詰める
+            assert_eq!(
+                config.update_registered_clip(0, "   ", "from preview"),
+                Ok(())
+            );
+            assert_eq!(config.clips[0].label, "from preview");
+            let long_label = "あ".repeat(consts::MAX_REGISTERED_CLIP_LABEL_CHARS + 10);
+            assert_eq!(config.update_registered_clip(0, &long_label, "x"), Ok(()));
+            assert_eq!(
+                config.clips[0].label.chars().count(),
+                consts::MAX_REGISTERED_CLIP_LABEL_CHARS
+            );
+        });
+    }
+
+    /// `update_registered_clip` が不正な更新を拒否し、元の内容を変えないこと
+    #[test]
+    fn test_update_registered_clip_rejects_invalid() {
+        use super::UpdateRegisteredClipError;
+
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("keep").expect("add");
+            config
+                .add_registered_image(1, 1, &[0, 0, 0, 255])
+                .expect("add image");
+            let before = config.clips[0].clone();
+
+            assert_eq!(
+                config.update_registered_clip(0, "l", "   "),
+                Err(UpdateRegisteredClipError::Empty)
+            );
+            assert_eq!(
+                config.update_registered_clip(
+                    0,
+                    "l",
+                    &"a".repeat(consts::MAX_CLIPBOARD_TEXT_BYTES + 1)
+                ),
+                Err(UpdateRegisteredClipError::TooLarge)
+            );
+            assert_eq!(
+                config.update_registered_clip(1, "l", "text"),
+                Err(UpdateRegisteredClipError::ImageClip)
+            );
+            assert_eq!(
+                config.update_registered_clip(2, "l", "text"),
+                Err(UpdateRegisteredClipError::NotFound)
+            );
+            assert_eq!(config.clips[0], before);
         });
     }
 

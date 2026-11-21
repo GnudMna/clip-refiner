@@ -2,6 +2,7 @@ use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowId};
 
 use super::lazy::{HasLazySelector, LazySelector};
+use super::webview_script::escape_json_for_js_single_quoted;
 use super::window::{WebSelectorWindow, WebViewWindowOptions, embed_clip_selector_assets};
 use crate::config::FavoriteMoveDirection;
 use crate::consts;
@@ -24,6 +25,10 @@ pub(crate) enum ClipSelectorIpcAction {
     MoveClip(usize, FavoriteMoveDirection),
     /// 登録クリップのテンプレート展開を切り替える
     SetTemplate(usize, bool),
+    /// 登録クリップの `{counter}` の連番を最初に戻す
+    ResetCounter(usize),
+    /// ホバー表示用に登録クリップ本文の全文を要求する
+    RequestFullText(usize),
     /// セレクタを閉じる
     Close,
 }
@@ -62,6 +67,16 @@ pub(crate) fn parse_clip_selector_ipc_message(msg: &str) -> Option<ClipSelectorI
             _ => return None,
         };
         Some(ClipSelectorIpcAction::SetTemplate(index, enabled))
+    } else if let Some(index_str) = msg.strip_prefix("counter-reset:") {
+        index_str
+            .parse::<usize>()
+            .ok()
+            .map(ClipSelectorIpcAction::ResetCounter)
+    } else if let Some(index_str) = msg.strip_prefix("full:") {
+        index_str
+            .parse::<usize>()
+            .ok()
+            .map(ClipSelectorIpcAction::RequestFullText)
     } else {
         None
     }
@@ -80,6 +95,13 @@ pub(crate) fn clip_selector_focus_script(clips_json: &str) -> String {
 /// 登録クリップ一覧の再描画用スクリプトを生成する
 pub(crate) fn clip_selector_refresh_script(clips_json: &str) -> String {
     format!("refreshItems({clips_json});")
+}
+
+/// 登録クリップ本文の全文をホバー表示へ渡すスクリプトを生成する
+pub(crate) fn clip_selector_full_text_script(index: usize, text: &str) -> String {
+    let text_json = serde_json::Value::String(text.to_string()).to_string();
+    let text_arg = escape_json_for_js_single_quoted(&text_json);
+    format!("showClipFullText({index}, JSON.parse('{text_arg}'));")
 }
 
 // ======================================================================
@@ -163,6 +185,18 @@ impl ClipSelectorWindow {
                             ClipsEvent::RequestSetTemplate(index, enabled).into(),
                         );
                     }
+                    Some(ClipSelectorIpcAction::ResetCounter(index)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            ClipsEvent::RequestResetCounter(index).into(),
+                        );
+                    }
+                    Some(ClipSelectorIpcAction::RequestFullText(index)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            ClipsEvent::RequestFullText(index).into(),
+                        );
+                    }
                     Some(ClipSelectorIpcAction::Close) => {
                         dispatch::send_app_event(&proxy_clone, SelectorEvent::HideClip.into());
                     }
@@ -207,6 +241,18 @@ impl ClipSelectorWindow {
     pub fn refresh_items(&self, clips_json: &str) {
         self.lazy
             .evaluate_script(&clip_selector_refresh_script(clips_json));
+    }
+
+    /// 登録クリップ本文の全文をホバー表示へ渡す
+    ///
+    /// `WebView` 未生成時は何もしない
+    ///
+    /// # Arguments
+    /// * `index` - 登録クリップのインデックス
+    /// * `text` - ホバー表示する本文
+    pub fn show_full_text(&self, index: usize, text: &str) {
+        self.lazy
+            .evaluate_script(&clip_selector_full_text_script(index, text));
     }
 
     /// 登録クリップセレクタが現在表示されているかどうかを確認する
@@ -346,6 +392,37 @@ mod tests {
         assert_eq!(parse_clip_selector_ipc_message("template:0:yes"), None);
         assert_eq!(parse_clip_selector_ipc_message("template:x:on"), None);
         assert_eq!(parse_clip_selector_ipc_message("template:1"), None);
+    }
+
+    /// `counter-reset:` メッセージからインデックスを復元できるようにすること
+    #[test]
+    fn parse_ipc_reset_counter() {
+        assert_eq!(
+            parse_clip_selector_ipc_message("counter-reset:2"),
+            Some(ClipSelectorIpcAction::ResetCounter(2))
+        );
+        assert_eq!(parse_clip_selector_ipc_message("counter-reset:x"), None);
+    }
+
+    /// `full:` メッセージからインデックスを復元できるようにすること
+    #[test]
+    fn parse_ipc_request_full_text() {
+        assert_eq!(
+            parse_clip_selector_ipc_message("full:4"),
+            Some(ClipSelectorIpcAction::RequestFullText(4))
+        );
+        assert_eq!(parse_clip_selector_ipc_message("full:x"), None);
+        assert_eq!(parse_clip_selector_ipc_message("full:"), None);
+    }
+
+    /// 全文スクリプトが引用符・改行・バックスラッシュを含む本文でも文字列リテラルを壊さないこと
+    #[test]
+    fn clip_selector_full_text_script_escapes_text() {
+        let script = clip_selector_full_text_script(2, "it's\n\"a\"\\b");
+        assert!(script.starts_with("showClipFullText(2, JSON.parse('"));
+        assert!(script.ends_with("'));"));
+        assert!(!script.contains('\n'));
+        assert!(script.contains(r"it\'s"));
     }
 
     /// 不正なメッセージは `None` を返すようにすること

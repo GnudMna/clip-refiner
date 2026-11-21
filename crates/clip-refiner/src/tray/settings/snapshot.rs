@@ -38,6 +38,8 @@ pub struct SettingsLimits {
     pub max_favorite_modes: usize,
     /// 登録クリップの最大件数
     pub max_registered_clips: usize,
+    /// 登録クリップのラベルの最大文字数
+    pub max_registered_clip_label_chars: usize,
     /// 正規表現パターンの最大バイト数
     pub max_regex_pattern_bytes: usize,
     /// 正規表現プリセットの最大件数
@@ -64,6 +66,7 @@ impl SettingsLimits {
             max_pipeline_length: consts::MAX_PIPELINE_LENGTH,
             max_favorite_modes: consts::MAX_FAVORITE_MODES,
             max_registered_clips: consts::MAX_REGISTERED_CLIPS,
+            max_registered_clip_label_chars: consts::MAX_REGISTERED_CLIP_LABEL_CHARS,
             max_regex_pattern_bytes: consts::MAX_REGEX_PATTERN_BYTES,
             max_regex_presets: consts::MAX_REGEX_PRESETS,
             max_regex_steps_per_preset: consts::MAX_REGEX_STEPS_PER_PRESET,

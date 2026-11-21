@@ -297,6 +297,12 @@ fn processing_limit_needles() -> Vec<String> {
         format_mib(consts::MAX_REGISTERED_IMAGE_BYTES),
         format!("{} px", consts::MAX_REGISTERED_IMAGE_DIMENSION),
         format_mib(consts::MAX_REGISTERED_CLIPS_FILE_BYTES),
+        format!("{} px", consts::MAX_BASE64_IMAGE_DIMENSION),
+        format!("{} ピクセル", consts::MAX_BASE64_IMAGE_PIXELS),
+        format!(
+            "{} 時間",
+            consts::CLIPBOARD_IMAGE_FILE_RETENTION_SECS / 3600
+        ),
         format!("{} 件", consts::MAX_FAVORITE_MODES),
         format!("{} 段", consts::MAX_PIPELINE_LENGTH),
         format!(

@@ -22,4 +22,4 @@ pub use fingerprint::ContentFingerprint;
 pub use limits::{is_within_clipboard_limit, is_within_parser_limit};
 #[cfg(feature = "config")]
 pub use secret::{SecretString, secret_from};
-pub use snippet::format_public_snippet;
+pub use snippet::{format_public_snippet, looks_sensitive};

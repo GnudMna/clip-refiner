@@ -89,6 +89,31 @@ fn copy_template_clip_expands_placeholders() {
     assert!(!harness.run_monitor_update(false));
 }
 
+/// 編集した本文が以降のコピーに使われ、ラベルとテンプレート指定が保たれること
+#[test]
+fn edited_clip_is_copied_with_new_text() {
+    let mut harness = ClipboardHarness::with_text("before {date}");
+
+    harness.register_clip_from_clipboard();
+    assert!(harness.with_config_mut(|c| c.set_registered_clip_template(0, true)));
+    harness
+        .with_config_mut(|c| c.update_registered_clip(0, "見出し", "after {{x}}"))
+        .expect("edit");
+    harness.reset_clipboard("other");
+    harness.copy_registered_clip(0);
+
+    // テンプレート指定が残るため、編集後の本文も展開して書き込む
+    assert_eq!(harness.clipboard_text(), "after {x}");
+    assert_eq!(
+        harness.registered_clip_text(0).as_deref(),
+        Some("after {{x}}")
+    );
+    assert_eq!(
+        harness.with_config_mut(|c| c.clips[0].label.clone()),
+        "見出し"
+    );
+}
+
 /// テンプレートでないクリップはプレースホルダを展開しないこと
 #[test]
 fn copy_plain_clip_keeps_placeholders() {
@@ -112,4 +137,51 @@ fn copy_template_clip_with_invalid_format_keeps_clipboard() {
     harness.copy_registered_clip(0);
 
     assert_eq!(harness.clipboard_text(), "unchanged");
+}
+
+/// `{counter}` を含むテンプレートはコピーのたびに連番を 1 ずつ進め、リセットで 1 に戻ること
+#[test]
+fn copy_template_clip_advances_counter() {
+    let mut harness = ClipboardHarness::with_text("No.{counter} / {counter}");
+
+    harness.register_clip_from_clipboard();
+    assert!(harness.with_config_mut(|c| c.set_registered_clip_template(0, true)));
+
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.clipboard_text(), "No.1 / 1");
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.clipboard_text(), "No.2 / 2");
+    assert_eq!(harness.with_config_mut(|c| c.clips[0].counter), 2);
+
+    assert!(harness.with_config_mut(|c| c.set_registered_clip_counter(0, 0)));
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.clipboard_text(), "No.1 / 1");
+}
+
+/// `{counter}` を含まないテンプレートと、展開に失敗したコピーでは連番を進めないこと
+#[test]
+fn copy_does_not_advance_counter_without_issuing_it() {
+    let mut harness = ClipboardHarness::with_text("{date:%Y}");
+    harness.register_clip_from_clipboard();
+    assert!(harness.with_config_mut(|c| c.set_registered_clip_template(0, true)));
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.with_config_mut(|c| c.clips[0].counter), 0);
+
+    // 不正な書式で展開に失敗した場合も連番は変わらない
+    harness
+        .with_config_mut(|c| c.update_registered_clip(0, "", "{counter}{date:%Q}"))
+        .expect("edit");
+    harness.reset_clipboard("unchanged");
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.clipboard_text(), "unchanged");
+    assert_eq!(harness.with_config_mut(|c| c.clips[0].counter), 0);
+
+    // テンプレートでないクリップの `{counter}` は展開せず、連番も進めない
+    harness
+        .with_config_mut(|c| c.update_registered_clip(0, "", "{counter}"))
+        .expect("edit");
+    assert!(harness.with_config_mut(|c| c.set_registered_clip_template(0, false)));
+    harness.copy_registered_clip(0);
+    assert_eq!(harness.clipboard_text(), "{counter}");
+    assert_eq!(harness.with_config_mut(|c| c.clips[0].counter), 0);
 }

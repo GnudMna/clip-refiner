@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+use std::fmt;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -6,6 +8,32 @@ use crate::config::RegexSettings;
 use crate::platform::update::{
     AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome, UpdateCheckUiResponse,
 };
+use crate::security::SecretString;
+
+// ======================================================================
+// 登録クリップ編集要求
+// ======================================================================
+/// 設定ウィンドウからの登録クリップ編集の保存要求
+///
+/// `AppEvent` は `Copy` かつ `Debug` のため、本文は含めずここへ預ける
+pub(crate) struct ClipEditRequest {
+    /// 登録クリップのインデックス
+    pub index: usize,
+    /// 新しい表示ラベル
+    pub label: String,
+    /// 新しい本文 (破棄時にゼロ化)
+    pub text: SecretString,
+}
+
+impl fmt::Debug for ClipEditRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClipEditRequest")
+            .field("index", &self.index)
+            .field("label", &self.label)
+            .field("text", &"...")
+            .finish()
+    }
+}
 
 // ======================================================================
 // 正規表現プレビュー要求
@@ -28,6 +56,7 @@ pub(crate) struct RegexPreviewRequest {
 pub(crate) struct SettingsPendingState {
     patch: Mutex<Option<String>>,
     regex_preview: Mutex<Option<RegexPreviewRequest>>,
+    clip_edits: Mutex<VecDeque<ClipEditRequest>>,
     update_busy: AtomicBool,
     update_check_result: Mutex<Option<UpdateCheckOutcome>>,
     available_update: Mutex<Option<AvailableUpdate>>,
@@ -43,6 +72,7 @@ impl SettingsPendingState {
         Self {
             patch: Mutex::new(None),
             regex_preview: Mutex::new(None),
+            clip_edits: Mutex::new(VecDeque::new()),
             update_busy: AtomicBool::new(false),
             update_check_result: Mutex::new(None),
             available_update: Mutex::new(None),
@@ -90,6 +120,26 @@ impl SettingsPendingState {
     /// * `Option<RegexPreviewRequest>` - 値がある場合は `Some`、ない場合は `None`
     pub fn take_regex_preview_request(&self) -> Option<RegexPreviewRequest> {
         self.regex_preview.lock_ignore_poison().take()
+    }
+
+    /// 登録クリップの編集要求を末尾へ追加する
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    /// * `request` - 編集要求
+    pub fn push_clip_edit(&self, request: ClipEditRequest) {
+        self.clip_edits.lock_ignore_poison().push_back(request);
+    }
+
+    /// 処理待ちの登録クリップ編集要求を古い順に取り出す
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `Option<ClipEditRequest>` - 値がある場合は `Some`、ない場合は `None`
+    pub fn take_clip_edit(&self) -> Option<ClipEditRequest> {
+        self.clip_edits.lock_ignore_poison().pop_front()
     }
 
     /// 更新操作を開始できるとき `true` を返しビジーにする
@@ -198,6 +248,28 @@ mod tests {
             size: 100,
             sha256: "a".repeat(64),
         }
+    }
+
+    /// 登録クリップの編集要求を送信順に取り出せ、`Debug` が本文を出力しないこと
+    #[test]
+    fn clip_edit_requests_are_fifo_and_debug_masks_text() {
+        let pending = SettingsPendingState::new();
+        for (index, text) in [(0, "secret-one"), (2, "secret-two")] {
+            pending.push_clip_edit(ClipEditRequest {
+                index,
+                label: format!("label{index}"),
+                text: crate::security::secret_from(text),
+            });
+        }
+
+        let first = pending.take_clip_edit().expect("first");
+        assert_eq!((first.index, first.label.as_str()), (0, "label0"));
+        assert_eq!(first.text.as_str(), "secret-one");
+        let debug = format!("{first:?}");
+        assert!(debug.contains("label0"));
+        assert!(!debug.contains("secret-one"));
+        assert_eq!(pending.take_clip_edit().expect("second").index, 2);
+        assert!(pending.take_clip_edit().is_none());
     }
 
     /// 更新操作のビジーフラグを排他的に立てられるようにすること

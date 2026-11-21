@@ -29,7 +29,13 @@ const {
     deleteMessage,
     moveMessage,
     templateMessage,
+    fullTextMessage,
+    canRequestFullText,
+    fullTextToShow,
     resolveTemplateToggle,
+    counterResetMessage,
+    resolveCounterReset,
+    counterBadgeText,
     canReorder,
     moveTargetIndex,
     buildRegisterRowInnerHtml,
@@ -40,7 +46,7 @@ const input = document.getElementById('input');
 /** @type {HTMLElement} */
 const results = document.getElementById('results');
 
-/** @type {Array<{ id: string, label: string, preview?: string, kind: string, template?: boolean, thumbnail?: string, hover_preview?: string }>} */
+/** @type {Array<{ id: string, label: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string, hover_preview?: string }>} */
 let items = [];
 /** @type {typeof items} */
 let filtered = [];
@@ -115,6 +121,105 @@ results.addEventListener('mouseleave', hideImageHoverPreview);
 results.addEventListener('scroll', hideImageHoverPreview, { passive: true });
 input.addEventListener('mouseenter', hideImageHoverPreview);
 
+// ======================================================================
+// テキスト全文のホバー表示
+// ======================================================================
+/** 全文を要求するまでのカーソル静止時間 (ms) */
+const TEXT_HOVER_DELAY_MS = 400;
+
+const textHoverPreview = document.getElementById('text-hover-preview');
+
+/** @type {ReturnType<typeof setTimeout>|null} */
+let textHoverTimer = null;
+/** @type {typeof items[number]|null} */
+let textHoverItem = null;
+/** @type {HTMLElement|null} */
+let textHoverAnchor = null;
+
+/** テキスト全文のホバー表示を非表示にし、待機中の要求を取り消す */
+function hideTextHoverPreview() {
+    if (textHoverTimer !== null) {
+        clearTimeout(textHoverTimer);
+        textHoverTimer = null;
+    }
+    textHoverItem = null;
+    textHoverAnchor = null;
+    textHoverPreview.classList.remove('is-visible');
+    textHoverPreview.setAttribute('aria-hidden', 'true');
+    textHoverPreview.textContent = '';
+}
+
+/**
+ * テキスト全文のホバー表示を対象行の上下どちらか広い側に配置する
+ *
+ * @param {HTMLElement} anchorEl
+ */
+function positionTextHoverPreview(anchorEl) {
+    const margin = 10;
+    const gap = 4;
+    const anchorRect = anchorEl.getBoundingClientRect();
+    const previewRect = textHoverPreview.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - anchorRect.bottom - margin;
+    const spaceAbove = anchorRect.top - margin;
+
+    let top =
+        previewRect.height + gap <= spaceBelow || spaceBelow >= spaceAbove
+            ? anchorRect.bottom + gap
+            : anchorRect.top - previewRect.height - gap;
+    top = Math.max(margin, Math.min(top, window.innerHeight - previewRect.height - margin));
+
+    textHoverPreview.style.top = `${top}px`;
+}
+
+/**
+ * カーソルが止まったテキスト行の全文を Rust へ要求する予約をする
+ *
+ * @param {typeof items[number]} item
+ * @param {HTMLElement} rowEl
+ */
+function scheduleTextHoverPreview(item, rowEl) {
+    if (textHoverItem === item) {
+        return;
+    }
+    hideTextHoverPreview();
+    if (!canRequestFullText(item)) {
+        return;
+    }
+    textHoverItem = item;
+    textHoverAnchor = rowEl;
+    textHoverTimer = setTimeout(() => {
+        textHoverTimer = null;
+        postIpc(fullTextMessage(item.id));
+    }, TEXT_HOVER_DELAY_MS);
+}
+
+/**
+ * Rust から受け取った全文をホバー表示する
+ *
+ * Rust WebView から `window.showClipFullText(id, text)` として呼び出す
+ * 応答待ちの間にカーソルが別の行へ移っていた場合は破棄する
+ *
+ * @param {number|string} id
+ * @param {unknown} text
+ */
+window.showClipFullText = (id, text) => {
+    if (!textHoverItem || !textHoverAnchor || textHoverItem.id !== String(id)) {
+        return;
+    }
+    const body = fullTextToShow(textHoverItem, text);
+    if (body === null) {
+        return;
+    }
+    textHoverPreview.textContent = body;
+    textHoverPreview.setAttribute('aria-hidden', 'false');
+    textHoverPreview.classList.add('is-visible');
+    positionTextHoverPreview(textHoverAnchor);
+};
+
+results.addEventListener('mouseleave', hideTextHoverPreview);
+results.addEventListener('scroll', hideTextHoverPreview, { passive: true });
+input.addEventListener('mouseenter', hideTextHoverPreview);
+
 /**
  * クリップ 1 行分の DOM 要素を生成する
  *
@@ -170,6 +275,14 @@ function createItem(item, index, query) {
         badge.title = 'コピー時に {date} などを展開する';
         modeInfo.appendChild(badge);
     }
+    const counterText = counterBadgeText(item);
+    if (counterText) {
+        const counterBadge = document.createElement('span');
+        counterBadge.className = 'template-badge';
+        counterBadge.textContent = counterText;
+        counterBadge.title = '{counter} で最後に使った連番。Ctrl+R で 1 から数え直す';
+        modeInfo.appendChild(counterBadge);
+    }
     content.appendChild(modeInfo);
 
     if (item.preview && !isImage) {
@@ -198,7 +311,11 @@ function createItem(item, index, query) {
     div.appendChild(deleteBtn);
 
     // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
-    div.onmousemove = () => selection.setSelectedIndex(index, false);
+    div.onmousemove = () => {
+        selection.setSelectedIndex(index, false);
+        scheduleTextHoverPreview(item, div);
+    };
+    div.onmouseleave = hideTextHoverPreview;
     div.onclick = () => select(item.id);
 
     return div;
@@ -260,6 +377,7 @@ function createRegisterRow(index, query) {
  */
 function renderList(scrollToSelection) {
     hideImageHoverPreview();
+    hideTextHoverPreview();
     results.innerHTML = '';
     const query = normalizeQuery(input.value);
     selection.clampSelectedIndex();
@@ -350,6 +468,20 @@ function toggleSelectedTemplate() {
     return true;
 }
 
+/**
+ * 選択中のクリップの連番を最初に戻す
+ *
+ * @returns {boolean} リセットを要求した場合は `true`
+ */
+function resetSelectedCounter() {
+    const target = resolveCounterReset(selection.index, filtered);
+    if (!target) {
+        return false;
+    }
+    postIpc(counterResetMessage(target.id));
+    return true;
+}
+
 /** 選択中のクリップを削除する */
 function deleteSelected() {
     const item = filtered[selection.index];
@@ -362,6 +494,7 @@ function deleteSelected() {
 /** セレクターを閉じる */
 function closeSelector() {
     hideImageHoverPreview();
+    hideTextHoverPreview();
     closeSelectorWindow();
 }
 
@@ -403,6 +536,11 @@ window.onkeydown = (e) => {
     }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
         toggleSelectedTemplate();
+        e.preventDefault();
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') {
+        resetSelectedCounter();
         e.preventDefault();
         return;
     }

@@ -66,6 +66,40 @@
     gap: 8px;
 }
 
+.confirm-dialog__panel--wide {
+    width: min(100%, 640px);
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.confirm-dialog__title {
+    margin: 0 0 14px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+#clip-editor-text {
+    min-height: 220px;
+    max-height: 50vh;
+}
+
+.clip-editor__error {
+    margin: 0 0 12px;
+    color: #ff9b9b;
+}
+
+.clip-editor__error[hidden] {
+    display: none;
+}
+
+.clip-editor__shortcut {
+    margin-right: auto;
+    align-self: center;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
 .info-banner {
     display: flex;
     align-items: flex-start;

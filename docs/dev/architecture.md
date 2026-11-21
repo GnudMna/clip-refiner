@@ -43,7 +43,7 @@ clip-refiner/
 │       └── src/
 │           ├── clip_template.rs # 登録クリップのテンプレート展開 (`{date}` など。feature 非依存)
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize ・ spec (ドキュメント同期テスト) など
-│           ├── native/      # DPAPI (`config`)・クリップボード画像と監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
+│           ├── native/      # DPAPI (`config`)・クリップボード画像・画像のファイル貼り付け (`CF_HDROP`)・監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   ├── mode/        # `RefineMode` / `RefineCategory` の定義・表示名・CLI 名・メニュー順
 │           │   ├── dispatch/    # モードからカテゴリ別の変換処理への振り分け
@@ -253,6 +253,7 @@ flowchart TB
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
   - `OwnedClipboard` (`arboard`): テキスト / 通常画像 / HTML 形式 (`CF_HTML`) の `OpenClipboard` I/O。HTML 形式の有無は `IsClipboardFormatAvailable` で開かずに判定する
   - `native/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
+  - `native/clipboard_file` (`CF_HDROP`): 画像のビットマップを書いた直後に、PNG を一時フォルダへ書き出してそのパスを追加する。既存の形式は消さない。`arboard` の書き込みが終わってから開く
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 

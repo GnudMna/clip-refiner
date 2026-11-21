@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use super::context::RefineContext;
 use super::mode::{RefineCategory, RefineMode};
 
+mod base64;
 mod case_convert;
 mod datetime;
 mod escape;
@@ -47,6 +48,7 @@ impl Refiner for RefineMode {
 fn refine_by_category<'a>(mode: RefineMode, text: &'a str, ctx: &RefineContext) -> Cow<'a, str> {
     match mode.category() {
         RefineCategory::UrlActions => url::refine(mode, text, ctx),
+        RefineCategory::Base64 => base64::refine(mode, text, ctx),
         RefineCategory::Path => path::refine(mode, text, ctx),
         RefineCategory::LineActions => line_actions::refine(mode, text, ctx),
         RefineCategory::Trim => trim::refine(mode, text, ctx),

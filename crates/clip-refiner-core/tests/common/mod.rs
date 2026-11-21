@@ -31,6 +31,8 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
         "http://example.com/?utm_source=test",
         "http://example.com/",
     ),
+    (RefineMode::Base64Encode, "あいう", "44GC44GE44GG"),
+    (RefineMode::Base64Decode, "44GC44GE44GG", "あいう"),
     (
         RefineMode::ExtractBasename,
         "C:\\path\\to\\file.txt",
@@ -162,7 +164,7 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 /// 全 `RefineMode` バリアントに回帰ケースが存在すること
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();
-    // 固定ケース 43 + ローカル日時 5 + 正規表現 4 + 画像 1 = 53
+    // 固定ケース 45 + ローカル日時 5 + 正規表現 4 + 画像 1 = 55
     assert_eq!(
         fixed.len() + 10,
         RefineMode::iter().count(),
