@@ -10,14 +10,14 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner = { version = "0.13.0", default-features = false }
+//! clip-refiner = { version = "0.13.1", default-features = false }
 //! ```
 //!
 //! または [`clip-refiner-core`] を直接依存に追加する
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "0.13.0" }
+//! clip-refiner-core = { version = "0.13.1" }
 //! ```
 //!
 //! # 単一モードの加工
@@ -66,11 +66,12 @@ pub use clip_refiner_core::{
     AddRegisteredClipError, AppConfig, CONFIG_VERSION, ClipboardIoError, ClipboardProcessError,
     ClipboardProcessOutcome, ConfigDiskReload, ConfigError, ConfigLoadFallback, ConfigLoadOutcome,
     ConfigReloadError, Error, FavoriteMoveDirection, FavoriteToggleResult, HotkeyParseError,
-    HotkeySettings, MonitorMode, NotificationSettings, OrderedValue, RefineCategory, RefineContext,
-    RefineMode, Refiner, RegexSettings, ResolvedClip, apply_pipeline_to_text, apply_text_pipeline,
-    disk_config_modified_time, format_unknown_config_keys_message, get_config_dir,
-    is_within_clipboard_limit, is_within_parser_limit, open_config_file, process_clipboard,
-    process_clipboard_pipeline, split_pipeline,
+    HotkeySettings, MonitorMode, NotificationSettings, OrderedValue, OwnedClipboard,
+    RefineCategory, RefineContext, RefineMode, Refiner, RegexSettings, ResolvedClip,
+    apply_pipeline_to_text, apply_text_pipeline, disk_config_modified_time,
+    format_unknown_config_keys_message, get_config_dir, is_within_clipboard_limit,
+    is_within_parser_limit, open_config_file, process_clipboard, process_clipboard_pipeline,
+    split_pipeline,
 };
 
 // ======================================================================

@@ -147,10 +147,13 @@ impl ClipboardWorkerHandle {
 
     fn start_thread(handle: &Arc<Self>, rx: Receiver<ClipboardCommand>) {
         // ワーカーは `Arc<Self>` を保持しない。保持するとテスト終了時の `Drop` が走らず
-        // `arboard::Clipboard` がスレッドに残留し、並列テストでヒープ破壊を起こす
+        // `OwnedClipboard` がスレッドに残留し、並列テストでヒープ破壊を起こす
         let state = Arc::clone(&handle.state);
+        let listener_tx = handle.tx.lock_ignore_poison().clone();
         let join_handle = thread::spawn(move || {
-            let result = catch_unwind(AssertUnwindSafe(|| run_worker_loop(&state, &rx)));
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                run_worker_loop(&state, &rx, listener_tx);
+            }));
             if result.is_err() {
                 crate::log_error!("クリップボードワーカーがパニックで終了しました");
             }

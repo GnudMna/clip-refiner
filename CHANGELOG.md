@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-07-18
+
+### Security
+
+- ワンショット IPC の名前付きパイプを現在ユーザー専用 DACL で作成するようにした。既定 ACL (Everyone 読み取り・管理者フルコントロール等) をやめ、他ユーザーからのローカル接続を拒否する (`PIPE_REJECT_REMOTE_CLIENTS` は従来どおり)。脅威モデルは [CONFIG.md](CONFIG.md#ワンショット-ipc) に記載
+
+### Added
+
+- ワンショット IPC の実パイプ往復統合テスト (`oneshot_ipc_flow`)。テスト専用パイプ名で待受し、成功 / 変更なし / 正規表現上書き / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求破棄 / 連続委譲を固定する
+
+### Changed
+
+- 画面 OCR のデフォルトホットキーを `Alt+Shift+O` から `Alt+Shift+G` (`hotkeys.ocr`) へ変更。既存の `config.toml` に保存済みの値がある場合は維持し、キー欠落時のみ新既定を適用する
+- Event 監視を `AddClipboardFormatListener` による OS 通知駆動へ変更。専用リスナスレッドが `WM_CLIPBOARDUPDATE` でワーカーを起床し、アイドル時のシーケンストークン周期 peek をやめた。リスナ初期化失敗時のみ従来の短周期 peek にフォールバックする
+- クリップボード本文 I/O を `OwnedClipboard` に集約し、変更検知 (`seq_num` / リスナ) と Excel 向け `CF_DIB` 短命 Open の責務を分離した。画像取得では同一呼び出しで `arboard` と `clipboard-win` を重ねて開かない
+
 ## [0.13.0] - 2026-07-13
 
 ### Fixed
@@ -436,7 +452,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...develop
+[0.13.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...v0.13.1
 [0.13.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...v0.13.0
 [0.12.6]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...v0.12.6
 [0.12.5]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...v0.12.5

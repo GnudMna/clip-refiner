@@ -18,7 +18,7 @@ use crate::user_error::UserNotification;
 /// ポーリングスリープを分割するチック間隔(ミリ秒)
 pub(crate) const POLL_TICK_MS: u64 = 50;
 
-/// イベント監視ループのスリープ間隔(ミリ秒)
+/// リスナ未使用時にシーケンストークンを peek する間隔 (ミリ秒)
 pub(crate) const EVENT_POLL_MS: u64 = 100;
 
 /// クリップボード観測の結果

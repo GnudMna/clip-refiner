@@ -1,6 +1,7 @@
 //! クリップボード I/O の抽象化
 //!
-//! テスト用のインメモリ実装は `test_helpers::InMemoryTextClipboard` を参照
+//! 本番の所有型は [`super::OwnedClipboard`]。テスト用のインメモリ実装は
+//! `test_helpers::InMemoryTextClipboard` を参照
 
 // ======================================================================
 // エラー型
@@ -66,21 +67,7 @@ impl TextClipboard for arboard::Clipboard {
 
 impl ImageClipboard for arboard::Clipboard {
     fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
-        if let Ok(image) = arboard::Clipboard::get_image(self) {
-            return Ok((
-                u32::try_from(image.width)
-                    .map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))?,
-                u32::try_from(image.height)
-                    .map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))?,
-                image.bytes.into_owned(),
-            ));
-        }
-
-        if let Some(image) = crate::platform::clipboard_image::read_dib_image() {
-            return Ok((image.width, image.height, image.rgba));
-        }
-
-        Err(ClipboardIoError::ImageUnavailable)
+        read_rgba_image(self)
     }
 
     fn set_image(
@@ -104,5 +91,28 @@ impl ImageClipboard for arboard::Clipboard {
             },
         )
         .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
+    }
+}
+
+/// 画像を 1 経路だけで読む (同一呼び出しで arboard と clipboard-win を重ねて開かない)
+///
+/// `CF_DIB` / `CF_DIBV5` がある場合は Excel 向け DIB デコードのみを試し、
+/// 無い場合または DIB 読み失敗時のみ `arboard` を使う
+fn read_rgba_image(
+    clipboard: &mut arboard::Clipboard,
+) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
+    if crate::platform::clipboard_image::dib_format_available()
+        && let Some(image) = crate::platform::clipboard_image::read_dib_image()
+    {
+        return Ok((image.width, image.height, image.rgba));
+    }
+
+    match arboard::Clipboard::get_image(clipboard) {
+        Ok(image) => Ok((
+            u32::try_from(image.width).map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))?,
+            u32::try_from(image.height).map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))?,
+            image.bytes.into_owned(),
+        )),
+        Err(_) => Err(ClipboardIoError::ImageUnavailable),
     }
 }

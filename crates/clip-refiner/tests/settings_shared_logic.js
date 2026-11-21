@@ -99,7 +99,7 @@ function test_snapshot_has_hotkey_fields() {
             hotkeys: {
                 quickSelector: 'Alt+Shift+S',
                 clipSelector: 'Alt+Shift+T',
-                ocr: 'Alt+Shift+O',
+                ocr: 'Alt+Shift+G',
                 notification: 'Alt+Shift+N',
                 pause: 'Alt+Shift+P',
                 continuousRecord: 'Alt+Shift+C',

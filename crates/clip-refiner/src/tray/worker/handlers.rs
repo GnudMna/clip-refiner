@@ -98,7 +98,8 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
         ClipboardCommand::RegisterClipFromClipboard => {
             register_clip_from_clipboard(clipboard, state);
         }
-        ClipboardCommand::Shutdown => {}
+        // 監視ティックはワーカーループ側で実行する
+        ClipboardCommand::ClipboardChanged | ClipboardCommand::Shutdown => {}
     }
 }
 

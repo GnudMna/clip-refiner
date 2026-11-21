@@ -11,7 +11,7 @@ use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 /// OS クリップボードを開くワーカー起動テストの直列化ロック
 ///
-/// Windows では複数 `arboard::Clipboard` の同時生成・破棄がヒープ破壊を起こしうる
+/// Windows では複数 `OwnedClipboard` の同時生成・破棄がヒープ破壊を起こしうる
 static CLIPBOARD_WORKER_SPAWN_LOCK: Mutex<()> = Mutex::new(());
 
 // ======================================================================

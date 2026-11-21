@@ -77,7 +77,9 @@ impl HotkeyTestContext {
     }
 }
 
-/// テスト間でホットキー登録が衝突しないよう F キーを割り当てる
+/// 本番デフォルトや他アプリと衝突しにくい F キーを割り当てる
+///
+/// `Alt+Shift+F10` は環境によって OS / 他プロセスが占有していることがあるため使わない
 fn test_hotkeys() -> HotkeySettings {
     HotkeySettings {
         quick_selector: "Alt+Shift+F1".to_string(),
@@ -89,7 +91,7 @@ fn test_hotkeys() -> HotkeySettings {
         ocr: "Alt+Shift+F7".to_string(),
         continuous_record: "Alt+Shift+F8".to_string(),
         continuous_record_undo: "Alt+Shift+F9".to_string(),
-        continuous_record_paste: "Alt+Shift+F10".to_string(),
+        continuous_record_paste: "Alt+Shift+F12".to_string(),
         favorite_mode_slots: Vec::new(),
     }
 }

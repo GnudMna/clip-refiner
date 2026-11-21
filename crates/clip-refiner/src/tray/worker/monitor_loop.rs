@@ -7,9 +7,7 @@ use super::super::state::AppState;
 use super::clipboard_seq;
 
 use crate::config::MonitorMode;
-use crate::refiner::RefineContext;
-
-use arboard::Clipboard;
+use crate::refiner::{OwnedClipboard, RefineContext, TextClipboard};
 
 // ======================================================================
 // 監視ループ状態
@@ -53,7 +51,7 @@ impl MonitorLoopState {
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
     /// * `state` - アプリケーションの共有状態
-    pub fn reset(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
+    pub fn reset(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
         let text = clipboard.get_text().unwrap_or_default();
         let new_token = clipboard_seq::token().unwrap_or(0);
         let token_changed = new_token != self.last_token;
@@ -93,15 +91,23 @@ impl MonitorLoopState {
 
     /// コマンド待ちのタイムアウトを計算する
     ///
-    /// 監視が停止中の場合は短い間隔で再確認し、
-    /// 監視中はポーリング間隔またはイベント監視間隔に応じた値を返す
+    /// 監視が停止中の場合は短い間隔で再確認する。Event / 連続記録でリスナが稼働中のときは
+    /// 設定外部変更検知用の長間隔にし、`ClipboardChanged` で起床する。
+    /// リスナ未使用時はシーケンストークンの短周期 peek にフォールバックする
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
+    /// * `listener_active` - OS クリップボードリスナが稼働中なら `true`
+    /// * `idle_timeout` - リスナ稼働時の待機上限 (設定外部変更検知用)
     ///
     /// # Returns
     /// * `Duration` - `recv_timeout` に渡す待機時間
-    pub fn recv_timeout(&self, state: &Arc<AppState>) -> Duration {
+    pub fn recv_timeout(
+        &self,
+        state: &Arc<AppState>,
+        listener_active: bool,
+        idle_timeout: Duration,
+    ) -> Duration {
         let generation = state.monitor_generation.load(Ordering::SeqCst);
         let snap = state.monitor_snapshot();
         if generation == 0 || self.tracked_generation != generation {
@@ -113,6 +119,9 @@ impl MonitorLoopState {
         }
 
         if snap.continuous_record_enabled || Self::effective_mode(state) == MonitorMode::Event {
+            if listener_active {
+                return idle_timeout;
+            }
             return Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS));
         }
 
@@ -129,7 +138,7 @@ impl MonitorLoopState {
     /// # Arguments
     /// * `clipboard` - クリップボード操作用のインスタンス
     /// * `state` - アプリケーションの共有状態
-    pub fn tick(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
+    pub fn tick(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
         let snap = state.monitor_snapshot();
 
         if state.with_config(|c| c.monitor_mode) == MonitorMode::Event
@@ -160,8 +169,8 @@ impl MonitorLoopState {
 
     /// 連続記録向けにクリップボード変更を検知する
     ///
-    /// 監視方式に依存せず変更トークンで検知する (イベント監視と同じ周期)
-    fn tick_continuous_record(&mut self, clipboard: &mut Clipboard, state: &Arc<AppState>) {
+    /// 監視方式に依存せず変更トークンで検知する (`ClipboardChanged` 起床後も同じ判定)
+    fn tick_continuous_record(&mut self, clipboard: &mut OwnedClipboard, state: &Arc<AppState>) {
         if let Some(token) = clipboard_seq::token() {
             if token != self.last_token {
                 let result = clipboard_monitor::observe_continuous_record(clipboard, state);
@@ -180,7 +189,7 @@ impl MonitorLoopState {
     /// イベント監視で加工処理を試みる
     fn tick_event_processing(
         &mut self,
-        clipboard: &mut Clipboard,
+        clipboard: &mut OwnedClipboard,
         state: &Arc<AppState>,
         snap: &super::super::state::MonitorSnapshot,
     ) {
@@ -204,7 +213,7 @@ impl MonitorLoopState {
     /// ポーリング監視で加工処理を試みる
     fn tick_polling_processing(
         &mut self,
-        clipboard: &mut Clipboard,
+        clipboard: &mut OwnedClipboard,
         state: &Arc<AppState>,
         snap: &super::super::state::MonitorSnapshot,
     ) {
@@ -266,7 +275,7 @@ pub(super) fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLo
 /// * `state` - アプリケーションの共有状態
 pub(super) fn sync_monitor_generation(
     monitor: &mut MonitorLoopState,
-    clipboard: &mut Clipboard,
+    clipboard: &mut OwnedClipboard,
     state: &Arc<AppState>,
 ) {
     let generation = state.monitor_generation.load(Ordering::SeqCst);

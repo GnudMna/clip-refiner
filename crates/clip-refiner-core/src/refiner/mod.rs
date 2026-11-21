@@ -20,10 +20,12 @@ mod context;
 mod dispatch;
 mod mode;
 mod ordered_value;
+mod owned_clipboard;
 mod pipeline;
 pub mod text_clipboard;
 mod transform;
 
+pub use owned_clipboard::OwnedClipboard;
 pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
 
 pub use clipboard::process_clipboard_pipeline_io;

@@ -149,7 +149,7 @@ pub fn apply_pipeline_to_text(
 /// テキストが変更された場合のみクリップボードを更新する
 ///
 /// # Arguments
-/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
+/// * `clipboard` - テキスト・画像クリップボード実装 (`OwnedClipboard` など)
 /// * `mode` - 適用する加工モード (`RefineMode`)
 /// * `ctx` - 設定依存の加工パラメータ
 ///
@@ -160,8 +160,8 @@ pub fn apply_pipeline_to_text(
 ///
 /// # Errors
 /// クリップボード I/O 失敗、空テキスト、サイズ上限超過のいずれか
-pub fn process_clipboard(
-    clipboard: &mut arboard::Clipboard,
+pub fn process_clipboard<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
     mode: RefineMode,
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {
@@ -173,7 +173,7 @@ pub fn process_clipboard(
 /// テキストが変更された場合のみクリップボードを更新する
 ///
 /// # Arguments
-/// * `clipboard` - `arboard::Clipboard` のミュータブルなインスタンス
+/// * `clipboard` - テキスト・画像クリップボード実装 (`OwnedClipboard` など)
 /// * `pipeline` - 適用する加工モード列
 /// * `ctx` - 設定依存の加工パラメータ
 ///
@@ -184,8 +184,8 @@ pub fn process_clipboard(
 ///
 /// # Errors
 /// クリップボード I/O 失敗、空テキスト、サイズ上限超過、画像取得失敗のいずれか
-pub fn process_clipboard_pipeline(
-    clipboard: &mut arboard::Clipboard,
+pub fn process_clipboard_pipeline<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
     pipeline: &[RefineMode],
     ctx: &RefineContext,
 ) -> Result<ClipboardProcessOutcome, ClipboardProcessError> {

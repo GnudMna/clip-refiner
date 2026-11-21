@@ -5,14 +5,13 @@ use crate::consts;
 use crate::logger;
 use crate::platform;
 use crate::refiner::{
-    self, ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
+    self, ClipboardProcessError, ClipboardProcessOutcome, OwnedClipboard, RefineContext, RefineMode,
 };
 use crate::tray::{self, E2eWindow};
 use crate::user_error::fatal_startup;
 use crate::{log_error, log_info, log_warn};
 
 use anyhow::{Context, Result};
-use arboard::Clipboard;
 use clap::Parser;
 use single_instance::SingleInstance;
 use tracing_subscriber::filter::EnvFilter;
@@ -300,7 +299,7 @@ fn report_oneshot_ipc_response(response: &crate::ipc::OneshotIpcResponse) -> Res
 
 /// 常駐が無い場合にローカルでワンショット加工する
 fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
-    let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
+    let mut clipboard = OwnedClipboard::new().context("クリップボードの初期化に失敗しました")?;
 
     match refiner::process_clipboard_pipeline(&mut clipboard, pipeline, ctx) {
         Ok(

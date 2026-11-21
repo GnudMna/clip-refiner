@@ -107,6 +107,11 @@ name = "oneshot_flow"
 path = "tests/oneshot_flow.rs"
 
 [[test]]
+name = "oneshot_ipc_flow"
+path = "tests/oneshot_ipc_flow.rs"
+required-features = ["app"]
+
+[[test]]
 name = "settings_ui_logic"
 path = "tests/settings_ui_logic.rs"
 
@@ -138,7 +143,7 @@ path = "tests/platform_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.13.0" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.13.1" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }
@@ -157,7 +162,7 @@ tracing-appender = { version = "0.2.5", optional = true }
 tracing-subscriber = { version = "0.3.23", optional = true, features = ["env-filter"] }
 tray-icon = { version = "0.24.1", optional = true }
 wry = { version = "0.55.1", optional = true }
-clipboard-win = { version = "5.4.1", optional = true, features = ["std"] }
+clipboard-win = { version = "5.4.1", optional = true, features = ["std", "monitor"] }
 windows = { version = "0.62.2", optional = true, features = [
     "Data_Xml_Dom",
     "Foundation",

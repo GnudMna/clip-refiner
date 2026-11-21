@@ -34,6 +34,8 @@ pub enum ClipboardCommand {
     DischargeContinuousRecordAt(usize),
     /// 連続記録キュー先頭をクリップボードへ載せ、貼り付けキー送信をメインへ依頼する
     PasteContinuousRecordFront,
+    /// OS のクリップボード変更通知を受けた (監視ティックの起床用)
+    ClipboardChanged,
     /// ワーカースレッドの終了要求
     Shutdown,
 }
@@ -58,6 +60,7 @@ impl std::fmt::Debug for ClipboardCommand {
                 .field(index)
                 .finish(),
             Self::PasteContinuousRecordFront => f.write_str("PasteContinuousRecordFront"),
+            Self::ClipboardChanged => f.write_str("ClipboardChanged"),
             Self::Shutdown => f.write_str("Shutdown"),
         }
     }

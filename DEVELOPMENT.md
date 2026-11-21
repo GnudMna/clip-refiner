@@ -185,6 +185,7 @@ assert_eq!(output, "hello world");
 | `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
+| `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
 | `library_api.rs` | クレートルート re-export と core 連携 |
 
 OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
@@ -332,6 +333,18 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 | `apply_ipc` | JSON IPC を解釈して即時反映 |
 | `with_persistence` | 一時 `config.toml` 上で永続化付きコンテキストを実行 |
 | `state` / `menu` | 検証用アクセサ |
+
+#### ワンショット IPC (`oneshot_ipc_flow`)
+
+本番パイプ名と衝突しないテスト用パイプで `OneshotIpcServer` を起動し、クライアント往復を検証する。クリップボード I/O はスタブワーカー (`spawn_oneshot_stub_responder`) で差し替え、トランスポートとプロトコル境界に焦点を当てる。
+
+| ヘルパー | 用途 |
+| :------- | :--- |
+| `start_oneshot_ipc_for_test` | 一意なパイプ名で待受開始 (`WaitNamedPipeW` で準備完了を待つ) |
+| `process_oneshot_via_pipe` | 指定パイプへ正式な加工要求を送る |
+| `send_raw_oneshot_line` | 不正 JSON / 過大要求など生 1 行を送る |
+| `spawn_oneshot_stub_responder` | `ProcessOneshotPipeline` に固定結果を返す |
+| `wait_for_oneshot_pipe` | 連続委譲前など、次インスタンスの待受開始を待つ |
 
 ---
 
@@ -525,7 +538,7 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
 | 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace}` | 正規表現置換のプレビュー (設定 UI と同一エンジン。クレートルートからは re-export しない) |
-| クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
+| クリップボード | `OwnedClipboard`, `process_clipboard`, `process_clipboard_pipeline` | OS クリップボード本文 I/O の所有者と加工 API |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `NotificationSettings`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
 | 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告 |
@@ -591,15 +604,17 @@ clip-refiner/
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
 │   │   ├── src/
+│   │   │   ├── bootstrap.rs # 常駐 / ワンショット起動分岐
+│   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
-│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` など)
+│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
 │   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event)
 │   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期
 │   │   │   │   ├── event/       # イベントループ制御・ルーティング
 │   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView
 │   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc, apply/, snapshot, geometry など)
-│   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ
+│   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ・OS リスナ
 │   │   │   │   └── ...
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
 │   │   ├── tests/           # 統合テスト (`*_flow.rs`)
@@ -608,7 +623,7 @@ clip-refiner/
 │       └── src/
 │           ├── config/
 │           ├── platform/    # DPAPI・クリップボード画像など GUI 非依存の OS 連携
-│           ├── refiner/
+│           ├── refiner/     # 加工モード・パイプライン・`OwnedClipboard`
 │           ├── security/
 │           └── test_helpers/ # コア単体テスト用
 ├── assets/
@@ -617,10 +632,12 @@ clip-refiner/
 │   ├── git/hooks/       # Git フック (pre-commit / pre-push)
 │   └── windows/         # 開発者向けエントリポイント (check.ps1, format.ps1 など)
 ├── CONFIG.md
+├── CHANGELOG.md
+├── DEVELOPMENT.md
 └── wix/
 ```
 
-`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
+`clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。`ipc/` は常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなり、パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護する (利用者向けは [CONFIG.md のワンショット IPC](CONFIG.md#ワンショット-ipc))。
 
 セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
 
@@ -644,7 +661,7 @@ clip-refiner/
 | `event/` | tao イベントループへの委譲 (`loop_event`, `user_event`)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング |
 | `selector/` | クイックセレクター・登録クリップセレクター・OCR オーバーレイの WebView 束 (`SelectorUi`) |
 | `settings/` | 設定ウィンドウ (下表参照) |
-| `worker/` | クリップボード I/O 集約・監視ループ |
+| `worker/` | クリップボード I/O 集約・監視ループ。`clipboard_listener` (OS 通知)、`clipboard_seq` (シーケンストークン)、`monitor_loop` / `handlers` / `handle` |
 | `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、`AppEvent` |
 | `hotkey/` | グローバルホットキー登録・イベント変換 |
 | `clipboard_monitor/` | 監視ループの判断・世代管理 |
@@ -723,22 +740,36 @@ flowchart TB
         GHK["GlobalHotKeyEvent::receiver()"]
     end
 
+    subgraph listener ["クリップボードリスナスレッド"]
+        CFL["AddClipboardFormatListener"]
+    end
+
+    subgraph ipc_server ["ワンショット IPC サーバスレッド"]
+        Pipe["Named Pipe (現在ユーザー DACL)"]
+    end
+
     subgraph worker ["クリップボードワーカースレッド"]
         WL["recv_timeout ループ"]
         Mon["監視ループ (Polling / Event)"]
         Cmd["ClipboardCommand 処理"]
+        Owned["OwnedClipboard (本文 I/O)"]
         WL --> Mon
         WL --> Cmd
+        Cmd --> Owned
+        Mon --> Owned
     end
 
     CB[("OS クリップボード")]
     State[("AppState (Arc)")]
+    CLI["ワンショット CLI (--mode / --pipeline)"]
 
     GHK -->|"AppEvent::Hotkey"| App
     App -->|"ClipboardCommand (mpsc)"| WL
+    CFL -->|"ClipboardChanged (mpsc)"| WL
+    Pipe -->|"ProcessOneshotPipeline"| WL
+    CLI -->|"接続"| Pipe
     WL -->|"AppEvent (EventLoopProxy)"| App
-    Cmd <--> CB
-    Mon <--> CB
+    Owned <--> CB
     App <--> State
     WL <--> State
 ```
@@ -748,9 +779,11 @@ flowchart TB
 | コンポーネント | スレッド | 責務 |
 | :------------- | :------- | :--- |
 | **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け。連続記録貼り付けでは `AppEvent::SendContinuousRecordPaste` を受けて `SendInput` で `Ctrl+V` を送る |
-| **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
+| **Hotkey Listener** (`tray/hotkey/`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
 | **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
-| **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理。再起動・破棄時は `Shutdown` 後に `JoinHandle` で旧スレッド終了を確認してから戻る |
+| **Clipboard Listener** (`tray/worker/clipboard_listener.rs`) | 専用 | メッセージ専用ウィンドウで `AddClipboardFormatListener` を登録し、`WM_CLIPBOARDUPDATE` を `ClipboardCommand::ClipboardChanged` としてワーカーへ送る。連打は未処理フラグで束ねる。初期化失敗時はワーカーがシーケンストークンの短周期 peek にフォールバックする |
+| **Oneshot IPC Server** (`ipc/`) | 専用 | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。現在ユーザー専用 DACL + リモート拒否。常駐未検出時は CLI 側がローカル実行する |
+| **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き (`OwnedClipboard`)、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理。Event / 連続記録かつリスナ稼働時は設定ポーリング間隔まで待機し、`ClipboardChanged` で起床する。再起動・破棄時は `Shutdown` 後にリスナとワーカーを join してから戻る |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、監視世代、イベントプロキシ。履歴・Undo・二重加工防止は `clipboard_session()`、ワーカー稼働は `worker()`、設定ディスク同期は `config_sync()`、設定 UI 適用待ちは `settings_pending()` 経由 |
 
 ### UI の遅延生成
@@ -760,9 +793,14 @@ flowchart TB
 ### 通信の要点
 
 - **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピー、連続記録貼り付けの書き込みなど)
+- **リスナ → ワーカー**: `ClipboardCommand::ClipboardChanged` で Event / 連続記録の監視を起床する
+- **ワンショット CLI → 常駐**: 名前付きパイプで加工要求を送り、サーバーが `ProcessOneshotPipeline` をワーカーへ渡す (監視エコー回避)
 - **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`SendContinuousRecordPaste`)
 - **ホットキー → UI**: 専用スレッドが `AppEvent::Hotkey` を送り、メインスレッドの `HotkeyHandler` が処理
-- **クリップボード**: 読み書きはワーカースレッド内の 1 インスタンスに集約する。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する
+- **クリップボード**: 本文の読み書きはワーカースレッド内の `OwnedClipboard` 1 インスタンスに集約する (常駐なしワンショットのみ短命に別インスタンスを開く)。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する。変更検知は役割を分ける
+  - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
+  - `OwnedClipboard` (`arboard`): テキスト / 通常画像の `OpenClipboard` I/O
+  - `platform/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 
@@ -822,16 +860,16 @@ flowchart TB
 
 ```powershell
 # リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
-git checkout -b release/v0.12.7
+git checkout -b release/v0.14.0
 
 # 明示的なバージョン指定
-./scripts/windows/release.ps1 -Version 0.12.7
+./scripts/windows/release.ps1 -Version 0.14.0
 
-# パッチリリース (0.12.6 -> 0.12.7)。事前に release/v0.12.7 ブランチへ checkout すること
+# パッチリリース (0.13.0 -> 0.13.1)。事前に release/v0.13.1 ブランチへ checkout すること
 ./scripts/windows/release.ps1 -Bump Patch
 
 # 変更内容の確認のみ (ファイル・Git・MSI は触らない)
-./scripts/windows/release.ps1 -Version 0.12.7 -DryRun
+./scripts/windows/release.ps1 -Version 0.14.0 -DryRun
 ```
 
 **自動で行うこと:**
@@ -860,7 +898,7 @@ git checkout -b release/v0.12.7
 
 **前提:**
 
-- `release/v{version}` ブランチ上で実行すること (例: `release/v0.12.7` で `-Version 0.12.7`)
+- `release/v{version}` ブランチ上で実行すること (例: `release/v0.14.0` で `-Version 0.14.0`)
 - リリース前に [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
 - 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
 - MSI 作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3)

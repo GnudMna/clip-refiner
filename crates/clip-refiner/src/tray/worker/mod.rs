@@ -1,5 +1,9 @@
 //! クリップボード操作と監視を単一スレッドで処理するワーカー
+//!
+//! 本文 I/O は [`OwnedClipboard`] を 1 インスタンスだけ保持する。
+//! 変更検知は `clipboard_seq` (Open 不要) と `clipboard_listener` (本文非読) に分離する
 
+mod clipboard_listener;
 mod clipboard_seq;
 mod command;
 mod handle;
@@ -7,23 +11,24 @@ mod handlers;
 mod monitor_loop;
 
 use std::sync::Arc;
-use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::Instant;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::time::{Duration, Instant};
 
+use clipboard_listener::{ClipboardFormatListener, clear_clipboard_changed_pending};
 use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
-
-pub(crate) use handlers::handle_command;
 
 use super::dispatch;
 use super::state::{AppEvent, AppState};
 
-use arboard::Clipboard;
+use crate::refiner::OwnedClipboard;
 
 pub use command::ClipboardCommand;
 pub use handle::ClipboardWorkerHandle;
+pub(crate) use handlers::handle_command;
 
 /// 設定ファイルの外部変更を検知するポーリング間隔
-const CONFIG_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+pub(super) const CONFIG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 // ======================================================================
 // ワーカースレッド
@@ -31,8 +36,12 @@ const CONFIG_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs
 /// クリップボードワーカーのメインループを実行する
 ///
 /// 初期化失敗・`Shutdown` コマンド・受信チャネル切断で終了する
-fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>) {
-    let mut clipboard = match Clipboard::new() {
+fn run_worker_loop(
+    state: &Arc<AppState>,
+    rx: &mpsc::Receiver<ClipboardCommand>,
+    listener_tx: Sender<ClipboardCommand>,
+) {
+    let mut clipboard = match OwnedClipboard::new() {
         Ok(cb) => cb,
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
@@ -48,6 +57,24 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerReady);
     }
 
+    let pending_clipboard_change = Arc::new(AtomicBool::new(false));
+    let listener = match ClipboardFormatListener::start(
+        listener_tx,
+        Arc::clone(&pending_clipboard_change),
+    ) {
+        Ok(listener) => {
+            crate::log_info!("クリップボード変更リスナを開始しました");
+            Some(listener)
+        }
+        Err(err) => {
+            crate::log_warn!(
+                "クリップボード変更リスナを開始できないため、シーケンストークンの周期監視にフォールバックします: {err}"
+            );
+            None
+        }
+    };
+    let listener_active = listener.is_some();
+
     let mut monitor = MonitorLoopState::new();
     let mut last_config_poll = Instant::now();
 
@@ -61,9 +88,13 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
             }
         }
 
-        let timeout = monitor.recv_timeout(state);
+        let timeout = monitor.recv_timeout(state, listener_active, CONFIG_POLL_INTERVAL);
         let should_exit = match rx.recv_timeout(timeout) {
             Ok(ClipboardCommand::Shutdown) | Err(RecvTimeoutError::Disconnected) => true,
+            Ok(ClipboardCommand::ClipboardChanged) => {
+                clear_clipboard_changed_pending(&pending_clipboard_change);
+                false
+            }
             Ok(cmd) => {
                 handle_command(&mut clipboard, state, &mut monitor.refine_ctx, cmd);
                 false
@@ -79,6 +110,9 @@ fn run_worker_loop(state: &Arc<AppState>, rx: &mpsc::Receiver<ClipboardCommand>)
         }
     }
 
+    if let Some(listener) = listener {
+        listener.stop();
+    }
     state.worker().set_alive(false);
 }
 
@@ -94,10 +128,9 @@ pub(super) fn worker_stopped_notification_body() -> &'static str {
 mod tests {
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
+    use std::time::Duration;
 
     use super::*;
-
-    use std::time::Duration;
 
     use crate::config::MonitorMode;
     use crate::refiner::RefineContext;
@@ -179,7 +212,73 @@ mod tests {
         state.monitor_generation.store(1, Ordering::SeqCst);
 
         let monitor = active_monitor(1);
-        assert_eq!(monitor.recv_timeout(&state), Duration::from_millis(100));
+        assert_eq!(
+            monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
+            Duration::from_millis(100)
+        );
+    }
+
+    /// Event 監視でリスナ稼働中は設定ポーリング間隔まで待機すること
+    #[test]
+    fn recv_timeout_is_idle_when_event_listener_active() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = false;
+            c.monitor_mode = MonitorMode::Event;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        if MonitorLoopState::effective_mode(&state) != MonitorMode::Event {
+            return;
+        }
+
+        assert_eq!(
+            monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
+            CONFIG_POLL_INTERVAL
+        );
+    }
+
+    /// Event 監視でリスナ未使用時は短周期 peek 間隔であること
+    #[test]
+    fn recv_timeout_is_short_when_event_listener_inactive() {
+        use crate::tray::clipboard_monitor::{EVENT_POLL_MS, POLL_TICK_MS};
+
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = false;
+            c.monitor_mode = MonitorMode::Event;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        if MonitorLoopState::effective_mode(&state) != MonitorMode::Event {
+            return;
+        }
+
+        assert_eq!(
+            monitor.recv_timeout(&state, false, CONFIG_POLL_INTERVAL),
+            Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS))
+        );
+    }
+
+    /// 連続記録でリスナ稼働中は設定ポーリング間隔まで待機すること
+    #[test]
+    fn recv_timeout_is_idle_when_continuous_record_listener_active() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.is_paused = false;
+            c.monitor_mode = MonitorMode::Polling;
+            c.continuous_record_enabled = true;
+            c.interval_ms = 5000;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let monitor = active_monitor(1);
+        assert_eq!(
+            monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
+            CONFIG_POLL_INTERVAL
+        );
     }
 
     /// 設定が Polling の場合は実効監視モードも Polling であるようにすること

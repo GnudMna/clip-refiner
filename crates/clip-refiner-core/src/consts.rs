@@ -102,7 +102,7 @@ pub const DEFAULT_HOTKEY_UNDO: &str = "Alt+Shift+Z";
 pub const DEFAULT_HOTKEY_CLIP_SELECTOR: &str = "Alt+Shift+T";
 
 /// 画面 OCR キャプチャのデフォルトホットキー
-pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+O";
+pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+G";
 
 /// 連続記録切替のデフォルトホットキー
 pub const DEFAULT_HOTKEY_CONTINUOUS_RECORD: &str = "Alt+Shift+C";
