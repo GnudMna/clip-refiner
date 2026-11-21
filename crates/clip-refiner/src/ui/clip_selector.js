@@ -206,7 +206,7 @@ window.showClipFullText = (id, text) => {
     if (!textHoverItem || !textHoverAnchor || textHoverItem.id !== String(id)) {
         return;
     }
-    const body = fullTextToShow(textHoverItem, text);
+    const body = fullTextToShow(text);
     if (body === null) {
         return;
     }

@@ -29,6 +29,13 @@
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-15
+
+### Fixed
+
+- 登録クリップセレクターで、短いテキストの行にカーソルを置いても全文が表示されない不具合を修正
+- 設定ウィンドウとセレクターで、右クリックすると WebView 標準のメニューが表示される不具合を修正
+
 ## [2.1.0] - 2026-10-15
 
 ### Added
@@ -979,7 +986,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.1...develop
+[2.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...v2.1.1
 [2.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.0.0...v2.1.0
 [2.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.2...v2.0.0
 [1.4.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.1...v1.4.2

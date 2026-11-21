@@ -254,14 +254,13 @@ const ClipSelectorLogic = (function () {
     /**
      * ホバー表示する全文を求める
      *
-     * 一覧のプレビューと同じ内容なら重ねて表示する意味がないため表示しない
+     * 一覧のプレビューと同じ内容でも表示する (一覧では改行が潰れ、見切れもあるため)
      *
-     * @param {ClipSelectorItem} item
      * @param {unknown} text - Rust から受け取った全文
      * @returns {string|null} 表示しない場合は `null`
      */
-    function fullTextToShow(item, text) {
-        if (typeof text !== 'string' || !text || text === item.preview) {
+    function fullTextToShow(text) {
+        if (typeof text !== 'string' || !text) {
             return null;
         }
         return text;

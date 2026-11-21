@@ -123,7 +123,8 @@ impl WebSelectorWindow {
     ///
     /// 直前プロセスの `WebView2` ユーザーデータロックで失敗した場合に備え、
     /// 同一ディレクトリ再試行のあとプロセス固有ディレクトリへフォールバックする
-    /// 外部 URL へのページ遷移・`window.open`・ダウンロードは拒否する
+    /// 外部 URL へのページ遷移・`window.open`・ダウンロードは拒否し、
+    /// 右クリックの既定コンテキストメニューも無効化する
     ///
     /// # Arguments
     /// * `window` - ホストとなる `tao` ウィンドウ
@@ -202,6 +203,7 @@ impl WebSelectorWindow {
         let html_for_nav = html.to_string();
         let mut builder = WebViewBuilder::new_with_web_context(&mut context)
             .with_html(html)
+            .with_default_context_menus(false)
             .with_ipc_handler(move |req| handler(req))
             .with_navigation_handler(move |url| {
                 let allowed = is_allowed_webview_navigation(&url, &html_for_nav);

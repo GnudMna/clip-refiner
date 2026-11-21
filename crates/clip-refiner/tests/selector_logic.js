@@ -418,12 +418,13 @@ function test_clip_full_text_hover() {
     // 画像は対象外
     assert.equal(ClipSelectorLogic.canRequestFullText(SAMPLE_CLIPS[0]), true);
     assert.equal(ClipSelectorLogic.canRequestFullText(SAMPLE_CLIPS[1]), false);
-    // 一覧のプレビューと同じ内容・空・文字列以外は表示しない
-    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], 'hello world'), null);
-    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], ''), null);
-    assert.equal(ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], null), null);
+    // 空・文字列以外は表示しない
+    assert.equal(ClipSelectorLogic.fullTextToShow(''), null);
+    assert.equal(ClipSelectorLogic.fullTextToShow(null), null);
+    // 一覧のプレビューと同じ内容でも表示する
+    assert.equal(ClipSelectorLogic.fullTextToShow('hello world'), 'hello world');
     assert.equal(
-        ClipSelectorLogic.fullTextToShow(SAMPLE_CLIPS[0], 'hello world\nsecond line'),
+        ClipSelectorLogic.fullTextToShow('hello world\nsecond line'),
         'hello world\nsecond line'
     );
 }
