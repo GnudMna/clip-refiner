@@ -33,6 +33,9 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | モジュール | `config` | 正規表現型。`config.toml` 永続化は feature `config` |
 | モジュール | `consts` | 設定スキーマ番号・処理上限・既定ホットキーなどの定数 |
 | モジュール | `security` | 入力サイズ上限・表示マスキング (`looks_sensitive` / `format_public_snippet`)。AEAD 暗号・鍵付き指紋・ゼロ化する文字列は feature `config` |
+| モジュール | `clip_template` | 登録クリップのテンプレート展開 (ルートにも再公開) |
+| モジュール | `hotkey_binding` | `Alt+Shift+S` 形式のホットキー文字列の解釈 (ルートにも再公開) |
+| モジュール | `error` | 加工・設定 I/O のエラー型 (ルートにも再公開) |
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |

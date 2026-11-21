@@ -2,8 +2,8 @@
 // WebView IPC の型定義
 // ======================================================================
 //
-// Rust と WebView の間で受け渡す JSON の形を `tsc` (checkJs) で検証するための宣言。
-// 実行時には読み込まない (esbuild のバンドル対象外)。
+// Rust と WebView の間で受け渡す JSON の形を `tsc` (checkJs) で検証するための宣言
+// 実行時には読み込まない (esbuild のバンドル対象外)
 // Rust 側の型を変えたら、対応する宣言も同じ変更で更新する
 // (ずれは `tray/settings/webview_contract_tests.rs` が `cargo test` で検出する)
 

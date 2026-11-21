@@ -1,6 +1,6 @@
 //! Rust と `WebView` UI の間で受け渡す JSON が `ui/ipc.d.ts` の型宣言と一致することのテスト
 //!
-//! Rust の実際の型から JSON を作り、TypeScript のソースへ埋め込んで `tsc` で型検査する。
+//! Rust の実際の型から JSON を作り、TypeScript のソースへ埋め込んで `tsc` で型検査する
 //! Rust → JS は `window.*` の呼び出し引数として、JS → Rust は `satisfies` と Rust 側のパースの両方で検証する
 //! (Node.js と `npm ci` 済みの TypeScript が必要。無い場合の扱いは `run_typescript_check` に従う)
 

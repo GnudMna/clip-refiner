@@ -339,7 +339,7 @@ const SettingsSharedLogic = (function () {
         if (!wasEditing) {
             return true;
         }
-        // 変換タブはお気に入りの追加・削除を一覧へ反映するためフル再描画する。
+        // 変換タブはお気に入りの追加・削除を一覧へ反映するためフル再描画する
         // 他のタブは入力中のフォーカスを維持するためフル再描画しない
         return activeTab === 'convert';
     }

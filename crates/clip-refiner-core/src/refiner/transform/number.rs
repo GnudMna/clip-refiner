@@ -83,11 +83,35 @@ fn add_commas_single(text: &str) -> Cow<'_, str> {
         formatted_int
     };
 
-    if final_result == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(final_result)
+    restore_surrounding_whitespace(text, trimmed, &final_result)
+}
+
+/// 変換結果に元の前後の空白を戻す
+///
+/// 変換結果が trim 済みの元の値と同じ場合は元の文字列をそのまま返す
+///
+/// # Arguments
+/// * `text` - 元の文字列 (前後の空白を含む)
+/// * `trimmed` - `text` を trim した文字列
+/// * `converted` - `trimmed` を変換した文字列
+///
+/// # Returns
+/// * `Cow<'_, str>` - 前後の空白を保った変換結果。変更がなければ `text`
+fn restore_surrounding_whitespace<'a>(
+    text: &'a str,
+    trimmed: &str,
+    converted: &str,
+) -> Cow<'a, str> {
+    if converted == trimmed {
+        return Cow::Borrowed(text);
     }
+    let indent_len = text.len() - text.trim_start().len();
+    let trailing_start = indent_len + trimmed.len();
+    Cow::Owned(format!(
+        "{}{converted}{}",
+        &text[..indent_len],
+        &text[trailing_start..]
+    ))
 }
 
 // ======================================================================
@@ -126,12 +150,7 @@ fn remove_commas_single(text: &str) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
 
-    let result = trimmed.replace(',', "");
-    if result == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(result)
-    }
+    restore_surrounding_whitespace(text, trimmed, &trimmed.replace(',', ""))
 }
 
 // ======================================================================
@@ -358,10 +377,15 @@ mod tests {
         assert_eq!(add_commas("1234."), "1,234.");
     }
 
-    /// 前後の空白を除いてカンマを付与すること
+    /// 前後の空白を保ったままカンマを付与・除去すること
     #[test]
-    fn test_add_commas_trimmed_input() {
-        assert_eq!(add_commas("  5678  "), "5,678");
+    fn test_surrounding_whitespace_is_preserved() {
+        assert_eq!(add_commas("  5678  "), "  5,678  ");
+        assert_eq!(remove_commas("\t1,234 "), "\t1234 ");
+        // 変更が不要な行は空白ごと元のまま返す
+        assert!(matches!(add_commas("  123"), Cow::Borrowed(_)));
+        assert!(matches!(remove_commas("  1234"), Cow::Borrowed(_)));
+        assert_eq!(add_commas("  123\n  1234"), "  123\n  1,234");
     }
 
     /// 複数行の数値を行ごとに処理し、数値でない行と改行コードを保つようにすること

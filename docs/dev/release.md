@@ -7,8 +7,9 @@
 `scripts/windows/release.ps1` で、バージョン更新から MSI / ポータブル ZIP 作成までを一括実行できる。
 
 ```powershell
-# リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
-git switch -c release/v1.1.0
+# 最新の origin/develop からリリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
+git fetch origin develop
+git switch -c release/v1.1.0 origin/develop
 
 # 明示的なバージョン指定
 ./scripts/windows/release.ps1 -Version 1.1.0
@@ -27,12 +28,11 @@ git switch -c release/v1.1.0
 3. ルート `Cargo.toml` の `[workspace.package] version` を更新 (`clip-refiner-core` は `workspace.dependencies` の path 参照のため版の二重更新は不要)
 4. `Cargo.lock` の workspace パッケージ version を同期
 5. [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
-6. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
-7. `check.ps1` で [品質チェック](testing.md#品質チェック) (E2E を含む全項目)。pre-push は E2E を含まないため、E2E はここで必ず通す (`CLIP_REFINER_SKIP_E2E` は無効化する)
-8. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
-9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
-10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
-11. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
+6. `check.ps1` で [品質チェック](testing.md#品質チェック) (E2E を含む全項目)。pre-push は E2E を含まないため、E2E はここで必ず通す (`CLIP_REFINER_SKIP_E2E` は無効化する)
+7. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
+8. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
+9. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
+10. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
 
 **主なオプション:**
 

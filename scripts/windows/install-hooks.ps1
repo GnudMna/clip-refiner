@@ -56,6 +56,8 @@ Invoke-ScriptMain {
         $relativePath = "$hooksRelativePath/$hookName"
         git ls-files --error-unmatch $relativePath 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
+            # 未追跡は想定内。終了コード 1 を Invoke-ScriptMain に拾わせない
+            $global:LASTEXITCODE = 0
             Write-Host "note: $relativePath は未追跡のため実行権限を Git 索引に設定しません"
             continue
         }

@@ -63,6 +63,17 @@ PowerShell スクリプトでターゲットを明示する場合:
 
 ホスト向けバイナリは `target/release/ClipRefiner.exe` に生成される。`-Target x64` を明示した場合は `target/{triple}/release/ClipRefiner.exe` になり、`vcvarsall.bat x64` で MSVC 環境を読み込む。配布対象は x64 のみで、それ以外のホスト・ターゲットはエラーになる。
 
+### 開発版 (debug ビルド) と製品版の分離
+
+debug ビルド (`cargo build` / `cargo run`) は、インストール済みの製品版の設定や自動起動を壊さないよう、次を製品版と分ける。
+
+| 項目 | 開発版 (debug) | 製品版 (release) |
+| :--- | :--- | :--- |
+| 設定ディレクトリ (設定・ログ・登録クリップ) | `%APPDATA%\ClipRefiner-Dev` | `%APPDATA%\ClipRefiner` |
+| ログイン時の自動起動 (`HKCU\...\Run` の値名) | `ClipRefiner-Dev` | `ClipRefiner` |
+
+ポータブルマーカーと `CLIP_REFINER_CONFIG_DIR` は、どちらのビルドでも上表より優先する。多重起動の判定とワンショット IPC のパイプ名は共通のため、製品版の常駐中に開発版を常駐起動すると、2 つ目として通知して終了する。開発版を試すときは製品版をトレイから終了しておく。
+
 ## Windows パッケージ作成
 
 ### Windows MSI
@@ -186,7 +197,7 @@ mdBook の出力には mdBook 自身と他のプロジェクトの素材が含�
 | `RUST_LOG` | ログレベル (例: `debug`, `clip_refiner=trace`) |
 | `RUST_BACKTRACE` | `1` のときパニック記録にバックトレースを含める ([ログ](architecture.md#ログ)) |
 | `CARGO_TARGET_DIR` | ビルド出力先。`build-portable.ps1` / `check.ps1` / E2E はこの配下の `ClipRefiner.exe` を探す |
-| `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`) |
+| `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`。debug ビルドは `%APPDATA%\ClipRefiner-Dev` ([開発版と製品版の分離](#開発版-debug-ビルド-と製品版の分離))) |
 | `CLIP_REFINER_KEY` | **ビルド時**に埋め込む gh-release-bridge ダウンロードキー。`build.rs` が ChaCha20-Poly1305 で暗号化し XOR 難読化してからバイナリへ入れる (`option_env!` による平文埋め込みはしない)。Worker Secret `CLIP_REFINER_KEY` と同値。未設定なら無認証 GET (開発向け)。`release.ps1` では必須。クライアント共有シークレットのため漏洩前提で運用する |
 | `CLIP_REFINER_SIGNING_KEY` | `release.ps1` が更新アセットへ署名するときの minisign 秘密鍵ファイルのパス。リポジトリ外に置く ([更新署名鍵](release.md#更新署名鍵)) |
 | `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |

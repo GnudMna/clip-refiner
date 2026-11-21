@@ -55,7 +55,7 @@ pub fn remove_path_quotes(text: &str) -> Cow<'_, str> {
                 .and_then(|s| s.strip_suffix('"'))
                 .unwrap_or(trimmed);
             if is_path_like_raw(path_str) {
-                return Some(Cow::Borrowed(path_str));
+                return Some(Cow::Owned(with_surrounding_whitespace(line, path_str)));
             }
         }
         None
@@ -78,7 +78,8 @@ pub fn add_path_quotes(text: &str) -> Cow<'_, str> {
         if !(trimmed.is_empty() || trimmed.starts_with('"') && trimmed.ends_with('"'))
             && is_path_like_raw(trimmed)
         {
-            return Some(Cow::Owned(format!("\"{trimmed}\"")));
+            let quoted = format!("\"{trimmed}\"");
+            return Some(Cow::Owned(with_surrounding_whitespace(line, &quoted)));
         }
         None
     })
@@ -136,15 +137,22 @@ fn convert_separators<'a>(text: &'a str, from: char, to: &str) -> Cow<'a, str> {
         if converted == body {
             return None;
         }
-        // 前後の空白は body の位置から切り出して維持する
-        let start = line.len() - line.trim_start().len();
-        let end = line.trim_end().len();
-        Some(Cow::Owned(format!(
-            "{}{converted}{}",
-            &line[..start],
-            &line[end..]
-        )))
+        Some(Cow::Owned(with_surrounding_whitespace(line, &converted)))
     })
+}
+
+/// 行頭のインデントと行末の空白を維持したまま、本文だけを差し替える
+///
+/// # Arguments
+/// * `line` - 元の1行
+/// * `body` - `line` の前後の空白を除いた部分と置き換える文字列
+///
+/// # Returns
+/// * `String` - 元の前後の空白で `body` を挟んだ文字列
+fn with_surrounding_whitespace(line: &str, body: &str) -> String {
+    let start = line.len() - line.trim_start().len();
+    let end = line.trim_end().len();
+    format!("{}{body}{}", &line[..start], &line[end..])
 }
 
 // ======================================================================
@@ -251,6 +259,22 @@ mod tests {
         let input = "C:\\foo\\bar.txt\n\"Already quoted\"\nE:\\work";
         let expected = "\"C:\\foo\\bar.txt\"\n\"Already quoted\"\n\"E:\\work\"";
         assert_eq!(add_path_quotes(input), expected);
+    }
+
+    /// 引用符の付与で行頭のインデントと行末の空白を維持すること
+    #[test]
+    fn test_add_path_quotes_preserves_whitespace() {
+        let input = "  C:\\foo\t\n\t/tmp/x";
+        let expected = "  \"C:\\foo\"\t\n\t\"/tmp/x\"";
+        assert_eq!(add_path_quotes(input), expected);
+    }
+
+    /// 引用符の除去で行頭のインデントと行末の空白を維持すること
+    #[test]
+    fn test_remove_path_quotes_preserves_whitespace() {
+        let input = "  \"C:\\foo\"\t\n\t\"/tmp/x\"";
+        let expected = "  C:\\foo\t\n\t/tmp/x";
+        assert_eq!(remove_path_quotes(input), expected);
     }
 
     /// CRLF と LF が混在していても行ごとに引用符を付与すること

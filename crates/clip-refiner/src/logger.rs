@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 
 use anyhow::{Context, Result};
-use chrono::{Local, NaiveDate};
+use jiff::ZonedDateTime;
+use jiff::civil::Date;
 
 // ======================================================================
 // 定数
@@ -24,7 +25,7 @@ const LOG_RETENTION_DAYS: i64 = 14;
 /// # Arguments
 /// * `log_dir` - ログファイルが格納されているディレクトリのパス
 pub fn cleanup_on_startup(log_dir: &Path) {
-    let today = Local::now().date_naive();
+    let today = ZonedDateTime::now().date();
     if let Err(e) = cleanup_old_logs(log_dir, LOG_FILE_PREFIX, today, LOG_RETENTION_DAYS) {
         tracing::warn!("起動時ログクリーンアップに失敗: {:?}", e);
     }
@@ -40,13 +41,13 @@ pub fn cleanup_on_startup(log_dir: &Path) {
 pub struct LocalDailyFileAppender {
     directory: PathBuf,
     file_name_prefix: String,
-    /// 現在日付の取得 (本番は `Local::now().date_naive()`、テストでは差し替え)
-    date_fn: Box<dyn Fn() -> NaiveDate + Send + Sync>,
+    /// 現在日付の取得 (本番は `ZonedDateTime::now().date()`、テストでは差し替え)
+    date_fn: Box<dyn Fn() -> Date + Send + Sync>,
     state: Mutex<AppenderState>,
 }
 
 struct AppenderState {
-    date: NaiveDate,
+    date: Date,
     file: File,
 }
 
@@ -60,7 +61,7 @@ impl LocalDailyFileAppender {
     /// # Returns
     /// * `Result<Self>` - 作成に成功した場合は Appender、失敗時はエラー
     pub fn new(directory: impl AsRef<Path>, file_name_prefix: impl Into<String>) -> Result<Self> {
-        Self::with_date_fn(directory, file_name_prefix, || Local::now().date_naive())
+        Self::with_date_fn(directory, file_name_prefix, || ZonedDateTime::now().date())
     }
 
     /// 日付取得関数を差し替えて Appender を作成する (テスト用)
@@ -75,7 +76,7 @@ impl LocalDailyFileAppender {
     pub fn with_date_fn(
         directory: impl AsRef<Path>,
         file_name_prefix: impl Into<String>,
-        date_fn: impl Fn() -> NaiveDate + Send + Sync + 'static,
+        date_fn: impl Fn() -> Date + Send + Sync + 'static,
     ) -> Result<Self> {
         let directory = directory.as_ref().to_path_buf();
         let file_name_prefix = file_name_prefix.into();
@@ -209,7 +210,7 @@ impl Write for SharedLogAppender {
 ///
 /// # Returns
 /// * `io::Result<File>` - オープンしたファイル
-fn open_log_file(directory: &Path, prefix: &str, date: NaiveDate) -> io::Result<File> {
+fn open_log_file(directory: &Path, prefix: &str, date: Date) -> io::Result<File> {
     let path = directory.join(format!("{prefix}.{date}"));
     OpenOptions::new().create(true).append(true).open(path)
 }
@@ -229,12 +230,7 @@ fn open_log_file(directory: &Path, prefix: &str, date: NaiveDate) -> io::Result<
 ///
 /// # Returns
 /// * `Result<()>` - クリーンアップが成功した場合は `Ok(())`、失敗した場合は `Err` を返す
-pub fn cleanup_old_logs(
-    log_dir: &Path,
-    prefix: &str,
-    today: NaiveDate,
-    max_days: i64,
-) -> Result<()> {
+pub fn cleanup_old_logs(log_dir: &Path, prefix: &str, today: Date, max_days: i64) -> Result<()> {
     let entries = fs::read_dir(log_dir).context("ログディレクトリの読み取りに失敗")?;
 
     for entry in entries {
@@ -247,10 +243,10 @@ pub fn cleanup_old_logs(
             if let Some(date_str) = filename
                 .strip_prefix(prefix)
                 .and_then(|rest| rest.strip_prefix('.'))
-                && let Ok(file_date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+                && let Ok(file_date) = Date::strptime("%Y-%m-%d", date_str)
             {
-                let age = today - file_date;
-                if age.num_days() > max_days {
+                let age_days = (today - file_date).get_days();
+                if i64::from(age_days) > max_days {
                     tracing::info!("古いログファイルを削除します: {}", filename);
                     let _ = fs::remove_file(path);
                 }
@@ -314,8 +310,6 @@ mod tests {
     use std::sync::atomic::{AtomicU8, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use chrono::NaiveDate;
-
     use super::*;
 
     /// テスト用の一時ディレクトリを作成する
@@ -341,7 +335,7 @@ mod tests {
         fs::write(base.join(old_name), "old").expect("古いログファイルの作成に失敗");
         fs::write(base.join(recent_name), "recent").expect("新しいログファイルの作成に失敗");
 
-        let today = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let today = jiff::civil::date(2026, 7, 12);
         cleanup_old_logs(&base, "clip-refiner.log", today, 14).expect("ログクリーンアップに失敗");
 
         assert!(!base.join(old_name).exists(), "古いログが残っている");
@@ -356,8 +350,8 @@ mod tests {
     #[test]
     fn rotation_removes_expired_logs() {
         let base = temp_log_dir("rotate-cleanup");
-        let day0 = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
-        let day1 = NaiveDate::from_ymd_opt(2026, 7, 13).expect("有効な日付");
+        let day0 = jiff::civil::date(2026, 7, 12);
+        let day1 = jiff::civil::date(2026, 7, 13);
         let step = Arc::new(AtomicU8::new(0));
         let step_for_fn = Arc::clone(&step);
 
@@ -397,7 +391,7 @@ mod tests {
     #[test]
     fn write_recovers_from_poisoned_lock() {
         let base = temp_log_dir("poisoned");
-        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let day = jiff::civil::date(2026, 7, 12);
         let appender = Arc::new(
             LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
                 .expect("Appender の作成に失敗"),
@@ -429,7 +423,7 @@ mod tests {
     #[test]
     fn shared_appender_and_immediate_write_use_same_file() {
         let base = temp_log_dir("shared");
-        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let day = jiff::civil::date(2026, 7, 12);
         let appender = Arc::new(
             LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
                 .expect("Appender の作成に失敗"),
@@ -489,7 +483,7 @@ panic record
     #[test]
     fn local_daily_appender_appends_same_day() {
         let base = temp_log_dir("same-day");
-        let day = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
+        let day = jiff::civil::date(2026, 7, 12);
 
         let mut appender =
             LocalDailyFileAppender::with_date_fn(&base, "clip-refiner.log", move || day)
@@ -518,8 +512,8 @@ panic record
     #[test]
     fn local_daily_appender_rotates_on_date_change() {
         let base = temp_log_dir("rotate");
-        let day0 = NaiveDate::from_ymd_opt(2026, 7, 12).expect("有効な日付");
-        let day1 = NaiveDate::from_ymd_opt(2026, 7, 13).expect("有効な日付");
+        let day0 = jiff::civil::date(2026, 7, 12);
+        let day1 = jiff::civil::date(2026, 7, 13);
         let step = Arc::new(AtomicU8::new(0));
         let step_for_fn = Arc::clone(&step);
 

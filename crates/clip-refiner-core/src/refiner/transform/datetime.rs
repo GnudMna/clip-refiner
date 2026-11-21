@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
-use chrono::{
-    DateTime, Datelike, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat,
-    TimeDelta, TimeZone, Utc,
-};
+use jiff::civil::{Date, DateTime, Time};
+use jiff::fmt::{rfc2822, strtime};
+use jiff::tz::{AmbiguousOffset, Offset, TimeZone};
+use jiff::{Timestamp, ToSpan, ZonedDateTime};
 
 const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const DATETIME_MILLIS_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.3f";
@@ -25,17 +25,32 @@ const ERA_NAMES: [(&str, i32); 5] = [
     ("大正", 1911),
     ("明治", 1867),
 ];
-/// 和暦の略号 (`R5.11.15` など) と、元号の年に足して西暦にする値
-const ERA_INITIALS: [(char, i32); 5] = [
-    ('R', 2018),
-    ('H', 1988),
-    ('S', 1925),
-    ('T', 1911),
-    ('M', 1867),
+/// 和暦の略号 (`R5.11.15` など)、元号の年に足して西暦にする値、元号の期間 (開始日と終了日、ともに含む)
+///
+/// 略号は `M1.2.3` のようなバージョン番号と紛れやすいため、期間外の日付は和暦として扱わない
+const ERA_INITIALS: [(char, i32, EraDate, EraDate); 5] = [
+    ('R', 2018, (2019, 5, 1), (9999, 12, 31)),
+    ('H', 1988, (1989, 1, 8), (2019, 4, 30)),
+    ('S', 1925, (1926, 12, 25), (1989, 1, 7)),
+    ('T', 1911, (1912, 7, 30), (1926, 12, 24)),
+    ('M', 1867, (1868, 1, 25), (1912, 7, 29)),
 ];
 
+/// 年・月・日の組
+type EraDate = (i32, u32, u32);
+
 /// 月名・米国式として受け付ける日付の書式
-const WESTERN_DATE_FORMATS: [&str; 4] = ["%B %d, %Y", "%B %d %Y", "%d %B %Y", "%m/%d/%Y"];
+///
+/// `%B` (英語の月名) は正式名、`%b` は略称だけを受け付けるため、月名の書式は両方を並べる
+const WESTERN_DATE_FORMATS: [&str; 7] = [
+    "%B %d, %Y",
+    "%b %d, %Y",
+    "%B %d %Y",
+    "%b %d %Y",
+    "%d %B %Y",
+    "%d %b %Y",
+    "%m/%d/%Y",
+];
 /// 月名・米国式の日付に続けて受け付ける時刻の書式 (12 時間制は `AM` / `PM` 付き)
 const WESTERN_TIME_FORMATS: [&str; 4] = ["%H:%M:%S%.f", "%H:%M", "%I:%M:%S %p", "%I:%M %p"];
 
@@ -64,7 +79,7 @@ const MILLIS_PER_DAY: u128 = 86_400_000;
 /// 解析した日時
 #[derive(Clone, Copy)]
 struct Moment {
-    utc: DateTime<Utc>,
+    utc: Timestamp,
     /// ミリ秒を保つかどうか (出力に小数点以下 3 桁を付け、タイムスタンプはミリ秒にする)
     has_millis: bool,
     /// 入力が Unixタイムスタンプの数値だったかどうか
@@ -74,11 +89,14 @@ struct Moment {
 impl Moment {
     /// Unixタイムスタンプ (`has_millis` の場合はミリ秒、それ以外は秒) を取得する
     fn timestamp(self) -> i64 {
-        if self.has_millis {
-            self.utc.timestamp_millis()
+        // 負の値は 0 方向への切り捨てではなく、過去方向へ切り下げる
+        let nanos = self.utc.as_nanosecond();
+        let divisor = if self.has_millis {
+            1_000_000
         } else {
-            self.utc.timestamp()
-        }
+            1_000_000_000
+        };
+        i64::try_from(nanos.div_euclid(divisor)).unwrap_or_default()
     }
 }
 
@@ -112,29 +130,49 @@ enum OutputStyle {
 /// # Returns
 /// * `Option<String>` - フォーマット済み文字列。表せない日時の場合は `None`
 fn format_moment(moment: Moment, style: OutputStyle) -> Option<String> {
-    let utc_dt = moment.utc;
     let plain_format = if moment.has_millis {
         DATETIME_MILLIS_FORMAT
     } else {
         DATETIME_FORMAT
     };
-    let iso_precision = if moment.has_millis {
-        SecondsFormat::Millis
-    } else {
-        SecondsFormat::Secs
-    };
-    let local_dt = utc_dt.with_timezone(&Local);
-    Some(match style {
-        OutputStyle::Local => local_dt.format(plain_format).to_string(),
-        OutputStyle::Utc => utc_dt.format(plain_format).to_string(),
-        OutputStyle::Iso8601Local => local_dt.to_rfc3339_opts(iso_precision, true),
-        OutputStyle::Iso8601Utc => utc_dt.to_rfc3339_opts(iso_precision, true),
-        // `to_rfc2822` は年が範囲外だとパニックする
+    let local_dt = moment.utc.to_zoned_datetime(TimeZone::system());
+    let utc_dt = moment.utc.to_zoned_datetime(TimeZone::UTC);
+    match style {
+        OutputStyle::Local => strtime::format(plain_format, &local_dt).ok(),
+        OutputStyle::Utc => strtime::format(plain_format, &utc_dt).ok(),
+        OutputStyle::Iso8601Local => format_rfc3339(&local_dt, moment.has_millis),
+        OutputStyle::Iso8601Utc => format_rfc3339(&utc_dt, moment.has_millis),
+        // 年が範囲外の日時は RFC 2822 で表せない
         OutputStyle::Rfc2822 => (0..=9999)
             .contains(&local_dt.year())
-            .then(|| local_dt.to_rfc2822())?,
-        OutputStyle::Japanese => local_dt.format(JAPANESE_FORMAT).to_string(),
-    })
+            .then(|| rfc2822::to_string(&local_dt).ok())?,
+        OutputStyle::Japanese => strtime::format(JAPANESE_FORMAT, &local_dt).ok(),
+    }
+}
+
+/// 日時を RFC 3339 形式で出力する
+///
+/// オフセットが 0 のときは `Z`、それ以外は `+09:00` の形で付ける
+///
+/// # Arguments
+/// * `dt` - 出力する日時
+/// * `has_millis` - 小数点以下 3 桁のミリ秒を付けるかどうか
+///
+/// # Returns
+/// * `Option<String>` - フォーマット済み文字列。書式化できない場合は `None`
+fn format_rfc3339(dt: &ZonedDateTime, has_millis: bool) -> Option<String> {
+    let format = if has_millis {
+        "%Y-%m-%dT%H:%M:%S%.3f"
+    } else {
+        "%Y-%m-%dT%H:%M:%S"
+    };
+    let mut text = strtime::format(format, dt).ok()?;
+    if dt.offset().is_zero() {
+        text.push('Z');
+    } else {
+        text.push_str(&strtime::format("%:z", dt).ok()?);
+    }
+    Some(text)
 }
 
 /// 複数行の日時を行ごとに指定の出力形式へ変換する
@@ -180,16 +218,32 @@ fn parse_moment(input: &str) -> Option<Moment> {
 /// * `has_millis` - ミリ秒を保つかどうか
 ///
 /// # Returns
-/// * `Option<Moment>` - 変換成功時は日時、夏時間の切り替えなどで一意に定まらない場合は `None`
-fn local_moment(naive: NaiveDateTime, has_millis: bool) -> Option<Moment> {
+/// * `Option<Moment>` - 変換成功時は日時、夏時間の切り替えで存在しない時刻の場合は `None`
+///   重複する時刻は早い方 (切り替え前) を採用する
+fn local_moment(naive: DateTime, has_millis: bool) -> Option<Moment> {
     Some(Moment {
-        utc: Local
-            .from_local_datetime(&naive)
-            .single()?
-            .with_timezone(&Utc),
+        utc: local_timestamp(naive)?,
         has_millis,
         is_unix_number: false,
     })
+}
+
+/// ローカルタイムゾーンの日時を `Timestamp` へ変換する
+///
+/// # Arguments
+/// * `naive` - タイムゾーンを持たない日時
+///
+/// # Returns
+/// * `Option<Timestamp>` - 変換成功時は日時、夏時間の切り替えで存在しない時刻の場合は `None`
+///   重複する時刻は早い方 (切り替え前) を採用する
+fn local_timestamp(naive: DateTime) -> Option<Timestamp> {
+    let offset = match TimeZone::system().to_ambiguous_timestamp(naive).offset() {
+        AmbiguousOffset::Unambiguous { offset } | AmbiguousOffset::Fold { before: offset, .. } => {
+            offset
+        }
+        AmbiguousOffset::Gap { .. } => return None,
+    };
+    offset.to_timestamp(naive).ok()
 }
 
 /// Unixタイムスタンプの整数を日時へ変換する
@@ -205,7 +259,7 @@ fn local_moment(naive: NaiveDateTime, has_millis: bool) -> Option<Moment> {
 fn moment_from_unix(timestamp: i64) -> Option<Moment> {
     let abs = timestamp.unsigned_abs();
     let (utc, has_millis) = if abs < MILLIS_THRESHOLD {
-        (DateTime::from_timestamp(timestamp, 0)?, false)
+        (Timestamp::from_second(timestamp).ok()?, false)
     } else {
         let millis = if abs < MICROS_THRESHOLD {
             timestamp
@@ -214,7 +268,7 @@ fn moment_from_unix(timestamp: i64) -> Option<Moment> {
         } else {
             timestamp.div_euclid(1_000_000)
         };
-        (DateTime::from_timestamp_millis(millis)?, true)
+        (Timestamp::from_millisecond(millis).ok()?, true)
     };
     Some(Moment {
         utc,
@@ -225,9 +279,10 @@ fn moment_from_unix(timestamp: i64) -> Option<Moment> {
 
 /// 数値の入力を Unixタイムスタンプまたは Excel のシリアル値として日時へ変換する
 ///
-/// 整数部が `EXCEL_SERIAL_MIN` 以上 `EXCEL_SERIAL_MAX` 以下の正の数は Excel のシリアル値
-/// (小数部は時刻、ローカルタイムゾーン) として扱う。それ以外の整数は `moment_from_unix` の桁数判定に従い、
-/// 小数は秒の Unixタイムスタンプ (小数点以下 4 桁目以降は切り捨て) として扱う
+/// 整数部が `EXCEL_SERIAL_MIN` 以上 `EXCEL_SERIAL_MAX` 以下で小数部を持つ正の数は Excel のシリアル値
+/// (小数部は時刻、ローカルタイムゾーン) として扱う。`2024` や `8080` のような整数だけの値は
+/// シリアル値にせず、`moment_from_unix` の桁数判定に従う。それ以外の小数は
+/// 秒の Unixタイムスタンプ (小数点以下 4 桁目以降は切り捨て) として扱う
 ///
 /// # Arguments
 /// * `input` - 前後の空白を除いた入力
@@ -247,12 +302,12 @@ fn parse_number(input: &str) -> Option<Moment> {
     let negative = input.starts_with('-');
     let int_value: i64 = int_part.parse().ok()?;
 
-    if !negative && (EXCEL_SERIAL_MIN..=EXCEL_SERIAL_MAX).contains(&int_value) {
-        return parse_excel_serial(int_value, frac_part);
-    }
     let Some(frac_part) = frac_part else {
         return moment_from_unix(input.parse().ok()?);
     };
+    if !negative && (EXCEL_SERIAL_MIN..=EXCEL_SERIAL_MAX).contains(&int_value) {
+        return parse_excel_serial(int_value, frac_part);
+    }
     if int_value.unsigned_abs() >= MILLIS_THRESHOLD {
         return None;
     }
@@ -261,7 +316,7 @@ fn parse_number(input: &str) -> Option<Moment> {
     let millis = int_value.checked_mul(1000)?.checked_add(frac_millis)?;
     let millis = if negative { -millis } else { millis };
     Some(Moment {
-        utc: DateTime::from_timestamp_millis(millis)?,
+        utc: Timestamp::from_millisecond(millis).ok()?,
         has_millis: true,
         is_unix_number: true,
     })
@@ -274,27 +329,29 @@ fn parse_number(input: &str) -> Option<Moment> {
 ///
 /// # Arguments
 /// * `days` - シリアル値の整数部 (日数)
-/// * `frac_part` - シリアル値の小数点以下の桁 (小数部がない場合は `None`)
+/// * `frac` - シリアル値の小数点以下の桁
 ///
 /// # Returns
 /// * `Option<Moment>` - 変換成功時は日時、失敗時は `None`
-fn parse_excel_serial(days: i64, frac_part: Option<&str>) -> Option<Moment> {
-    let day_millis = match frac_part {
-        Some(frac) => {
-            // 浮動小数点を使わず、小数点以下 12 桁までを整数演算で 1 日のミリ秒へ換算する
-            let digits = &frac[..frac.len().min(12)];
-            let numerator: u128 = digits.parse().ok()?;
-            let denominator = 10_u128.pow(u32::try_from(digits.len()).ok()?);
-            let rounded = (numerator * MILLIS_PER_DAY + denominator / 2) / denominator;
-            i64::try_from(rounded).ok()?
-        }
-        None => 0,
-    };
+fn parse_excel_serial(days: i64, frac: &str) -> Option<Moment> {
+    // 浮動小数点を使わず、小数点以下 12 桁までを整数演算で 1 日のミリ秒へ換算する
+    let digits = &frac[..frac.len().min(12)];
+    let numerator: u128 = digits.parse().ok()?;
+    let denominator = 10_u128.pow(u32::try_from(digits.len()).ok()?);
+    let rounded = (numerator * MILLIS_PER_DAY + denominator / 2) / denominator;
+    let day_millis = i64::try_from(rounded).ok()?;
     let (year, month, day) = EXCEL_EPOCH;
-    let naive = NaiveDate::from_ymd_opt(year, month, day)?
-        .and_time(NaiveTime::MIN)
-        .checked_add_signed(TimeDelta::try_days(days)?)?
-        .checked_add_signed(TimeDelta::try_milliseconds(day_millis)?)?;
+    let naive = Date::new(
+        i16::try_from(year).ok()?,
+        i8::try_from(month).ok()?,
+        i8::try_from(day).ok()?,
+    )
+    .ok()?
+    .at(0, 0, 0, 0)
+    .checked_add(days.days())
+    .ok()?
+    .checked_add(day_millis.milliseconds())
+    .ok()?;
     local_moment(naive, day_millis % 1000 != 0)
 }
 
@@ -332,24 +389,18 @@ fn parse_datetime(input: &str) -> Option<Moment> {
                 ),
                 None => (time_part, None),
             };
-            let time = NaiveTime::parse_from_str(time_str, "%H:%M:%S%.f")
-                .or_else(|_| NaiveTime::parse_from_str(time_str, "%H:%M"))
+            let time = Time::strptime("%H:%M:%S%.f", time_str)
+                .or_else(|_| Time::strptime("%H:%M", time_str))
                 .ok()?;
             (time, offset, time_str.contains('.'))
         }
-        None => (NaiveTime::MIN, None, false),
+        None => (Time::midnight(), None, false),
     };
 
-    let naive = date.and_time(time);
+    let naive = date.to_datetime(time);
     let utc = match offset {
-        Some(offset) => offset
-            .from_local_datetime(&naive)
-            .single()?
-            .with_timezone(&Utc),
-        None => Local
-            .from_local_datetime(&naive)
-            .single()?
-            .with_timezone(&Utc),
+        Some(offset) => offset.to_timestamp(naive).ok()?,
+        None => local_timestamp(naive)?,
     };
     Some(Moment {
         utc,
@@ -366,9 +417,9 @@ fn parse_datetime(input: &str) -> Option<Moment> {
 /// # Returns
 /// * `Option<Moment>` - 変換成功時は日時、失敗時は `None`
 fn parse_rfc2822(input: &str) -> Option<Moment> {
-    let datetime = DateTime::parse_from_rfc2822(input.trim()).ok()?;
+    let datetime = rfc2822::parse(input.trim()).ok()?;
     Some(Moment {
-        utc: datetime.with_timezone(&Utc),
+        utc: datetime.timestamp(),
         has_millis: false,
         is_unix_number: false,
     })
@@ -388,11 +439,11 @@ fn parse_japanese(input: &str) -> Option<Moment> {
     let input = input.trim();
     let naive = JAPANESE_PARSE_FORMATS
         .iter()
-        .find_map(|format| NaiveDateTime::parse_from_str(input, format).ok())
+        .find_map(|format| DateTime::strptime(format, input).ok())
         .or_else(|| {
-            NaiveDate::parse_from_str(input, JAPANESE_DATE_PARSE_FORMAT)
+            Date::strptime(JAPANESE_DATE_PARSE_FORMAT, input)
                 .ok()
-                .map(|date| date.and_time(NaiveTime::MIN))
+                .map(|date| date.at(0, 0, 0, 0))
         })?;
     local_moment(naive, false)
 }
@@ -402,7 +453,8 @@ fn parse_japanese(input: &str) -> Option<Moment> {
 /// 元号は `令和`・`平成`・`昭和`・`大正`・`明治` と略号 `R`・`H`・`S`・`T`・`M` に対応し、
 /// 元年は `元` と書ける。`令和5年11月15日 07時13分` のような和文形式と、
 /// `R5.11.15 07:13` のような区切り文字 (`.`・`/`・`-`) の形式を受け付ける
-/// 元号の改元日による範囲の検証はしない
+/// 略号形式はバージョン番号などとの誤検知を避けるため、月日を 2 桁に限り、元号の期間内の日付だけを受け付ける
+/// 元号名の形式は改元日による範囲の検証をしない
 ///
 /// # Arguments
 /// * `input` - 和暦の日時文字列
@@ -410,16 +462,17 @@ fn parse_japanese(input: &str) -> Option<Moment> {
 /// # Returns
 /// * `Option<Moment>` - 変換成功時は日時、和暦でない場合や失敗時は `None`
 fn parse_japanese_era(input: &str) -> Option<Moment> {
-    let (offset, rest, is_kanji) = ERA_NAMES
+    // 略号形式のときだけ元号の期間を持つ
+    let (offset, rest, span) = ERA_NAMES
         .iter()
-        .find_map(|(name, offset)| input.strip_prefix(name).map(|rest| (*offset, rest, true)))
+        .find_map(|(name, offset)| input.strip_prefix(name).map(|rest| (*offset, rest, None)))
         .or_else(|| {
             let mut chars = input.chars();
             let initial = chars.next()?.to_ascii_uppercase();
             ERA_INITIALS
                 .iter()
-                .find(|(era_initial, _)| *era_initial == initial)
-                .map(|(_, offset)| (*offset, chars.as_str(), false))
+                .find(|(era_initial, ..)| *era_initial == initial)
+                .map(|(_, offset, start, end)| (*offset, chars.as_str(), Some((*start, *end))))
         })?;
 
     let (era_year, rest) = if let Some(rest) = rest.strip_prefix('元') {
@@ -436,15 +489,24 @@ fn parse_japanese_era(input: &str) -> Option<Moment> {
     }
     let year = offset + era_year;
 
-    if is_kanji {
+    let Some((start, end)) = span else {
         let rest = rest.strip_prefix('年')?;
         return parse_japanese(&format!("{year:04}年{rest}"));
-    }
+    };
     let rest = rest.strip_prefix(['.', '/', '-'])?;
     let (date_part, time_part) = match rest.find([' ', 'T', 't']) {
         Some(pos) => rest.split_at(pos),
         None => (rest, ""),
     };
+    let mut parts = date_part.split(['.', '/', '-']);
+    let (month, day) = (parts.next()?, parts.next()?);
+    if parts.next().is_some() || month.len() != 2 || day.len() != 2 {
+        return None;
+    }
+    let date = (year, month.parse::<u32>().ok()?, day.parse::<u32>().ok()?);
+    if date < start || date > end {
+        return None;
+    }
     let date_part = date_part.replace(['.', '-'], "/");
     parse_datetime(&format!("{year:04}/{date_part}{time_part}"))
 }
@@ -468,15 +530,15 @@ fn parse_western(input: &str) -> Option<Moment> {
     let naive = WESTERN_DATE_FORMATS
         .iter()
         .find_map(|date_format| {
-            NaiveDate::parse_from_str(input, date_format)
+            Date::strptime(date_format, input)
                 .ok()
-                .map(|date| date.and_time(NaiveTime::MIN))
+                .map(|date| date.at(0, 0, 0, 0))
                 .or_else(|| {
                     [" ", ", "].iter().find_map(|separator| {
                         WESTERN_TIME_FORMATS.iter().find_map(|time_format| {
-                            NaiveDateTime::parse_from_str(
+                            DateTime::strptime(
+                                format!("{date_format}{separator}{time_format}"),
                                 input,
-                                &format!("{date_format}{separator}{time_format}"),
                             )
                             .ok()
                         })
@@ -484,7 +546,7 @@ fn parse_western(input: &str) -> Option<Moment> {
                 })
         })
         .filter(|naive| (1000..=9999).contains(&naive.year()))?;
-    let has_millis = naive.and_utc().timestamp_subsec_millis() != 0;
+    let has_millis = naive.subsec_nanosecond() / 1_000_000 != 0;
     local_moment(naive, has_millis)
 }
 
@@ -494,14 +556,14 @@ fn parse_western(input: &str) -> Option<Moment> {
 /// * `input` - 日付文字列
 ///
 /// # Returns
-/// * `Option<NaiveDate>` - 解析成功時は日付、失敗時は `None`
-fn parse_date(input: &str) -> Option<NaiveDate> {
+/// * `Option<Date>` - 解析成功時は日付、失敗時は `None`
+fn parse_date(input: &str) -> Option<Date> {
     // 年は 4 桁に限る (`24-1-5` のような曖昧な入力を日付として扱わない)
     if input.find(['-', '/'])? != 4 {
         return None;
     }
-    NaiveDate::parse_from_str(input, "%Y-%m-%d")
-        .or_else(|_| NaiveDate::parse_from_str(input, "%Y/%m/%d"))
+    Date::strptime("%Y-%m-%d", input)
+        .or_else(|_| Date::strptime("%Y/%m/%d", input))
         .ok()
 }
 
@@ -511,10 +573,10 @@ fn parse_date(input: &str) -> Option<NaiveDate> {
 /// * `input` - オフセット文字列 (先頭が `Z`・`+`・`-` のいずれか)
 ///
 /// # Returns
-/// * `Option<FixedOffset>` - 解析成功時はオフセット、失敗時は `None`
-fn parse_offset(input: &str) -> Option<FixedOffset> {
+/// * `Option<Offset>` - 解析成功時はオフセット、失敗時は `None`
+fn parse_offset(input: &str) -> Option<Offset> {
     if input.eq_ignore_ascii_case("z") {
-        return FixedOffset::east_opt(0);
+        return Some(Offset::UTC);
     }
     let (sign, digits) = match input.as_bytes().first()? {
         b'+' => (1, &input[1..]),
@@ -538,10 +600,11 @@ fn parse_offset(input: &str) -> Option<FixedOffset> {
         return None;
     }
     let (hours, minutes): (i32, i32) = (hours.parse().ok()?, minutes.parse().ok()?);
-    if minutes >= 60 {
+    // jiff は ±25:59 まで許すが、オフセットは 24 時間未満に限る
+    if hours >= 24 || minutes >= 60 {
         return None;
     }
-    FixedOffset::east_opt(sign * (hours * 3600 + minutes * 60))
+    Offset::from_seconds(sign * (hours * 3600 + minutes * 60)).ok()
 }
 
 // ======================================================================
@@ -962,7 +1025,6 @@ mod tests {
     #[test]
     fn test_excel_serial() {
         let date = parse_timestamp("2023-11-15").expect("日時パースに失敗");
-        assert_eq!(to_unix_timestamp("45245"), date.to_string());
         assert_eq!(to_unix_timestamp("45245.0"), date.to_string());
 
         // 小数部は時刻 (0.5 = 正午)
@@ -979,11 +1041,15 @@ mod tests {
         assert_eq!(to_datetime_string("45245.5"), "2023-11-15 12:00:00");
 
         // 範囲の端: 1900-03-01 と 9999-12-31
-        assert_eq!(to_datetime_string("61"), "1900-03-01 00:00:00");
-        assert_eq!(to_datetime_string("2958465"), "9999-12-31 00:00:00");
-        // 範囲外の整数は Unix タイムスタンプのまま扱う
-        assert_eq!(to_datetime_string_utc("60"), "1970-01-01 00:01:00");
-        assert_eq!(to_datetime_string_utc("2958466"), "1970-02-04 05:47:46");
+        assert_eq!(to_datetime_string("61.0"), "1900-03-01 00:00:00");
+        assert_eq!(to_datetime_string("2958465.0"), "9999-12-31 00:00:00");
+        // 整数だけの値は範囲内でも Unix タイムスタンプとして扱う
+        assert_eq!(to_datetime_string_utc("45245"), "1970-01-01 12:34:05");
+        assert_eq!(to_datetime_string_utc("2024"), "1970-01-01 00:33:44");
+        assert_eq!(to_datetime_string_utc("61"), "1970-01-01 00:01:01");
+        assert_eq!(to_datetime_string_utc("2958465"), "1970-02-04 05:47:45");
+        // 範囲外の小数は Unix タイムスタンプのまま扱う
+        assert_eq!(to_datetime_string_utc("60.0"), "1970-01-01 00:01:00.000");
     }
 
     /// 和暦を元号名・略号・元年の表記から日時へ変換すること
@@ -1038,6 +1104,15 @@ mod tests {
             "R5",
             "R5.11",
             "Hello",
+            // バージョン番号・型番 (月日が 1 桁)
+            "R4.3.1",
+            "M1.2.3",
+            // 元号の期間外
+            "R1.04.30",
+            "H31.05.01",
+            "S64.01.08",
+            "T15.12.25",
+            "M45.07.30",
         ] {
             assert_eq!(to_unix_timestamp(input), input, "input={input}");
         }

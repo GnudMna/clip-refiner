@@ -25,7 +25,7 @@ use crate::security::is_within_parser_limit;
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
 pub fn format_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
@@ -61,7 +61,7 @@ pub fn format_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
 pub fn format_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
@@ -104,7 +104,7 @@ pub fn format_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailu
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) はその理由を返す
 pub fn json_to_yaml(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
@@ -139,7 +139,7 @@ pub fn json_to_yaml(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) はその理由を返す
 pub fn json_to_yaml_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {

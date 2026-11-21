@@ -306,8 +306,29 @@ function test_section_category() {
 /** フィルタ後の選択インデックスを維持できること */
 function test_next_index_after_filter() {
     const filtered = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, 'url', new Set());
-    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, 'UrlDecode'), 0);
-    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, 'missing'), 0);
+    const urlDecode = filtered.find((mode) => mode.id === 'UrlDecode');
+    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, urlDecode), 0);
+    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, { id: 'missing' }), 0);
+    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, undefined), 0);
+}
+
+/** 同じ id がお気に入り節とカテゴリ節に並ぶとき、選択した節の行を維持すること */
+function test_next_index_after_filter_keeps_section() {
+    const filtered = [
+        { id: 'Trim', label: 'Trim', listSection: 'favorites', favorite: true },
+        { id: 'cat:テキスト', label: 'テキスト', category: 'テキスト', listSection: 'header' },
+        { id: 'Trim', label: 'Trim', category: 'テキスト', listSection: 'category' },
+    ];
+    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, filtered[2]), 2);
+    assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, filtered[0]), 0);
+    // 同じ節に無ければ id だけで探す
+    assert.equal(
+        QuickSelectorLogic.nextIndexAfterFilter(filtered.slice(1), {
+            id: 'Trim',
+            listSection: 'favorites',
+        }),
+        1
+    );
 }
 
 /** お気に入り並べ替え可否を判定できること */
@@ -380,14 +401,26 @@ function test_clip_register_index_and_total_rows() {
 
 /** フィルタ後の選択インデックスを維持できること */
 function test_clip_next_selection_after_filter() {
+    const a = { id: 'a' };
+    const b = { id: 'b' };
+    const c = { id: 'c' };
     // 登録行を維持
-    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter(2, 2, 1), 1);
-    // 既存行を維持
-    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter(0, 2, 1), 0);
-    // 件数減少で範囲外になった場合は先頭へ
-    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter(2, 3, 1), 0);
-    // 最終アイテム選択中に件数が減っても登録行へ誤判定しない
-    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter(2, 3, 2), 0);
+    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter(null, [a]), 1);
+    // 同じクリップを ID で追跡する (位置が変わっても維持)
+    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter('c', [c]), 0);
+    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter('b', [a, b, c]), 1);
+    // 結果から消えた場合は先頭へ
+    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter('b', [a, c]), 0);
+    assert.equal(ClipSelectorLogic.nextSelectionAfterFilter('b', []), 0);
+}
+
+/** フィルタ前の選択行から ID を求められること */
+function test_clip_selected_item_id() {
+    const filtered = [{ id: 'a' }, { id: 'b' }];
+    assert.equal(ClipSelectorLogic.selectedItemId(1, filtered), 'b');
+    // 登録行・範囲外は null
+    assert.equal(ClipSelectorLogic.selectedItemId(2, filtered), null);
+    assert.equal(ClipSelectorLogic.selectedItemId(0, []), null);
 }
 
 /** 空一覧メッセージを切り替えられること */
@@ -542,11 +575,13 @@ const tests = [
     test_expanded_categories_state,
     test_section_category,
     test_next_index_after_filter,
+    test_next_index_after_filter_keeps_section,
     test_can_move_selected_favorite,
     test_quick_selector_ipc_messages,
     test_build_item_inner_html,
     test_clip_item_matches,
     test_clip_register_index_and_total_rows,
+    test_clip_selected_item_id,
     test_clip_next_selection_after_filter,
     test_clip_empty_list_message,
     test_clip_image_preview,

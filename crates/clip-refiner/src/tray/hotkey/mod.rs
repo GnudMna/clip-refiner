@@ -14,12 +14,12 @@ use std::time::Duration;
 use global_hotkey::GlobalHotKeyEvent;
 use tao::event_loop::EventLoopProxy;
 
+use super::dispatch;
+use super::state::{AppEvent, HotkeyEvent};
+
 pub use handler::HotkeyEventContext;
 pub use register::HotkeyHandler;
 pub(crate) use register::{format_registration_failures, notify_registration_failures};
-
-use super::dispatch;
-use super::state::{AppEvent, HotkeyEvent};
 
 // ======================================================================
 // 定数

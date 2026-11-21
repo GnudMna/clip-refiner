@@ -104,7 +104,7 @@ fn image_dir() -> PathBuf {
 fn write_png_file(dir: &Path, png: &[u8]) -> io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
 
-    let stamp = chrono::Local::now().format(FILE_STAMP_FORMAT);
+    let stamp = jiff::ZonedDateTime::now().strftime(FILE_STAMP_FORMAT);
     for serial in 0..100 {
         let name = if serial == 0 {
             format!("{stamp}.{FILE_EXTENSION}")
@@ -170,7 +170,7 @@ fn is_own_file_stem(stem: &str) -> bool {
         || serial
             .strip_prefix('-')
             .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
-    serial_ok && chrono::NaiveDateTime::parse_from_str(stamp, FILE_STAMP_FORMAT).is_ok()
+    serial_ok && jiff::civil::DateTime::strptime(FILE_STAMP_FORMAT, stamp).is_ok()
 }
 
 // ======================================================================

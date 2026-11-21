@@ -140,36 +140,6 @@ function Set-WorkspaceCargoVersion {
     Set-Content -LiteralPath $cargoTomlPath -Value $updated -Encoding utf8NoBOM -NoNewline
 }
 
-# lib.rs ドキュメント内の依存バージョン例を更新する
-function Set-LibRsDocVersions {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ProjectRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$NewVersion,
-
-        [switch]$DryRun
-    )
-
-    $libRsPath = Join-Path $ProjectRoot 'crates\clip-refiner\src\lib.rs'
-    $content = Get-Content -LiteralPath $libRsPath -Raw -Encoding utf8
-    $updated = $content -replace '(?m)^(//!\s+\S+\s*=\s*\{\s*version\s*=\s*")[^"]+(")', "`${1}$NewVersion`${2}"
-
-    if ($updated -eq $content) {
-        Write-Host '注意: crates/clip-refiner/src/lib.rs のバージョン例は更新対象がありませんでした'
-        return
-    }
-
-    if ($DryRun) {
-        Write-Host "[DryRun] crates/clip-refiner/src/lib.rs -> ドキュメント内 version 例を `"$NewVersion`" に更新"
-        return
-    }
-
-    Set-Content -LiteralPath $libRsPath -Value $updated -Encoding utf8NoBOM -NoNewline
-}
-
 # Cargo.lock の workspace パッケージ version を Cargo.toml と同期する
 function Sync-WorkspaceCargoLock {
     [CmdletBinding()]
@@ -233,11 +203,15 @@ function Update-ChangelogForRelease {
         throw 'エラー: CHANGELOG.md の [Unreleased] 節に変更項目がありません (- で始まる行が必要)'
     }
 
-    $releasedSection = "## [$NewVersion] - $ReleaseDate`r`n`r`n$unreleasedBody`r`n`r`n"
-    $updated = [regex]::Replace(
+    # 既存ファイルの改行に合わせる (LF のファイルへ CRLF を混ぜない)
+    $nl = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
+
+    # 置換文字列の $ ($1 や $& など) を展開させないため、$ を $$ へエスケープして渡す
+    $releasedSection = "## [$NewVersion] - $ReleaseDate$nl$nl$unreleasedBody$nl$nl"
+    # 静的 Replace の第 4 引数は件数ではなく RegexOptions のため、件数指定にはインスタンスを使う
+    $updated = [regex]::new('(?ms)^## \[Unreleased\]\r?\n.*?(?=^## \[)').Replace(
         $content,
-        '(?ms)^## \[Unreleased\]\r?\n.*?(?=^## \[)',
-        "## [Unreleased]`r`n`r`n$releasedSection",
+        "## [Unreleased]$nl$nl$releasedSection".Replace('$', '$$'),
         1
     )
 
@@ -252,18 +226,16 @@ function Update-ChangelogForRelease {
         throw 'エラー: CHANGELOG.md の [Unreleased] リンクから compare URL を抽出できませんでした'
     }
 
-    $updated = [regex]::Replace(
+    $updated = [regex]::new('(?m)^\[Unreleased\]:[^\r\n]+').Replace(
         $updated,
-        '(?m)^\[Unreleased\]:\s*.+$',
-        "[Unreleased]: $compareBase/compare/v$NewVersion...develop",
+        "[Unreleased]: $compareBase/compare/v$NewVersion...develop".Replace('$', '$$'),
         1
     )
 
     $newVersionLink = "[$NewVersion]: $compareBase/compare/v$CurrentVersion...v$NewVersion"
-    $updated = [regex]::Replace(
+    $updated = [regex]::new('(?m)^(\[Unreleased\]:[^\r\n]+)').Replace(
         $updated,
-        '(?m)^(\[Unreleased\]:.+)$',
-        "`$1`r`n$newVersionLink",
+        "`$1$nl$($newVersionLink.Replace('$', '$$'))",
         1
     )
 
@@ -286,8 +258,7 @@ function Get-ReleaseVersionFilePaths {
     return @(
         (Join-Path $ProjectRoot 'Cargo.toml'),
         (Join-Path $ProjectRoot 'Cargo.lock'),
-        (Join-Path $ProjectRoot 'CHANGELOG.md'),
-        (Join-Path $ProjectRoot 'crates\clip-refiner\src\lib.rs')
+        (Join-Path $ProjectRoot 'CHANGELOG.md')
     )
 }
 

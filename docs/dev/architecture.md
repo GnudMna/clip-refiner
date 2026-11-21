@@ -159,7 +159,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 
 ### スクリプト構成
 
-`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、markdownlint のカスタムルール、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。
+`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、markdownlint のカスタムルール、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。エントリポイントは本体を `Invoke-ScriptMain` (`wait-if-double-clicked.ps1`) で実行し、本体が変えたカレントディレクトリと環境変数を終了時に呼び出し前へ戻す。
 
 | `scripts/windows/` | 役割 |
 | :--- | :--- |

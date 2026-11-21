@@ -8,11 +8,16 @@
 
 #requires -Version 7.0
 
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [switch]$Release,
 
     # 配布ターゲット。省略時はホスト。Host / x64 / triple
-    [string]$Target
+    [string]$Target,
+
+    # `--release` は PowerShell のパラメータとして解釈されないため、ここで受けて -Release に読み替える
+    [Parameter(ValueFromRemainingArguments)]
+    [string[]]$ExtraArgs
 )
 
 Set-StrictMode -Version Latest
@@ -25,7 +30,11 @@ Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\assert.ps1')
     . (Join-Path $PSScriptRoot '..\common\windows-target.ps1')
 
-    if ($args -contains '--release' -or $args -contains '-r') {
+    $unknownArgs = @($ExtraArgs | Where-Object { $_ -notin '--release', '-r' })
+    if ($unknownArgs.Count -gt 0) {
+        throw "エラー: 不明な引数です: $($unknownArgs -join ' ')"
+    }
+    if ($ExtraArgs -contains '--release' -or $ExtraArgs -contains '-r') {
         $Release = $true
     }
 

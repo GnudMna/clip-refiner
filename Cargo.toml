@@ -3,7 +3,7 @@ members = ["crates/clip-refiner", "crates/clip-refiner-core"]
 resolver = "2"
 
 [workspace.package]
-version = "3.1.0"
+version = "3.1.1"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]
@@ -17,12 +17,12 @@ arboard = "3.7.0"
 base64 = "0.23.1"
 blake3 = "1.8.7"
 chacha20poly1305 = "0.11.0"
-chrono = "0.4.45"
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.8", features = ["derive"] }
 clipboard-win = { version = "5.4.3", features = ["std"] }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 csv = "1.4.0"
 getrandom = "0.4.3"
+jiff = "1.0.0"
 global-hotkey = "0.10.0"
 htmd = "0.5.6"
 image = { version = "0.25.10", default-features = false, features = ["bmp", "jpeg", "png"] }
@@ -54,7 +54,7 @@ winreg = "0.56.0"
 winresource = "0.1.34"
 wry = "0.57.2"
 zeroize = "1.9.1"
-zip = { version = "9.5.1", default-features = false, features = ["deflate"] }
+zip = { version = "9.6.1", default-features = false, features = ["deflate"] }
 
 # 開発ビルド: PDB を小さくしてリンクを速くする。行番号付きのバックトレースは残る
 [profile.dev]

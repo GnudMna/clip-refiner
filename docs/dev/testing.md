@@ -341,11 +341,12 @@ $env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
 | :--- | :--- | :--- |
 | 1 | Rust の整形検証 | `cargo fmt --check` |
 | 2 | Clippy (アプリ全体 + core の feature なし) | `cargo clippy ... -- -D warnings` |
-| 3 | サプライチェーン監査 | `cargo deny check` |
-| 4 | Node.js の確認 (`CLIP_REFINER_REQUIRE_NODE=1` を設定) | — |
-| 5 | UI バンドルの最新性・ESLint・Prettier・TypeScript 型チェック・markdownlint | `npm run build:ui:check` / `npm run lint` / `npm run format:check` / `npm run typecheck` / `npm run lint:md` |
-| 6 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
-| 7 | WebView E2E (`-SkipE2E` または `CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build --all-targets --features test-helpers` → `npm run test:e2e` |
+| 3 | rustdoc (壊れた intra-doc リンクなどの警告をエラー扱い。core の feature なしを含む) | `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --features test-helpers` ほか |
+| 4 | サプライチェーン監査 | `cargo deny check` |
+| 5 | Node.js の確認 (`CLIP_REFINER_REQUIRE_NODE=1` を設定) | — |
+| 6 | UI バンドルの最新性・ESLint・Prettier・TypeScript 型チェック・markdownlint | `npm run build:ui:check` / `npm run lint` / `npm run format:check` / `npm run typecheck` / `npm run lint:md` |
+| 7 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
+| 8 | WebView E2E (`-SkipE2E` または `CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build --all-targets --features test-helpers` → `npm run test:e2e` |
 
 E2E 用のビルドは対象と feature を `cargo test` と揃え、互いのビルド結果を無効にし合わないようにする (`-p clip-refiner` だけでは dev-dependencies の feature が統合されず、毎回再コンパイルになる。デバッグビルドでは `test-helpers` の有無で挙動は変わらない)。テスト・E2E 用ビルド・カバレッジの cargo は、リンカーがライブラリを開けない一過性の失敗 (`LNK1104`。並列リンク中にウイルス対策ソフトのスキャンと競合して起きると推定) のときだけ 1 回再実行する。判定のため出力を行単位で中継するので、cargo の進捗バーと色は出ない。
 
@@ -355,6 +356,8 @@ E2E 用のビルドは対象と feature を `cargo test` と揃え、互いの�
 cargo fmt --check
 cargo clippy --all-targets --features test-helpers -- -D warnings
 cargo clippy -p clip-refiner-core --no-default-features --all-targets -- -D warnings
+$env:RUSTDOCFLAGS = '-D warnings'; cargo doc --workspace --no-deps --features test-helpers
+$env:RUSTDOCFLAGS = '-D warnings'; cargo doc -p clip-refiner-core --no-default-features --no-deps
 cargo deny check
 npm ci
 npm run build:ui:check
@@ -412,7 +415,7 @@ cargo install cargo-llvm-cov --locked
 | フック | 実行内容 | 所要時間の目安 |
 | :--- | :--- | :--- |
 | `pre-commit` | `cargo fmt --check` (`check-pre-commit.ps1`) | 数秒 |
-| `pre-push` | `check.ps1 -SkipE2E` ([品質チェック](#品質チェック) の 7 以外) | 数分 |
+| `pre-push` | `check.ps1 -SkipE2E` ([品質チェック](#品質チェック) の 8 以外) | 数分 |
 
 無効化:
 

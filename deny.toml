@@ -58,7 +58,7 @@ allow-wildcard-paths = true
 skip = [
     { crate = "miniz_oxide@0.8.9", reason = "png 0.18 が直接依存 (flate2 経由の zip・png は 0.9)" },
     { crate = "syn@2.0.119", reason = "proc-macro のビルド時のみ。strum_macros・tracing-attributes などが syn 2、serde_derive・thiserror-impl などが syn 3" },
-    { crate = "windows-sys@0.59.0", reason = "global-hotkey 0.9 が依存" },
+    { crate = "windows-sys@0.59.0", reason = "global-hotkey 0.10 が依存" },
 ]
 
 [sources]

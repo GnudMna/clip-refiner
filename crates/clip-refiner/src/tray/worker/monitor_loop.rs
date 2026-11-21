@@ -11,12 +11,26 @@ use crate::config::MonitorMode;
 use crate::refiner::{OwnedClipboard, RefineContext, TextClipboard};
 
 // ======================================================================
+// 定数
+// ======================================================================
+/// 読み取り失敗後に再試行する間隔
+const READ_RETRY_INTERVAL: Duration = Duration::from_millis(150);
+/// 同じ変更トークンに対する読み取り失敗後の最大再試行回数
+const READ_RETRY_MAX: u32 = 5;
+
+// ======================================================================
 // 監視ループ状態
 // ======================================================================
 /// ワーカースレッド内でクリップボード監視を行うための状態
 ///
 /// 監視世代、ポーリング間隔、イベントトークンの追跡を担当する
 pub(super) struct MonitorLoopState {
+    /// 読み取り失敗を再試行中の変更トークン
+    pub retry_token: Option<u64>,
+    /// 読み取り失敗の残り再試行回数
+    pub retries_left: u32,
+    /// 次に読み取りを再試行する時刻 (再試行待ちでなければ `None`)
+    pub retry_due: Option<Instant>,
     /// 現在追跡中の監視世代(0 は監視停止中)
     pub tracked_generation: u64,
     /// 前回ポーリング監視を実行した時刻
@@ -36,6 +50,9 @@ impl MonitorLoopState {
     /// * `Self` - 監視停止状態の初期インスタンス
     pub fn new() -> Self {
         Self {
+            retry_token: None,
+            retries_left: 0,
+            retry_due: None,
             tracked_generation: 0,
             last_poll_at: Instant::now(),
             last_token: 0,
@@ -71,6 +88,7 @@ impl MonitorLoopState {
             );
         }
         self.last_token = new_token;
+        self.clear_read_retry();
         self.last_poll_at = Instant::now();
         self.tracked_generation = state.monitor_generation.load(Ordering::SeqCst);
         self.event_fallback_warned = false;
@@ -121,7 +139,13 @@ impl MonitorLoopState {
             || Self::effective_mode(snap.monitor_mode) == MonitorMode::Event
         {
             if listener_active {
-                return idle_timeout;
+                // 読み取り失敗の再試行待ちは、次のクリップボード変更や安全網を待たず短い間隔で起床する
+                return match self.retry_due {
+                    Some(due) => idle_timeout
+                        .min(due.saturating_duration_since(Instant::now()))
+                        .max(Duration::from_millis(1)),
+                    None => idle_timeout,
+                };
             }
             return Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS));
         }
@@ -169,7 +193,7 @@ impl MonitorLoopState {
 
     /// 自動加工も連続記録も無効な間に残った `last_written` を破棄する
     ///
-    /// 判定側が消費しないため、手動加工や履歴復元で記録された指紋が残り続ける。
+    /// 判定側が消費しないため、手動加工や履歴復元で記録された指紋が残り続ける
     /// 残すと後から自動変換を有効にして同じ文字列をコピーしたとき、書き戻しのエコーと誤認して加工されない
     fn discard_unconsumed_last_written(
         state: &Arc<AppState>,
@@ -272,6 +296,30 @@ impl MonitorLoopState {
         }
     }
 
+    /// 読み取り失敗後の再試行を予約する
+    ///
+    /// 変更トークンは進めないため、次のティックで同じ変更を再び読む
+    /// 別のトークンの失敗は再試行回数を数え直し、上限に達したら予約しない
+    fn schedule_read_retry(&mut self, token: u64) {
+        if self.retry_token != Some(token) {
+            self.retry_token = Some(token);
+            self.retries_left = READ_RETRY_MAX;
+        }
+        if self.retries_left == 0 {
+            self.retry_due = None;
+            return;
+        }
+        self.retries_left -= 1;
+        self.retry_due = Some(Instant::now() + READ_RETRY_INTERVAL);
+    }
+
+    /// 読み取り失敗の再試行状態を破棄する
+    fn clear_read_retry(&mut self) {
+        self.retry_token = None;
+        self.retries_left = 0;
+        self.retry_due = None;
+    }
+
     /// 観測結果に応じて変更トークンを更新する
     fn apply_token_after_observe(
         monitor: &mut Self,
@@ -285,7 +333,7 @@ impl MonitorLoopState {
     /// 書き戻し後の現在トークンを受け取って変更トークンを更新する
     ///
     /// 書き戻しを反映したトークンを取得できた場合、自身の書き戻しによる変更はトークン一致で
-    /// 読み飛ばされ判定側の `last_written` が消費されないため、ここで消す。
+    /// 読み飛ばされ判定側の `last_written` が消費されないため、ここで消す
     /// 消さないと直後に同じ文字列をコピーしたとき、書き戻しのエコーと誤認して加工されない
     fn apply_token_with_current(
         monitor: &mut Self,
@@ -295,9 +343,13 @@ impl MonitorLoopState {
         current_token: Option<u64>,
     ) {
         match result {
-            ClipboardObserveResult::ReadFailed => {}
-            ClipboardObserveResult::Observed => monitor.last_token = token,
+            ClipboardObserveResult::ReadFailed => monitor.schedule_read_retry(token),
+            ClipboardObserveResult::Observed => {
+                monitor.clear_read_retry();
+                monitor.last_token = token;
+            }
             ClipboardObserveResult::ClipboardWritten => {
+                monitor.clear_read_retry();
                 monitor.last_token = current_token.unwrap_or(token);
                 if current_token.is_some() {
                     state
@@ -452,6 +504,54 @@ mod tests {
             .clipboard_session()
             .with_processed_state(|ps| ps.matches_last_written("out"));
         assert!(remains);
+    }
+
+    /// 読み取り失敗後は上限まで再試行を予約し、成功で破棄すること
+    ///
+    /// トークンは進めず、上限到達後は次の変更まで予約しない
+    #[test]
+    fn read_failed_schedules_bounded_retries() {
+        let (state, mut monitor) = state_with_last_written();
+
+        for _ in 0..READ_RETRY_MAX {
+            MonitorLoopState::apply_token_with_current(
+                &mut monitor,
+                &state,
+                5,
+                ClipboardObserveResult::ReadFailed,
+                Some(5),
+            );
+            assert!(monitor.retry_due.is_some());
+        }
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            5,
+            ClipboardObserveResult::ReadFailed,
+            Some(5),
+        );
+        assert_eq!(monitor.last_token, 0);
+        assert!(monitor.retry_due.is_none());
+
+        // 別のトークンでは再び再試行する
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            6,
+            ClipboardObserveResult::ReadFailed,
+            Some(6),
+        );
+        assert!(monitor.retry_due.is_some());
+
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            6,
+            ClipboardObserveResult::Observed,
+            Some(6),
+        );
+        assert!(monitor.retry_due.is_none());
+        assert_eq!(monitor.last_token, 6);
     }
 
     /// 観測のみの場合は `last_written` を変更しないこと

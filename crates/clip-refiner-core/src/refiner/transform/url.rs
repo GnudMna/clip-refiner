@@ -55,7 +55,8 @@ pub fn url_decode(input: &str) -> Result<String, std::str::Utf8Error> {
 ///
 /// `?` から始まるクエリ文字列の計測用パラメータをすべて取り除く
 /// 対象は URL の `?` のみで、`What?utm_source=1` のような URL でない文字列は変更しない (`is_url_like` を参照)
-/// クエリの終わりは、空白・ASCII 以外の文字・`)` `>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点は含めない
+/// クエリの終わりは、空白・日本語の句読点・対応する `(` のない `)`・`>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点は含めない
+/// 非 ASCII 文字は、`?q=日本&...` のようにクエリの値として続く場合だけクエリに含め、`xを参照` のような URL 直後の文章は含めない
 /// 対象は `utm_` で始まるキーと、広告のクリックID (`fbclid` / `gclid` など)
 /// キーは大文字・小文字を区別しない
 /// 他のパラメータと、URL以外の文字列・改行・空白は維持される
@@ -100,9 +101,21 @@ const CLICK_ID_PARAMS: &[&str] = &[
     "igshid",
 ];
 
-/// クエリの直後に続いていても URL の一部とみなさない文字か判定する
-fn is_query_terminator(c: char) -> bool {
-    c.is_whitespace() || !c.is_ascii() || matches!(c, ')' | '>' | '<' | '"' | '\'' | '`')
+/// URL の区切りとみなす日本語・全角の句読点・括弧か判定する
+fn is_wide_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '\u{3000}'..='\u{303F}'
+            | '\u{FF01}'..='\u{FF0F}'
+            | '\u{FF1A}'..='\u{FF20}'
+            | '\u{FF3B}'..='\u{FF40}'
+            | '\u{FF5B}'..='\u{FF65}'
+    )
+}
+
+/// URL の一部とみなさない文字か判定する (`)` は対応する `(` の有無で別に判定する)
+fn is_url_boundary(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '>' | '<' | '"' | '\'' | '`') || is_wide_punctuation(c)
 }
 
 /// `?` の直前までのテキストが URL の一部とみなせるか判定する
@@ -116,9 +129,11 @@ fn is_query_terminator(c: char) -> bool {
 /// # Returns
 /// * `bool` - URL の一部とみなせる場合は `true`
 fn is_url_like(before: &str) -> bool {
-    let word = before.rsplit(is_query_terminator).next().unwrap_or("");
+    let word = before.rsplit(is_url_boundary).next().unwrap_or("");
+    // 日本語の文章に直接続く `www.` も拾うため、最後の非 ASCII 文字より後ろで判定する
+    let ascii_tail = word.rsplit(|c: char| !c.is_ascii()).next().unwrap_or("");
     word.contains('/')
-        || word
+        || ascii_tail
             .get(..4)
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("www."))
 }
@@ -133,13 +148,50 @@ fn is_url_like(before: &str) -> bool {
 /// * `usize` - 終了位置 (排他)。文末の句読点は含めない
 fn query_end(input: &str, from: usize) -> usize {
     let rest = &input[from..];
-    let len = rest.find(is_query_terminator).unwrap_or(rest.len());
+    let len = query_len(rest);
     let trimmed = rest[..len].trim_end_matches(['.', ',', ';', ':', '!', '?']);
     // 末尾の `&amp;` の `;` は句読点ではなく区切りの一部なので含める
     if trimmed.ends_with("&amp") && rest[trimmed.len()..len].starts_with(';') {
         return from + trimmed.len() + 1;
     }
     from + trimmed.len()
+}
+
+/// 区切り文字が現れるまでのクエリの長さを返す (句読点のトリム前)
+///
+/// `(` と対応する `)` は URL の一部とする。非 ASCII 文字の連続は、直前が `=` `&` などの区切り、
+/// または直後が `&` `#` `=` の場合だけ URL の一部とし、`xを参照` のような URL 直後の文章は含めない
+fn query_len(rest: &str) -> usize {
+    let mut depth = 0usize;
+    let mut prev: Option<char> = None;
+    let mut chars = rest.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return index,
+            ')' => depth -= 1,
+            _ if is_url_boundary(c) => return index,
+            _ if !c.is_ascii() => {
+                let run_end = rest[index..]
+                    .find(|ch: char| ch.is_ascii() || is_url_boundary(ch))
+                    .map_or(rest.len(), |offset| index + offset);
+                let after = rest[run_end..].chars().next();
+                let continues = matches!(prev, Some('=' | '&' | '?' | '#' | '/' | ';'))
+                    || matches!(after, Some('&' | '#' | '='));
+                if !continues {
+                    return index;
+                }
+                while chars.peek().is_some_and(|&(next, _)| next < run_end) {
+                    chars.next();
+                }
+                prev = rest[..run_end].chars().next_back();
+                continue;
+            }
+            _ => {}
+        }
+        prev = Some(c);
+    }
+    rest.len()
 }
 
 /// クエリパラメータのキーが計測用パラメータかを判定する (大文字・小文字を区別しない)
@@ -493,6 +545,35 @@ mod tests {
         assert_eq!(
             remove_utm_params("(https://a.com/?utm_source=x#top)"),
             "(https://a.com/#top)"
+        );
+    }
+
+    /// クエリ中の非 ASCII 文字や `)` を含むパスでも、後ろの計測用パラメータを除去すること
+    #[test]
+    fn test_remove_utm_params_non_ascii_and_parens() {
+        assert_eq!(
+            remove_utm_params("https://a.com/?q=日本&utm_source=x"),
+            "https://a.com/?q=日本"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x&q=日本語&id=1"),
+            "https://a.com/?q=日本語&id=1"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/日本?utm_source=x"),
+            "https://a.com/日本"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/wiki/Foo_(bar)?utm_source=x"),
+            "https://a.com/wiki/Foo_(bar)"
+        );
+        assert_eq!(
+            remove_utm_params("(https://a.com/wiki/Foo_(bar)?id=1&utm_source=x)"),
+            "(https://a.com/wiki/Foo_(bar)?id=1)"
+        );
+        assert_eq!(
+            remove_utm_params("詳細はwww.a.com?utm_source=xを参照"),
+            "詳細はwww.a.comを参照"
         );
     }
 

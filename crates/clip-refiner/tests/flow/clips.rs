@@ -129,7 +129,7 @@ fn copy_plain_clip_keeps_placeholders() {
 /// 展開に失敗したテンプレートはクリップボードを変更しないこと
 #[test]
 fn copy_template_clip_with_invalid_format_keeps_clipboard() {
-    let mut harness = ClipboardHarness::with_text("{date:%Q}");
+    let mut harness = ClipboardHarness::with_text("{date:%+}");
 
     harness.register_clip_from_clipboard();
     harness.with_config_mut(|c| c.set_registered_clip_template(0, true));
@@ -169,7 +169,7 @@ fn copy_does_not_advance_counter_without_issuing_it() {
 
     // 不正な書式で展開に失敗した場合も連番は変わらない
     harness
-        .with_config_mut(|c| c.update_registered_clip(0, "", "{counter}{date:%Q}"))
+        .with_config_mut(|c| c.update_registered_clip(0, "", "{counter}{date:%+}"))
         .expect("edit");
     harness.reset_clipboard("unchanged");
     harness.copy_registered_clip(0);

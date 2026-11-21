@@ -1,5 +1,5 @@
 #!/bin/sh
-# ClipRefiner pre-push: check.ps1 -SkipE2E (fmt / clippy / deny / eslint / test)
+# ClipRefiner pre-push: check.ps1 -SkipE2E (fmt / clippy / rustdoc / deny / eslint / markdownlint / test)
 # WebView E2E は GUI を開いて重いため含めない。/check とリリース前 (release.ps1) で実行する
 
 if [ "$CLIP_REFINER_SKIP_HOOK" = "1" ]; then
@@ -8,13 +8,10 @@ fi
 
 root="$(git rev-parse --show-toplevel)" || exit 1
 
-if command -v pwsh >/dev/null 2>&1; then
-    shell=pwsh
-elif command -v powershell >/dev/null 2>&1; then
-    shell=powershell
-else
-    echo "pre-push: PowerShell が見つかりません (pwsh または powershell が必要です)" >&2
+# 呼び出すスクリプトは #requires -Version 7.0 のため、Windows PowerShell 5.1 へはフォールバックしない
+if ! command -v pwsh >/dev/null 2>&1; then
+    echo "pre-push: pwsh (PowerShell 7 以上) が見つかりません。インストールしてください" >&2
     exit 1
 fi
 
-exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/windows/check.ps1" -SkipE2E
+exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/windows/check.ps1" -SkipE2E

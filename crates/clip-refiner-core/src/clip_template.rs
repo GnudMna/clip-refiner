@@ -5,8 +5,8 @@
 
 use std::fmt::Write as _;
 
-use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Datelike, FixedOffset};
+use jiff::ZonedDateTime;
+use jiff::fmt::strtime;
 use thiserror::Error;
 
 use crate::consts::MAX_CLIPBOARD_TEXT_BYTES;
@@ -29,10 +29,10 @@ const WEEKDAY_LABELS: [&str; 7] = ["月", "火", "水", "木", "金", "土", "�
 /// テンプレート展開に使う値
 ///
 /// 展開 1 回につき日時を 1 度だけ取得し、同じテンプレート内の日時を揃える
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ClipTemplateContext<'a> {
     /// `{date}` / `{time}` / `{datetime}` / `{weekday}` の基準日時
-    pub now: DateTime<FixedOffset>,
+    pub now: ZonedDateTime,
     /// `{clipboard}` に差し込むテキスト。`None` は空文字として扱う
     pub clipboard: Option<&'a str>,
     /// `{user}` に差し込むユーザー名。`None` は空文字として扱う
@@ -61,7 +61,7 @@ pub enum ClipTemplateError {
 /// テンプレートを展開する
 ///
 /// 対応するプレースホルダは `{date}` `{time}` `{datetime}` (`{date:%Y/%m/%d}` のように
-/// chrono の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`、`{counter}`
+/// jiff の strftime 書式を指定可)、`{weekday}`、`{clipboard}`、`{uuid}`、`{user}`、`{counter}`
 /// `{counter}` は 1 回の展開の中ではすべて同じ値になる
 /// `{{` / `}}` は `{` / `}` になる。未知の名前や閉じていない `{` は書かれたまま残す
 ///
@@ -239,16 +239,16 @@ fn render_placeholder(
 ) -> Result<(), ClipTemplateError> {
     match placeholder {
         Placeholder::Date(format) => {
-            write_datetime(out, ctx.now, format.unwrap_or(DEFAULT_DATE_FORMAT))
+            write_datetime(out, &ctx.now, format.unwrap_or(DEFAULT_DATE_FORMAT))
         }
         Placeholder::Time(format) => {
-            write_datetime(out, ctx.now, format.unwrap_or(DEFAULT_TIME_FORMAT))
+            write_datetime(out, &ctx.now, format.unwrap_or(DEFAULT_TIME_FORMAT))
         }
         Placeholder::DateTime(format) => {
-            write_datetime(out, ctx.now, format.unwrap_or(DEFAULT_DATETIME_FORMAT))
+            write_datetime(out, &ctx.now, format.unwrap_or(DEFAULT_DATETIME_FORMAT))
         }
         Placeholder::Weekday => {
-            let index = ctx.now.weekday().num_days_from_monday() as usize;
+            let index = usize::from(ctx.now.weekday().to_monday_zero_offset().unsigned_abs());
             out.push_str(WEEKDAY_LABELS[index]);
             Ok(())
         }
@@ -274,22 +274,20 @@ fn render_placeholder(
 
 /// 日時を strftime 書式で追記する
 ///
-/// 書式の解析エラーや書式化できない指定子は `InvalidFormat` にする (chrono の `to_string` は
-/// 書式化失敗でパニックするため `write!` の `Err` で受ける)
+/// 書式の解析エラーや書式化できない指定子は `InvalidFormat` にする
+/// 書式化に失敗した場合は途中の出力を残さない
 fn write_datetime(
     out: &mut String,
-    now: DateTime<FixedOffset>,
+    now: &ZonedDateTime,
     format: &str,
 ) -> Result<(), ClipTemplateError> {
     let invalid = || ClipTemplateError::InvalidFormat(format.to_string());
     if format.is_empty() {
         return Err(invalid());
     }
-    let items: Vec<Item<'_>> = StrftimeItems::new(format).collect();
-    if items.iter().any(|item| matches!(item, Item::Error)) {
-        return Err(invalid());
-    }
-    write!(out, "{}", now.format_with_items(items.into_iter())).map_err(|_| invalid())
+    let formatted = strtime::format(format, now).map_err(|_| invalid())?;
+    out.push_str(&formatted);
+    Ok(())
 }
 
 /// 乱数 16 バイトから UUID v4 の文字列 (小文字 16 進) を追記する
@@ -309,17 +307,18 @@ fn write_uuid_v4(out: &mut String, mut bytes: [u8; 16]) {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use jiff::civil::date;
+    use jiff::tz::{Offset, TimeZone};
 
     use super::*;
 
     /// 2026-10-08 (木) 09:05:03 +09:00 を基準日時とするコンテキスト
     fn ctx<'a>(clipboard: Option<&'a str>, user_name: Option<&'a str>) -> ClipTemplateContext<'a> {
-        let offset = FixedOffset::east_opt(9 * 3600).expect("offset");
+        let offset = Offset::from_hours(9).expect("offset");
         ClipTemplateContext {
-            now: offset
-                .with_ymd_and_hms(2026, 10, 8, 9, 5, 3)
-                .single()
+            now: date(2026, 10, 8)
+                .at(9, 5, 3, 0)
+                .to_zoned_datetime(TimeZone::fixed(offset))
                 .expect("datetime"),
             clipboard,
             user_name,
@@ -351,12 +350,35 @@ mod tests {
         );
     }
 
+    /// 曜日・月名・パディング指定・小数秒などよく使う指定子を展開できること
+    #[test]
+    fn expands_common_strftime_specifiers() {
+        assert_eq!(
+            expand("{date:%A %a %B %b}").expect("expand"),
+            "Thursday Thu October Oct"
+        );
+        assert_eq!(expand("{date:%-m/%-d %e|}").expect("expand"), "10/8  8|");
+        assert_eq!(
+            expand("{time:%H:%M:%S%.3f}").expect("expand"),
+            "09:05:03.000"
+        );
+        assert_eq!(
+            expand("{datetime:%Y%m%dT%H%M%S%z}").expect("expand"),
+            "20261008T090503+0900"
+        );
+    }
+
     /// 不正な書式指定や空の書式はエラーにすること
     #[test]
     fn rejects_invalid_datetime_format() {
+        // 未対応の指定子と、末尾の単独の `%`
         assert_eq!(
-            expand("{date:%Q}"),
-            Err(ClipTemplateError::InvalidFormat("%Q".to_string()))
+            expand("{date:%+}"),
+            Err(ClipTemplateError::InvalidFormat("%+".to_string()))
+        );
+        assert_eq!(
+            expand("{date:%Y%}"),
+            Err(ClipTemplateError::InvalidFormat("%Y%".to_string()))
         );
         assert_eq!(
             expand("{time:}"),

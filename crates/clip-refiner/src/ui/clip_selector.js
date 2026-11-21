@@ -23,6 +23,7 @@ const {
     itemMatches,
     isRegisterIndex,
     totalRows,
+    selectedItemId,
     nextSelectionAfterFilter,
     emptyListMessage,
     resolveActivateSelection,
@@ -450,17 +451,24 @@ function renderList(scrollToSelection) {
     }
 }
 
-/** 検索フィルタを適用して一覧を再描画する */
-function filter() {
+/**
+ * 検索フィルタを適用し、指定したクリップを選択して一覧を再描画する
+ *
+ * @param {string|null} previousId - 選択を維持するクリップ ID (登録行は `null`)
+ */
+function applyFilter(previousId) {
     // 一覧が変わると確認待ちの ID が別のクリップを指す恐れがあるため解除する
     pendingDeleteId = null;
     const query = normalizeQuery(input.value);
-    const previousIndex = selection.index;
-    const oldFilteredLength = filtered.length;
 
     filtered = items.filter((item) => itemMatches(item, query));
-    selection.index = nextSelectionAfterFilter(previousIndex, oldFilteredLength, filtered.length);
+    selection.index = nextSelectionAfterFilter(previousId, filtered);
     renderList(true);
+}
+
+/** 検索フィルタを適用して一覧を再描画する (選択中のクリップを ID で維持する) */
+function filter() {
+    applyFilter(selectedItemId(selection.index, filtered));
 }
 
 /**
@@ -659,8 +667,8 @@ window.onkeydown = (e) => {
 window.focusInput = (nextItems) => {
     items = Array.isArray(nextItems) ? nextItems : [];
     input.value = '';
-    selection.index = 0;
-    filter();
+    // 前回表示時の選択を引き継がず、先頭 (空なら登録行) から始める
+    applyFilter(items[0]?.id ?? null);
     focusSearchInput(input);
 };
 

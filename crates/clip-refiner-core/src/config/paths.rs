@@ -44,7 +44,7 @@ thread_local! {
 /// 1. 環境変数 `CLIP_REFINER_CONFIG_DIR` (非空のとき)
 /// 2. テスト用上書き (`set_test_config_dir`, debug/test/`test-helpers` のみ)
 /// 3. ポータブルモード (実行ファイル隣に `portable` があるとき `<exe_dir>/data`)
-/// 4. `%APPDATA%` 配下の `ClipRefiner`
+/// 4. `%APPDATA%` 配下の `ClipRefiner` (開発版の debug ビルドは `ClipRefiner-Dev`)
 ///
 /// # Returns
 /// * `Result<PathBuf>` - 設定ディレクトリのパス
@@ -81,7 +81,21 @@ fn resolve_config_dir(env_dir: Option<PathBuf>) -> Result<PathBuf, ConfigError> 
         return Ok(dir);
     }
 
-    Ok(config_base_dir()?.join(consts::APP_NAME))
+    Ok(config_base_dir()?.join(default_data_dir_name()))
+}
+
+/// `%APPDATA%` 配下で使うディレクトリ名を返す
+///
+/// 開発版 (debug ビルド) は製品版とデータを共有しないよう別名にする
+///
+/// # Returns
+/// * `&'static str` - debug ビルドは `ClipRefiner-Dev`、release ビルドは `ClipRefiner`
+const fn default_data_dir_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        consts::DEV_DATA_DIR_NAME
+    } else {
+        consts::APP_NAME
+    }
 }
 
 /// 現在の解決結果がポータブルモード由来かどうかを返す

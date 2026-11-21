@@ -4,7 +4,6 @@ use serde::Serialize;
 
 use super::docs::SECTION_RULE;
 use super::scalar::toml_scalar;
-
 use crate::error::ConfigError;
 
 type Result<T> = std::result::Result<T, ConfigError>;

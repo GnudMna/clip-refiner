@@ -44,7 +44,7 @@ const NON_FINITE_MESSAGE: &str = "JSON で表現できない数値 (.inf / .nan)
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) はその理由を返す
 pub fn yaml_to_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     convert_to_json(text, "yaml_to_json")
@@ -61,7 +61,7 @@ pub fn yaml_to_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) はその理由を返す
 pub fn yaml_to_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     convert_to_json(text, "yaml_to_json_preserve_order")
@@ -118,7 +118,7 @@ fn convert_to_json<'a>(text: &'a str, name: &str) -> Result<Cow<'a, str>, ParseF
 /// * `text` - YAML 文字列
 ///
 /// # Returns
-/// * `Result<Option<OrderedValue>, ParseFailure>` - 読み取った値。マッピングも配列も含まない場合は `None`。
+/// * `Result<Option<OrderedValue>, ParseFailure>` - 読み取った値。マッピングも配列も含まない場合は `None`
 ///   YAML として不正な場合は `InvalidYaml`、JSON で表現できない値 (`.inf` / `.nan`) を含む場合は `NonFiniteNumber`、
 ///   重複キーを含む場合は `DuplicateKey`
 fn read_yaml(text: &str) -> Result<Option<OrderedValue>, ParseFailure> {

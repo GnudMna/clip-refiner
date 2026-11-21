@@ -43,10 +43,10 @@ pub fn set_enabled(enabled: bool) -> Result<()> {
 
     if enabled {
         let exe_path = current_exe_path()?;
-        run.set_value(consts::APP_NAME, &format_run_value(&exe_path))
+        run.set_value(run_value_name(), &format_run_value(&exe_path))
             .context("自動起動レジストリ値の書き込みに失敗")?;
     } else {
-        let _ = run.delete_value(consts::APP_NAME);
+        let _ = run.delete_value(run_value_name());
     }
 
     Ok(())
@@ -55,6 +55,17 @@ pub fn set_enabled(enabled: bool) -> Result<()> {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// Run キーの値名を返す
+///
+/// 開発版 (debug ビルド) は製品版の登録を上書き・削除しないよう別名にする
+const fn run_value_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        consts::DEV_DATA_DIR_NAME
+    } else {
+        consts::APP_NAME
+    }
+}
+
 /// 現在の実行ファイルパスを正規化して返す
 fn current_exe_path() -> Result<PathBuf> {
     std::env::current_exe()
@@ -121,7 +132,7 @@ fn read_run_value() -> Result<Option<PathBuf>> {
         .open_subkey_with_flags(RUN_KEY, KEY_READ)
         .context("自動起動レジストリキーの読み取りに失敗")?;
 
-    match run.get_value::<String, _>(consts::APP_NAME) {
+    match run.get_value::<String, _>(run_value_name()) {
         Ok(value) => Ok(Some(normalize_path(parse_run_value(&value)))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e).context("自動起動レジストリ値の読み取りに失敗"),

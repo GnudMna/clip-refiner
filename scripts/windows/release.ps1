@@ -1,7 +1,8 @@
 # ========================================================================
 # Script Name : release.ps1
 # Description : リリース手順を一括実行する (バージョン更新 / CHANGELOG / 品質チェック / Git / MSI / ポータブル ZIP)
-# Usage       : git checkout -b release/v0.12.2
+# Usage       : git fetch origin develop
+#               git switch -c release/v0.12.2 origin/develop
 #               ./release.ps1 -Version 0.12.2
 #               ./release.ps1 -Bump Patch -DryRun
 # Requires    : PowerShell 7.0+, Git
@@ -119,7 +120,6 @@ Invoke-ScriptMain {
         -NewVersion $newVersion `
         -ReleaseDate $Date `
         -DryRun:$DryRun
-    Set-LibRsDocVersions -ProjectRoot $ProjectRoot -NewVersion $newVersion -DryRun:$DryRun
     Sync-WorkspaceCargoLock -ProjectRoot $ProjectRoot -DryRun:$DryRun
     Write-Host ''
 
@@ -150,7 +150,7 @@ Invoke-ScriptMain {
         Write-Host ''
     } else {
         Write-Host 'Git コミットをスキップしました (-NoCommit)'
-        Write-Host '  手動でコミットする場合: git add Cargo.toml crates/clip-refiner/Cargo.toml Cargo.lock CHANGELOG.md crates/clip-refiner/src/lib.rs'
+        Write-Host '  手動でコミットする場合: git add Cargo.toml Cargo.lock CHANGELOG.md'
         Write-Host "  推奨メッセージ: Release: v$newVersion"
         Write-Host ''
     }

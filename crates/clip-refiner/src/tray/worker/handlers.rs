@@ -1,8 +1,6 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
-use chrono::Local;
-
 use super::super::clipboard_monitor::ObservedClipboard;
 use super::super::dispatch;
 use super::super::notify::{
@@ -412,7 +410,7 @@ fn expand_registered_clip_template<C: TextClipboard>(
     };
     let user_name = std::env::var("USERNAME").ok();
     let ctx = ClipTemplateContext {
-        now: Local::now().fixed_offset(),
+        now: jiff::ZonedDateTime::now(),
         clipboard: current.as_deref().map(String::as_str),
         user_name: user_name.as_deref(),
         counter,

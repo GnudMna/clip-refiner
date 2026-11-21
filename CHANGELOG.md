@@ -29,6 +29,44 @@
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-11-17
+
+### Breaking changes
+
+- `ClipTemplateContext::now` の型を `chrono::DateTime<FixedOffset>` から `jiff::ZonedDateTime` に変更し、`ClipTemplateContext` の `Copy` 実装を削除
+  - `chrono` への依存をなくしたため。`ZonedDateTime::now()` などで基準日時を作る
+
+### Changed
+
+- 登録クリップのテンプレートの `{date:書式}`・`{time:書式}`・`{datetime:書式}` が、[jiff の strftime 形式](https://docs.rs/jiff/latest/jiff/fmt/strtime/index.html) の書式を使うように変更
+  - `%+` など未対応の指定子は、書式エラーとして展開しない。`%c`・`%x`・`%X` の出力形式も変わる
+  - `%Y-%m-%d` や `%H:%M:%S`、`%.3f` などよく使う書式の結果は変わらない
+- 日時変換で、扱える日時の範囲を西暦 -9999 年から 9999 年までに限定
+  - 範囲外の Unix タイムスタンプの行は変換せず、そのまま残す
+- 日時変換で、Excel のシリアル値として扱う入力を小数部を持つ値 (`45245.5` など) に限定
+  - `2024` や `45245` のような整数だけの値は、1900 年代の日時にせず Unix タイムスタンプとして変換する
+- エスケープで `/` を `\/` にしないように変更
+  - C# / Java では `\/` が不正なエスケープになり、Python では `\/` がそのまま残るため。エスケープ解除は従来どおり `\/` を `/` に戻す
+
+### Fixed
+
+- クイックセレクターで、カテゴリ内のお気に入りを選択中にお気に入りの切り替えやカテゴリの開閉をすると、選択とスクロールが「お気に入り」節へ飛ぶ問題を修正
+- 登録クリップセレクターで検索すると、選択中とは別のクリップが選ばれ、`Enter` や `Del` が意図しないクリップに作用する問題を修正
+  - 検索結果に選択中のクリップが無いときは、先頭の行を選ぶ
+- イベント監視で、コピー直後にクリップボードを読み取れないと、加工が最大 30 秒遅れる問題を修正
+  - 読み取れなかったときは、短い間隔で読み直す
+- `R4.3.1` や `M1.2.3` のようなバージョン番号・型番が和暦の日付として変換される問題を修正
+  - 和暦の略号 (`R`・`H`・`S`・`T`・`M`) は、月日を 2 桁で書いた元号の期間内の日付だけを変換する
+- 日時変換で、夏時間の終了で 2 回現れる時刻が変換されない問題を修正
+  - 切り替え前 (夏時間) の時刻として変換する
+- Excel → Markdown 変換で、1 列の範囲に空セルがあるとその行が消えて行がずれる問題を修正
+  - 空セルは空の行として残す
+- Excel → Markdown 変換で、`"` で始まるセルの `"` が消える問題と、閉じていない `"` があると表全体が 1 つのセルにまとまる問題を修正
+- UTM パラメータ除去で、クエリに日本語を含む URL (`?q=日本&utm_source=x`) や、`)` を含むパスの URL (`wiki/Foo_(bar)?utm_source=x`) で除去されない問題を修正
+- カンマ追加・カンマ除去で、行頭・行末の空白が消える問題を修正
+  - 変更が要らない行 (行頭に空白のある `123` など) も含め、前後の空白をそのまま保つ
+- 引用符を付与・引用符を削除で、行頭のインデントと行末の空白が消える問題を修正
+
 ## [3.1.0] - 2026-11-13
 
 ### Breaking changes
@@ -1132,7 +1170,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.1...develop
+[3.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.0...v3.1.1
 [3.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.2...v3.1.0
 [3.0.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.1...v3.0.2
 [3.0.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.0...v3.0.1

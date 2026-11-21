@@ -20,9 +20,14 @@ pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 /// 実際のパイプ名は末尾に `.<ログオンセッション ID>` を付け、セッションごとの常駐と対応させる
 pub const ONESHOT_IPC_PIPE_NAME: &str = r"\\.\pipe\com.y_hirata.clip-refiner.oneshot";
 
+/// 開発版 (debug ビルド) が `%APPDATA%` 配下で使うディレクトリ名
+///
+/// 製品版の [`APP_NAME`] と分け、設定・ログ・登録クリップを共有しない
+pub const DEV_DATA_DIR_NAME: &str = "ClipRefiner-Dev";
+
 /// 設定ディレクトリ上書き用の環境変数名
 ///
-/// 設定時は既定の設定ディレクトリ (`%APPDATA%\ClipRefiner` またはポータブルの `data`) の代わりに指定パスを使う
+/// 設定時は既定の設定ディレクトリ (製品版は `%APPDATA%\ClipRefiner`、開発版は `%APPDATA%\ClipRefiner-Dev`、またはポータブルの `data`) の代わりに指定パスを使う
 pub const ENV_CONFIG_DIR: &str = "CLIP_REFINER_CONFIG_DIR";
 
 /// `WebView2` CDP ポート指定用の環境変数名 (E2E 専用)

@@ -1,6 +1,6 @@
 //! クリップボード I/O の抽象化
 //!
-//! 本番の所有型は [`super::OwnedClipboard`]。テスト用のインメモリ実装は
+//! 本番の所有型は `OwnedClipboard` (feature `clipboard`)。テスト用のインメモリ実装は
 //! `test_helpers::InMemoryTextClipboard` を参照
 
 // ======================================================================

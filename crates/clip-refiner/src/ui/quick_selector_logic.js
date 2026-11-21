@@ -238,13 +238,25 @@ const QuickSelectorLogic = (function () {
     /**
      * フィルタ後に維持する選択インデックスを求める
      *
+     * お気に入りは「お気に入り」節とカテゴリ節に同じ id で並ぶため、id と listSection の両方で照合する
+     * 同じ節に見つからないときは id だけで探し、それも無ければ先頭にする
+     *
      * @param {QuickSelectorMode[]} filtered
-     * @param {string|undefined|null} previousId
+     * @param {QuickSelectorMode|undefined|null} previous - 再描画前の選択行
      * @returns {number}
      */
-    function nextIndexAfterFilter(filtered, previousId) {
-        const nextIndex = previousId ? filtered.findIndex((mode) => mode.id === previousId) : -1;
-        return nextIndex !== -1 ? nextIndex : 0;
+    function nextIndexAfterFilter(filtered, previous) {
+        if (!previous || !previous.id) {
+            return 0;
+        }
+        const sameSection = filtered.findIndex(
+            (mode) => mode.id === previous.id && mode.listSection === previous.listSection
+        );
+        if (sameSection !== -1) {
+            return sameSection;
+        }
+        const sameId = filtered.findIndex((mode) => mode.id === previous.id);
+        return sameId !== -1 ? sameId : 0;
     }
 
     /**

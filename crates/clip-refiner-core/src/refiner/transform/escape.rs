@@ -26,7 +26,6 @@ pub fn escape_string(input: &str) -> Cow<'_, str> {
         match c {
             '"' => result.push_str("\\\""),
             '\\' => result.push_str("\\\\"),
-            '/' => result.push_str("\\/"),
             '\x08' => result.push_str("\\b"),
             '\x0c' => result.push_str("\\f"),
             '\n' => result.push_str("\\n"),
@@ -280,7 +279,6 @@ mod tests {
     fn test_escape_string_all_chars() {
         assert_eq!(escape_string("\""), "\\\"");
         assert_eq!(escape_string("\\"), "\\\\");
-        assert_eq!(escape_string("/"), "\\/");
         assert_eq!(escape_string("\x08"), "\\b");
         assert_eq!(escape_string("\x0c"), "\\f");
         assert_eq!(escape_string("\n"), "\\n");
@@ -319,6 +317,15 @@ mod tests {
         assert_eq!(unescape_string("\\uD83D\\u0041"), "\\uD83DA");
         // 4 バイト目がマルチバイト文字の途中になっても panic しない
         assert_eq!(unescape_string("\\uあいう"), "\\uあいう");
+    }
+
+    /// `escape_string`: `/` はエスケープしないこと
+    ///
+    /// C# / Java では `\/` が不正なエスケープになり、Python では `\/` がそのまま残るため
+    #[test]
+    fn test_escape_string_keeps_slash() {
+        assert!(matches!(escape_string("a/b"), Cow::Borrowed(_)));
+        assert_eq!(escape_string("a/\"b"), "a/\\\"b");
     }
 
     /// `escape_string`: 空文字列は Borrowed を返すようにすること

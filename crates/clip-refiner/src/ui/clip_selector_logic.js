@@ -72,21 +72,31 @@ const ClipSelectorLogic = (function () {
     }
 
     /**
+     * フィルタ前に選択していた行の ID を求める
+     *
+     * @param {number} index - フィルタ前の選択インデックス
+     * @param {ClipSelectorItem[]} filtered - フィルタ前の一覧
+     * @returns {string|null} 登録行・範囲外は `null`
+     */
+    function selectedItemId(index, filtered) {
+        return filtered[index]?.id ?? null;
+    }
+
+    /**
      * フィルタ後に維持する選択インデックスを求める
      *
-     * @param {number} previousIndex
-     * @param {number} oldFilteredLength - フィルタ前の件数
-     * @param {number} newFilteredLength - フィルタ後の件数
+     * 位置ではなく ID で追跡し、残っていなければ先頭に戻す (クイックセレクターと同じ)
+     *
+     * @param {string|null} previousId - フィルタ前に選択していたクリップ ID (登録行は `null`)
+     * @param {ClipSelectorItem[]} newFiltered - フィルタ後の一覧
      * @returns {number}
      */
-    function nextSelectionAfterFilter(previousIndex, oldFilteredLength, newFilteredLength) {
-        if (isRegisterIndex(previousIndex, oldFilteredLength)) {
-            return newFilteredLength;
+    function nextSelectionAfterFilter(previousId, newFiltered) {
+        if (previousId === null) {
+            return newFiltered.length;
         }
-        if (previousIndex < newFilteredLength) {
-            return previousIndex;
-        }
-        return 0;
+        const index = newFiltered.findIndex((item) => item.id === previousId);
+        return index >= 0 ? index : 0;
     }
 
     /**
@@ -315,7 +325,7 @@ const ClipSelectorLogic = (function () {
     /**
      * Del キーの扱いを決める
      *
-     * 検索欄に文字があるときは検索欄の文字削除に任せる。
+     * 検索欄に文字があるときは検索欄の文字削除に任せる
      * キーリピートは、確認待ちの行をそのまま削除してしまうため無視する
      *
      * @param {string} inputValue - 検索欄の現在値 (正規化前)
@@ -356,6 +366,7 @@ const ClipSelectorLogic = (function () {
         itemMatches,
         isRegisterIndex,
         totalRows,
+        selectedItemId,
         nextSelectionAfterFilter,
         emptyListMessage,
         canShowImageHoverPreview,

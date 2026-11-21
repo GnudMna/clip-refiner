@@ -22,6 +22,8 @@ Invoke-ScriptMain {
     $expectedHooksPath = 'scripts/git/hooks'
     $currentHooksPath = git config --get core.hooksPath 2>$null
     if (-not $currentHooksPath) {
+        # 未設定時の git config --get の終了コード 1 を Invoke-ScriptMain に拾わせない
+        $global:LASTEXITCODE = 0
         Write-Host 'note: core.hooksPath は未設定です'
         return
     }

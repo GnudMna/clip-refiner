@@ -82,6 +82,25 @@ function Invoke-CargoClippy {
     Assert-LastExitCode -CommandLabel 'cargo clippy -p clip-refiner-core --no-default-features'
 }
 
+# rustdoc の警告 (壊れた intra-doc リンクなど) をエラーとして API ドキュメントを生成する
+function Invoke-CargoDoc {
+    [CmdletBinding()]
+    param()
+
+    $previous = $env:RUSTDOCFLAGS
+    $env:RUSTDOCFLAGS = '-D warnings'
+    try {
+        cargo doc --workspace --no-deps --features $script:CargoTestFeatures
+        Assert-LastExitCode -CommandLabel 'cargo doc'
+
+        cargo doc -p clip-refiner-core --no-default-features --no-deps
+        Assert-LastExitCode -CommandLabel 'cargo doc -p clip-refiner-core --no-default-features'
+    }
+    finally {
+        $env:RUSTDOCFLAGS = $previous
+    }
+}
+
 # テストを実行する
 function Invoke-CargoTest {
     [CmdletBinding()]

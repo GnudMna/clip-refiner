@@ -25,7 +25,7 @@ pub(super) fn install_panic_hook(appender: Arc<LocalDailyFileAppender>) {
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let record = format_panic_record(
-            &chrono::Utc::now(),
+            &jiff::Timestamp::now(),
             thread::current().name(),
             &panic_message(info.payload()),
             info.location().map(ToString::to_string).as_deref(),
@@ -71,7 +71,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 /// # Returns
 /// * `String` - 末尾に改行を含む記録
 fn format_panic_record(
-    now: &chrono::DateTime<chrono::Utc>,
+    now: &jiff::Timestamp,
     thread_name: Option<&str>,
     message: &str,
     location: Option<&str>,
@@ -79,7 +79,7 @@ fn format_panic_record(
 ) -> String {
     let mut record = format!(
         "{} ERROR panic: スレッド '{}' がパニックしました: {} (位置: {})\n",
-        now.format("%Y-%m-%dT%H:%M:%S%.6fZ"),
+        now.strftime("%Y-%m-%dT%H:%M:%S%.6fZ"),
         thread_name.unwrap_or("<unnamed>"),
         message,
         location.unwrap_or("不明"),
@@ -95,8 +95,6 @@ fn format_panic_record(
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-
     use super::*;
 
     /// `&str` のペイロードからメッセージを取り出すこと
@@ -123,10 +121,7 @@ mod tests {
     /// 時刻・スレッド名・メッセージ・位置を 1 行に含めること
     #[test]
     fn format_panic_record_contains_all_fields() {
-        let now = chrono::Utc
-            .with_ymd_and_hms(2026, 10, 3, 1, 2, 3)
-            .single()
-            .expect("有効な日時");
+        let now = jiff::Timestamp::from_second(1_790_989_323).expect("有効な日時");
         let record = format_panic_record(
             &now,
             Some("clipboard-worker"),
@@ -143,10 +138,7 @@ mod tests {
     /// スレッド名と位置が無い場合は代替表記にすること
     #[test]
     fn format_panic_record_uses_placeholders_when_missing() {
-        let now = chrono::Utc
-            .with_ymd_and_hms(2026, 10, 3, 1, 2, 3)
-            .single()
-            .expect("有効な日時");
+        let now = jiff::Timestamp::from_second(1_790_989_323).expect("有効な日時");
         let record = format_panic_record(&now, None, "boom", None, &Backtrace::disabled());
         // 欠けた項目は空欄にせず代替表記で埋める
         assert!(record.contains("スレッド '<unnamed>'"), "{record}");

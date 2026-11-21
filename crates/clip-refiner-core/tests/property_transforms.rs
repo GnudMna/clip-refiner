@@ -303,12 +303,22 @@ proptest! {
         prop_assert_eq!(markdown.lines().count(), rows.len() + 1, "tsv={:?}\nmarkdown={:?}", tsv, markdown);
     }
 
-    /// 重複行削除は各行を 1 回ずつ残し、行の集合を保つこと
+    /// 重複行削除は行の集合を保ち、クォートを含まない入力では各行を 1 回ずつ残すこと
+    ///
+    /// クォート内に改行を含む CSV はレコード単位で比べるため、レコード内の同じ行 (空行など) は重複として削除しない
     #[test]
     fn remove_duplicate_lines_keeps_each_line_once(input in lines_text()) {
         let output = refine(RefineMode::RemoveDuplicateLines, &input);
-        let expected: BTreeMap<&str, usize> = line_counts(&input).into_keys().map(|line| (line, 1)).collect();
-        prop_assert_eq!(line_counts(&output), expected);
+        let counts = line_counts(&input);
+        if input.contains('"') {
+            // 削除されるのは重複したレコードだけで、1 件目が残るため行の種類は変わらない
+            let kept: Vec<&str> = line_counts(&output).into_keys().collect();
+            let original: Vec<&str> = counts.into_keys().collect();
+            prop_assert_eq!(kept, original);
+        } else {
+            let expected: BTreeMap<&str, usize> = counts.into_keys().map(|line| (line, 1)).collect();
+            prop_assert_eq!(line_counts(&output), expected);
+        }
     }
 
     /// 空行削除は空白だけの行以外を順序どおりに残すこと
@@ -318,6 +328,16 @@ proptest! {
         let expected: Vec<&str> = input.lines().filter(|line| !line.trim().is_empty()).collect();
         prop_assert_eq!(output.lines().collect::<Vec<_>>(), expected);
     }
+}
+
+/// クォート内の空行を含む CSV レコードは、行単位の重複として削除しないこと
+#[test]
+fn remove_duplicate_lines_keeps_blank_lines_inside_quoted_field() {
+    let input = ",\"x
+
+
+\"";
+    assert_eq!(refine(RefineMode::RemoveDuplicateLines, input), input);
 }
 
 // ======================================================================

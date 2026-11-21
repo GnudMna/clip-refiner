@@ -13,7 +13,7 @@ const SettingsPatch = (function () {
     /**
      * 部分更新オブジェクトを深くマージする
      *
-     * ネストしたプレーンオブジェクトは再帰的にマージし、配列とプリミティブは上書きする。
+     * ネストしたプレーンオブジェクトは再帰的にマージし、配列とプリミティブは上書きする
      * `null` / `undefined` は未指定として扱い、既存値を維持する (Rust 側 `deep_merge_json_values` と同仕様)
      *
      * @param {Record<string, unknown>} target - マージ先

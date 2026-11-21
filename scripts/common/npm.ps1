@@ -89,16 +89,32 @@ function Assert-NodeInstalled {
     Assert-LastExitCode -CommandLabel 'node --version'
 }
 
-# node_modules がなければ npm ci で依存関係をインストールする
+# 最後にインストールした時点の package-lock.json (なければ package.json) のハッシュを記録するファイル
+$script:NpmInstallStampPath = Join-Path 'node_modules' '.clip-refiner-install-hash'
+
+# 依存定義ファイル (package-lock.json、なければ package.json) の SHA-256 を返す
+function Get-NpmDependencyHash {
+    [CmdletBinding()]
+    param()
+
+    $source = if (Test-Path -LiteralPath 'package-lock.json') { 'package-lock.json' } else { 'package.json' }
+    return (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+}
+
+# node_modules がない、または前回のインストール後に package-lock.json が変わっていれば
+# npm ci で依存関係をインストールする
 function Install-NpmDependenciesIfNeeded {
     [CmdletBinding()]
     param()
 
     Assert-NpmInstalled
 
-    $playwrightPkg = Join-Path 'node_modules' '@playwright\test'
-    if ((Test-Path -LiteralPath 'node_modules') -and (Test-Path -LiteralPath $playwrightPkg)) {
-        return
+    $currentHash = Get-NpmDependencyHash
+    if (Test-Path -LiteralPath $script:NpmInstallStampPath) {
+        $installedHash = (Get-Content -LiteralPath $script:NpmInstallStampPath -Raw).Trim()
+        if ($installedHash -eq $currentHash) {
+            return
+        }
     }
 
     Write-Host 'npm 依存関係をインストールしています...'
@@ -110,6 +126,8 @@ function Install-NpmDependenciesIfNeeded {
         npm install
         Assert-LastExitCode -CommandLabel 'npm install'
     }
+
+    Set-Content -LiteralPath $script:NpmInstallStampPath -Value $currentHash -NoNewline
     Write-Host ''
 }
 

@@ -284,10 +284,10 @@ function renderList(scrollToSelection) {
 /** 検索フィルタを適用して一覧を再描画する */
 function filter() {
     const query = normalizeQuery(input.value);
-    const previousId = filtered[selection.index]?.id;
+    const previous = filtered[selection.index];
 
     filtered = buildDisplayList(modes, query, expandedCategories);
-    selection.index = nextIndexAfterFilter(filtered, previousId);
+    selection.index = nextIndexAfterFilter(filtered, previous);
     renderList(true);
 }
 
@@ -489,13 +489,13 @@ window.focusInput = (modeId, modesJson, expanded) => {
  * @param {import('./quick_selector_logic').QuickSelectorMode[]} [modesJson]
  */
 window.refreshModes = (modeId, modesJson) => {
-    const previousId = filtered[selection.index]?.id;
+    const previous = filtered[selection.index];
     if (modesJson) {
         loadModes(modesJson);
     }
     currentModeId = modeId;
     filtered = buildDisplayList(modes, normalizeQuery(input.value), expandedCategories);
-    selection.index = nextIndexAfterFilter(filtered, previousId);
+    selection.index = nextIndexAfterFilter(filtered, previous);
     renderList(true);
 };
 

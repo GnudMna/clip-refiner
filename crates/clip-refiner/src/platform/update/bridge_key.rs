@@ -1,7 +1,6 @@
 use zeroize::Zeroize;
 
 use super::bridge_key_obfuscate::{OBFUSCATE_MASK_LEN, xor_obfuscate};
-
 use crate::security::{SecretString, decrypt_bytes, secret_from, zeroize_cipher_key};
 
 include!(concat!(env!("OUT_DIR"), "/bridge_key_blob.rs"));
@@ -74,7 +73,6 @@ fn unwrap_blob(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::security::encrypt_bytes;
 
     /// 合成 blob を復号して平文を復元できること

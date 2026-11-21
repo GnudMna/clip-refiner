@@ -18,7 +18,6 @@ use clip_refiner::test_helpers::{
     check_update_at, sha256_hex, update_signature_asset_name, update_signature_trusted_comment,
     version_api_json,
 };
-
 use minisign::KeyPair;
 
 /// ケースごとに一意なバージョン末尾を割り当てる

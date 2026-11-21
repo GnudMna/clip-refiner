@@ -74,34 +74,13 @@ pub(crate) fn markdown_to_rich_text_html(text: &str) -> String {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のMarkdownテーブル文字列。読み取れるレコードが無い場合 (空入力など) は元の文字列を返す
 pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
-    let mut reader = csv::ReaderBuilder::new()
-        .delimiter(b'\t')
-        .has_headers(false)
-        .flexible(true)
-        .from_reader(text.as_bytes());
-
-    let records: Vec<csv::StringRecord> = reader
-        .records()
-        .filter_map(|r| match r {
-            Ok(record) => Some(record),
-            Err(e) => {
-                tracing::debug!(
-                    "TSV レコードのパースに失敗 (excel_to_markdown_table): {}",
-                    e
-                );
-                None
-            }
-        })
-        .collect();
-    if records.is_empty() {
+    let records = parse_excel_records(text);
+    // 改行だけの入力は表にしない
+    if records.iter().all(|r| r.len() == 1 && r[0].is_empty()) {
         return Cow::Borrowed(text);
     }
 
-    let max_cols = records
-        .iter()
-        .map(csv::StringRecord::len)
-        .max()
-        .unwrap_or(0);
+    let max_cols = records.iter().map(Vec::len).max().unwrap_or(0);
     if max_cols == 0 {
         return Cow::Borrowed(text);
     }
@@ -112,7 +91,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     let header_row = &records[0];
     markdown.push('|');
     for i in 0..max_cols {
-        let cell = header_row.get(i).unwrap_or("").trim();
+        let cell = header_row.get(i).map_or("", |c| c.trim());
         let processed = cell
             .replace("\r\n", "<br>")
             .replace(['\r', '\n'], "<br>")
@@ -132,7 +111,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     for record in records.iter().skip(1) {
         markdown.push('|');
         for i in 0..max_cols {
-            let cell = record.get(i).unwrap_or("").trim();
+            let cell = record.get(i).map_or("", |c| c.trim());
             let processed = cell
                 .replace("\r\n", "<br>")
                 .replace(['\r', '\n'], "<br>")
@@ -148,6 +127,93 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     } else {
         Cow::Owned(result)
     }
+}
+
+/// Excel のコピー形式 (TSV) をレコードとセルに分ける
+///
+/// Excel は改行・タブ・`"` を含むセルだけを `"` で囲み、中の `"` を `""` にする
+/// 先頭が `"` でも、閉じ引用符の直後がタブ・改行・終端でなければ囲みとみなさず、`"` を含めた値として読む
+/// 空行は 1 列の空セルのレコードとして残す (1 列の範囲の空セルで行がずれないようにする)
+///
+/// # Arguments
+/// * `text` - 分割する対象の TSV テキスト
+///
+/// # Returns
+/// * `Vec<Vec<String>>` - レコードごとのセルの一覧
+fn parse_excel_records(text: &str) -> Vec<Vec<String>> {
+    let bytes = text.as_bytes();
+    let mut records: Vec<Vec<String>> = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // フィールドを 1 つ読む
+        let (field, next) = read_quoted_field(text, i).unwrap_or_else(|| {
+            let end = bytes[i..]
+                .iter()
+                .position(|&b| matches!(b, b'\t' | b'\n' | b'\r'))
+                .map_or(bytes.len(), |p| i + p);
+            (text[i..end].to_string(), end)
+        });
+        row.push(field);
+        i = next;
+
+        // フィールドの後ろ: タブなら同じ行が続き、改行か終端ならレコードを閉じる
+        match bytes.get(i) {
+            Some(b'\t') => {
+                i += 1;
+                if i == bytes.len() {
+                    row.push(String::new());
+                }
+                continue;
+            }
+            Some(b'\r') if bytes.get(i + 1) == Some(&b'\n') => i += 2,
+            Some(_) => i += 1,
+            None => {}
+        }
+        records.push(std::mem::take(&mut row));
+    }
+    if !row.is_empty() {
+        records.push(row);
+    }
+    records
+}
+
+/// `start` から始まる `"` で囲んだセルを読む
+///
+/// # Arguments
+/// * `text` - TSV テキスト全体
+/// * `start` - セルの先頭のバイト位置
+///
+/// # Returns
+/// * `Option<(String, usize)>` - (引用符を外した値, 閉じ引用符の次のバイト位置)
+///   囲みとみなせない場合 (先頭が `"` でない・閉じていない・閉じ引用符の直後がタブ・改行・終端でない) は `None`
+fn read_quoted_field(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    if bytes.get(start) != Some(&b'"') {
+        return None;
+    }
+    let mut value = String::new();
+    let mut seg_start = start + 1;
+    let mut j = seg_start;
+    while j < bytes.len() {
+        if bytes[j] != b'"' {
+            j += 1;
+            continue;
+        }
+        value.push_str(&text[seg_start..j]);
+        match bytes.get(j + 1) {
+            // `""` はエスケープした引用符
+            Some(b'"') => {
+                value.push('"');
+                j += 2;
+                seg_start = j;
+            }
+            None | Some(b'\t' | b'\n' | b'\r') => return Some((value, j + 1)),
+            Some(_) => return None,
+        }
+    }
+    None
 }
 
 // ======================================================================
@@ -465,6 +531,42 @@ mod tests {
         let output = excel_to_markdown_table(input);
         assert!(output.contains("| Col1 | Col2 | Col3 |"));
         assert!(output.contains("|---|---|---|"));
+    }
+
+    /// `excel_to_markdown_table`: 閉じ引用符の直後が区切りでないセルは引用符を残すこと
+    #[test]
+    fn test_excel_to_markdown_table_literal_quote() {
+        assert_eq!(
+            excel_to_markdown_table("山田\t\"至急\" 対応"),
+            "| 山田 | \"至急\" 対応 |\n|---|---|"
+        );
+    }
+
+    /// `excel_to_markdown_table`: 閉じていない引用符があっても表を 1 セルにまとめないこと
+    #[test]
+    fn test_excel_to_markdown_table_unclosed_quote() {
+        assert_eq!(
+            excel_to_markdown_table("\"abc\tdef\nghi\tjkl\nmno\tpqr"),
+            "| \"abc | def |\n|---|---|\n| ghi | jkl |\n| mno | pqr |"
+        );
+    }
+
+    /// `excel_to_markdown_table`: Excel が囲んだセルは改行を `<br>`、`""` を `"` にして読むこと
+    #[test]
+    fn test_excel_to_markdown_table_excel_quoted_cell() {
+        assert_eq!(
+            excel_to_markdown_table("a\t\"x\ny \"\"z\"\"\"\nb\tc"),
+            "| a | x<br>y \"z\" |\n|---|---|\n| b | c |"
+        );
+    }
+
+    /// `excel_to_markdown_table`: 1 列の範囲の空セルを空の行として残すこと
+    #[test]
+    fn test_excel_to_markdown_table_single_column_empty_cell() {
+        assert_eq!(
+            excel_to_markdown_table("見出し\r\nA\r\n\r\nB\r\n"),
+            "| 見出し |\n|---|\n| A |\n|  |\n| B |"
+        );
     }
 
     /// `markdown_table_to_excel`: 基本的な Markdown 表変換できるようにすること

@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : check.ps1
-# Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / markdownlint / test / e2e)
+# Description : Windows 用の品質チェック (fmt / clippy / rustdoc / deny / eslint / markdownlint / test / e2e)
 # Usage       : ./check.ps1 [-Coverage] [-SkipE2E]
 # Requires    : PowerShell 7.0+, Node.js (npm), WebView2 Runtime (E2E)
 #               -Coverage 時は cargo-llvm-cov と llvm-tools-preview も必要
@@ -35,6 +35,10 @@ Invoke-ScriptMain {
 
     Write-Host 'Clippy を実行中...'
     Invoke-CargoClippy
+    Write-Host ''
+
+    Write-Host 'rustdoc を検証中...'
+    Invoke-CargoDoc
     Write-Host ''
 
     Write-Host 'サプライチェーン監査を実行中...'

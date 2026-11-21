@@ -30,7 +30,7 @@ npm run typecheck                   # TypeScript 型チェック (UI の checkJs
 ./scripts/windows/fuzz.ps1          # ファジング (nightly + cargo-fuzz。不定期にローカルで実行)
 ./scripts/windows/bench.ps1         # 処理時間ベンチ (criterion。-Save / -Compare で基準と比較)
 
-# 完了前の品質チェック一式 (fmt / clippy / deny / eslint / prettier / tsc / markdownlint / test / e2e)
+# 完了前の品質チェック一式 (fmt / clippy / rustdoc / deny / eslint / prettier / tsc / markdownlint / test / e2e)
 ./scripts/windows/check.ps1
 # GUI セッションが無い場合は WebView E2E をスキップする
 $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
