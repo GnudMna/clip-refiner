@@ -5,8 +5,6 @@ mod notification;
 mod refiner;
 mod tray;
 
-use crate::tray::tray_app;
-
 use anyhow::{Context, Result};
 use arboard::Clipboard;
 use clap::Parser;
@@ -50,7 +48,7 @@ fn main() -> Result<()> {
     if let Some(mode) = args.mode {
         run_once(mode)?;
     } else {
-        tray_app::run_loop()?;
+        tray::run_loop()?;
     }
 
     Ok(())

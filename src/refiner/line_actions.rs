@@ -21,6 +21,51 @@ pub fn sort_lines(text: &str) -> String {
     }
 }
 
+/// 空行を削除する
+///
+/// # Arguments
+/// * `text` - 処理対象のテキスト。
+///
+/// # Returns
+/// * `String` - 空行が削除されたテキスト。
+pub fn remove_empty_lines(text: &str) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+
+    let line_ending = detect_line_ending(text);
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    lines.join(line_ending)
+}
+
+/// 重複行を削除する（順序を維持する）
+///
+/// # Arguments
+/// * `text` - 処理対象のテキスト。
+///
+/// # Returns
+/// * `String` - 重複行が削除されたテキスト。
+pub fn remove_duplicate_lines(text: &str) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+
+    let line_ending = detect_line_ending(text);
+    let mut seen = std::collections::HashSet::new();
+    let mut lines = Vec::new();
+
+    for line in text.lines() {
+        if seen.insert(line) {
+            lines.push(line);
+        }
+    }
+
+    lines.join(line_ending)
+}
+
 /// 改行コードを判定する
 ///
 /// # Arguments
@@ -140,5 +185,19 @@ mod tests {
         let output = sort_lines(input);
         assert!(output.starts_with("a,simple,1"));
         assert!(output.contains("z,\"cell\nwith\nnewline\",3"));
+    }
+
+    #[test]
+    fn test_remove_empty_lines() {
+        let input = "line1\n\n  \nline2\n\t\nline3";
+        let expected = "line1\nline2\nline3";
+        assert_eq!(remove_empty_lines(input), expected);
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines() {
+        let input = "line1\nline2\nline1\nline3\nline2";
+        let expected = "line1\nline2\nline3";
+        assert_eq!(remove_duplicate_lines(input), expected);
     }
 }

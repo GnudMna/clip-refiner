@@ -5,13 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug 'clip-coder'",
+            "name": "Debug Tasktray Mode",
             "type": "lldb",
             "request": "launch",
             "cargo": {
                 "args": [
                     "run",
-                    "--bin=clip-coder"
+                    "--bin=ClipRefiner"
                 ]
             },
             "args": [],
