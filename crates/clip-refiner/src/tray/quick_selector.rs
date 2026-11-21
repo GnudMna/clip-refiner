@@ -1,6 +1,6 @@
 use super::dispatch;
 use super::selector_window::{
-    WebSelectorWindow, build_hidden_selector_window, embed_selector_assets,
+    WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window, embed_selector_assets,
 };
 use super::state::AppEvent;
 
@@ -101,27 +101,36 @@ impl QuickSelectorWindow {
         let proxy_clone = proxy.clone();
         let data_dir = format!("{}-QuickSelector-WebView2", consts::APP_NAME);
 
-        let inner = WebSelectorWindow::build(window, &data_dir, html, move |req| {
-            let msg = req.body();
-            match parse_quick_selector_ipc_message(msg) {
-                Some(QuickSelectorIpcAction::SelectMode(mode)) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestModeChange(mode));
+        let inner = WebSelectorWindow::build(
+            window,
+            &data_dir,
+            html,
+            move |req| {
+                let msg = req.body();
+                match parse_quick_selector_ipc_message(msg) {
+                    Some(QuickSelectorIpcAction::SelectMode(mode)) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::RequestModeChange(mode));
+                    }
+                    Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            AppEvent::RequestFavoriteToggle(mode),
+                        );
+                    }
+                    Some(QuickSelectorIpcAction::MoveFavorite(mode, direction)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            AppEvent::RequestFavoriteMove(mode, direction),
+                        );
+                    }
+                    Some(QuickSelectorIpcAction::Close) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::HideQuickSelector);
+                    }
+                    None => {}
                 }
-                Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestFavoriteToggle(mode));
-                }
-                Some(QuickSelectorIpcAction::MoveFavorite(mode, direction)) => {
-                    dispatch::send_app_event(
-                        &proxy_clone,
-                        AppEvent::RequestFavoriteMove(mode, direction),
-                    );
-                }
-                Some(QuickSelectorIpcAction::Close) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::HideQuickSelector);
-                }
-                None => {}
-            }
-        })?;
+            },
+            WebViewWindowOptions::default(),
+        )?;
 
         Ok(Self { inner })
     }

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        @import url("settings.css");
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <header id="header">
+            <div id="header-brand">
+                <img id="header-logo" src="__APP_ICON_SRC__" alt="" width="32" height="32">
+                <div>
+                    <h1>ClipRefiner</h1>
+                    <p id="header-subtitle">設定</p>
+                </div>
+            </div>
+            <div id="header-actions">
+                <button type="button" id="open-config-btn" class="ghost-btn">config.toml</button>
+                <button type="button" id="close-btn" class="primary-btn">閉じる</button>
+            </div>
+        </header>
+        <div id="apply-feedback" class="apply-feedback" role="status" aria-live="polite" hidden></div>
+        <div id="layout">
+            <nav id="sidebar" aria-label="設定カテゴリ"></nav>
+            <main id="content"></main>
+        </div>
+    </div>
+    <div id="confirm-dialog" class="confirm-dialog" hidden>
+        <div class="confirm-dialog__backdrop" data-confirm-cancel></div>
+        <div class="confirm-dialog__panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-message">
+            <p id="confirm-dialog-message" class="confirm-dialog__message"></p>
+            <div class="confirm-dialog__actions">
+                <button type="button" id="confirm-dialog-cancel" class="ghost-btn" data-confirm-cancel>キャンセル</button>
+                <button type="button" id="confirm-dialog-ok" class="danger-btn">確認</button>
+            </div>
+        </div>
+    </div>
+    <script src="settings.js"></script>
+</body>
+
+</html>

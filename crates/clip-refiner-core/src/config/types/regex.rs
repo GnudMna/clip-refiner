@@ -15,7 +15,11 @@ pub struct RegexSettings {
     #[serde(default)]
     pub replacement: String,
     /// 大文字小文字を無視する (`(?i)` 相当)
-    #[serde(default)]
+    #[serde(
+        default,
+        rename(serialize = "caseInsensitive", deserialize = "case_insensitive"),
+        alias = "caseInsensitive"
+    )]
     pub case_insensitive: bool,
     /// 複数行モード (`(?m)` 相当)
     #[serde(default)]

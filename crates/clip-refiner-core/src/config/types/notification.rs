@@ -15,13 +15,25 @@ pub struct NotificationSettings {
     #[serde(default)]
     pub enabled: bool,
     /// 実行されたモード名を通知するかどうか
-    #[serde(default = "consts::default_true")]
+    #[serde(
+        default = "consts::default_true",
+        rename(serialize = "notifyMode", deserialize = "notify_mode"),
+        alias = "notifyMode"
+    )]
     pub notify_mode: bool,
     /// 通知にクリップボードの内容 (加工結果) を含めるかどうか
-    #[serde(default)]
+    #[serde(
+        default,
+        rename(serialize = "notifyResult", deserialize = "notify_result"),
+        alias = "notifyResult"
+    )]
     pub notify_result: bool,
     /// 一時停止の切り替えを通知するかどうか
-    #[serde(default = "consts::default_true")]
+    #[serde(
+        default = "consts::default_true",
+        rename(serialize = "notifyPause", deserialize = "notify_pause"),
+        alias = "notifyPause"
+    )]
     pub notify_pause: bool,
 }
 

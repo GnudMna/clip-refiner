@@ -6,7 +6,13 @@
 
 mod harness;
 
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+mod settings;
+
 pub use harness::ClipboardHarness;
+
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub use settings::SettingsTestContext;
 
 pub use clip_refiner_core::config::MonitorMode;
 pub use clip_refiner_core::test_helpers::{InMemoryTextClipboard, with_temp_config_dir};

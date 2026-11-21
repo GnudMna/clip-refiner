@@ -7,6 +7,7 @@ mod monitor_snapshot;
 
 pub use app_event::AppEvent;
 pub use app_state::AppState;
+pub(crate) use app_state::RegexPreviewRequest;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use app_state::test_app_state;
 pub use lock_ext::LockExt;

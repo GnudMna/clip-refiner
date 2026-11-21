@@ -39,6 +39,22 @@ pub enum AppEvent {
     ClipboardWorkerReady,
     /// お気に入り変換モード用ホットキーの再登録要求
     ReloadFavoriteHotkeys,
+    /// 設定ウィンドウを表示する
+    ShowSettingsWindow,
+    /// 設定ウィンドウを非表示にする
+    HideSettingsWindow,
+    /// 設定ウィンドウからの部分更新パッチを適用する
+    SettingsApplyPatch,
+    /// 設定ウィンドウからの履歴全削除要求
+    SettingsClearHistory,
+    /// 設定ウィンドウからの連続記録全削除要求
+    SettingsClearContinuousRecord,
+    /// 設定ウィンドウからの設定ファイル起動要求
+    SettingsOpenConfigFile,
+    /// 設定ウィンドウからの正規表現プレビュー要求
+    SettingsRegexPreview,
+    /// 設定ウィンドウの表示内容を最新化する
+    RefreshSettingsWindow,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }

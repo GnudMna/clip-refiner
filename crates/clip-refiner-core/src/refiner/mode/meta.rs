@@ -113,6 +113,7 @@ impl RefineMode {
                     "category": m.category().label(),
                     "value": m.to_string(),
                     "favorite": favorite,
+                    "producesImage": m.produces_image(),
                 });
                 if let Some(index) = favorite_index.get(m) {
                     item["favoriteIndex"] = serde_json::json!(index);
@@ -254,6 +255,7 @@ mod tests {
             assert!(item.get("category").is_some());
             assert!(item.get("value").is_some());
             assert!(item.get("favorite").is_some());
+            assert!(item.get("producesImage").is_some());
         }
 
         let favorites: Vec<_> = parsed

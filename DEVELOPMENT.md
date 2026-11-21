@@ -63,6 +63,7 @@ cargo test
 
 # 特定の統合テストのみ実行
 cargo test --test monitor_flow
+cargo test --test settings_flow
 cargo test --test clips_flow
 
 # ライブラリ API のドキュメントを生成
@@ -90,6 +91,8 @@ assert_eq!(output, "hello world");
 | `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
 | `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
 | `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
+| `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・パイプラインとデフォルトモード |
+| `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行。未インストール時はスキップ) |
 | `library_api.rs` | クレートルート re-export と core 連携 |
 
 ### テスト用ヘルパー (`test_helpers`)
@@ -98,7 +101,7 @@ assert_eq!(output, "hello world");
 
 | モジュール | 所在 | 内容 |
 | :--------- | :--- | :--- |
-| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness` など) |
+| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `SettingsTestContext` など) |
 | `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
 
 アプリ側の `test_helpers` は core のヘルパーを re-export する。設定ディレクトリを触るテストは `with_temp_config_dir` で一時ディレクトリへ切り替える。
@@ -160,7 +163,29 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 
 `clipboard_text`, `history_len`, `history_entries`, `continuous_record_len`, `continuous_record_entries`, `registered_clip_count`, `registered_clip_text`, `take_undo_source`, `matches_last_written`, `with_config_mut` など。
 
-新しい統合テストを追加するときは、既存の `*_flow.rs` に近い経路かどうかでファイルを選び、監視とワーカーの両方にまたがるケースは `ClipboardHarness` で往復検証する。
+新しい統合テストを追加するときは、既存の `*_flow.rs` に近い経路かどうかでファイルを選び、監視とワーカーの両方にまたがるケースは `ClipboardHarness` で往復検証する。設定ウィンドウの IPC とパッチ適用は `SettingsTestContext` を使う。
+
+#### `SettingsTestContext`
+
+設定ウィンドウの `apply` IPC・適用待ちキューのマージ・`config.toml` へのパッチ反映を、WebView なしで検証するヘルパー。`TrayMenu` とスタブ `ClipboardWorkerHandle` を束ね、本番と同じ `apply_settings_patch_without_ui` を呼び出す。
+
+```rust
+use clip_refiner::test_helpers::SettingsTestContext;
+
+let ctx = SettingsTestContext::new();
+
+assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"historyEnabled":true}}"#));
+assert!(ctx.state().with_config(|c| c.history_enabled));
+```
+
+| メソッド | 用途 |
+| :------- | :--- |
+| `enqueue_apply_ipc` | JSON IPC の `apply` を適用待ちキューへ積む |
+| `enqueue_patch_json` | 部分更新 JSON をキューへ積む (マージ検証用) |
+| `take_pending_patch_json` | マージ済みパッチ JSON を取り出す |
+| `apply_pending_patch` | キューから取り出して反映 |
+| `apply_ipc` | JSON IPC を解釈して即時反映 |
+| `state` / `menu` | 検証用アクセサ |
 
 ---
 
@@ -308,8 +333,8 @@ clip-refiner/
 │   │   ├── src/
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ)
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` など)
-│   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・画面 OCR UI
-│   │   │   └── ui/          # WebView セレクター
+│   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ・画面 OCR UI
+│   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
 │   │   ├── tests/           # 統合テスト (`*_flow.rs`)
 │   │   └── build.rs
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)
@@ -329,7 +354,7 @@ clip-refiner/
 
 `clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
 
-セレクター UI (`src/ui/`) は WebView 上で動作し、`selector-common.js` に共通ロジックを集約している。
+セレクター UI (`src/ui/`) は WebView 上で動作する。クイックセレクタ・登録クリップセレクタは `selector-common.js` に共通ロジックを集約している。設定ウィンドウ (`src/ui/settings/`) は `regex_preview.js`・`shared.js` などの分割 JS を Rust 側で組み立ててインライン展開する。
 
 ---
 
@@ -344,9 +369,11 @@ flowchart TB
         Tray["TrayMenu / tray-icon"]
         QS["QuickSelector (WebView)"]
         CS["ClipSelector (WebView)"]
+        SW["SettingsWindow (WebView)"]
         App --> Tray
         App --> QS
         App --> CS
+        App --> SW
     end
 
     subgraph hotkey_thread ["ホットキーリスナースレッド"]
@@ -377,7 +404,7 @@ flowchart TB
 
 | コンポーネント | スレッド | 責務 |
 | :------------- | :------- | :--- |
-| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC、`AppEvent` の受信と `App::handle_event` への振り分け |
+| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け |
 | **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る |
 | **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理 |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、加工済み状態・履歴・Undo 用テキスト (`Mutex`)。UI とワーカーの両方から参照 |

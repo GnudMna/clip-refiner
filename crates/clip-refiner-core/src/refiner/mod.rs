@@ -36,3 +36,4 @@ pub use dispatch::Refiner;
 pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
 pub use pipeline::{apply_text_pipeline, split_pipeline};
+pub use transform::regex::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace};

@@ -5,6 +5,7 @@ use super::handle_window_event;
 use super::user_event::handle_user_event;
 
 use tao::event::Event;
+use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
@@ -26,6 +27,13 @@ pub(crate) fn handle_loop_event(event: Event<AppEvent>, ctx: &mut AppEventContex
             window_id, event, ..
         } if window_id == ctx.selectors.clip.id() => {
             handle_window_event(&event, &ctx.selectors.clip, ctx.last_clip_selector_show);
+        }
+        Event::WindowEvent {
+            window_id, event, ..
+        } if window_id == ctx.settings.id() => {
+            if let WindowEvent::CloseRequested = event {
+                ctx.settings.hide();
+            }
         }
         _ => {
             if let Ok(menu_event) = MenuEvent::receiver().try_recv() {

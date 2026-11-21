@@ -39,7 +39,7 @@ pub(crate) const SECTION_HISTORY: &str = "履歴";
 pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_HOTKEYS: &str =
-    "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は自動または「設定を再読み込み」で反映)";
+    "グローバルホットキー (\"Alt+Shift+S\" 形式。変更後は数秒以内に自動反映)";
 pub(crate) const SECTION_REGEX: &str = "正規表現加工モード用のパターンと置換文字列";
 
 pub(crate) const SECTION_RULE: &str =

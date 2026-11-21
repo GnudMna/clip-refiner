@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-06
+
+### Added
+
+- WebView ベースの設定ウィンドウ (トレイ「設定を開く」): 一般・お気に入り・正規表現・履歴・連続記録・登録クリップ・監視・通知・ショートカットの 8 タブ。変更は debounce 後に自動保存・即時反映
+- 設定ウィンドウの正規表現タブで Rust エンジンによるライブプレビュー
+- 統合テスト `settings_flow.rs` と `SettingsTestContext` ヘルパー
+- 設定 UI の正規表現プレビュー JS ロジックテスト (`regex_preview_logic.rs` / Node.js)
+
+### Fixed
+
+- パイプライン非空時にデフォルトモード変更が保存されない問題
+- 正規表現プレビュー応答と DOM 更新のレース
+- 設定ウィンドウ非表示後も適用エラーをデスクトップ通知で表示
+- 設定ウィンドウからの `interval_ms` パッチがポーリング切替時に無視される問題
+- `interval_ms` パッチ適用時のメモリ上 `normalize` 漏れ
+
 ## [0.11.0] - 2026-07-04
 
 ### Added
@@ -290,7 +307,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...develop
+[0.12.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.11.0...v0.12.0
 [0.11.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.10.0...v0.11.0
 [0.10.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.9.0...v0.10.0
 [0.9.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.8.0...v0.9.0

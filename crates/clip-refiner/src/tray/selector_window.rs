@@ -5,10 +5,43 @@
 use std::sync::Arc;
 
 use super::state::AppEvent;
+use super::webview_script;
 
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder, WindowId};
 use wry::{WebContext, WebView, WebViewBuilder};
+
+// ======================================================================
+// ウィンドウ配置
+// ======================================================================
+/// モニター上でのウィンドウ垂直位置
+#[derive(Clone, Copy)]
+pub(crate) enum WindowVerticalAlign {
+    /// 画面中央
+    Center,
+    /// 上寄り (セレクター向け)
+    UpperThird,
+}
+
+/// 生成済みウィンドウを現在のモニター中央付近へ配置する
+pub(crate) fn position_window_on_monitor(window: &Window, align: WindowVerticalAlign) {
+    let Some(monitor) = window.current_monitor() else {
+        return;
+    };
+
+    let screen_size = monitor.size();
+    let window_size = window.outer_size();
+    let x = (screen_size.width.cast_signed() - window_size.width.cast_signed()) / 2;
+    let y = match align {
+        WindowVerticalAlign::Center => {
+            (screen_size.height.cast_signed() - window_size.height.cast_signed()) / 2
+        }
+        WindowVerticalAlign::UpperThird => {
+            (screen_size.height.cast_signed() - window_size.height.cast_signed()) / 3
+        }
+    };
+    window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
+}
 
 // ======================================================================
 // HTML 組み立て
@@ -35,9 +68,27 @@ pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
 }
 
 // ======================================================================
-// WebView セレクターウィンドウ
+// WebView ウィンドウ
 // ======================================================================
-/// `wry` ベースの透明セレクターウィンドウ
+/// `WebView` 構築時の表示オプション
+#[derive(Clone, Copy)]
+pub(crate) struct WebViewWindowOptions {
+    /// 透明ウィンドウとして構築するか
+    pub transparent: bool,
+}
+
+impl Default for WebViewWindowOptions {
+    fn default() -> Self {
+        Self { transparent: true }
+    }
+}
+
+impl WebViewWindowOptions {
+    /// 通常の不透明ウィンドウ (設定画面など)
+    pub const OPAQUE: Self = Self { transparent: false };
+}
+
+/// `wry` ベースの `WebView` ウィンドウ
 pub(crate) struct WebSelectorWindow {
     /// `WebView` インスタンス
     webview: WebView,
@@ -55,22 +106,27 @@ impl WebSelectorWindow {
     /// * `webview_data_dir_suffix` - `WebView2` データディレクトリ名のサフィックス
     /// * `html` - 初期表示 HTML
     /// * `ipc_handler` - JavaScript からの IPC コールバック
+    /// * `options` - 透明化などの表示オプション
     pub fn build(
         window: Window,
         webview_data_dir_suffix: &str,
         html: String,
         ipc_handler: impl Fn(wry::http::Request<String>) + 'static,
+        options: WebViewWindowOptions,
     ) -> anyhow::Result<Self> {
         let window = Arc::new(window);
         let data_dir = std::env::temp_dir().join(webview_data_dir_suffix);
         let mut context = WebContext::new(Some(data_dir));
 
-        let webview = WebViewBuilder::new_with_web_context(&mut context)
-            .with_transparent(true)
-            .with_background_color((0, 0, 0, 0))
+        let mut builder = WebViewBuilder::new_with_web_context(&mut context)
             .with_html(html)
-            .with_ipc_handler(ipc_handler)
-            .build(&window)?;
+            .with_ipc_handler(ipc_handler);
+        if options.transparent {
+            builder = builder
+                .with_transparent(true)
+                .with_background_color((0, 0, 0, 0));
+        }
+        let webview = builder.build(&window)?;
 
         Ok(Self {
             webview,
@@ -88,9 +144,7 @@ impl WebSelectorWindow {
 
     /// JavaScript を実行する
     pub fn evaluate_script(&self, script: &str) {
-        if let Err(err) = self.webview.evaluate_script(script) {
-            crate::log_warn!("セレクターの JavaScript 実行に失敗: {:?}", err);
-        }
+        webview_script::evaluate_script(&self.webview, "WebView", script);
     }
 
     /// ウィンドウを非表示にする
@@ -106,6 +160,11 @@ impl WebSelectorWindow {
     /// ウィンドウ ID を返す
     pub fn id(&self) -> WindowId {
         self.window.id()
+    }
+
+    /// 描画先ウィンドウへの参照を返す
+    pub(crate) fn window(&self) -> &Window {
+        self.window.as_ref()
     }
 }
 
@@ -129,13 +188,7 @@ pub(crate) fn build_hidden_selector_window(
         .with_inner_size(tao::dpi::LogicalSize::new(width, height))
         .build(event_loop)?;
 
-    if let Some(monitor) = window.current_monitor() {
-        let screen_size = monitor.size();
-        let window_size = window.outer_size();
-        let x = (screen_size.width.cast_signed() - window_size.width.cast_signed()) / 2;
-        let y = (screen_size.height.cast_signed() - window_size.height.cast_signed()) / 3;
-        window.set_outer_position(tao::dpi::PhysicalPosition::new(x, y));
-    }
+    position_window_on_monitor(&window, WindowVerticalAlign::UpperThird);
 
     Ok(window)
 }

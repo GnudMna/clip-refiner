@@ -11,10 +11,22 @@ use super::app_event::AppEvent;
 use super::lock_ext::{LockExt, RwLockExt};
 use super::monitor_snapshot::{MonitorSnapshot, ProcessedState};
 
-use crate::config::{AppConfig, ConfigLoadFallback};
+use crate::config::{AppConfig, ConfigLoadFallback, RegexSettings};
 use crate::security::{SecretString, secret_from};
 
 use tao::event_loop::EventLoopProxy;
+
+// ======================================================================
+// 正規表現プレビュー要求
+// ======================================================================
+/// 設定ウィンドウからの正規表現プレビュー要求
+#[derive(Debug, Clone)]
+pub(crate) struct RegexPreviewRequest {
+    /// クライアント側リクエスト ID (応答の突合に使用)
+    pub request_id: u64,
+    /// プレビュー対象の正規表現設定
+    pub settings: RegexSettings,
+}
 
 // ======================================================================
 // アプリケーション状態
@@ -47,6 +59,10 @@ pub struct AppState {
     config_disk_mtime: Mutex<Option<SystemTime>>,
     /// 自身の保存直後に外部変更検知を抑制する期限
     config_save_grace_until: Mutex<Option<Instant>>,
+    /// 設定ウィンドウから受信した部分更新 JSON (適用待ち)
+    pending_settings_patch: Mutex<Option<String>>,
+    /// 設定ウィンドウからの正規表現プレビュー要求 (処理待ち)
+    pending_regex_preview: Mutex<Option<RegexPreviewRequest>>,
 }
 
 // ======================================================================
@@ -77,9 +93,31 @@ impl AppState {
                 persist_config: true,
                 config_disk_mtime: Mutex::new(disk_mtime),
                 config_save_grace_until: Mutex::new(None),
+                pending_settings_patch: Mutex::new(None),
+                pending_regex_preview: Mutex::new(None),
             },
             load_outcome.fallback,
         ))
+    }
+
+    /// 適用待ちの部分更新 JSON キューへ排他アクセスする
+    pub(crate) fn pending_settings_patch_mut(&self) -> std::sync::MutexGuard<'_, Option<String>> {
+        self.pending_settings_patch.lock_ignore_poison()
+    }
+
+    /// キュー済みの部分更新 JSON を取り出す
+    pub(crate) fn take_pending_settings_patch(&self) -> Option<String> {
+        self.pending_settings_patch.lock_ignore_poison().take()
+    }
+
+    /// 正規表現プレビュー要求を格納する
+    pub(crate) fn set_regex_preview_request(&self, request: RegexPreviewRequest) {
+        *self.pending_regex_preview.lock_ignore_poison() = Some(request);
+    }
+
+    /// 処理待ちの正規表現プレビュー要求を取り出す
+    pub(crate) fn take_regex_preview_request(&self) -> Option<RegexPreviewRequest> {
+        self.pending_regex_preview.lock_ignore_poison().take()
     }
 
     /// ディスク上の設定ファイルと同期済みの更新時刻を記録する
@@ -397,5 +435,7 @@ pub(crate) fn test_app_state() -> AppState {
         persist_config: false,
         config_disk_mtime: Mutex::new(None),
         config_save_grace_until: Mutex::new(None),
+        pending_settings_patch: Mutex::new(None),
+        pending_regex_preview: Mutex::new(None),
     }
 }

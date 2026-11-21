@@ -13,6 +13,7 @@ const ICON_PATH: &str = "../../assets/icon.ico";
 fn main() {
     // アイコンパスを再実行条件に追加
     println!("cargo:rerun-if-changed={ICON_PATH}");
+    println!("cargo:rerun-if-changed=../../assets/icon.png");
 
     let mut res = winres::WindowsResource::new();
 

@@ -223,6 +223,11 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
     }
 }
 
+/// 登録クリップ操作後に設定ウィンドウの pending 状態を解除する
+fn refresh_settings_after_register(state: &Arc<AppState>) {
+    dispatch::send_app_event(&state.proxy, AppEvent::RefreshSettingsWindow);
+}
+
 /// クリップボードの内容を登録クリップとして保存する
 pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
     clipboard: &mut C,
@@ -246,9 +251,11 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
                     "登録クリップ",
                     "画像が大きすぎるため登録できません",
                 );
+                refresh_settings_after_register(state);
             }
             Err(AddRegisteredClipError::LimitReached) => {
                 notify::show_when_enabled(state, "登録クリップ", "登録件数の上限に達しています");
+                refresh_settings_after_register(state);
             }
             Err(
                 AddRegisteredClipError::ImageInvalid
@@ -260,6 +267,7 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
                     "登録クリップ",
                     "画像の形式が不正なため登録できません",
                 );
+                refresh_settings_after_register(state);
             }
         }
         return;
@@ -273,6 +281,7 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
                 "クリップボードエラー",
                 "クリップボードの読み取りに失敗しました",
             );
+            refresh_settings_after_register(state);
             return;
         }
     };
@@ -290,6 +299,7 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
                 "登録クリップ",
                 "クリップボードが空のため登録できません",
             );
+            refresh_settings_after_register(state);
         }
         Err(AddRegisteredClipError::TooLarge) => {
             notify::show_when_enabled(
@@ -297,10 +307,14 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
                 "登録クリップ",
                 "テキストが長すぎるため登録できません",
             );
+            refresh_settings_after_register(state);
         }
         Err(AddRegisteredClipError::LimitReached) => {
             notify::show_when_enabled(state, "登録クリップ", "登録件数の上限に達しています");
+            refresh_settings_after_register(state);
         }
-        Err(AddRegisteredClipError::ImageTooLarge | AddRegisteredClipError::ImageInvalid) => {}
+        Err(AddRegisteredClipError::ImageTooLarge | AddRegisteredClipError::ImageInvalid) => {
+            refresh_settings_after_register(state);
+        }
     }
 }

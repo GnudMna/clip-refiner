@@ -1,16 +1,15 @@
+use std::io::Cursor;
+
 use anyhow::{Context, Result};
-use tray_icon::Icon;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use tao::window::Icon as WindowIcon;
+use tray_icon::Icon as TrayIcon;
 
 // ======================================================================
 // アイコン作成
 // ======================================================================
-/// 埋め込まれたアセットからトレイ用のアイコンを作成する
-///
-/// # Returns
-/// * `Result<Icon>` - 作成されたアイコン。失敗した場合はエラーを返す。
-pub fn create_icon() -> Result<Icon> {
-    use std::io::Cursor;
-
+/// 埋め込み `assets/icon.png` を RGBA8 配列へデコードする
+fn decode_app_icon_png() -> Result<(Vec<u8>, u32, u32)> {
     let icon_bytes = include_bytes!("../../../../../assets/icon.png");
     let decoder = png::Decoder::new(Cursor::new(icon_bytes.as_slice()));
     let mut reader = decoder
@@ -37,7 +36,34 @@ pub fn create_icon() -> Result<Icon> {
         png::ColorType::Indexed => anyhow::bail!("サポート外PNGカラータイプ: Indexed"),
     };
 
-    Icon::from_rgba(rgba, info.width, info.height).context("アイコンデータの作成に失敗しました")
+    Ok((rgba, info.width, info.height))
+}
+
+/// 埋め込まれたアセットからトレイ用のアイコンを作成する
+///
+/// # Returns
+/// * `Result<TrayIcon>` - 作成されたアイコン。失敗した場合はエラーを返す
+pub fn create_icon() -> Result<TrayIcon> {
+    let (rgba, width, height) = decode_app_icon_png()?;
+    TrayIcon::from_rgba(rgba, width, height).context("トレイアイコンデータの作成に失敗しました")
+}
+
+/// 埋め込まれたアセットからウィンドウ用のアイコンを作成する
+///
+/// # Returns
+/// * `Result<WindowIcon>` - 作成されたアイコン。失敗した場合はエラーを返す
+pub fn create_window_icon() -> Result<WindowIcon> {
+    let (rgba, width, height) = decode_app_icon_png()?;
+    WindowIcon::from_rgba(rgba, width, height)
+        .context("ウィンドウアイコンデータの作成に失敗しました")
+}
+
+/// 設定ウィンドウ HTML 用の `assets/icon.png` データ URL を返す
+pub(crate) fn app_icon_png_data_url() -> String {
+    format!(
+        "data:image/png;base64,{}",
+        STANDARD.encode(include_bytes!("../../../../../assets/icon.png"))
+    )
 }
 
 // ======================================================================
@@ -51,5 +77,19 @@ mod tests {
     #[test]
     fn create_icon_from_embedded_png() {
         let _icon = create_icon().expect("トレイアイコンの作成に失敗");
+    }
+
+    /// 埋め込み PNG からウィンドウアイコンを生成できること
+    #[test]
+    fn create_window_icon_from_embedded_png() {
+        let _icon = create_window_icon().expect("ウィンドウアイコンの作成に失敗");
+    }
+
+    /// データ URL が PNG 形式であること
+    #[test]
+    fn app_icon_png_data_url_is_png_data_uri() {
+        let data_url = app_icon_png_data_url();
+        assert!(data_url.starts_with("data:image/png;base64,"));
+        assert!(data_url.len() > "data:image/png;base64,".len());
     }
 }

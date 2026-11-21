@@ -64,6 +64,66 @@ fn compile_pattern(settings: &RegexSettings) -> Option<Regex> {
 }
 
 // ======================================================================
+// プレビュー
+// ======================================================================
+/// 設定 UI 向けプレビュー用サンプル文字列
+pub const REGEX_PREVIEW_SAMPLE: &str = "Hello world 123";
+
+/// 正規表現プレビューの結果
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegexPreviewResult {
+    /// パターンがコンパイル可能かどうか
+    pub valid: bool,
+    /// 状態メッセージ
+    pub message: String,
+    /// 置換後テキスト (`valid` かつパターン非空のとき)
+    pub result: Option<String>,
+}
+
+/// サンプル文字列へ正規表現置換を適用してプレビュー結果を返す
+///
+/// 実行時の `regex_replace` と同じ `regex` クレートで評価する
+pub fn preview_regex_replace(sample: &str, settings: &RegexSettings) -> RegexPreviewResult {
+    if settings.pattern.is_empty() {
+        return RegexPreviewResult {
+            valid: true,
+            message: "パターンが空です (マッチしません)".to_string(),
+            result: Some(sample.to_string()),
+        };
+    }
+
+    if settings.pattern.len() > MAX_REGEX_PATTERN_BYTES {
+        return RegexPreviewResult {
+            valid: false,
+            message: format!("パターンが長すぎます (最大 {MAX_REGEX_PATTERN_BYTES} バイト)"),
+            result: None,
+        };
+    }
+
+    match RegexBuilder::new(&settings.pattern)
+        .case_insensitive(settings.case_insensitive)
+        .multi_line(settings.multiline)
+        .build()
+    {
+        Ok(re) => {
+            let result = re
+                .replace_all(sample, settings.replacement.as_str())
+                .into_owned();
+            RegexPreviewResult {
+                valid: true,
+                message: "パターンは有効です".to_string(),
+                result: Some(result),
+            }
+        }
+        Err(err) => RegexPreviewResult {
+            valid: false,
+            message: format!("パターンが無効です: {err}"),
+            result: None,
+        },
+    }
+}
+
+// ======================================================================
 // 置換
 // ======================================================================
 /// 正規表現に一致する部分を置換文字列へ変換する
@@ -331,5 +391,30 @@ mod tests {
             regex_extract("a1b", &settings(r"[a-z]"), &mut cache),
             "a\nb"
         );
+    }
+
+    /// プレビューが置換結果とエラーを返すこと
+    #[test]
+    fn test_preview_regex_replace() {
+        let ok = preview_regex_replace(
+            REGEX_PREVIEW_SAMPLE,
+            &RegexSettings {
+                pattern: r"\d+".to_string(),
+                replacement: "#".to_string(),
+                ..RegexSettings::default()
+            },
+        );
+        assert!(ok.valid);
+        assert_eq!(ok.result.as_deref(), Some("Hello world #"));
+
+        let invalid = preview_regex_replace(
+            REGEX_PREVIEW_SAMPLE,
+            &RegexSettings {
+                pattern: "[unclosed".to_string(),
+                ..RegexSettings::default()
+            },
+        );
+        assert!(!invalid.valid);
+        assert!(invalid.result.is_none());
     }
 }

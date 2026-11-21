@@ -4,6 +4,7 @@ use std::time::Instant;
 use super::super::hotkey::HotkeyHandler;
 use super::super::menu::TrayMenu;
 use super::super::selector_ui::SelectorUi;
+use super::super::settings::SettingsWindow;
 use super::super::state::AppState;
 use super::super::worker::ClipboardWorkerHandle;
 
@@ -20,6 +21,8 @@ pub(crate) struct AppEventContext<'a> {
     pub menu: &'a TrayMenu,
     /// セレクター系 UI
     pub selectors: &'a SelectorUi,
+    /// 設定ウィンドウ
+    pub settings: &'a SettingsWindow,
     /// クイックセレクターを最後に表示した時刻 (更新用)
     pub last_quick_selector_show: &'a mut Instant,
     /// 登録クリップセレクターを最後に表示した時刻 (更新用)

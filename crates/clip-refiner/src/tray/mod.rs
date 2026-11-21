@@ -17,7 +17,9 @@ pub mod quick_selector;
 mod runner;
 mod selector_ui;
 mod selector_window;
+pub mod settings;
 pub mod state;
+mod webview_script;
 pub mod worker;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]

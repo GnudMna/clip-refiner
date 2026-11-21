@@ -1,0 +1,336 @@
+use std::sync::Arc;
+
+use super::apply::{
+    SettingsApplyFeedback, SettingsWindowCommand, handle_settings_window_command,
+    should_notify_apply_error_via_desktop,
+};
+use super::geometry::{
+    apply_geometry_to_builder, apply_saved_position, load_settings_window_geometry,
+    save_settings_window_geometry,
+};
+use super::ipc::{SettingsPatch, dispatch_settings_ipc, parse_settings_ipc_message};
+use super::regex_preview::RegexPreviewResponse;
+use super::snapshot::SettingsSnapshot;
+
+use crate::consts;
+use crate::tray::menu::{TrayMenu, create_window_icon, icon::app_icon_png_data_url};
+use crate::tray::quick_selector::QuickSelectorWindow;
+use crate::tray::selector_window::{WebSelectorWindow, WebViewWindowOptions};
+use crate::tray::state::{AppEvent, AppState};
+use crate::tray::webview_script;
+use crate::tray::worker::ClipboardWorkerHandle;
+
+use anyhow::{Context, Result};
+use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use tao::window::{Window, WindowBuilder};
+
+// ======================================================================
+// HTML 組み立て
+// ======================================================================
+const SETTINGS_CSS_IMPORT: &str = r#"@import url("settings.css");"#;
+const SETTINGS_JS_TAG: &str = r#"<script src="settings.js"></script>"#;
+const SETTINGS_ICON_PLACEHOLDER: &str = "__APP_ICON_SRC__";
+const FLUSH_PENDING_APPLY_SCRIPT: &str =
+    "typeof flushPendingApply==='function'&&flushPendingApply();";
+const IPC_LOG_PREVIEW_MAX_LEN: usize = 200;
+
+/// 解釈に失敗した IPC メッセージを警告ログへ出力する
+fn log_unparsed_settings_ipc(msg: &str) {
+    let preview = if msg.len() > IPC_LOG_PREVIEW_MAX_LEN {
+        format!("{}...", &msg[..IPC_LOG_PREVIEW_MAX_LEN])
+    } else {
+        msg.to_string()
+    };
+    crate::log_warn!("設定 IPC メッセージの解釈に失敗: {}", preview);
+}
+
+/// 設定ウィンドウ用 JavaScript を分割ファイルから組み立てる
+fn assemble_settings_js() -> String {
+    const FRAGMENTS: &[&str] = &[
+        include_str!("../../ui/settings/regex_preview.js"),
+        include_str!("../../ui/settings/shared.js"),
+        include_str!("../../ui/settings/panels.js"),
+        include_str!("../../ui/settings/events.js"),
+        include_str!("../../ui/settings/main.js"),
+    ];
+    format!(
+        "(function () {{\n'use strict';\n{}\n}})();",
+        FRAGMENTS.join("\n")
+    )
+}
+
+/// 設定ウィンドウ HTML 内のアセットをインライン展開する
+fn embed_settings_assets(html: &str) -> String {
+    let css = include_str!("../../ui/settings.css");
+    let js = assemble_settings_js();
+
+    html.replace(SETTINGS_CSS_IMPORT, css)
+        .replace(SETTINGS_JS_TAG, &format!("<script>\n{js}\n</script>"))
+        .replace(SETTINGS_ICON_PLACEHOLDER, &app_icon_png_data_url())
+}
+
+/// 設定ウィンドウ用 HTML を組み立てる
+fn assemble_settings_html() -> String {
+    embed_settings_assets(include_str!("../../ui/settings.html"))
+}
+
+// ======================================================================
+// 設定ウィンドウ
+// ======================================================================
+/// 設定編集用 `WebView` ウィンドウ
+pub struct SettingsWindow {
+    inner: WebSelectorWindow,
+}
+
+impl SettingsWindow {
+    /// 設定ウィンドウと `WebView` を初期化して生成する
+    pub fn new(
+        window: Window,
+        proxy: &EventLoopProxy<AppEvent>,
+        state: &Arc<AppState>,
+    ) -> Result<Self> {
+        let html = assemble_settings_html();
+        let proxy_clone = proxy.clone();
+        let state_clone = Arc::clone(state);
+        let data_dir = format!("{}-Settings-WebView2", consts::APP_NAME);
+
+        let inner = WebSelectorWindow::build(
+            window,
+            &data_dir,
+            html,
+            move |req| {
+                let msg = req.body();
+                if let Some(action) = parse_settings_ipc_message(msg) {
+                    dispatch_settings_ipc(&proxy_clone, &state_clone, action);
+                } else {
+                    log_unparsed_settings_ipc(msg);
+                }
+            },
+            WebViewWindowOptions::OPAQUE,
+        )?;
+
+        Ok(Self { inner })
+    }
+
+    /// 設定ウィンドウを表示し、スナップショットを読み込む
+    pub fn show(&self, snapshot_json: &str) {
+        self.inner.window().set_visible(true);
+        self.inner.window().set_focus();
+        self.load_snapshot(snapshot_json);
+    }
+
+    /// 前面へフォーカスを移す
+    pub fn focus(&self) {
+        self.inner.window().set_focus();
+    }
+
+    /// JavaScript へスナップショットを渡す
+    pub fn load_snapshot(&self, snapshot_json: &str) {
+        self.load_snapshot_with_options(snapshot_json, false, false);
+    }
+
+    /// JavaScript へスナップショットを渡す (`force` 時は編集中でも UI を再描画する)
+    pub fn load_snapshot_with_options(
+        &self,
+        snapshot_json: &str,
+        force: bool,
+        external_sync: bool,
+    ) {
+        let script = webview_script::settings_load_script(snapshot_json, force, external_sync);
+        self.inner.evaluate_script(&script);
+    }
+
+    /// 登録クリップ一覧のみ JavaScript へ反映する
+    pub(crate) fn update_clips(&self, clips_json: &str) {
+        let script = webview_script::json_parse_call_script("updateClips", clips_json);
+        self.inner.evaluate_script(&script);
+    }
+
+    /// お気に入りとショートカット一覧のみ JavaScript へ反映する
+    pub(crate) fn update_favorites_and_shortcuts(&self, json: &str) {
+        let script = webview_script::json_parse_call_script("updateFavoritesAndShortcuts", json);
+        self.inner.evaluate_script(&script);
+    }
+
+    /// debounce 中の設定変更を即時送信する
+    pub fn flush_pending_apply(&self) {
+        self.inner.evaluate_script(FLUSH_PENDING_APPLY_SCRIPT);
+    }
+
+    /// 設定適用結果を JavaScript へ通知する
+    ///
+    /// ウィンドウ非表示時は適用エラーのみデスクトップ通知へフォールバックする
+    pub(crate) fn notify_apply_feedback(&self, feedback: &SettingsApplyFeedback) {
+        if self.is_visible() {
+            let Ok(json) = serde_json::to_string(feedback) else {
+                return;
+            };
+            let script = webview_script::json_parse_call_script("onApplyFeedback", &json);
+            self.inner.evaluate_script(&script);
+            return;
+        }
+
+        if should_notify_apply_error_via_desktop(self.is_visible(), feedback) {
+            crate::platform::show_notification("設定エラー", &feedback.message);
+        }
+    }
+
+    /// 正規表現プレビュー結果を JavaScript へ通知する
+    pub(crate) fn notify_regex_preview(&self, response: &RegexPreviewResponse) {
+        if !self.is_visible() {
+            return;
+        }
+        let Ok(json) = serde_json::to_string(response) else {
+            return;
+        };
+        let script = webview_script::json_parse_call_script("onRegexPreview", &json);
+        self.inner.evaluate_script(&script);
+    }
+
+    /// 設定ウィンドウを非表示にする
+    pub fn hide(&self) {
+        self.flush_pending_apply();
+        save_settings_window_geometry(self.inner.window());
+        self.inner.hide();
+    }
+
+    /// 設定ウィンドウが表示中かどうか
+    pub fn is_visible(&self) -> bool {
+        self.inner.is_visible()
+    }
+
+    /// ウィンドウ ID を返す
+    pub fn id(&self) -> tao::window::WindowId {
+        self.inner.id()
+    }
+
+    /// 設定ウィンドウ関連の `AppEvent` を処理する
+    pub(crate) fn handle_event(
+        &self,
+        event: AppEvent,
+        state: &Arc<AppState>,
+        menu: &TrayMenu,
+        quick_selector: Option<&QuickSelectorWindow>,
+        clipboard_worker: &ClipboardWorkerHandle,
+    ) {
+        match event {
+            AppEvent::ShowSettingsWindow => open_settings_window(state, self),
+            AppEvent::HideSettingsWindow => self.hide(),
+            AppEvent::SettingsApplyPatch => {
+                if let Some(json) = state.take_pending_settings_patch() {
+                    match serde_json::from_str::<SettingsPatch>(&json) {
+                        Ok(patch) => handle_settings_window_command(
+                            SettingsWindowCommand::Apply(patch),
+                            state,
+                            menu,
+                            self,
+                            quick_selector,
+                            clipboard_worker,
+                        ),
+                        Err(err) => {
+                            crate::log_warn!("設定パッチの JSON 解釈に失敗: {:?}", err);
+                            self.notify_apply_feedback(&SettingsApplyFeedback::error(
+                                None,
+                                "設定の適用に失敗しました",
+                            ));
+                        }
+                    }
+                }
+            }
+            AppEvent::SettingsClearHistory => {
+                handle_settings_window_command(
+                    SettingsWindowCommand::ClearHistory,
+                    state,
+                    menu,
+                    self,
+                    quick_selector,
+                    clipboard_worker,
+                );
+            }
+            AppEvent::SettingsClearContinuousRecord => {
+                handle_settings_window_command(
+                    SettingsWindowCommand::ClearContinuousRecord,
+                    state,
+                    menu,
+                    self,
+                    quick_selector,
+                    clipboard_worker,
+                );
+            }
+            AppEvent::SettingsOpenConfigFile => {
+                handle_settings_window_command(
+                    SettingsWindowCommand::OpenConfigFile,
+                    state,
+                    menu,
+                    self,
+                    quick_selector,
+                    clipboard_worker,
+                );
+            }
+            AppEvent::SettingsRegexPreview => {
+                if let Some(request) = state.take_regex_preview_request() {
+                    let response = RegexPreviewResponse::from_request(&request);
+                    self.notify_regex_preview(&response);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// ======================================================================
+// ウィンドウ生成
+// ======================================================================
+/// 画面中央に配置する非表示の設定ウィンドウを生成する
+fn build_hidden_settings_window(event_loop: &EventLoopWindowTarget<AppEvent>) -> Result<Window> {
+    let geometry = load_settings_window_geometry();
+    let builder = WindowBuilder::new()
+        .with_title(format!("{} 設定", consts::APP_NAME))
+        .with_window_icon(Some(
+            create_window_icon().context("ウィンドウアイコンの読み込みに失敗")?,
+        ))
+        .with_visible(false)
+        .with_resizable(true)
+        .with_min_inner_size(tao::dpi::LogicalSize::new(640.0, 480.0));
+    let window = apply_geometry_to_builder(builder, geometry).build(event_loop)?;
+    apply_saved_position(&window, geometry);
+    Ok(window)
+}
+
+/// 設定ウィンドウを初期化する
+pub fn init_settings_window(
+    event_loop: &EventLoopWindowTarget<AppEvent>,
+    proxy: &EventLoopProxy<AppEvent>,
+    state: &Arc<AppState>,
+) -> Result<SettingsWindow> {
+    let window = build_hidden_settings_window(event_loop)?;
+    SettingsWindow::new(window, proxy, state)
+}
+
+/// 設定ウィンドウを開く (既に表示中なら前面へ)
+pub(crate) fn open_settings_window(state: &Arc<AppState>, settings: &SettingsWindow) {
+    let snapshot = state.with_config(SettingsSnapshot::from_config);
+    if settings.is_visible() {
+        settings.load_snapshot(&snapshot.to_json());
+        settings.focus();
+    } else {
+        settings.show(&snapshot.to_json());
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::assemble_settings_js;
+
+    /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれること
+    #[test]
+    fn assembled_settings_js_includes_regex_preview_stale_guard() {
+        let js = assemble_settings_js();
+        assert!(js.contains("resolveRegexPreviewResponse"));
+        assert!(js.contains("pendingRegexPreviewRequest"));
+        assert!(js.contains("action: 'stale'"));
+    }
+}

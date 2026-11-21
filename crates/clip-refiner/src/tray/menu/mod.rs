@@ -8,7 +8,6 @@ use super::dispatch;
 use super::state::AppState;
 
 use crate::config::MonitorMode;
-use crate::platform::autostart;
 use crate::refiner::{RefineCategory, RefineMode};
 use crate::tray::state::LockExt;
 
@@ -20,13 +19,13 @@ use tray_icon::{
 
 mod clips;
 mod history;
-mod icon;
+pub(crate) mod icon;
 mod monitor;
 mod notification;
 mod record;
 mod refine;
 
-pub use icon::create_icon;
+pub use icon::{create_icon, create_window_icon};
 
 // ======================================================================
 // メニュー構造体定義
@@ -140,7 +139,8 @@ pub struct NotificationMenu {
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体
 pub struct TrayMenu {
     /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する。
-    pub _tray_icon: TrayIcon,
+    #[expect(dead_code)]
+    tray_icon: TrayIcon,
     /// 終了項目
     pub quit_item: MenuItem,
     /// 一時停止項目
@@ -159,16 +159,10 @@ pub struct TrayMenu {
     pub clips: ClipsMenu,
     /// 通知設定メニュー
     pub notification: NotificationMenu,
-    /// 設定ファイルを開く項目
-    pub open_config_item: MenuItem,
-    /// 設定ファイルを再読み込みする項目
-    pub reload_config_item: MenuItem,
+    /// 設定ウィンドウを開く項目
+    pub open_settings_window_item: MenuItem,
     /// 停止したクリップボードワーカーを再起動する項目
     pub retry_clipboard_worker_item: MenuItem,
-    /// ショートカット一覧表示項目
-    pub shortcut_list_item: MenuItem,
-    /// ログイン時の自動起動を切り替える項目
-    pub launch_at_login_item: CheckMenuItem,
 }
 
 // ======================================================================
@@ -211,38 +205,33 @@ impl TrayMenu {
 
         // その他のメニュー
         let pause_item = CheckMenuItem::new("一時停止", true, config.is_paused, None);
-        let launch_at_login_item =
-            CheckMenuItem::new("ログイン時に起動", true, autostart::is_enabled(), None);
-        let open_config_item = MenuItem::new("設定を開く", true, None);
-        let reload_config_item = MenuItem::new("設定を再読み込み", true, None);
+        let open_settings_window_item = MenuItem::new("設定を開く", true, None);
         let retry_clipboard_worker_item = MenuItem::new("クリップボード監視を再開", true, None);
         retry_clipboard_worker_item.set_enabled(false);
-        let shortcut_list_item = MenuItem::new("ショートカット一覧", true, None);
         let quit_item = MenuItem::new("終了", true, None);
 
         // メインメニューの組み立て
         // クリップボード加工: 変換モード / 監視 / 登録クリップ
-        // 補助機能: 履歴 / 通知
+        // 補助機能: 履歴 / 連続記録 / 通知
+        // 設定: 設定ウィンドウ
+        // 操作: 監視再開 / 一時停止 / 終了
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
                 &refine.main_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &clips.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+                &monitor.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &interval.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &notification.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-                &open_config_item as &dyn tray_icon::menu::IsMenuItem,
-                &reload_config_item as &dyn tray_icon::menu::IsMenuItem,
+                &open_settings_window_item as &dyn tray_icon::menu::IsMenuItem,
+                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &retry_clipboard_worker_item as &dyn tray_icon::menu::IsMenuItem,
-                &shortcut_list_item as &dyn tray_icon::menu::IsMenuItem,
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
-                &launch_at_login_item as &dyn tray_icon::menu::IsMenuItem,
                 &pause_item as &dyn tray_icon::menu::IsMenuItem,
-                &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &quit_item as &dyn tray_icon::menu::IsMenuItem,
             ])
             .context("メニューの組み立てに失敗しました")?;
@@ -257,7 +246,7 @@ impl TrayMenu {
             .context("トレイアイコンのビルドに失敗しました")?;
 
         let this = Self {
-            _tray_icon: tray_icon,
+            tray_icon,
             quit_item,
             pause_item,
             refine,
@@ -267,11 +256,8 @@ impl TrayMenu {
             continuous_record,
             clips,
             notification,
-            open_config_item,
-            reload_config_item,
+            open_settings_window_item,
             retry_clipboard_worker_item,
-            shortcut_list_item,
-            launch_at_login_item,
         };
 
         // カテゴリラベルの初期更新
@@ -395,7 +381,7 @@ mod tests {
         )
         .expect("変換モードメニューの構築に失敗");
         let tray = TrayMenu {
-            _tray_icon: TrayIconBuilder::new()
+            tray_icon: TrayIconBuilder::new()
                 .with_icon(create_icon().expect("アイコンの作成に失敗"))
                 .build()
                 .expect("トレイアイコンのビルドに失敗"),
@@ -417,11 +403,8 @@ mod tests {
             },
             notification: TrayMenu::build_notification_menu(false, true, true, true)
                 .expect("通知メニューの構築に失敗"),
-            open_config_item: MenuItem::new("設定を開く", true, None),
-            reload_config_item: MenuItem::new("設定を再読み込み", true, None),
+            open_settings_window_item: MenuItem::new("設定ウィンドウ", true, None),
             retry_clipboard_worker_item: MenuItem::new("クリップボード監視を再開", true, None),
-            shortcut_list_item: MenuItem::new("ショートカット一覧", true, None),
-            launch_at_login_item: CheckMenuItem::new("ログイン時に起動", true, false, None),
         };
 
         tray.refresh_category_labels(RefineMode::UrlEncode);

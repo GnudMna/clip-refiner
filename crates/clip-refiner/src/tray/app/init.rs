@@ -6,6 +6,7 @@ use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::paste_watcher::PasteWatcher;
 use super::super::selector_ui::SelectorUi;
+use super::super::settings::init_settings_window;
 use super::super::state::{AppEvent, AppState};
 use super::super::worker::ClipboardWorkerHandle;
 use super::App;
@@ -42,6 +43,7 @@ impl App {
         notify_registration_failures(&hotkey_failures);
         let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
         let selectors = SelectorUi::new(event_loop, proxy, Arc::clone(&clipboard_worker))?;
+        let settings = init_settings_window(event_loop, proxy, &state)?;
         let paste_watcher = PasteWatcher::start(
             proxy.clone(),
             Arc::clone(&state),
@@ -56,6 +58,7 @@ impl App {
             state,
             menu,
             selectors,
+            settings,
             hotkey_handler,
             _hotkey_listener: hotkey_listener,
             clipboard_worker,

@@ -1,6 +1,7 @@
 use super::dispatch;
 use super::selector_window::{
-    WebSelectorWindow, build_hidden_selector_window, embed_clip_selector_assets,
+    WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
+    embed_clip_selector_assets,
 };
 use super::state::AppEvent;
 
@@ -79,24 +80,30 @@ impl ClipSelectorWindow {
         let proxy_clone = proxy.clone();
         let data_dir = format!("{}-ClipSelector-WebView2", consts::APP_NAME);
 
-        let inner = WebSelectorWindow::build(window, &data_dir, html, move |req| {
-            let msg = req.body();
-            match parse_clip_selector_ipc_message(msg) {
-                Some(ClipSelectorIpcAction::SelectClip(index)) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipCopy(index));
+        let inner = WebSelectorWindow::build(
+            window,
+            &data_dir,
+            html,
+            move |req| {
+                let msg = req.body();
+                match parse_clip_selector_ipc_message(msg) {
+                    Some(ClipSelectorIpcAction::SelectClip(index)) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipCopy(index));
+                    }
+                    Some(ClipSelectorIpcAction::Register) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipRegister);
+                    }
+                    Some(ClipSelectorIpcAction::DeleteClip(index)) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipDelete(index));
+                    }
+                    Some(ClipSelectorIpcAction::Close) => {
+                        dispatch::send_app_event(&proxy_clone, AppEvent::HideClipSelector);
+                    }
+                    None => {}
                 }
-                Some(ClipSelectorIpcAction::Register) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipRegister);
-                }
-                Some(ClipSelectorIpcAction::DeleteClip(index)) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::RequestClipDelete(index));
-                }
-                Some(ClipSelectorIpcAction::Close) => {
-                    dispatch::send_app_event(&proxy_clone, AppEvent::HideClipSelector);
-                }
-                None => {}
-            }
-        })?;
+            },
+            WebViewWindowOptions::default(),
+        )?;
 
         Ok(Self { inner })
     }

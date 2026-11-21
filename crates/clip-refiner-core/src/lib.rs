@@ -49,9 +49,10 @@ pub use config::{
 };
 pub use error::{AddRegisteredClipError, ConfigError, Error};
 pub use refiner::{
-    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue, RefineCategory,
-    RefineContext, RefineMode, Refiner, apply_pipeline_to_text, apply_text_pipeline,
-    process_clipboard, process_clipboard_pipeline, split_pipeline,
+    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue,
+    REGEX_PREVIEW_SAMPLE, RefineCategory, RefineContext, RefineMode, Refiner, RegexPreviewResult,
+    apply_pipeline_to_text, apply_text_pipeline, preview_regex_replace, process_clipboard,
+    process_clipboard_pipeline, split_pipeline,
 };
 pub use security::{is_within_clipboard_limit, is_within_parser_limit};
 

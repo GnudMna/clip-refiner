@@ -10,6 +10,7 @@ use super::hotkey::{HotkeyHandler, HotkeyListenerStop};
 use super::menu::TrayMenu;
 use super::paste_watcher::PasteWatcher;
 use super::selector_ui::SelectorUi;
+use super::settings::SettingsWindow;
 use super::state::{AppEvent, AppState};
 use super::worker::ClipboardWorkerHandle;
 
@@ -26,6 +27,7 @@ pub struct App {
     state: Arc<AppState>,
     menu: TrayMenu,
     selectors: SelectorUi,
+    settings: SettingsWindow,
     hotkey_handler: HotkeyHandler,
     _hotkey_listener: HotkeyListenerStop,
     clipboard_worker: Arc<ClipboardWorkerHandle>,
@@ -48,6 +50,7 @@ impl App {
             state: &self.state,
             menu: &self.menu,
             selectors: &self.selectors,
+            settings: &self.settings,
             hotkey_handler: &mut self.hotkey_handler,
             clipboard_worker: &self.clipboard_worker,
             control_flow,

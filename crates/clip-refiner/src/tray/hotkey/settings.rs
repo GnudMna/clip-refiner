@@ -4,33 +4,69 @@ use crate::consts;
 use crate::refiner::RefineMode;
 
 use global_hotkey::hotkey::HotKey;
+use serde::Serialize;
 
 // ======================================================================
-// HotkeySettings 拡張 (アプリ UI 向け)
+// ショートカット一覧
 // ======================================================================
-/// ショートカット一覧表示用の文字列を生成する
-pub(crate) fn shortcut_list_text(
+/// ショートカット一覧の1行分
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutEntry {
+    /// ホットキー文字列 (`Alt+Shift+S` 形式)
+    pub binding: String,
+    /// 動作の説明
+    pub label: String,
+}
+
+/// ショートカット一覧を構造化データとして生成する
+pub(crate) fn shortcut_list_entries(
     hotkeys: &HotkeySettings,
     favorite_modes: &[RefineMode],
-) -> String {
-    let mut lines = vec![
-        format!("{}: クイックセレクター", hotkeys.quick_selector),
-        format!("{}: 登録クリップセレクター", hotkeys.clip_selector),
-        format!("{}: 画面 OCR", hotkeys.ocr),
+) -> Vec<ShortcutEntry> {
+    let mut entries = vec![
+        ShortcutEntry {
+            binding: hotkeys.quick_selector.clone(),
+            label: "クイックセレクター".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.clip_selector.clone(),
+            label: "登録クリップセレクター".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.ocr.clone(),
+            label: "画面 OCR".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.notification.clone(),
+            label: "成功通知の切替".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.pause.clone(),
+            label: "一時停止 / 再開".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.continuous_record.clone(),
+            label: "連続記録の切替".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.undo.clone(),
+            label: "加工の取り消し".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.quit.clone(),
+            label: "終了".to_string(),
+        },
     ];
-    lines.extend([
-        format!("{}: 成功通知の切替", hotkeys.notification),
-        format!("{}: 一時停止/再開", hotkeys.pause),
-        format!("{}: 連続記録の切替", hotkeys.continuous_record),
-        format!("{}: 加工の取り消し", hotkeys.undo),
-        format!("{}: 終了", hotkeys.quit),
-    ]);
     for (index, mode) in favorite_modes.iter().enumerate() {
         if let Some(binding) = hotkeys.favorite_slot_binding(index) {
-            lines.push(format!("{binding}: {} (お気に入り)", mode.label()));
+            entries.push(ShortcutEntry {
+                binding,
+                label: format!("{} (お気に入り)", mode.label()),
+            });
         }
     }
-    lines.join("\n")
+    entries
 }
 
 /// お気に入りスロット用ホットキーを解決する

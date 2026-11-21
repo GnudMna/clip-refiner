@@ -37,6 +37,7 @@ pub(crate) use config_reload::reload_config_with_notification;
 pub(crate) use context::AppEventContext;
 pub(crate) use favorites::{move_favorite_mode, toggle_favorite_mode};
 pub(crate) use loop_event::handle_loop_event;
+pub(crate) use monitor::update_monitor_mode;
 pub(crate) use ocr::run_ocr_on_image;
 pub use refine::update_refine;
 

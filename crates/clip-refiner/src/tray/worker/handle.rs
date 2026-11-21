@@ -103,7 +103,7 @@ impl Drop for ClipboardWorkerHandle {
 // ======================================================================
 // テスト
 // ======================================================================
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers", debug_assertions))]
 impl ClipboardWorkerHandle {
     /// テスト用にチャネル送信のみ行うハンドルを生成する
     pub fn for_test(state: Arc<AppState>, tx: Sender<ClipboardCommand>) -> Arc<Self> {
