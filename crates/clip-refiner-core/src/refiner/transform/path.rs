@@ -138,9 +138,11 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 入力がパスらしい形式か判定する(簡易版)
 ///
-/// スラッシュ、バックスラッシュ、またはWindowsドライブレター形式(例: `C:\`, `D:/`)が
-/// 含まれているかを確認する。単独のコロン(時刻文字列・URLポート番号・YAMLキーなど)は
-/// パスとみなしない
+/// 先頭が次のいずれかの場合のみパスとみなす。区切り文字を含むだけの文字列は
+/// パスとみなさない(URL・`and/or`・`TCP/IP` などの通常の文章を壊さないため)
+/// * Windowsドライブレター(例: `C:\`, `D:/`)
+/// * `/` または `\` (ルート・UNC `\\server\share` を含む)
+/// * `./` `../` `.\` `..\` (相対パス)
 ///
 /// # Arguments
 /// * `text` - 判定対象の文字列
@@ -148,13 +150,22 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `bool` - パスらしい場合は `true`、そうでない場合は `false`
 fn is_path_like_raw(text: &str) -> bool {
-    if text.contains('/') || text.contains('\\') {
+    let b = text.as_bytes();
+    let is_sep = |c: u8| c == b'/' || c == b'\\';
+
+    // ルート・UNC
+    if b.first().is_some_and(|&c| is_sep(c)) {
         return true;
     }
     // Windowsドライブレター: 先頭が ASCII アルファベット1文字 + ':' + パス区切り文字
     // 例: C:\ や D:/ はパスだが、12:00:00 や key: value などは除外する
-    let b = text.as_bytes();
-    b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/')
+    if b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && is_sep(b[2]) {
+        return true;
+    }
+    // 相対パス: ./ ../ (区切りは / と \ のどちらも可)
+    let rest = text.strip_prefix("..").or_else(|| text.strip_prefix('.'));
+    rest.and_then(|r| r.as_bytes().first())
+        .is_some_and(|&c| is_sep(c))
 }
 
 /// 1つの行からベースネームを抽出する
@@ -301,5 +312,51 @@ mod tests {
     fn test_extract_basename_relative() {
         let input = "./foo/bar/baz.txt";
         assert_eq!(extract_basename(input), "baz.txt");
+    }
+
+    /// URL を各パス変換で変更しないこと
+    #[test]
+    fn test_url_is_not_converted() {
+        let input = "https://example.com/a/b?x=1";
+        assert!(matches!(convert_to_backslash(input), Cow::Borrowed(_)));
+        assert!(matches!(convert_to_forward_slash(input), Cow::Borrowed(_)));
+        assert!(matches!(add_path_quotes(input), Cow::Borrowed(_)));
+        assert!(matches!(extract_basename(input), Cow::Borrowed(_)));
+    }
+
+    /// 区切り文字を含む通常の文章を各パス変換で変更しないこと
+    #[test]
+    fn test_prose_with_slash_is_not_converted() {
+        for input in ["TCP/IP and/or UDP", "and/or", "foo/bar.txt", "a\\b"] {
+            assert!(
+                matches!(convert_to_backslash(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+            assert!(
+                matches!(convert_to_forward_slash(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+            assert!(
+                matches!(add_path_quotes(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+        }
+    }
+
+    /// ルート・UNC・相対パスをパスとして変換すること
+    #[test]
+    fn test_root_unc_and_relative_paths_are_converted() {
+        assert_eq!(convert_to_backslash("/usr/bin"), "\\usr\\bin");
+        assert_eq!(convert_to_backslash("./a/b"), ".\\a\\b");
+        assert_eq!(convert_to_backslash("../a/b"), "..\\a\\b");
+        assert_eq!(
+            convert_to_forward_slash("\\\\server\\share\\f"),
+            "//server/share/f"
+        );
+        assert_eq!(convert_to_forward_slash(".\\a\\b"), "./a/b");
+        assert_eq!(
+            add_path_quotes("\\\\server\\share"),
+            "\"\\\\server\\share\""
+        );
     }
 }

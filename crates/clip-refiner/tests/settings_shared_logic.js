@@ -92,13 +92,13 @@ function test_build_hotkeys_patch() {
     const patch = SettingsSharedLogic.buildHotkeysPatch(
         {
             'hotkey-quick-selector': 'Ctrl+Shift+S',
-            'hotkey-pause': 'Alt+Shift+P',
+            'hotkey-auto-refine': 'Alt+Shift+P',
         },
         ['', 'Alt+Shift+2']
     );
 
     assert.equal(patch.quickSelector, 'Ctrl+Shift+S');
-    assert.equal(patch.pause, 'Alt+Shift+P');
+    assert.equal(patch.autoRefine, 'Alt+Shift+P');
     assert.deepEqual(patch.favoriteModeSlots, ['', 'Alt+Shift+2']);
 }
 
@@ -111,7 +111,7 @@ function test_snapshot_has_hotkey_fields() {
                 clipSelector: 'Alt+Shift+T',
                 ocr: 'Alt+Shift+G',
                 notification: 'Alt+Shift+N',
-                pause: 'Alt+Shift+P',
+                autoRefine: 'Alt+Shift+P',
                 continuousRecord: 'Alt+Shift+C',
                 continuousRecordUndo: 'Alt+Shift+Backspace',
                 continuousRecordPaste: 'Alt+Shift+X',
@@ -135,12 +135,12 @@ function test_notification_patch_allows_sub_toggles_when_master_off() {
     const patch = SettingsSharedLogic.buildNotificationSettingsPatch({
         'notify-enabled': false,
         'notify-process': true,
-        'notify-pause': true,
+        'notify-auto-refine': true,
     });
 
     assert.equal(patch.enabled, false);
     assert.equal(patch.notifyProcess, true);
-    assert.equal(patch.notifyPause, true);
+    assert.equal(patch.notifyAutoRefine, true);
 }
 
 /** スナップショット JSON の通知必須フィールドを検証できること */
@@ -150,7 +150,7 @@ function test_snapshot_has_notification_fields() {
             notificationSettings: {
                 enabled: false,
                 notifyProcess: true,
-                notifyPause: true,
+                notifyAutoRefine: true,
                 notifyHistoryRestore: true,
                 notifyOcr: true,
                 notifyRegisteredClip: true,

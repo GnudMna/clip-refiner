@@ -4,15 +4,12 @@ use std::time::Instant;
 use global_hotkey::GlobalHotKeyEvent;
 use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
 
-use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
 use super::super::event::apply_refine_once;
+use super::super::event::set_auto_refine_enabled as apply_auto_refine_enabled;
 use super::super::event::toggle_continuous_record as apply_continuous_record_toggle;
 use super::super::event::undo_last_continuous_record as apply_continuous_record_undo;
 use super::super::menu::TrayMenu;
-use super::super::notify::{
-    NotificationCategory, show_category_notification, show_pause_notification,
-};
 use super::super::ocr::OcrCaptureWindow;
 use super::super::selector::{
     ClipSelectorWindow, QuickSelectorWindow, clip_selector_json, hide_with_retention,
@@ -69,8 +66,8 @@ impl HotkeyHandler {
             Self::handle_quick_selector_hotkey(ctx);
         } else if event.id == self.notification_hotkey.id() {
             Self::toggle_notification(ctx);
-        } else if event.id == self.pause_hotkey.id() {
-            Self::toggle_pause(ctx);
+        } else if event.id == self.auto_refine_hotkey.id() {
+            Self::toggle_auto_refine(ctx);
         } else if event.id == self.continuous_record_hotkey.id() {
             Self::toggle_continuous_record(ctx);
         } else if event.id == self.continuous_record_undo_hotkey.id() {
@@ -223,32 +220,23 @@ impl HotkeyHandler {
         );
     }
 
-    /// 監視の一時停止/再開を切り替える
-    pub(super) fn toggle_pause(ctx: &mut HotkeyEventContext<'_>) {
-        let new_paused = ctx.state.with_config_mut(|c| {
-            c.is_paused = !c.is_paused;
-            c.is_paused
-        });
-        ctx.menu.pause_item.set_checked(new_paused);
+    /// 自動変換の有効/無効を切り替える
+    ///
+    /// 有効にするときに連続記録が有効なら、連続記録を無効にする
+    pub(super) fn toggle_auto_refine(ctx: &mut HotkeyEventContext<'_>) {
+        let enabled = !ctx.state.with_config(|c| c.auto_refine_enabled);
+        apply_auto_refine_enabled(ctx.state, ctx.menu, enabled, Some("ショートカット"));
         ctx.state.save_config();
-        show_pause_notification(ctx.state, new_paused, "ショートカット");
-        bump_monitor_generation(ctx.state);
         let _ = ctx.state.proxy.send_event(SettingsEvent::Refresh.into());
     }
 
     /// 連続記録の有効/無効を切り替える
     pub(super) fn toggle_continuous_record(ctx: &mut HotkeyEventContext<'_>) {
-        apply_continuous_record_toggle(ctx.menu, ctx.state, ctx.clipboard_worker);
-        let enabled = ctx.state.with_config(|c| c.continuous_record_enabled);
-        show_category_notification(
+        apply_continuous_record_toggle(
+            ctx.menu,
             ctx.state,
-            NotificationCategory::ContinuousRecord,
-            "ショートカット",
-            if enabled {
-                "連続記録を有効にしました"
-            } else {
-                "連続記録を無効にしました"
-            },
+            ctx.clipboard_worker,
+            Some("ショートカット"),
         );
     }
 

@@ -42,7 +42,7 @@ pub struct HotkeyHandler {
     pub(super) manager: GlobalHotKeyManager,
     pub(super) quick_selector_hotkey: HotKey,
     pub(super) notification_hotkey: HotKey,
-    pub(super) pause_hotkey: HotKey,
+    pub(super) auto_refine_hotkey: HotKey,
     pub(super) quit_hotkey: HotKey,
     pub(super) undo_hotkey: HotKey,
     pub(super) clip_selector_hotkey: HotKey,
@@ -76,7 +76,7 @@ impl HotkeyHandler {
             manager,
             quick_selector_hotkey: resolved.quick_selector,
             notification_hotkey: resolved.notification,
-            pause_hotkey: resolved.pause,
+            auto_refine_hotkey: resolved.auto_refine,
             quit_hotkey: resolved.quit,
             undo_hotkey: resolved.undo,
             clip_selector_hotkey: resolved.clip_selector,
@@ -117,7 +117,7 @@ impl HotkeyHandler {
 
         self.quick_selector_hotkey = resolved.quick_selector;
         self.notification_hotkey = resolved.notification;
-        self.pause_hotkey = resolved.pause;
+        self.auto_refine_hotkey = resolved.auto_refine;
         self.quit_hotkey = resolved.quit;
         self.undo_hotkey = resolved.undo;
         self.clip_selector_hotkey = resolved.clip_selector;
@@ -152,7 +152,7 @@ impl HotkeyHandler {
         let hotkeys = vec![
             self.quick_selector_hotkey,
             self.notification_hotkey,
-            self.pause_hotkey,
+            self.auto_refine_hotkey,
             self.quit_hotkey,
             self.undo_hotkey,
             self.clip_selector_hotkey,
@@ -236,7 +236,11 @@ fn register_resolved_hotkeys(
             hotkeys.notification.as_str(),
             resolved.notification,
         ),
-        ("pause", hotkeys.pause.as_str(), resolved.pause),
+        (
+            "auto_refine",
+            hotkeys.auto_refine.as_str(),
+            resolved.auto_refine,
+        ),
         ("quit", hotkeys.quit.as_str(), resolved.quit),
         ("undo", hotkeys.undo.as_str(), resolved.undo),
         (
@@ -295,14 +299,14 @@ fn hotkey_action_label(key: &str) -> String {
     match key {
         "quick_selector" => "クイックセレクター".to_string(),
         "notification" => "成功通知の切替".to_string(),
-        "pause" => "一時停止/再開".to_string(),
+        "auto_refine" => "自動変換の切替".to_string(),
         "quit" => "終了".to_string(),
         "undo" => "加工の取り消し".to_string(),
         "clip_selector" => "登録クリップセレクター".to_string(),
         "ocr" => "画面 OCR".to_string(),
-        "continuous_record" => "連続記録の切替".to_string(),
-        "continuous_record_undo" => "連続記録の取り消し".to_string(),
-        "continuous_record_paste" => "連続記録の貼り付け".to_string(),
+        "continuous_record" => "連続記録モードの切替".to_string(),
+        "continuous_record_undo" => "連続記録モードの記録取り消し".to_string(),
+        "continuous_record_paste" => "連続記録モードの記録貼り付け".to_string(),
         other => other.to_string(),
     }
 }
@@ -367,9 +371,9 @@ impl HotkeyHandler {
         self.quit_hotkey.id()
     }
 
-    /// テスト用: 一時停止ホットキーの ID を返す
-    pub(crate) fn pause_hotkey_id(&self) -> u32 {
-        self.pause_hotkey.id()
+    /// テスト用: 自動変換切替ホットキーの ID を返す
+    pub(crate) fn auto_refine_hotkey_id(&self) -> u32 {
+        self.auto_refine_hotkey.id()
     }
 
     /// テスト用: 通知切替ホットキーの ID を返す
@@ -448,13 +452,13 @@ mod tests {
                 reason: "a".to_string(),
             },
             HotkeyRegistrationFailure {
-                label: "一時停止/再開".to_string(),
+                label: "自動変換の切替".to_string(),
                 binding: "Alt+Shift+P".to_string(),
                 reason: "b".to_string(),
             },
         ]);
         assert!(message.contains("2 件"));
         assert!(message.contains("・終了"));
-        assert!(message.contains("・一時停止/再開"));
+        assert!(message.contains("・自動変換の切替"));
     }
 }

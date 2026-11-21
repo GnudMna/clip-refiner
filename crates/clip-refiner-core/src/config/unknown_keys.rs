@@ -4,7 +4,7 @@
 /// ユーザー向けメッセージに含める未知キーの最大件数
 const UNKNOWN_KEYS_MESSAGE_LIMIT: usize = 5;
 
-/// ルートレベルの既知キー (レガシー `clips` を含む)
+/// ルートレベルの既知キー (レガシー `clips` と v4 以前の `is_paused` を含む)
 const ROOT_KEYS: &[&str] = &[
     "version",
     "auto_refine_enabled",
@@ -31,6 +31,8 @@ const NOTIFICATION_KEYS: &[&str] = &[
     "enabled",
     "notify_process",
     "notifyProcess",
+    "notify_auto_refine",
+    "notifyAutoRefine",
     "notify_pause",
     "notifyPause",
     "notify_history_restore",
@@ -57,6 +59,8 @@ const HOTKEY_KEYS: &[&str] = &[
     "quickSelector",
     "selector",
     "notification",
+    "auto_refine",
+    "autoRefine",
     "pause",
     "quit",
     "undo",

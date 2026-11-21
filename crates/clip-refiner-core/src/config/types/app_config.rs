@@ -49,6 +49,8 @@ pub struct AppConfig {
     #[serde(default = "default_config_version")]
     pub version: u32,
     /// コピー時に自動変換するかどうか (新規設定は無効。v3 以前からの移行時は有効)
+    ///
+    /// `continuous_record_enabled` とは同時に有効にならない
     #[serde(default)]
     pub auto_refine_enabled: bool,
     /// 最後に使用した(または常駐時に使用する)変換モード
@@ -71,6 +73,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub history_enabled: bool,
     /// 連続記録モード (監視時は加工せず元テキストを記録)
+    ///
+    /// `auto_refine_enabled` とは同時に有効にならない
     #[serde(default)]
     pub continuous_record_enabled: bool,
     /// 連続記録の最大保持件数
@@ -79,9 +83,12 @@ pub struct AppConfig {
     /// クリップボード履歴の最大保持件数
     #[serde(default = "default_history_limit")]
     pub history_limit: usize,
-    /// 監視が一時停止されているかどうか
-    #[serde(default)]
-    pub is_paused: bool,
+    /// v4 以前の `is_paused` の読み込み用 (保存時は出力しない)
+    ///
+    /// v5 で一時停止は自動変換の無効化へ統合した。`migrate_v4_to_v5` が読み取って `false` へ戻す
+    #[doc(hidden)]
+    #[serde(default, rename = "is_paused", skip_serializing)]
+    pub legacy_is_paused: bool,
     /// 通知の内容設定
     #[serde(default)]
     pub notification_settings: NotificationSettings,
@@ -120,7 +127,7 @@ impl Default for AppConfig {
             continuous_record_enabled: false,
             continuous_record_limit: consts::DEFAULT_CONTINUOUS_RECORD_LIMIT,
             history_limit: consts::DEFAULT_HISTORY_LIMIT,
-            is_paused: false,
+            legacy_is_paused: false,
             notification_settings: NotificationSettings::default(),
             hotkeys: HotkeySettings::default(),
             regex: RegexSettings::default(),
@@ -144,6 +151,7 @@ impl AppConfig {
         migration.config.normalize_clips();
         migration.config.normalize_favorite_modes();
         migration.config.normalize_pipeline();
+        migration.config.normalize_exclusive_modes();
         migration.config.regex.normalize();
         migration
             .config
@@ -162,9 +170,19 @@ impl AppConfig {
         self.normalize_clips();
         self.normalize_favorite_modes();
         self.normalize_pipeline();
+        self.normalize_exclusive_modes();
         self.regex.normalize();
         self.notification_settings.migrate_legacy_fields();
         self.version = consts::CONFIG_VERSION;
+    }
+
+    /// 自動変換と連続記録が同時に有効な場合、連続記録を優先して自動変換を無効にする
+    ///
+    /// 連続記録中は従来から自動変換が動かないため、実際の挙動に合わせた補正になる
+    pub(crate) fn normalize_exclusive_modes(&mut self) {
+        if self.auto_refine_enabled && self.continuous_record_enabled {
+            self.auto_refine_enabled = false;
+        }
     }
 
     /// 数値項目を許容範囲内に収める

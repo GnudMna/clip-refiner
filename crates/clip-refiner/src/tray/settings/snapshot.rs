@@ -179,7 +179,7 @@ mod tests {
         notification_settings.enabled = true;
         notification_settings.notify_process = false;
         notification_settings.notify_result = true;
-        notification_settings.notify_pause = false;
+        notification_settings.notify_auto_refine = false;
         notification_settings.notify_history_restore = true;
         notification_settings.notify_ocr = false;
         notification_settings.notify_registered_clip = true;

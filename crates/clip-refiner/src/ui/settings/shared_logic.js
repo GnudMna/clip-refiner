@@ -16,7 +16,7 @@ const SettingsSharedLogic = (function () {
     const NOTIFICATION_FIELD_MAP = [
         ['notify-enabled', 'enabled'],
         ['notify-process', 'notifyProcess'],
-        ['notify-pause', 'notifyPause'],
+        ['notify-auto-refine', 'notifyAutoRefine'],
         ['notify-history-restore', 'notifyHistoryRestore'],
         ['notify-ocr', 'notifyOcr'],
         ['notify-registered-clip', 'notifyRegisteredClip'],
@@ -31,7 +31,7 @@ const SettingsSharedLogic = (function () {
         ['hotkey-clip-selector', 'clipSelector'],
         ['hotkey-ocr', 'ocr'],
         ['hotkey-notification', 'notification'],
-        ['hotkey-pause', 'pause'],
+        ['hotkey-auto-refine', 'autoRefine'],
         ['hotkey-continuous-record', 'continuousRecord'],
         ['hotkey-continuous-record-undo', 'continuousRecordUndo'],
         ['hotkey-continuous-record-paste', 'continuousRecordPaste'],
@@ -45,10 +45,10 @@ const SettingsSharedLogic = (function () {
         ['clipSelector', '登録クリップセレクター'],
         ['ocr', '画面 OCR'],
         ['notification', '成功通知の切替'],
-        ['pause', '一時停止 / 再開'],
-        ['continuousRecord', '連続記録の切替'],
-        ['continuousRecordUndo', '連続記録の取り消し'],
-        ['continuousRecordPaste', '連続記録の貼り付け'],
+        ['autoRefine', '自動変換の切替'],
+        ['continuousRecord', '連続記録モードの切替'],
+        ['continuousRecordUndo', '連続記録モードの記録取り消し'],
+        ['continuousRecordPaste', '連続記録モードの記録貼り付け'],
         ['undo', '加工の取り消し'],
         ['quit', '終了'],
     ];
@@ -290,7 +290,7 @@ const SettingsSharedLogic = (function () {
         const required = [
             'enabled',
             'notifyProcess',
-            'notifyPause',
+            'notifyAutoRefine',
             'notifyHistoryRestore',
             'notifyOcr',
             'notifyRegisteredClip',
@@ -400,6 +400,7 @@ const SettingsSharedLogic = (function () {
 
     /** @type {ReadonlyArray<string>} 設定ウィンドウのタブ ID */
     const SETTINGS_TAB_IDS = [
+        'monitor',
         'convert',
         'regex',
         'clipboard',

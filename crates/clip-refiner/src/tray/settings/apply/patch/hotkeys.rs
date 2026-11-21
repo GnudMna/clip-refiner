@@ -88,7 +88,7 @@ mod tests {
         let state = Arc::new(test_app_state());
         let patch = SettingsPatch {
             hotkeys: Some(HotkeySettings {
-                pause: "Bad+Key".to_string(),
+                auto_refine: "Bad+Key".to_string(),
                 ..HotkeySettings::default()
             }),
             ..SettingsPatch::default()
@@ -100,10 +100,10 @@ mod tests {
         let feedback = outcome.feedback.expect("正規化フィードバック");
         assert!(feedback.ok);
         assert_eq!(feedback.field.as_deref(), Some("hotkeys"));
-        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert!(feedback.message.contains("自動変換の切替"));
         assert_eq!(
-            state.with_config(|c| c.hotkeys.pause.clone()),
-            consts::DEFAULT_HOTKEY_PAUSE
+            state.with_config(|c| c.hotkeys.auto_refine.clone()),
+            consts::DEFAULT_HOTKEY_AUTO_REFINE
         );
     }
 
@@ -114,7 +114,7 @@ mod tests {
         let patch = SettingsPatch {
             hotkeys: Some(HotkeySettings {
                 notification: "Ctrl+Shift+N".to_string(),
-                pause: "Ctrl+Shift+N".to_string(),
+                auto_refine: "Ctrl+Shift+N".to_string(),
                 ..HotkeySettings::default()
             }),
             ..SettingsPatch::default()
@@ -124,11 +124,11 @@ mod tests {
         let outcome = apply_hotkeys_patch(&patch, &state, &mut config_dirty);
         let feedback = outcome.feedback.expect("重複フィードバック");
         assert!(feedback.ok);
-        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert!(feedback.message.contains("自動変換の切替"));
         assert!(feedback.message.contains("成功通知の切替"));
         assert_eq!(
-            state.with_config(|c| c.hotkeys.pause.clone()),
-            consts::DEFAULT_HOTKEY_PAUSE
+            state.with_config(|c| c.hotkeys.auto_refine.clone()),
+            consts::DEFAULT_HOTKEY_AUTO_REFINE
         );
     }
 

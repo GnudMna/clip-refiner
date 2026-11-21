@@ -42,7 +42,6 @@ impl TrayMenu {
         self.continuous_record
             .enabled_item
             .set_checked(snap.continuous_record_enabled);
-        self.pause_item.set_checked(snap.is_paused);
 
         self.refresh_clips(state)?;
         self.refresh_regex_presets_logged(state);
@@ -53,12 +52,12 @@ impl TrayMenu {
         Ok(())
     }
 
-    /// 自動変換・連続記録の有効状態に応じて自動加工関連のメニュー表示を同期する
+    /// 自動変換・連続記録モードの有効状態に応じて自動加工関連のメニュー表示を同期する
     ///
-    /// 連続記録中は変換モード・正規表現プリセットメニューを無効化し、連続記録サブメニュー名と
-    /// トレイツールチップで自動加工が停止していることを示す。
-    /// それ以外のときはツールチップに自動変換の状態 (モード名またはオフ) を表示する。
-    /// 「変換モード」サブメニュー名にも現在のモードと自動変換の状態を表示する。
+    /// 連続記録モード中は正規表現プリセットメニューを無効化する。
+    /// 変換モードメニューは連続記録モード中も操作でき、選ぶと連続記録モードが無効になる。
+    /// 「変換モード」サブメニュー名には現在のモードと自動変換のオン・オフを、
+    /// 「連続記録モード」サブメニュー名にはオン・オフを表示し、ツールチップにも同じ表記で並べる。
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
@@ -80,19 +79,13 @@ impl TrayMenu {
             &pipeline,
         ));
 
-        self.refine
-            .main_submenu
-            .set_enabled(!continuous_record_enabled);
         self.regex_presets
             .main_submenu
             .set_enabled(!continuous_record_enabled);
 
-        let submenu_title = if continuous_record_enabled {
-            "連続記録 (自動加工停止)"
-        } else {
-            "連続記録"
-        };
-        self.continuous_record.main_submenu.set_text(submenu_title);
+        self.continuous_record
+            .main_submenu
+            .set_text(continuous_record_menu_title(continuous_record_enabled));
 
         let tooltip =
             auto_processing_tooltip(continuous_record_enabled, auto_refine_enabled, &pipeline);
@@ -141,14 +134,30 @@ fn refine_menu_title(
     } else {
         RefineMode::pipeline_label(pipeline)
     };
-    let status = if continuous_record_enabled {
-        "連続記録中"
-    } else if auto_refine_enabled {
-        "自動変換オン"
+    // 「連続記録モード」と表記をそろえ、自動変換が実際に動くときだけオンとする
+    let status = if auto_refine_enabled && !continuous_record_enabled {
+        "オン"
     } else {
-        "自動変換オフ"
+        "オフ"
     };
     format!("変換モード: {modes} ({status})")
+}
+
+/// 「連続記録モード」サブメニュー名を組み立てる
+///
+/// 「変換モード」と同じく、トレイを開いた時点で有効かどうかが分かるようにする
+///
+/// # Arguments
+/// * `continuous_record_enabled` - 連続記録モードが有効かどうか
+///
+/// # Returns
+/// * `&'static str` - サブメニュー名
+fn continuous_record_menu_title(continuous_record_enabled: bool) -> &'static str {
+    if continuous_record_enabled {
+        "連続記録モード (オン)"
+    } else {
+        "連続記録モード (オフ)"
+    }
 }
 
 // ======================================================================
@@ -156,8 +165,11 @@ fn refine_menu_title(
 // ======================================================================
 /// 自動加工の状態を示すトレイツールチップ文字列を組み立てる
 ///
+/// トレイメニューの「変換モード」「連続記録モード」と同じ表記を 1 行ずつ並べる。
+/// パイプラインはメニューと同じく段数を要約するため、ツールチップの長さ上限に収まる
+///
 /// # Arguments
-/// * `continuous_record_enabled` - 連続記録が有効かどうか
+/// * `continuous_record_enabled` - 連続記録モードが有効かどうか
 /// * `auto_refine_enabled` - コピー時の自動変換が有効かどうか
 /// * `pipeline` - 自動変換で適用する変換モード列
 ///
@@ -168,16 +180,11 @@ fn auto_processing_tooltip(
     auto_refine_enabled: bool,
     pipeline: &[RefineMode],
 ) -> String {
-    if continuous_record_enabled {
-        "ClipRefiner (連続記録中・自動加工停止)".to_string()
-    } else if auto_refine_enabled {
-        format!(
-            "ClipRefiner (自動変換: {})",
-            RefineMode::pipeline_label(pipeline)
-        )
-    } else {
-        "ClipRefiner (自動変換: オフ)".to_string()
-    }
+    format!(
+        "ClipRefiner\n{}\n{}",
+        refine_menu_title(continuous_record_enabled, auto_refine_enabled, pipeline),
+        continuous_record_menu_title(continuous_record_enabled)
+    )
 }
 
 // ======================================================================
@@ -185,6 +192,8 @@ fn auto_processing_tooltip(
 // ======================================================================
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
+
     use super::*;
 
     /// 変換モードのサブメニュー名に現在のモードと自動変換の状態を表示すること
@@ -194,17 +203,24 @@ mod tests {
         let label = RefineMode::UrlDecode.label();
         assert_eq!(
             refine_menu_title(false, true, &single),
-            format!("変換モード: {label} (自動変換オン)")
+            format!("変換モード: {label} (オン)")
         );
         assert_eq!(
             refine_menu_title(false, false, &single),
-            format!("変換モード: {label} (自動変換オフ)")
+            format!("変換モード: {label} (オフ)")
         );
-        // 連続記録中は自動変換の設定より優先して停止を示す
+        // 連続記録モード中は自動変換が動かないため、設定より優先してオフを示す
         assert_eq!(
             refine_menu_title(true, true, &single),
-            format!("変換モード: {label} (連続記録中)")
+            format!("変換モード: {label} (オフ)")
         );
+    }
+
+    /// 連続記録モードのサブメニュー名にオン・オフを表示すること
+    #[test]
+    fn continuous_record_menu_title_reflects_state() {
+        assert_eq!(continuous_record_menu_title(true), "連続記録モード (オン)");
+        assert_eq!(continuous_record_menu_title(false), "連続記録モード (オフ)");
     }
 
     /// 長いパイプラインは先頭 2 段と残りの段数で表示すること
@@ -219,31 +235,40 @@ mod tests {
         assert_eq!(
             refine_menu_title(false, true, &pipeline),
             format!(
-                "変換モード: {} ほか 2 段 (自動変換オン)",
+                "変換モード: {} ほか 2 段 (オン)",
                 RefineMode::pipeline_label(&pipeline[..2])
             )
         );
     }
 
-    /// ツールチップに自動変換の状態を表示すること
+    /// ツールチップに変換モード・連続記録モードのオン・オフをメニューと同じ表記で表示すること
     #[test]
     fn auto_processing_tooltip_reflects_state() {
         let pipeline = [RefineMode::UrlDecode, RefineMode::Trim];
+        let modes = RefineMode::pipeline_label(&pipeline);
         assert_eq!(
             auto_processing_tooltip(false, false, &pipeline),
-            "ClipRefiner (自動変換: オフ)"
+            format!("ClipRefiner\n変換モード: {modes} (オフ)\n連続記録モード (オフ)")
         );
         assert_eq!(
             auto_processing_tooltip(false, true, &pipeline),
-            format!(
-                "ClipRefiner (自動変換: {})",
-                RefineMode::pipeline_label(&pipeline)
-            )
+            format!("ClipRefiner\n変換モード: {modes} (オン)\n連続記録モード (オフ)")
         );
-        // 連続記録中は自動変換の設定より優先して停止を示す
+        // 連続記録モード中は自動変換の設定より優先してオフを示す
         assert_eq!(
             auto_processing_tooltip(true, true, &pipeline),
-            "ClipRefiner (連続記録中・自動加工停止)"
+            format!("ClipRefiner\n変換モード: {modes} (オフ)\n連続記録モード (オン)")
         );
+    }
+
+    /// 最長のパイプラインでもツールチップが Windows の上限 (127 文字) に収まること
+    #[test]
+    fn auto_processing_tooltip_fits_windows_limit() {
+        let longest = RefineMode::iter()
+            .max_by_key(|mode| mode.label().chars().count())
+            .expect("変換モードが 1 つ以上ある");
+        let pipeline = vec![longest; crate::consts::MAX_PIPELINE_LENGTH];
+        let tooltip = auto_processing_tooltip(false, true, &pipeline);
+        assert!(tooltip.encode_utf16().count() <= 127, "{tooltip}");
     }
 }

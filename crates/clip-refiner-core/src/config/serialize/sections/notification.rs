@@ -4,9 +4,10 @@ use toml_edit::DocumentMut;
 
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
-    DOC_NS_ENABLED, DOC_NS_NOTIFY_CONTINUOUS_RECORD, DOC_NS_NOTIFY_FAVORITES,
-    DOC_NS_NOTIFY_HISTORY_RESTORE, DOC_NS_NOTIFY_OCR, DOC_NS_NOTIFY_PAUSE, DOC_NS_NOTIFY_PROCESS,
-    DOC_NS_NOTIFY_REGISTERED_CLIP, DOC_NS_NOTIFY_RESULT, SECTION_NOTIFICATION,
+    DOC_NS_ENABLED, DOC_NS_NOTIFY_AUTO_REFINE, DOC_NS_NOTIFY_CONTINUOUS_RECORD,
+    DOC_NS_NOTIFY_FAVORITES, DOC_NS_NOTIFY_HISTORY_RESTORE, DOC_NS_NOTIFY_OCR,
+    DOC_NS_NOTIFY_PROCESS, DOC_NS_NOTIFY_REGISTERED_CLIP, DOC_NS_NOTIFY_RESULT,
+    SECTION_NOTIFICATION,
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
@@ -44,11 +45,13 @@ fn write_notification_table(notification: &mut toml_edit::Table, config: &AppCon
     )?;
     set_table_value(
         notification,
-        "notify_pause",
-        DOC_NS_NOTIFY_PAUSE,
+        "notify_auto_refine",
+        DOC_NS_NOTIFY_AUTO_REFINE,
         TABLE_INDENT,
-        &config.notification_settings.notify_pause,
+        &config.notification_settings.notify_auto_refine,
     )?;
+    // 旧キー名を除去 (notify_auto_refine へ移行済み)
+    notification.remove("notify_pause");
     set_table_value(
         notification,
         "notify_history_restore",
@@ -117,9 +120,9 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         TABLE_INDENT,
-        DOC_NS_NOTIFY_PAUSE,
-        "notify_pause",
-        &config.notification_settings.notify_pause,
+        DOC_NS_NOTIFY_AUTO_REFINE,
+        "notify_auto_refine",
+        &config.notification_settings.notify_auto_refine,
     )?;
     write_field(
         out,

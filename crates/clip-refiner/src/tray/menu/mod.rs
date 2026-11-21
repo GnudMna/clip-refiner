@@ -26,7 +26,7 @@ mod tests {
 
     use tray_icon::{
         TrayIconBuilder,
-        menu::{CheckMenuItem, MenuItem, Submenu},
+        menu::{MenuItem, Submenu},
     };
 
     use super::icon::create_icon;
@@ -71,7 +71,6 @@ mod tests {
                 .build()
                 .expect("トレイアイコンのビルドに失敗"),
             quit_item: MenuItem::new("終了", true, None),
-            pause_item: CheckMenuItem::new("一時停止", true, false, None),
             refine,
             history: TrayMenu::build_history_menu(false).expect("履歴メニューの構築に失敗"),
             continuous_record: TrayMenu::build_continuous_record_menu(false)
@@ -113,13 +112,13 @@ mod tests {
         let trim = RefineMode::Trim.label();
         assert_eq!(
             ctx.menu().refine.main_submenu.text(),
-            format!("変換モード: {trim} (自動変換オフ)")
+            format!("変換モード: {trim} (オフ)")
         );
 
-        crate::tray::event::set_auto_refine_enabled(ctx.state(), ctx.menu(), true);
+        crate::tray::event::set_auto_refine_enabled(ctx.state(), ctx.menu(), true, None);
         assert_eq!(
             ctx.menu().refine.main_submenu.text(),
-            format!("変換モード: {trim} (自動変換オン)")
+            format!("変換モード: {trim} (オン)")
         );
 
         crate::tray::event::update_refine(
@@ -131,25 +130,22 @@ mod tests {
         );
         assert_eq!(
             ctx.menu().refine.main_submenu.text(),
-            format!(
-                "変換モード: {} (自動変換オン)",
-                RefineMode::JsonFormat.label()
-            )
+            format!("変換モード: {} (オン)", RefineMode::JsonFormat.label())
         );
     }
 
-    /// 連続記録有効時は変換モード・正規表現プリセットメニューが無効になるようにすること
+    /// 連続記録有効時は正規表現プリセットメニューだけが無効になり、変換モードメニューは操作できること
     #[test]
-    fn sync_auto_processing_state_disables_refine_when_continuous_record_enabled() {
+    fn sync_auto_processing_state_disables_regex_presets_when_continuous_record_enabled() {
         let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
             c.continuous_record_enabled = true;
         });
 
-        assert!(!ctx.menu().refine.main_submenu.is_enabled());
+        assert!(ctx.menu().refine.main_submenu.is_enabled());
         assert!(!ctx.menu().regex_presets.main_submenu.is_enabled());
         assert_eq!(
             ctx.menu().continuous_record.main_submenu.text(),
-            "連続記録 (自動加工停止)"
+            "連続記録モード (オン)"
         );
     }
 
@@ -162,6 +158,9 @@ mod tests {
 
         assert!(ctx.menu().refine.main_submenu.is_enabled());
         assert!(ctx.menu().regex_presets.main_submenu.is_enabled());
-        assert_eq!(ctx.menu().continuous_record.main_submenu.text(), "連続記録");
+        assert_eq!(
+            ctx.menu().continuous_record.main_submenu.text(),
+            "連続記録モード (オフ)"
+        );
     }
 }

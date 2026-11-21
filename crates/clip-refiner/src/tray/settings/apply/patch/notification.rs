@@ -40,7 +40,7 @@ mod tests {
         let mut notification_settings = NotificationSettings::default();
         notification_settings.enabled = true;
         notification_settings.notify_process = false;
-        notification_settings.notify_pause = true;
+        notification_settings.notify_auto_refine = true;
         notification_settings.notify_history_restore = false;
         notification_settings.notify_ocr = true;
         notification_settings.notify_registered_clip = false;
@@ -58,7 +58,7 @@ mod tests {
         let ns = ctx.state().with_config(|c| c.notification_settings.clone());
         assert!(ns.enabled);
         assert!(!ns.notify_process);
-        assert!(ns.notify_pause);
+        assert!(ns.notify_auto_refine);
         assert!(!ns.notify_history_restore);
         assert!(ns.notify_ocr);
         assert!(!ns.notify_registered_clip);

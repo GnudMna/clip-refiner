@@ -1,4 +1,4 @@
-//! 配布物に同梱する文書 (利用者向けドキュメント・`THIRD_PARTY_NOTICES`) の起動
+//! 配布物に同梱する文書 (利用者向けドキュメント・`LICENSE`・`THIRD_PARTY_NOTICES`) の起動
 //!
 //! ポータブル ZIP は実行ファイルと同じフォルダ、MSI は `bin\` の親フォルダに文書を置く
 
@@ -15,6 +15,8 @@ use super::shell::{shell_open, shell_open_with};
 pub enum BundledDocument {
     /// 利用者向けドキュメント (`docs\index.html`)
     UserDocs,
+    /// 本体のライセンス (`LICENSE`)
+    License,
     /// 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
     ThirdPartyNotices,
 }
@@ -24,6 +26,7 @@ impl BundledDocument {
     fn relative_path(self) -> &'static str {
         match self {
             Self::UserDocs => r"docs\index.html",
+            Self::License => "LICENSE",
             Self::ThirdPartyNotices => "THIRD_PARTY_NOTICES",
         }
     }
@@ -51,7 +54,9 @@ pub(crate) fn open_bundled_document(document: BundledDocument) -> io::Result<()>
     match document {
         BundledDocument::UserDocs => shell_open(path_str),
         // 拡張子が無く関連付けも無いため、メモ帳で明示的に開く
-        BundledDocument::ThirdPartyNotices => shell_open_with(&notepad_path()?, path_str),
+        BundledDocument::License | BundledDocument::ThirdPartyNotices => {
+            shell_open_with(&notepad_path()?, path_str)
+        }
     }
 }
 
@@ -114,6 +119,7 @@ mod tests {
         // 何も置いていない状態
         for document in [
             BundledDocument::UserDocs,
+            BundledDocument::License,
             BundledDocument::ThirdPartyNotices,
         ] {
             let err = existing_document_path(&root, document).expect_err("missing");
@@ -122,10 +128,15 @@ mod tests {
 
         // 配布物と同じ配置にした状態
         fs::write(root.join("docs").join("index.html"), b"<html>").expect("write index");
+        fs::write(root.join("LICENSE"), b"license").expect("write license");
         fs::write(root.join("THIRD_PARTY_NOTICES"), b"notices").expect("write notices");
         assert_eq!(
             existing_document_path(&root, BundledDocument::UserDocs).expect("docs"),
             root.join("docs").join("index.html")
+        );
+        assert_eq!(
+            existing_document_path(&root, BundledDocument::License).expect("license"),
+            root.join("LICENSE")
         );
         assert_eq!(
             existing_document_path(&root, BundledDocument::ThirdPartyNotices).expect("notices"),
@@ -138,6 +149,10 @@ mod tests {
         assert_eq!(
             existing_document_path(&bin, BundledDocument::UserDocs).expect("msi docs"),
             root.join("docs").join("index.html")
+        );
+        assert_eq!(
+            existing_document_path(&bin, BundledDocument::License).expect("msi license"),
+            root.join("LICENSE")
         );
         assert_eq!(
             existing_document_path(&bin, BundledDocument::ThirdPartyNotices).expect("msi notices"),

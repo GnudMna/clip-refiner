@@ -58,13 +58,13 @@ fn apply_ipc_updates_all_notification_settings() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.apply_ipc(
-        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyPause":true,"notifyHistoryRestore":false,"notifyOcr":true,"notifyRegisteredClip":false,"notifyFavorites":true,"notifyContinuousRecord":false,"notifyResult":true}}}"#,
+        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyAutoRefine":true,"notifyHistoryRestore":false,"notifyOcr":true,"notifyRegisteredClip":false,"notifyFavorites":true,"notifyContinuousRecord":false,"notifyResult":true}}}"#,
     ));
 
     let ns = ctx.state().with_config(|c| c.notification_settings.clone());
     assert!(ns.enabled);
     assert!(!ns.notify_process);
-    assert!(ns.notify_pause);
+    assert!(ns.notify_auto_refine);
     assert!(!ns.notify_history_restore);
     assert!(ns.notify_ocr);
     assert!(!ns.notify_registered_clip);
@@ -95,7 +95,7 @@ fn partial_notification_patch_preserves_sibling_categories_when_master_off() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.apply_ipc(
-        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":false,"notifyProcess":true,"notifyPause":true,"notifyOcr":false}}}"#,
+        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":false,"notifyProcess":true,"notifyAutoRefine":true,"notifyOcr":false}}}"#,
     ));
     assert!(
         ctx.apply_ipc(r#"{"type":"apply","patch":{"notificationSettings":{"notifyOcr":true}}}"#,)
@@ -104,7 +104,7 @@ fn partial_notification_patch_preserves_sibling_categories_when_master_off() {
     let ns = ctx.state().with_config(|c| c.notification_settings.clone());
     assert!(!ns.enabled);
     assert!(ns.notify_process);
-    assert!(ns.notify_pause);
+    assert!(ns.notify_auto_refine);
     assert!(ns.notify_ocr);
 }
 

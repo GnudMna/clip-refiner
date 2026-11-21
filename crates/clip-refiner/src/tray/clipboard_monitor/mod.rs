@@ -3,7 +3,7 @@ mod generation;
 mod guard;
 mod handle;
 
-pub use generation::{bump_monitor_generation, bump_monitor_generation_unchecked};
+pub use generation::bump_monitor_generation;
 pub(crate) use guard::ObservedClipboard;
 pub(crate) use handle::{
     ClipboardObserveResult, ClipboardTrigger, EVENT_POLL_MS, POLL_TICK_MS, handle_clipboard_update,

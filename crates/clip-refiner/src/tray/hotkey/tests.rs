@@ -86,7 +86,7 @@ fn test_hotkeys() -> HotkeySettings {
     HotkeySettings {
         quick_selector: "Alt+Ctrl+Shift+A".to_string(),
         notification: "Alt+Ctrl+Shift+B".to_string(),
-        pause: "Alt+Ctrl+Shift+C".to_string(),
+        auto_refine: "Alt+Ctrl+Shift+C".to_string(),
         quit: "Alt+Ctrl+Shift+D".to_string(),
         undo: "Alt+Ctrl+Shift+E".to_string(),
         clip_selector: "Alt+Ctrl+Shift+F".to_string(),
@@ -106,7 +106,7 @@ fn ui_test_hotkeys() -> HotkeySettings {
     HotkeySettings {
         quick_selector: "Alt+Ctrl+Shift+F1".to_string(),
         notification: "Alt+Ctrl+Shift+F2".to_string(),
-        pause: "Alt+Ctrl+Shift+F3".to_string(),
+        auto_refine: "Alt+Ctrl+Shift+F3".to_string(),
         quit: "Alt+Ctrl+Shift+F4".to_string(),
         undo: "Alt+Ctrl+Shift+F5".to_string(),
         clip_selector: "Alt+Ctrl+Shift+F6".to_string(),
@@ -157,11 +157,11 @@ fn assert_release_ignored(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestConte
     assert!(matches!(ctx.control_flow, ControlFlow::Wait));
 }
 
-fn assert_pause_toggle(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
-    assert!(!ctx.state.with_config(|c| c.is_paused));
-    handler.handle_event(press_event(handler.pause_hotkey_id()), &mut ctx.ctx());
-    assert!(ctx.state.with_config(|c| c.is_paused));
-    assert!(ctx.menu.pause_item.is_checked());
+fn assert_auto_refine_toggle(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
+    let before = ctx.state.with_config(|c| c.auto_refine_enabled);
+    handler.handle_event(press_event(handler.auto_refine_hotkey_id()), &mut ctx.ctx());
+    assert_eq!(ctx.state.with_config(|c| c.auto_refine_enabled), !before);
+    assert_eq!(ctx.menu.refine.auto_refine_item.is_checked(), !before);
 }
 
 fn assert_notification_toggle(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
@@ -298,7 +298,7 @@ fn hotkey_event_handling() {
     let mut ctx = HotkeyTestContext::new();
 
     assert_release_ignored(&mut handler, &mut ctx);
-    assert_pause_toggle(&mut handler, &mut ctx);
+    assert_auto_refine_toggle(&mut handler, &mut ctx);
     assert_notification_toggle(&mut handler, &mut ctx);
     assert_continuous_record_toggle(&mut handler, &mut ctx);
     assert_continuous_record_undo(&mut handler, &mut ctx);
@@ -308,13 +308,51 @@ fn hotkey_event_handling() {
     assert_quit_exits(&mut handler, &mut ctx);
 }
 
-/// `toggle_pause` が設定とメニューを更新すること
+/// `toggle_auto_refine` が設定とメニューを更新すること
 #[test]
-fn toggle_pause_updates_state_and_menu() {
+fn toggle_auto_refine_updates_state_and_menu() {
     let mut ctx = HotkeyTestContext::new();
-    HotkeyHandler::toggle_pause(&mut ctx.ctx());
-    assert!(ctx.state.with_config(|c| c.is_paused));
-    assert!(ctx.menu.pause_item.is_checked());
+    ctx.state.with_config_mut(|c| c.auto_refine_enabled = false);
+
+    HotkeyHandler::toggle_auto_refine(&mut ctx.ctx());
+    assert!(ctx.state.with_config(|c| c.auto_refine_enabled));
+    assert!(ctx.menu.refine.auto_refine_item.is_checked());
+
+    HotkeyHandler::toggle_auto_refine(&mut ctx.ctx());
+    assert!(!ctx.state.with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu.refine.auto_refine_item.is_checked());
+}
+
+/// 連続記録が有効なときに `toggle_auto_refine` で自動変換を有効にすると、連続記録が無効になること
+#[test]
+fn toggle_auto_refine_disables_continuous_record() {
+    let mut ctx = HotkeyTestContext::new();
+    ctx.state.with_config_mut(|c| {
+        c.auto_refine_enabled = false;
+        c.continuous_record_enabled = true;
+    });
+
+    HotkeyHandler::toggle_auto_refine(&mut ctx.ctx());
+
+    assert!(ctx.state.with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.state.with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.menu.continuous_record.enabled_item.is_checked());
+}
+
+/// 自動変換が有効なときに `toggle_continuous_record` で連続記録を有効にすると、自動変換が無効になること
+#[test]
+fn toggle_continuous_record_disables_auto_refine() {
+    let mut ctx = HotkeyTestContext::new();
+    ctx.state.with_config_mut(|c| {
+        c.auto_refine_enabled = true;
+        c.continuous_record_enabled = false;
+    });
+
+    HotkeyHandler::toggle_continuous_record(&mut ctx.ctx());
+
+    assert!(ctx.state.with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.state.with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu.refine.auto_refine_item.is_checked());
 }
 
 /// `toggle_continuous_record` が設定とメニューを更新すること
@@ -340,7 +378,7 @@ fn reload_updates_registered_hotkey_ids() {
     let initial = HotkeySettings {
         quick_selector: "Alt+Ctrl+Shift+M".to_string(),
         notification: "Alt+Ctrl+Shift+N".to_string(),
-        pause: "Alt+Ctrl+Shift+O".to_string(),
+        auto_refine: "Alt+Ctrl+Shift+O".to_string(),
         quit: "Alt+Ctrl+Shift+P".to_string(),
         undo: "Alt+Ctrl+Shift+Q".to_string(),
         clip_selector: "Alt+Ctrl+Shift+R".to_string(),

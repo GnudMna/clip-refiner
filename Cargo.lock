@@ -507,7 +507,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clip-refiner"
-version = "1.4.2"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "clip-refiner-core"
-version = "1.4.2"
+version = "2.0.0"
 dependencies = [
  "arboard",
  "base64 0.23.1",

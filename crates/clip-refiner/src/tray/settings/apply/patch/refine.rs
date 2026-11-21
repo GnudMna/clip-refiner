@@ -23,7 +23,7 @@ pub(super) fn apply_refine_patch(
     config_dirty: &mut bool,
 ) {
     if let Some(enabled) = patch.auto_refine_enabled
-        && set_auto_refine_enabled(state, menu, enabled)
+        && set_auto_refine_enabled(state, menu, enabled, Some("設定ウィンドウ"))
     {
         *config_dirty = true;
     }

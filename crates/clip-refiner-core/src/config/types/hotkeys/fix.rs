@@ -106,14 +106,14 @@ fn hotkey_field_display_name(field: &str) -> String {
     match field {
         "quick_selector" => "クイックセレクター".to_string(),
         "notification" => "成功通知の切替".to_string(),
-        "pause" => "一時停止 / 再開".to_string(),
+        "auto_refine" => "自動変換の切替".to_string(),
         "quit" => "終了".to_string(),
         "undo" => "加工の取り消し".to_string(),
         "clip_selector" => "登録クリップセレクター".to_string(),
         "ocr" => "画面 OCR".to_string(),
-        "continuous_record" => "連続記録の切替".to_string(),
-        "continuous_record_undo" => "連続記録の取り消し".to_string(),
-        "continuous_record_paste" => "連続記録の貼り付け".to_string(),
+        "continuous_record" => "連続記録モードの切替".to_string(),
+        "continuous_record_undo" => "連続記録モードの記録取り消し".to_string(),
+        "continuous_record_paste" => "連続記録モードの記録貼り付け".to_string(),
         "favorite_mode_slot" => "お気に入り".to_string(),
         other => other.to_string(),
     }
@@ -137,15 +137,15 @@ mod tests {
     #[test]
     fn format_invalid_fix_message() {
         let mut hotkeys = HotkeySettings {
-            pause: "Bad+Key".to_string(),
+            auto_refine: "Bad+Key".to_string(),
             ..HotkeySettings::default()
         };
         let fixes = hotkeys.fix_invalid();
         assert_eq!(fixes.len(), 1);
         assert_eq!(fixes[0].kind, HotkeyFixKind::InvalidReplacedWithDefault);
         let message = format_hotkey_fixes_message(&fixes).expect("メッセージ");
-        assert!(message.contains("一時停止 / 再開"));
-        assert!(message.contains(consts::DEFAULT_HOTKEY_PAUSE));
+        assert!(message.contains("自動変換の切替"));
+        assert!(message.contains(consts::DEFAULT_HOTKEY_AUTO_REFINE));
     }
 
     /// 重複する固定ホットキーの修正メッセージを組み立てられるようにすること
@@ -153,20 +153,23 @@ mod tests {
     fn format_duplicate_fix_message() {
         let mut hotkeys = HotkeySettings {
             notification: "Ctrl+Shift+N".to_string(),
-            pause: "Ctrl+Shift+N".to_string(),
+            auto_refine: "Ctrl+Shift+N".to_string(),
             ..HotkeySettings::default()
         };
         let fixes = hotkeys.fix_duplicates();
-        let pause_fix = fixes
+        let auto_refine_fix = fixes
             .iter()
-            .find(|fix| fix.field == "pause")
-            .expect("pause の重複修正");
-        assert_eq!(pause_fix.kind, HotkeyFixKind::DuplicateReplacedWithDefault);
+            .find(|fix| fix.field == "auto_refine")
+            .expect("auto_refine の重複修正");
+        assert_eq!(
+            auto_refine_fix.kind,
+            HotkeyFixKind::DuplicateReplacedWithDefault
+        );
         let message =
-            format_hotkey_fixes_message(std::slice::from_ref(pause_fix)).expect("メッセージ");
-        assert!(message.contains("一時停止 / 再開"));
+            format_hotkey_fixes_message(std::slice::from_ref(auto_refine_fix)).expect("メッセージ");
+        assert!(message.contains("自動変換の切替"));
         assert!(message.contains("成功通知の切替"));
-        assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
+        assert_eq!(hotkeys.auto_refine, consts::DEFAULT_HOTKEY_AUTO_REFINE);
     }
 
     /// 重複するお気に入りスロットの無効化メッセージを組み立てられるようにすること

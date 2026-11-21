@@ -3,10 +3,11 @@ import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml, expe
 test.use({ e2eWindow: 'settings' });
 
 test.describe('設定 WebView', () => {
-  test('7 タブのサイドバーが表示される', async ({ page }) => {
+  test('8 タブのサイドバーが表示される', async ({ page }) => {
     await expect(page.locator('#sidebar')).toHaveAttribute('role', 'tablist');
     await expect(page.locator('#sidebar')).toHaveAttribute('aria-orientation', 'vertical');
-    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(7);
+    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(8);
+    await expect(page.locator('#sidebar [role="tab"][data-tab="monitor"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][data-tab="convert"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
@@ -39,20 +40,16 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#open-config-btn')).toContainText(/config\.toml/);
   });
 
-  test('一般タブの詳細設定で周期入力ができる', async ({ page }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
+  test('監視タブで周期入力ができる', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
     const interval = page.locator('#interval-ms');
-    // 詳細設定は折りたたみ表示のため、展開するまで表示されない
-    await expect(interval).toBeHidden();
-    await page.locator('.advanced-section > summary').click();
     await expect(interval).toBeVisible();
     await interval.fill('750');
     await expect(interval).toHaveValue('750');
   });
 
   test('監視周期の変更が debounce 後に config.toml へ保存される', async ({ page, configDir }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
-    await page.locator('.advanced-section > summary').click();
+    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
     const interval = page.locator('#interval-ms');
     await interval.fill('750');
     await interval.blur();
@@ -77,7 +74,7 @@ test.describe('設定 WebView', () => {
     await expect(feedback).toBeVisible({ timeout: 15_000 });
     await expect(feedback).toHaveText('設定ファイルが外部で更新されました');
 
-    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
+    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
     await expect(page.locator('#interval-ms')).toHaveValue('2500');
   });
 
@@ -108,6 +105,13 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#open-third-party-notices-btn')).toBeVisible();
   });
 
+  test('情報タブにこのアプリケーションのライセンスが表示される', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="about"]').click();
+    await expect(page.locator('#panel-about')).toContainText('Copyright (c) 2026 Yuto Hirata');
+    await expect(page.locator('#panel-about')).toContainText('All Rights Reserved.');
+    await expect(page.locator('#open-license-btn')).toBeVisible();
+  });
+
   test('お気に入りの並べ替えが config.toml に保存される', async ({ page, configDir }) => {
     await page.locator('#sidebar .nav-btn[data-tab="convert"]').click();
     await expect(page.locator('.favorite-up[data-mode="UrlDecode"]')).toBeVisible();
@@ -125,5 +129,43 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#app')).toBeVisible();
     await page.locator('#close-btn').click();
     await expect.poll(() => page.isClosed(), { timeout: 15_000 }).toBe(true);
+  });
+
+  test('連続記録を有効にすると自動変換のチェックが外れる', async ({ page, configDir }) => {
+    // v3 からの移行で自動変換は有効になっている
+    await page.locator('#sidebar .nav-btn[data-tab="convert"]').click();
+    await expect(page.locator('#auto-refine-enabled')).toBeChecked();
+
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
+    await page.locator('#record-enabled').check();
+
+    await expect
+      .poll(() => readConfigToml(configDir), { timeout: 10_000 })
+      .toMatch(/^continuous_record_enabled\s*=\s*true$/m);
+    expect(readConfigToml(configDir)).toMatch(/^auto_refine_enabled\s*=\s*false$/m);
+
+    await page.locator('#sidebar .nav-btn[data-tab="convert"]').click();
+    await expect(page.locator('#auto-refine-enabled')).not.toBeChecked({ timeout: 10_000 });
+  });
+});
+
+test.describe('設定 WebView 連続記録中', () => {
+  test.use({ harnessOptions: { continuousRecordEnabled: true } });
+
+  test('自動変換を有効にすると連続記録のチェックが外れる', async ({ page, configDir }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="convert"]').click();
+    await expect(page.locator('#monitor-record-banner')).toBeVisible();
+    await expect(page.locator('#auto-refine-enabled')).not.toBeChecked();
+
+    await page.locator('#auto-refine-enabled').check();
+
+    await expect
+      .poll(() => readConfigToml(configDir), { timeout: 10_000 })
+      .toMatch(/^auto_refine_enabled\s*=\s*true$/m);
+    expect(readConfigToml(configDir)).toMatch(/^continuous_record_enabled\s*=\s*false$/m);
+    await expect(page.locator('#monitor-record-banner')).toBeHidden({ timeout: 10_000 });
+
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
+    await expect(page.locator('#record-enabled')).not.toBeChecked();
   });
 });

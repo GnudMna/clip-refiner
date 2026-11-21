@@ -79,14 +79,18 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
             }
         }
         ClipboardCommand::DischargeContinuousRecordAt(index) => {
-            set_continuous_record_from_queue(clipboard, state, || {
-                state.discharge_continuous_record_at(index)
-            });
+            set_continuous_record_from_queue(clipboard, state, index);
         }
         ClipboardCommand::PasteContinuousRecordFront => {
-            // 書き込み成否に関わらず Ctrl+V を送る (空キュー時は現在のクリップボードを貼付)
-            let _ = crate::tray::try_paste_continuous_record_front(state, clipboard);
-            dispatch::send_app_event(&state.proxy, RecordEvent::SendPaste.into());
+            // 空キュー時は現在のクリップボードを貼付。書き込み失敗時は古い内容を貼らないよう送らない
+            let outcome = crate::tray::try_paste_continuous_record_front(state, clipboard);
+            if outcome.should_send_paste() {
+                dispatch::send_app_event(&state.proxy, RecordEvent::SendPaste.into());
+            } else {
+                ClipboardWriteContext::ContinuousRecord
+                    .notification()
+                    .notify();
+            }
         }
         ClipboardCommand::ProcessMode(mode) => {
             handle_process_mode_command(clipboard, state, refine_ctx, mode);
@@ -263,17 +267,19 @@ fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState
 // ======================================================================
 // 連続記録
 // ======================================================================
-/// 連続記録キューから取り出したテキストをクリップボードへセットする
+/// 連続記録キューの指定位置から取り出したテキストをクリップボードへセットする
+///
+/// 書き込みに失敗した場合は元の位置へ戻す
 fn set_continuous_record_from_queue<C: TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
-    take: impl FnOnce() -> Option<SecretString>,
+    index: usize,
 ) {
-    let Some(text) = take() else {
+    let Some(text) = state.discharge_continuous_record_at(index) else {
         show_category_notification(
             state,
             NotificationCategory::ContinuousRecord,
-            "連続記録",
+            "連続記録モード",
             "取り出せる記録がありません",
         );
         return;
@@ -283,12 +289,13 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
         ClipboardWriteContext::ContinuousRecord
             .notification()
             .notify_with_debug(&e);
+        state.restore_continuous_record_at(index, text.as_str());
     } else {
         state.clipboard_session().record_clipboard_set(&text);
         show_category_notification(
             state,
             NotificationCategory::ContinuousRecord,
-            "連続記録",
+            "連続記録モード",
             "クリップボードに取り出しました",
         );
     }

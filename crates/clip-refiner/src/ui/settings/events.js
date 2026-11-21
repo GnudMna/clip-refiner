@@ -15,7 +15,6 @@ import {
     applyPipelineChange,
     syncContinuousRecordUi,
     syncMonitorIntervalSection,
-    syncMonitorPauseBanner,
 } from './monitor_ui.js';
 import {
     readRegexForApply,
@@ -147,14 +146,8 @@ export function bindContentDelegation() {
     ctx.contentDelegationBound = true;
 }
 
-/** 監視・自動変換のフォームイベントをバインドする (変換タブと一般タブで共有) */
+/** 監視・自動変換のフォームイベントをバインドする (変換タブと監視タブで共有) */
 export function bindMonitorEvents() {
-    document.getElementById('monitor-paused')?.addEventListener('change', (event) => {
-        ctx.state.isPaused = event.target.checked;
-        scheduleApply({ isPaused: event.target.checked });
-        syncMonitorPauseBanner();
-    });
-
     document.getElementById('auto-refine-enabled')?.addEventListener('change', (event) => {
         ctx.state.autoRefineEnabled = event.target.checked;
         scheduleApply({ autoRefineEnabled: event.target.checked });
@@ -268,7 +261,7 @@ export function bindHistoryEvents() {
     });
     document.getElementById('clear-record-btn')?.addEventListener('click', () => {
         showConfirmDialog({
-            message: '連続記録をすべて削除しますか？\nこの操作は元に戻せません。',
+            message: '連続記録モードの記録をすべて削除しますか？\nこの操作は元に戻せません。',
             confirmLabel: '削除する',
             onConfirm: () => postIpcEnvelope({ type: 'clear-record' }),
         });
@@ -604,6 +597,9 @@ export function bindAboutEvents() {
     document.getElementById('open-user-docs-btn')?.addEventListener('click', () => {
         openDocument('user-docs');
     });
+    document.getElementById('open-license-btn')?.addEventListener('click', () => {
+        openDocument('license');
+    });
     document.getElementById('open-third-party-notices-btn')?.addEventListener('click', () => {
         openDocument('third-party-notices');
     });
@@ -612,6 +608,9 @@ export function bindAboutEvents() {
 /** アクティブタブに応じたパネルイベントをバインドする */
 export function bindActivePanelEvents() {
     switch (ctx.activeTab) {
+        case 'monitor':
+            bindMonitorEvents();
+            break;
         case 'convert':
             bindMonitorEvents();
             bindFavoriteEvents();
@@ -631,7 +630,6 @@ export function bindActivePanelEvents() {
             break;
         case 'general':
             bindGeneralEvents();
-            bindMonitorEvents();
             break;
         case 'about':
             bindAboutEvents();

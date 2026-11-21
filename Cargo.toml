@@ -3,7 +3,7 @@ members = ["crates/clip-refiner", "crates/clip-refiner-core"]
 resolver = "2"
 
 [workspace.package]
-version = "1.4.2"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]

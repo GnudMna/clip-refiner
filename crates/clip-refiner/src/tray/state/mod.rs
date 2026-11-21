@@ -51,17 +51,6 @@ mod tests {
         assert_eq!(state.monitor_generation.load(Ordering::SeqCst), 0);
     }
 
-    /// 一時停止フラグの更新できるようにすること
-    #[test]
-    fn test_paused_accessor() {
-        let state = test_app_state();
-        assert!(!state.with_config(|c| c.is_paused));
-        state.with_config_mut(|c| c.is_paused = true);
-        assert!(state.with_config(|c| c.is_paused));
-        state.with_config_mut(|c| c.is_paused = false);
-        assert!(!state.with_config(|c| c.is_paused));
-    }
-
     /// 履歴機能の更新できるようにすること
     #[test]
     fn test_history_enabled_accessor() {
@@ -88,9 +77,9 @@ mod tests {
         state.with_config_mut(|c| c.notification_settings.notify_result = true);
         assert!(state.with_config(|c| c.notification_settings.notify_result));
 
-        assert!(state.with_config(|c| c.notification_settings.notify_pause));
-        state.with_config_mut(|c| c.notification_settings.notify_pause = false);
-        assert!(!state.with_config(|c| c.notification_settings.notify_pause));
+        assert!(state.with_config(|c| c.notification_settings.notify_auto_refine));
+        state.with_config_mut(|c| c.notification_settings.notify_auto_refine = false);
+        assert!(!state.with_config(|c| c.notification_settings.notify_auto_refine));
     }
 
     /// `monitor_snapshot` が設定値を正しく反映すること
@@ -100,14 +89,14 @@ mod tests {
         state.with_config_mut(|c| {
             c.mode = RefineMode::UrlEncode;
             c.interval_ms = 1500;
-            c.is_paused = true;
+            c.auto_refine_enabled = true;
             c.history_enabled = true;
         });
 
         let snap = state.monitor_snapshot();
         assert_eq!(snap.pipeline, vec![RefineMode::UrlEncode]);
         assert_eq!(snap.interval_ms, 1500);
-        assert!(snap.is_paused);
+        assert!(snap.auto_refine_enabled);
         assert!(snap.history_enabled);
     }
 
@@ -122,12 +111,11 @@ mod tests {
             c.pipeline = vec![RefineMode::Trim, RefineMode::UrlEncode];
             c.favorite_modes = vec![RefineMode::Trim];
             c.hotkeys = HotkeySettings {
-                pause: "Ctrl+Alt+P".to_string(),
+                auto_refine: "Ctrl+Alt+P".to_string(),
                 ..HotkeySettings::default()
             };
             c.history_enabled = true;
             c.continuous_record_enabled = true;
-            c.is_paused = true;
         });
 
         let snap: MenuSnapshot = state.menu_snapshot();
@@ -135,15 +123,14 @@ mod tests {
         assert!(snap.active_modes.contains(&RefineMode::Trim));
         assert!(snap.active_modes.contains(&RefineMode::UrlEncode));
         assert_eq!(snap.favorite_modes, vec![RefineMode::Trim]);
-        assert_eq!(snap.hotkeys.pause, "Ctrl+Alt+P");
+        assert_eq!(snap.hotkeys.auto_refine, "Ctrl+Alt+P");
         assert!(snap.history_enabled);
         assert!(snap.continuous_record_enabled);
-        assert!(snap.is_paused);
         assert_eq!(snap.regex_active_preset_id, "default");
         assert!(!snap.regex_presets.is_empty());
     }
 
-    /// `auto_processing_enabled` が自動変換・連続記録・一時停止の状態を反映すること
+    /// `auto_processing_enabled` が自動変換・連続記録の状態を反映すること
     #[test]
     fn test_auto_processing_enabled() {
         let state = test_app_state();
@@ -156,12 +143,6 @@ mod tests {
         state.with_config_mut(|c| c.auto_refine_enabled = true);
 
         state.with_config_mut(|c| c.continuous_record_enabled = true);
-        assert!(!state.monitor_snapshot().auto_processing_enabled());
-
-        state.with_config_mut(|c| {
-            c.continuous_record_enabled = false;
-            c.is_paused = true;
-        });
         assert!(!state.monitor_snapshot().auto_processing_enabled());
     }
 

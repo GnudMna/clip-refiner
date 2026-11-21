@@ -1,41 +1,67 @@
 use std::borrow::Cow;
 
 // ======================================================================
-// 改行コード検出
-// ======================================================================
-/// テキスト全体から使用されている改行コードを判定する
-///
-/// テキスト内に `\r\n` が含まれている場合は CRLF ("\r\n") を返し、そうでない場合は LF ("\n") を返す
-///
-/// # Arguments
-/// * `text` - 判定対象のテキスト
-///
-/// # Returns
-/// * `&str` - 検出された改行コード("\r\n" または "\n")
-pub fn detect_line_ending(text: &str) -> &str {
-    if text.contains("\r\n") { "\r\n" } else { "\n" }
-}
-
-// ======================================================================
 // 行処理ユーティリティ
 // ======================================================================
-/// 行を改行コードで結合する
+/// テキストを行と、その行末の改行コードの組に分ける
+///
+/// 改行コードは行ごとに判別するため、CRLF と LF が混在していても行は混ざらない
+/// 最終行が改行で終わっていない場合、その改行コードは空文字列になる
+///
+/// # Arguments
+/// * `text` - 分割する対象のテキスト
+///
+/// # Returns
+/// * `Vec<(&str, &str)>` - (改行を除いた行, 行末の改行コード) の組。空文字列は空の `Vec`
+pub fn split_line_endings(text: &str) -> Vec<(&str, &str)> {
+    text.split_inclusive('\n')
+        .map(|segment| {
+            if let Some(line) = segment.strip_suffix("\r\n") {
+                (line, "\r\n")
+            } else if let Some(line) = segment.strip_suffix('\n') {
+                (line, "\n")
+            } else {
+                (segment, "")
+            }
+        })
+        .collect()
+}
+
+/// 行を、それぞれの改行コードで結合する
 ///
 /// 元のテキストが改行で終わっていた場合は、末尾に改行を 1 つ付けて元の終端を保つ
 /// 最終行が空行の場合も末尾に改行を 1 つ足す。結合結果の末尾の改行は `str::lines` で
 /// 行の終端とみなされるため、足さないと再度行に分けたときに空行が 1 つ消える
+/// 足す改行や、改行コードが空の行の区切りには、組の中で最後に現れる改行コードを使う
 ///
 /// # Arguments
-/// * `lines` - 結合する行 (改行を含まない)
-/// * `line_ending` - 使用する改行コード ("\n" または "\r\n")
+/// * `lines` - 結合する (改行を含まない行, その行末の改行コード) の組
 /// * `trailing_newline` - 元のテキストが改行で終わっていた場合は `true`
 ///
 /// # Returns
 /// * `String` - 結合後のテキスト。行が無い場合は空文字列
-pub fn join_lines(lines: &[&str], line_ending: &str, trailing_newline: bool) -> String {
-    let mut result = lines.join(line_ending);
-    if !lines.is_empty() && (trailing_newline || lines.last().is_some_and(|line| line.is_empty())) {
-        result.push_str(line_ending);
+pub fn join_lines(lines: &[(&str, &str)], trailing_newline: bool) -> String {
+    let Some(((last_line, last_ending), init)) = lines.split_last() else {
+        return String::new();
+    };
+    let fallback = lines
+        .iter()
+        .rev()
+        .map(|(_, ending)| *ending)
+        .find(|ending| !ending.is_empty())
+        .unwrap_or("\n");
+    let push_ending = |result: &mut String, ending: &str| {
+        result.push_str(if ending.is_empty() { fallback } else { ending });
+    };
+
+    let mut result = String::new();
+    for (line, ending) in init {
+        result.push_str(line);
+        push_ending(&mut result, ending);
+    }
+    result.push_str(last_line);
+    if trailing_newline || last_line.is_empty() {
+        push_ending(&mut result, last_ending);
     }
     result
 }
@@ -107,30 +133,47 @@ where
 mod tests {
     use super::*;
 
-    /// CRLF / LF の改行コード判定できるようにすること
+    /// 行ごとに改行コードを判別して分けること
     #[test]
-    fn test_detect_line_ending() {
-        // LF
-        assert_eq!(detect_line_ending("line1\nline2"), "\n");
-        // CRLF
-        assert_eq!(detect_line_ending("line1\r\nline2"), "\r\n");
-        // 改行なし
-        assert_eq!(detect_line_ending("no newline"), "\n");
+    fn test_split_line_endings() {
+        assert_eq!(
+            split_line_endings("a\r\nb\nc\r\n"),
+            [("a", "\r\n"), ("b", "\n"), ("c", "\r\n")]
+        );
+        // 最終行が改行で終わっていなければ、改行コードは空
+        assert_eq!(split_line_endings("a\nb"), [("a", "\n"), ("b", "")]);
+        assert_eq!(split_line_endings("\n"), [("", "\n")]);
+        assert!(split_line_endings("").is_empty());
     }
 
     /// 元が改行終わり、または最終行が空行のときだけ末尾に改行を足して結合すること
     #[test]
     fn test_join_lines() {
-        assert_eq!(join_lines(&["a", "b"], "\n", false), "a\nb");
-        // 元が改行で終わっていれば、改行を 1 つだけ付ける
-        assert_eq!(join_lines(&["a", "b"], "\n", true), "a\nb\n");
+        assert_eq!(join_lines(&[("a", "\n"), ("b", "")], false), "a\nb");
+        // 元が改行で終わっていれば、その行の改行コードを付ける
+        assert_eq!(join_lines(&[("a", "\n"), ("b", "\n")], true), "a\nb\n");
         // 末尾の空行を `lines` で数え直しても残るようにする
-        assert_eq!(join_lines(&["a", ""], "\r\n", false), "a\r\n\r\n");
-        assert_eq!(join_lines(&["a", ""], "\r\n", true), "a\r\n\r\n");
-        assert_eq!(join_lines(&["a", ""], "\r\n", false).lines().count(), 2);
-        assert_eq!(join_lines(&[""], "\n", false), "\n");
+        assert_eq!(join_lines(&[("a", "\r\n"), ("", "")], false), "a\r\n\r\n");
+        assert_eq!(
+            join_lines(&[("a", "\r\n"), ("", "\r\n")], true),
+            "a\r\n\r\n"
+        );
+        assert_eq!(
+            join_lines(&[("a", "\r\n"), ("", "")], false)
+                .lines()
+                .count(),
+            2
+        );
+        // 行ごとの改行コードをそのまま使う
+        assert_eq!(
+            join_lines(&[("a", "\r\n"), ("b", "\n"), ("c", "\r\n")], true),
+            "a\r\nb\nc\r\n"
+        );
+        // 元が改行終わりでなければ、最後の行の改行コードは付けない
+        assert_eq!(join_lines(&[("a", "\r\n"), ("b", "\n")], false), "a\r\nb");
+        assert_eq!(join_lines(&[("", "")], false), "\n");
         // 行が無ければ、改行も付けない
-        assert_eq!(join_lines(&[], "\n", true), "");
+        assert_eq!(join_lines(&[], true), "");
     }
 
     /// `process_lines` の行単位変換と Borrowed 返却できるようにすること

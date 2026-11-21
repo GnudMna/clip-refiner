@@ -146,7 +146,7 @@ impl ClipboardWriteContext {
             }
             Self::ContinuousRecord => UserNotification::static_message(
                 titles::CLIPBOARD,
-                "連続記録からの取り出しに失敗しました",
+                "連続記録モードの記録の取り出しに失敗しました",
             ),
             Self::RegisteredClip => UserNotification::static_message(
                 titles::CLIPBOARD,
@@ -374,7 +374,7 @@ const NOTIFICATION_BODY_MAX_CHARS: usize = 240;
 /// 通知タイトル定数
 pub mod titles {
     pub const CLIPBOARD: &str = "クリップボードエラー";
-    pub const CONTINUOUS_RECORD: &str = "連続記録";
+    pub const CONTINUOUS_RECORD: &str = "連続記録モード";
     pub const OCR: &str = "OCR エラー";
     pub const ONESHOT: &str = "ワンショット連携";
     pub const PROCESS: &str = "加工エラー";

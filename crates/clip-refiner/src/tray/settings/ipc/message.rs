@@ -91,6 +91,8 @@ enum SettingsIpcMessage {
 enum IpcDocumentTarget {
     /// 利用者向けドキュメント
     UserDocs,
+    /// 本体のライセンス (`LICENSE`)
+    License,
     /// 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
     ThirdPartyNotices,
 }
@@ -99,6 +101,7 @@ impl From<IpcDocumentTarget> for BundledDocument {
     fn from(target: IpcDocumentTarget) -> Self {
         match target {
             IpcDocumentTarget::UserDocs => Self::UserDocs,
+            IpcDocumentTarget::License => Self::License,
             IpcDocumentTarget::ThirdPartyNotices => Self::ThirdPartyNotices,
         }
     }

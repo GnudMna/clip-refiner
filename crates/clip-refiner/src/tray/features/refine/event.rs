@@ -5,7 +5,10 @@ use crate::refiner::RefineMode;
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
-use crate::tray::notify::{NotificationCategory, show_category_notification};
+use crate::tray::notify::{
+    NotificationCategory, show_auto_refine_notification, show_category_notification,
+    show_exclusive_mode_notification,
+};
 use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::state::LockExt;
 use crate::tray::state::{AppState, SettingsEvent};
@@ -86,7 +89,7 @@ pub(crate) fn select_auto_refine_mode(
     mode: RefineMode,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
-    if set_auto_refine_enabled(state, menu, true) {
+    if set_auto_refine_enabled(state, menu, true, None) {
         let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
     }
     update_refine(state, menu, clipboard_worker, mode, quick_selector);
@@ -94,31 +97,51 @@ pub(crate) fn select_auto_refine_mode(
 
 /// コピー時の自動変換の有効・無効を切り替え、メニュー表示と監視状態へ反映する
 ///
+/// 有効にするときに連続記録が有効なら、後から有効にした自動変換を優先して連続記録を無効にし、
+/// その旨を通知する (切替通知を兼ねる)。`source` を渡した場合は、それ以外の切替も通知する。
 /// 設定ファイルへの保存は呼び出し側で行う
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
 /// * `menu` - トレイメニュー構造体
 /// * `enabled` - 自動変換を有効にする場合は `true`
+/// * `source` - 切替通知のタイトル (操作元)。`None` なら排他時の通知だけを表示する
 ///
 /// # Returns
-/// * `bool` - 設定値が変わった場合は `true`
+/// * `bool` - 自動変換または連続記録の設定値が変わった場合は `true`
 pub(crate) fn set_auto_refine_enabled(
     state: &Arc<AppState>,
     menu: &TrayMenu,
     enabled: bool,
+    source: Option<&str>,
 ) -> bool {
-    let changed = state.with_config_mut(|c| {
+    let (changed, continuous_record_disabled) = state.with_config_mut(|c| {
         let changed = c.auto_refine_enabled != enabled;
         c.auto_refine_enabled = enabled;
-        changed
+        let continuous_record_disabled =
+            enabled && std::mem::replace(&mut c.continuous_record_enabled, false);
+        (changed, continuous_record_disabled)
     });
+    if continuous_record_disabled {
+        menu.continuous_record.enabled_item.set_checked(false);
+        if let Err(err) = menu.refresh_continuous_record(state) {
+            dispatch::log_menu_operation_error("連続記録メニューの更新", err);
+        }
+        show_exclusive_mode_notification(
+            state,
+            source.unwrap_or("自動変換"),
+            "自動変換を有効にしたため、連続記録モードを無効にしました",
+        );
+        dispatch::send_app_event(&state.proxy, SettingsEvent::Refresh.into());
+    } else if changed && let Some(source) = source {
+        show_auto_refine_notification(state, enabled, source);
+    }
     menu.sync_auto_processing_state(state);
-    if changed {
+    if changed || continuous_record_disabled {
         // 切り替え時点のクリップボードは加工せず、次のコピーから対象にする
         bump_monitor_generation(state);
     }
-    changed
+    changed || continuous_record_disabled
 }
 
 /// 自動変換の設定を変えずに、現在のクリップボードへ変換モードを一回だけ適用する
@@ -152,7 +175,7 @@ pub(crate) fn handle_refine_mode_event(
 ) -> bool {
     if id == menu.refine.auto_refine_item.id() {
         let enabled = menu.refine.auto_refine_item.is_checked();
-        if set_auto_refine_enabled(state, menu, enabled) {
+        if set_auto_refine_enabled(state, menu, enabled, Some("トレイメニュー")) {
             state.save_config();
             let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
         }

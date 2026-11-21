@@ -21,8 +21,7 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 // ======================================================================
 /// 文字列の各行について、前後の空白文字を削除する
 ///
-/// 行ごとにトリムを行い、改行で結合し直す
-/// 各行末の `\r` も適切に処理される
+/// 行ごとにトリムを行い、各行の改行コードは元のまま保持する (CRLF と LF が混在していても変えない)
 /// 削除する空白文字は `trim_text` と同じ (全角スペースを含む)
 ///
 /// # Arguments
@@ -31,18 +30,7 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返す。
 pub fn trim_lines(input: &str) -> Cow<'_, str> {
-    let line_ending = super::utils::detect_line_ending(input);
-    let result = input
-        .split('\n')
-        .map(str::trim)
-        .collect::<Vec<_>>()
-        .join(line_ending);
-
-    if result == input {
-        Cow::Borrowed(input)
-    } else {
-        Cow::Owned(result)
-    }
+    super::utils::process_lines(input, |line| Some(Cow::Borrowed(line.trim())))
 }
 
 // ======================================================================
@@ -73,6 +61,15 @@ mod tests {
         let input = "  hello  \r\n  world \r\n  rust ";
         let expected = "hello\r\nworld\r\nrust";
         assert_eq!(trim_lines(input), expected);
+    }
+
+    /// CRLF と LF が混在していても、各行の改行コードを保持して各行をトリムすること
+    #[test]
+    fn test_trim_lines_mixed_line_endings() {
+        assert_eq!(trim_lines(" a \r\n b \n c \r\n"), "a\r\nb\nc\r\n");
+        assert_eq!(trim_lines(" a \n b \r\n c "), "a\nb\r\nc");
+        // 変更がなければ元の文字列を借用する
+        assert!(matches!(trim_lines("a\r\nb\n"), Cow::Borrowed(_)));
     }
 
     /// 全角スペースも `trim_text` と同様に削除すること

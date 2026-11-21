@@ -26,6 +26,8 @@ export type E2eWindow = 'settings' | 'quick' | 'clip';
 export type HarnessOptions = {
   /** `config.toml` の `favorite_modes` (PascalCase)。未指定時は Trim → UrlDecode */
   favoriteModes?: string[];
+  /** `config.toml` の `continuous_record_enabled`。未指定時は false */
+  continuousRecordEnabled?: boolean;
 };
 
 type HarnessFixtures = {
@@ -82,11 +84,10 @@ function prepareConfigDir(options: HarnessOptions = {}): string {
 version = 3
 interval_ms = 1000
 mode = "UrlDecode"
-is_paused = false
 monitor_mode = "Event"
 history_enabled = true
 history_limit = 10
-continuous_record_enabled = false
+continuous_record_enabled = ${options.continuousRecordEnabled ?? false}
 continuous_record_limit = 10
 favorite_modes = [${favoriteModesToml}]
 

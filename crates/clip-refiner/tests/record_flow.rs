@@ -126,6 +126,28 @@ fn continuous_record_menu_discharge_removes_entry() {
     assert_eq!(harness.continuous_record_entries(), vec!["first"]);
 }
 
+/// メニュー取り出しでクリップボード書き込みに失敗した場合は元の位置へ戻すこと
+#[test]
+fn continuous_record_menu_discharge_restores_entry_on_write_failure() {
+    let mut harness = ClipboardHarness::with_text("first")
+        .with_mode(RefineMode::Trim)
+        .with_continuous_record(true);
+
+    assert!(!harness.run_monitor_update(false));
+    harness.replace_clipboard("second");
+    assert!(!harness.run_monitor_update(false));
+    harness.replace_clipboard("third");
+    assert!(!harness.run_monitor_update(false));
+
+    let mut harness = harness.with_write_failure();
+    harness.discharge_continuous_record_at(1);
+    assert_eq!(harness.clipboard_text(), "third");
+    assert_eq!(
+        harness.continuous_record_entries(),
+        vec!["first", "second", "third"]
+    );
+}
+
 /// 連続記録の直近 1 件取り消しが末尾から除去すること
 #[test]
 fn continuous_record_undo_removes_last_entry() {

@@ -11,10 +11,36 @@ use crate::refiner::TextClipboard;
 // ======================================================================
 // キュー先頭のクリップボード書き込み
 // ======================================================================
+/// `try_paste_continuous_record_front` の結果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PasteFrontOutcome {
+    /// キュー先頭をクリップボードへ書き込めた
+    Written,
+    /// キューが空、または連続記録が無効のため何もしなかった
+    Skipped,
+    /// クリップボードへの書き込みに失敗し、先頭をキューへ戻した
+    WriteFailed,
+}
+
+impl PasteFrontOutcome {
+    /// 貼り付け (`Ctrl+V`) を実行してよいか
+    ///
+    /// 書き込み失敗時は古いクリップボード内容が貼られるため実行しない
+    ///
+    /// # Arguments
+    /// * `self` - 自身
+    ///
+    /// # Returns
+    /// * `bool` - `Ctrl+V` を送ってよい場合は `true`
+    pub(crate) fn should_send_paste(self) -> bool {
+        !matches!(self, Self::WriteFailed)
+    }
+}
+
 /// 連続記録キュー先頭を取り出し、クリップボードへセットする
 ///
 /// キューが空、または連続記録が無効な場合は何もしない
-/// 書き込み失敗時はキューへ戻す
+/// 書き込み失敗時は取り出した先頭を元の位置 (先頭) へ戻す
 ///
 /// 本番のホットキー経路はワーカーの `PasteContinuousRecordFront` から呼ぶ
 ///
@@ -23,29 +49,29 @@ use crate::refiner::TextClipboard;
 /// * `clipboard` - クリップボード書き込み先 (ワーカー所有インスタンス)
 ///
 /// # Returns
-/// * `bool` - 先頭を取り出してクリップボードへ書き込めた場合は `true`
+/// * `PasteFrontOutcome` - 書き込み成功・何もしなかった・書き込み失敗のいずれか
 pub(crate) fn try_paste_continuous_record_front<C: TextClipboard>(
     state: &AppState,
     clipboard: &mut C,
-) -> bool {
+) -> PasteFrontOutcome {
     if !state.with_config(|c| c.continuous_record_enabled)
         || state.clipboard_session().continuous_record_len() == 0
     {
-        return false;
+        return PasteFrontOutcome::Skipped;
     }
 
     let Some(text) = state.discharge_continuous_record_front() else {
-        return false;
+        return PasteFrontOutcome::Skipped;
     };
 
     if clipboard.set_text(text.to_string()).is_err() {
-        state.enqueue_continuous_record(text.as_str());
+        state.restore_continuous_record_at(0, text.as_str());
         crate::log_error!("連続記録キュー先頭のクリップボード書き込みに失敗");
-        return false;
+        return PasteFrontOutcome::WriteFailed;
     }
 
     state.clipboard_session().record_clipboard_set(&text);
-    true
+    PasteFrontOutcome::Written
 }
 
 // ======================================================================
@@ -119,7 +145,10 @@ mod tests {
         let state = test_app_state();
         let mut clipboard = InMemoryTextClipboard::with_text("keep");
 
-        assert!(!try_paste_continuous_record_front(&state, &mut clipboard));
+        assert_eq!(
+            try_paste_continuous_record_front(&state, &mut clipboard),
+            PasteFrontOutcome::Skipped
+        );
         assert_eq!(clipboard.text(), "keep");
     }
 
@@ -130,36 +159,38 @@ mod tests {
         state.with_config_mut(|c| c.continuous_record_enabled = true);
         let mut clipboard = InMemoryTextClipboard::with_text("keep");
 
-        assert!(!try_paste_continuous_record_front(&state, &mut clipboard));
+        let outcome = try_paste_continuous_record_front(&state, &mut clipboard);
+        assert_eq!(outcome, PasteFrontOutcome::Skipped);
+        // 空キュー時は現在のクリップボード内容をそのまま貼り付ける
+        assert!(outcome.should_send_paste());
         assert_eq!(clipboard.text(), "keep");
     }
 
-    /// クリップボード書き込み失敗時はキューへ戻すようにすること
+    /// クリップボード書き込み失敗時は先頭の位置のまま戻し、Ctrl+V を送らないようにすること
     #[test]
-    fn paste_requeues_front_on_clipboard_write_failure() {
+    fn paste_restores_front_on_clipboard_write_failure() {
         let state = test_app_state();
         state.with_config_mut(|c| c.continuous_record_enabled = true);
         state.enqueue_continuous_record("first");
         state.enqueue_continuous_record("second");
+        state.enqueue_continuous_record("third");
         let mut clipboard = InMemoryTextClipboard::with_text("keep").fail_on_write();
 
-        assert!(!try_paste_continuous_record_front(&state, &mut clipboard));
+        let outcome = try_paste_continuous_record_front(&state, &mut clipboard);
+        assert_eq!(outcome, PasteFrontOutcome::WriteFailed);
+        assert!(!outcome.should_send_paste());
         assert_eq!(clipboard.text(), "keep");
-        assert_eq!(state.clipboard_session().continuous_record_len(), 2);
-        assert_eq!(
-            state
-                .clipboard_session()
-                .get_continuous_record_entry(0)
-                .map(|s| s.to_string()),
-            Some("second".to_string())
-        );
-        assert_eq!(
-            state
-                .clipboard_session()
-                .get_continuous_record_entry(1)
-                .map(|s| s.to_string()),
-            Some("first".to_string())
-        );
+        // 並びは A,B,C のまま保たれる
+        assert_eq!(state.clipboard_session().continuous_record_len(), 3);
+        for (index, expected) in ["first", "second", "third"].into_iter().enumerate() {
+            assert_eq!(
+                state
+                    .clipboard_session()
+                    .get_continuous_record_entry(index)
+                    .map(|s| s.to_string()),
+                Some(expected.to_string())
+            );
+        }
     }
 
     /// 貼り付け排出成功時は先頭エントリを取り出すようにすること
@@ -171,7 +202,9 @@ mod tests {
         state.enqueue_continuous_record("second");
         let mut clipboard = InMemoryTextClipboard::with_text("keep");
 
-        assert!(try_paste_continuous_record_front(&state, &mut clipboard));
+        let outcome = try_paste_continuous_record_front(&state, &mut clipboard);
+        assert_eq!(outcome, PasteFrontOutcome::Written);
+        assert!(outcome.should_send_paste());
         assert_eq!(clipboard.text(), "first");
         assert_eq!(state.clipboard_session().continuous_record_len(), 1);
         assert_eq!(

@@ -33,9 +33,9 @@ impl HotkeySettings {
             &mut fixes,
         );
         fix_hotkey_field(
-            &mut self.pause,
-            consts::DEFAULT_HOTKEY_PAUSE,
-            "pause",
+            &mut self.auto_refine,
+            consts::DEFAULT_HOTKEY_AUTO_REFINE,
+            "auto_refine",
             &mut fixes,
         );
         fix_hotkey_field(
@@ -109,9 +109,9 @@ impl HotkeySettings {
             &mut fixes,
         );
         dedupe_fixed_field(
-            &mut self.pause,
-            "pause",
-            consts::DEFAULT_HOTKEY_PAUSE,
+            &mut self.auto_refine,
+            "auto_refine",
+            consts::DEFAULT_HOTKEY_AUTO_REFINE,
             &mut used,
             &mut fixes,
         );

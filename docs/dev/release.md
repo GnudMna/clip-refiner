@@ -37,7 +37,7 @@ git switch -c release/v1.1.0
 **主なオプション:**
 
 | オプション | 説明 |
-| :--------- | :--- |
+| :--- | :--- |
 | `-Bump Patch\|Minor\|Major` | 現在のバージョンから SemVer インクリメント |
 | `-Version x.y.z` | 新バージョンを明示指定 (`-Bump` と排他) |
 | `-Date yyyy-MM-dd` | リリース日 (既定: 本日) |

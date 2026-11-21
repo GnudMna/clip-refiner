@@ -2,15 +2,13 @@ use std::sync::Arc;
 
 use tao::event_loop::ControlFlow;
 
-use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
-use crate::tray::notify;
 use crate::tray::state::{AppState, SelectorEvent, SettingsEvent, WorkerEvent};
 
 // ======================================================================
 // メニューイベント処理
 // ======================================================================
-/// アプリケーションの基本操作(終了、一時停止、設定ウィンドウの表示)を処理する
+/// アプリケーションの基本操作(終了、設定ウィンドウの表示など)を処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -28,14 +26,6 @@ pub(crate) fn handle_app_control(
 ) -> bool {
     if id == menu.quit_item.id() {
         *control_flow = ControlFlow::Exit;
-        true
-    } else if id == menu.pause_item.id() {
-        let paused = menu.pause_item.is_checked();
-        state.with_config_mut(|c| c.is_paused = paused);
-        notify::show_pause_notification(state, paused, "設定変更");
-        state.save_config();
-        bump_monitor_generation(state);
-        let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
         true
     } else if id == menu.quick_selector_item.id() {
         let _ = state.proxy.send_event(SelectorEvent::ShowQuick.into());

@@ -20,6 +20,7 @@ pub fn add_commas(text: &str) -> Cow<'_, str> {
 ///
 /// 入力された文字列が数値として妥当な場合、整数部分に3桁ごとのカンマを挿入する
 /// 負の数や小数を含む数値にも対応している
+/// 整数部が先頭ゼロで始まる値 (`00123456` など) は数値として扱わず元のまま返す
 ///
 /// # Arguments
 /// * `text` - カンマを付与する対象の文字列 (改行を含まない)
@@ -46,14 +47,20 @@ fn add_commas_single(text: &str) -> Cow<'_, str> {
     let integer_part = parts[0];
     let decimal_part = if parts.len() > 1 { parts[1] } else { "" };
 
-    // 整数部にカンマを付与
-    let mut result = String::new();
     let is_negative = integer_part.starts_with('-');
     let abs_integer = if is_negative {
         &integer_part[1..]
     } else {
         integer_part
     };
+
+    // 先頭ゼロのある整数部は ID・電話番号・郵便番号などの可能性があるため変換しない
+    if abs_integer.len() > 1 && abs_integer.starts_with('0') {
+        return Cow::Borrowed(text);
+    }
+
+    // 整数部にカンマを付与
+    let mut result = String::new();
 
     for (count, c) in abs_integer.chars().rev().enumerate() {
         if count > 0 && count % 3 == 0 {
@@ -254,6 +261,18 @@ mod tests {
     fn test_add_commas_zero() {
         assert_eq!(add_commas("0"), "0");
         assert_eq!(add_commas("0.0"), "0.0");
+    }
+
+    /// 先頭ゼロのある整数部は ID や電話番号を壊さないよう変換しないこと
+    #[test]
+    fn test_add_commas_leading_zero_is_untouched() {
+        for input in ["00123456", "0123", "-0123456", "0123456.78", "00,123,456"] {
+            assert!(matches!(add_commas(input), Cow::Borrowed(_)), "{input}");
+        }
+        // 複数行では先頭ゼロの行だけが残る
+        assert_eq!(add_commas("00123456\n1234"), "00123456\n1,234");
+        // 整数部が 0 のみの値は従来どおり扱う
+        assert_eq!(add_commas("0.5"), "0.5");
     }
 
     /// 負の数に対するカンマ追加できるようにすること

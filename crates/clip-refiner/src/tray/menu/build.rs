@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use tray_icon::{
     TrayIconBuilder,
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
 };
 
 use super::icon::create_icon;
@@ -46,7 +46,6 @@ impl TrayMenu {
             .context("正規表現プリセットメニューの追加に失敗しました")?;
 
         // その他のメニュー
-        let pause_item = CheckMenuItem::new("一時停止", true, snap.is_paused, None);
         let quick_selector_item = MenuItem::new("クイック変換…", true, None);
         let open_settings_window_item = MenuItem::new("設定を開く", true, None);
         let retry_clipboard_worker_item = MenuItem::new("クリップボード監視を再開", true, None);
@@ -54,24 +53,24 @@ impl TrayMenu {
         let quit_item = MenuItem::new("終了", true, None);
 
         // メインメニューの組み立て
-        // 変換: 変換モード (自動変換・正規表現プリセットを含む) / クイック変換
-        // クリップボード: 登録クリップ / 履歴 / 連続記録
+        // 変換: 変換モード (自動変換・正規表現プリセットを含む) / 連続記録モード / クイック変換
+        // クリップボード: 登録クリップ / 履歴
         // 設定: 設定ウィンドウ
-        // 操作: 監視再開 / 一時停止 / 終了
+        // 操作: 監視再開 / 終了
+        // 連続記録モードは自動変換と排他のため、変換モードの直下に並べる
         let tray_menu = Menu::new();
         tray_menu
             .append_items(&[
                 &refine.main_submenu as &dyn tray_icon::menu::IsMenuItem,
+                &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &quick_selector_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &clips.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &history.main_submenu as &dyn tray_icon::menu::IsMenuItem,
-                &continuous_record.main_submenu as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &open_settings_window_item as &dyn tray_icon::menu::IsMenuItem,
                 &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
                 &retry_clipboard_worker_item as &dyn tray_icon::menu::IsMenuItem,
-                &pause_item as &dyn tray_icon::menu::IsMenuItem,
                 &quit_item as &dyn tray_icon::menu::IsMenuItem,
             ])
             .context("メニューの組み立てに失敗しました")?;
@@ -88,7 +87,6 @@ impl TrayMenu {
         let this = Self {
             tray_icon,
             quit_item,
-            pause_item,
             refine,
             history,
             continuous_record,

@@ -11,7 +11,12 @@ export const TABS = [
     {
         id: 'general',
         label: '一般',
-        description: '一時停止・起動時の動作・更新など、アプリ全体の設定を管理する',
+        description: '起動時の動作・更新など、アプリ全体の設定を管理する',
+    },
+    {
+        id: 'monitor',
+        label: '監視',
+        description: 'クリップボードの監視方式とポーリング間隔を設定する',
     },
     {
         id: 'convert',
@@ -26,7 +31,7 @@ export const TABS = [
     {
         id: 'clipboard',
         label: 'クリップボード',
-        description: '履歴・連続記録・登録クリップを管理する',
+        description: '履歴・連続記録モード・登録クリップを管理する',
     },
     {
         id: 'notifications',

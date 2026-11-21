@@ -32,7 +32,7 @@ mod tests {
     #[test]
     fn parse_ipc_apply_patch() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":true,"notifyPause":true,"notifyOcr":false}}}"#,
+            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":true,"notifyAutoRefine":true,"notifyOcr":false}}}"#,
         );
         let Some(SettingsIpcAction::Apply(patch)) = action else {
             panic!("Apply アクションとして解釈されること");
@@ -43,15 +43,32 @@ mod tests {
         assert!(notification.enabled);
         assert!(!notification.notify_process);
         assert!(notification.notify_result);
-        assert!(notification.notify_pause);
+        assert!(notification.notify_auto_refine);
         assert!(!notification.notify_ocr);
+    }
+
+    /// 廃止した `notifyPause` / `hotkeys.pause` も新しい項目として解釈できるようにすること
+    #[test]
+    fn parse_ipc_apply_patch_legacy_pause_keys() {
+        let action = parse_settings_ipc_message(
+            r#"{"type":"apply","patch":{"notificationSettings":{"notifyPause":false},"hotkeys":{"pause":"Alt+Shift+K"}}}"#,
+        );
+        let Some(SettingsIpcAction::Apply(patch)) = action else {
+            panic!("Apply アクションとして解釈されること");
+        };
+        let notification = patch
+            .notification_settings
+            .expect("notification_settings が含まれること");
+        assert!(!notification.notify_auto_refine);
+        let hotkeys = patch.hotkeys.expect("hotkeys が含まれること");
+        assert_eq!(hotkeys.auto_refine, "Alt+Shift+K");
     }
 
     /// `snake_case` 別名でも IPC パッチを解釈できるようにすること
     #[test]
     fn parse_ipc_apply_patch_nested_snake_case_alias() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notify_process":false,"notify_result":true,"notify_pause":true,"notify_ocr":false}}}"#,
+            r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notify_process":false,"notify_result":true,"notify_auto_refine":true,"notify_ocr":false}}}"#,
         );
         let Some(SettingsIpcAction::Apply(patch)) = action else {
             panic!("Apply アクションとして解釈されること");
@@ -62,7 +79,7 @@ mod tests {
         assert!(notification.enabled);
         assert!(!notification.notify_process);
         assert!(notification.notify_result);
-        assert!(notification.notify_pause);
+        assert!(notification.notify_auto_refine);
         assert!(!notification.notify_ocr);
     }
 
@@ -104,13 +121,13 @@ mod tests {
         base_settings.enabled = true;
         base_settings.notify_process = false;
         base_settings.notify_result = false;
-        base_settings.notify_pause = true;
+        base_settings.notify_auto_refine = true;
         base_settings.notify_ocr = true;
         let mut merged_settings = NotificationSettings::default();
         merged_settings.enabled = false;
         merged_settings.notify_process = true;
         merged_settings.notify_result = true;
-        merged_settings.notify_pause = false;
+        merged_settings.notify_auto_refine = false;
         merged_settings.notify_ocr = false;
         let mut base = SettingsPatch {
             notification_settings: Some(base_settings),
@@ -126,14 +143,14 @@ mod tests {
         assert!(!notification.enabled);
         assert!(notification.notify_process);
         assert!(notification.notify_result);
-        assert!(!notification.notify_pause);
+        assert!(!notification.notify_auto_refine);
         assert!(!notification.notify_ocr);
     }
 
     /// JSON 文字列マージでネスト項目の一部だけを更新できるようにすること
     #[test]
     fn merge_settings_patch_json_strings_preserves_sibling_nested_fields() {
-        let existing = r#"{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyPause":true,"notifyOcr":true}}"#;
+        let existing = r#"{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyAutoRefine":true,"notifyOcr":true}}"#;
         let incoming = r#"{"notificationSettings":{"notifyResult":true}}"#;
         let merged = merge_settings_patch_json_strings(existing, incoming)
             .expect("マージ後 JSON が生成されること");
@@ -142,7 +159,7 @@ mod tests {
         assert_eq!(value["notificationSettings"]["enabled"], true);
         assert_eq!(value["notificationSettings"]["notifyProcess"], false);
         assert_eq!(value["notificationSettings"]["notifyResult"], true);
-        assert_eq!(value["notificationSettings"]["notifyPause"], true);
+        assert_eq!(value["notificationSettings"]["notifyAutoRefine"], true);
         assert_eq!(value["notificationSettings"]["notifyOcr"], true);
     }
 
@@ -178,6 +195,10 @@ mod tests {
             Some(SettingsIpcAction::OpenDocument(BundledDocument::UserDocs))
         ));
         assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"open-document","target":"license"}"#),
+            Some(SettingsIpcAction::OpenDocument(BundledDocument::License))
+        ));
+        assert!(matches!(
             parse_settings_ipc_message(
                 r#"{"type":"open-document","target":"third-party-notices"}"#
             ),
@@ -204,7 +225,7 @@ mod tests {
         notification_settings.enabled = true;
         notification_settings.notify_process = false;
         notification_settings.notify_result = false;
-        notification_settings.notify_pause = true;
+        notification_settings.notify_auto_refine = true;
         enqueue_settings_patch(
             &state,
             &SettingsPatch {
@@ -224,7 +245,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&json).expect("マージ後 JSON のパース");
         assert_eq!(value["notificationSettings"]["enabled"], true);
         assert_eq!(value["notificationSettings"]["notifyResult"], true);
-        assert_eq!(value["notificationSettings"]["notifyPause"], true);
+        assert_eq!(value["notificationSettings"]["notifyAutoRefine"], true);
     }
 
     /// `clip-copy` メッセージを解釈できるようにすること
@@ -416,7 +437,7 @@ mod tests {
     #[test]
     fn ipc_apply_round_trip_through_queue() {
         let state = Arc::new(crate::tray::state::test_app_state());
-        let json = r#"{"type":"apply","patch":{"intervalMs":2000,"isPaused":true}}"#;
+        let json = r#"{"type":"apply","patch":{"intervalMs":2000,"autoRefineEnabled":true}}"#;
         let action = parse_settings_ipc_message(json).expect("IPC JSON の解釈");
         let SettingsIpcAction::Apply(patch) = action else {
             panic!("Apply アクションとして解釈されること");
@@ -430,7 +451,7 @@ mod tests {
         let restored: SettingsPatch =
             serde_json::from_str(&queued).expect("キュー JSON からパッチを復元");
         assert_eq!(restored.interval_ms, Some(2000));
-        assert_eq!(restored.is_paused, Some(true));
+        assert_eq!(restored.auto_refine_enabled, Some(true));
     }
 
     /// 旧プレフィックス形式は解釈しないようにすること

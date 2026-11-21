@@ -129,6 +129,30 @@ test.describe('クイックセレクター WebView', () => {
   });
 });
 
+test.describe('クイックセレクター 連続記録中', () => {
+  test.use({
+    e2eWindow: 'quick',
+    harnessOptions: { continuousRecordEnabled: true },
+  });
+
+  test('Ctrl+Enter で自動変換に設定すると連続記録が無効になる', async ({ page, configDir }) => {
+    await expect(page.locator('#results .item').first()).toBeVisible();
+    await page.locator('#input').click();
+    await page.keyboard.press('Home');
+    const closed = page.waitForEvent('close', { timeout: 15_000 });
+    await Promise.all([
+      closed,
+      page.keyboard.press('Control+Enter').catch(() => undefined),
+    ]);
+    expect(page.isClosed()).toBe(true);
+
+    await expect
+      .poll(() => readConfigToml(configDir), { timeout: 10_000 })
+      .toMatch(/^auto_refine_enabled\s*=\s*true$/m);
+    expect(readConfigToml(configDir)).toMatch(/^continuous_record_enabled\s*=\s*false$/m);
+  });
+});
+
 test.describe('クイックセレクター お気に入り並び', () => {
   test.use({
     e2eWindow: 'quick',

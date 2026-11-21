@@ -89,6 +89,129 @@ mod tests {
         );
     }
 
+    /// v4 以前の `hotkeys.pause` / `notify_pause` を新しいキーとして読み込めること
+    #[test]
+    fn legacy_pause_keys_load_as_auto_refine() {
+        let toml = r#"
+version = 4
+mode = "Trim"
+interval_ms = 1000
+
+[notification_settings]
+notify_pause = false
+
+[hotkeys]
+pause = "Ctrl+Alt+P"
+"#;
+
+        let config: AppConfig = toml::from_str(toml).expect("v4 TOML のデシリアライズ");
+
+        assert!(!config.notification_settings.notify_auto_refine);
+        assert_eq!(config.hotkeys.auto_refine, "Ctrl+Alt+P");
+    }
+
+    /// 新しい `hotkeys.auto_refine` / `notify_auto_refine` を読み込めること
+    #[test]
+    fn auto_refine_keys_load() {
+        let toml = r#"
+version = 5
+mode = "Trim"
+interval_ms = 1000
+
+[notification_settings]
+notify_auto_refine = false
+
+[hotkeys]
+auto_refine = "Ctrl+Alt+R"
+"#;
+
+        let config: AppConfig = toml::from_str(toml).expect("TOML のデシリアライズ");
+
+        assert!(!config.notification_settings.notify_auto_refine);
+        assert_eq!(config.hotkeys.auto_refine, "Ctrl+Alt+R");
+    }
+
+    /// 読み込み時に自動変換と連続記録が同時に有効なら、連続記録を優先すること
+    #[test]
+    fn prepare_loaded_disables_auto_refine_with_continuous_record() {
+        let config = AppConfig {
+            auto_refine_enabled: true,
+            continuous_record_enabled: true,
+            ..AppConfig::default()
+        };
+
+        let prepared = config.prepare_loaded().config;
+
+        assert!(!prepared.auto_refine_enabled);
+        assert!(prepared.continuous_record_enabled);
+    }
+
+    /// 保存前の正規化でも自動変換と連続記録の同時有効を解消すること
+    #[test]
+    fn normalize_disables_auto_refine_with_continuous_record() {
+        let mut config = AppConfig {
+            auto_refine_enabled: true,
+            continuous_record_enabled: true,
+            ..AppConfig::default()
+        };
+
+        config.normalize();
+
+        assert!(!config.auto_refine_enabled);
+        assert!(config.continuous_record_enabled);
+    }
+
+    /// 保存した設定に廃止した `is_paused` / `pause` / `notify_pause` を出力しないこと
+    #[test]
+    fn serialized_config_omits_removed_pause_keys() {
+        let toml =
+            serialize::config_to_toml(&AppConfig::default(), None).expect("設定の TOML 生成");
+
+        assert!(!toml.contains("is_paused"));
+        assert!(!toml.contains("notify_pause"));
+        assert!(!toml.contains("pause"));
+        assert!(toml.contains("auto_refine"));
+        assert!(toml.contains("notify_auto_refine"));
+        let reloaded: AppConfig = toml::from_str(&toml).expect("生成結果のデシリアライズ");
+        assert_eq!(
+            reloaded.hotkeys.auto_refine,
+            consts::DEFAULT_HOTKEY_AUTO_REFINE
+        );
+    }
+
+    /// 旧キーを含む既存ファイルを保存し直すと、旧キーを除去して新キーへ置き換えること
+    #[test]
+    fn saving_over_legacy_file_replaces_pause_keys() {
+        let existing = r#"
+version = 4
+auto_refine_enabled = true
+mode = "Trim"
+interval_ms = 1000
+is_paused = true
+
+[notification_settings]
+notify_pause = false
+
+[hotkeys]
+pause = "Ctrl+Alt+P"
+"#;
+        let loaded: AppConfig = toml::from_str(existing).expect("v4 TOML のデシリアライズ");
+        let config = loaded.prepare_loaded().config;
+
+        let toml = serialize::config_to_toml(&config, Some(existing)).expect("設定の TOML 生成");
+
+        assert!(!toml.contains("is_paused"));
+        assert!(!toml.contains("notify_pause"));
+        assert!(!toml.contains("\npause "));
+        // 保存結果を読み直しても、旧設定の内容が新キーに引き継がれていること
+        let reloaded: AppConfig = toml::from_str(&toml).expect("保存結果のデシリアライズ");
+        assert_eq!(reloaded.version, consts::CONFIG_VERSION);
+        assert!(!reloaded.auto_refine_enabled);
+        assert!(!reloaded.legacy_is_paused);
+        assert!(!reloaded.notification_settings.notify_auto_refine);
+        assert_eq!(reloaded.hotkeys.auto_refine, "Ctrl+Alt+P");
+    }
+
     /// `AppConfig` のシリアライズ/デシリアライズ往復できるようにすること
     #[test]
     fn test_app_config_serde() {
@@ -109,7 +232,7 @@ mod tests {
         assert!(!ns.enabled, "enabled のデフォルトは false");
         assert!(ns.notify_process);
         assert!(!ns.notify_result, "notify_result のデフォルトは false");
-        assert!(ns.notify_pause);
+        assert!(ns.notify_auto_refine);
         assert!(ns.notify_history_restore);
         assert!(ns.notify_ocr);
         assert!(ns.notify_registered_clip);
@@ -296,12 +419,12 @@ history_enabled = true
     fn test_hotkey_settings_fix_duplicate_fixed_fields() {
         let mut hotkeys = HotkeySettings {
             notification: "Alt+Shift+P".to_string(),
-            pause: "Alt+Shift+P".to_string(),
+            auto_refine: "Alt+Shift+P".to_string(),
             ..HotkeySettings::default()
         };
         hotkeys.fix_duplicates();
         assert_eq!(hotkeys.notification, "Alt+Shift+P");
-        assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
+        assert_eq!(hotkeys.auto_refine, consts::DEFAULT_HOTKEY_AUTO_REFINE);
     }
 
     /// `fix_duplicates` が固定割り当てと重複するお気に入りスロットを無効化すること

@@ -46,7 +46,7 @@ pub const PORTABLE_DATA_DIR_NAME: &str = "data";
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
 /// 手順を書き忘れると既存項目を維持して警告し、デフォルトへは置換しない
-pub const CONFIG_VERSION: u32 = 4;
+pub const CONFIG_VERSION: u32 = 5;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
@@ -124,8 +124,8 @@ pub const DEFAULT_HOTKEY_QUICK_SELECTOR: &str = "Alt+Shift+S";
 /// 通知切替のデフォルトホットキー
 pub const DEFAULT_HOTKEY_NOTIFICATION: &str = "Alt+Shift+N";
 
-/// 一時停止切替のデフォルトホットキー
-pub const DEFAULT_HOTKEY_PAUSE: &str = "Alt+Shift+P";
+/// 自動変換切替のデフォルトホットキー
+pub const DEFAULT_HOTKEY_AUTO_REFINE: &str = "Alt+Shift+P";
 
 /// 終了のデフォルトホットキー
 pub const DEFAULT_HOTKEY_QUIT: &str = "Alt+Shift+Q";

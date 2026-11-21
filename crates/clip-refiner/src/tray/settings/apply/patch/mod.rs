@@ -92,7 +92,7 @@ pub(crate) fn apply_settings_patch_without_ui(
         &mut outcome,
         &mut config_dirty,
     );
-    let system_outcome = apply_system_patch(patch, state, menu, &mut config_dirty);
+    let system_outcome = apply_system_patch(patch);
 
     if config_dirty {
         state.save_config();
@@ -245,7 +245,7 @@ mod tests {
         let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             hotkeys: Some(crate::config::HotkeySettings {
-                pause: "Bad+Key".to_string(),
+                auto_refine: "Bad+Key".to_string(),
                 ..crate::config::HotkeySettings::default()
             }),
             ..SettingsPatch::default()
@@ -258,7 +258,7 @@ mod tests {
             .expect("不正ホットキーで正規化フィードバックが返ること");
         assert!(feedback.ok);
         assert_eq!(feedback.field.as_deref(), Some("hotkeys"));
-        assert!(feedback.message.contains("一時停止 / 再開"));
+        assert!(feedback.message.contains("自動変換の切替"));
         assert_eq!(
             result.refresh,
             Some((SettingsRefreshScope::FavoritesAndShortcuts, false))

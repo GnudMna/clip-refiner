@@ -42,14 +42,6 @@ export function applyPipelineChange(pipeline) {
     updateMonitorPipelineUi();
 }
 
-/** 監視一時停止バナーの表示状態を同期する */
-export function syncMonitorPauseBanner() {
-    const banner = document.getElementById('monitor-pause-banner');
-    if (banner) {
-        banner.hidden = !ctx.state.isPaused;
-    }
-}
-
 /** 監視タブの連続記録バナー表示を同期する */
 function syncMonitorContinuousRecordBanner() {
     const banner = document.getElementById('monitor-record-banner');

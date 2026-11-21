@@ -37,13 +37,13 @@ function test_merge_nested_objects() {
 /** 後勝ちでプリミティブ値を上書きできること */
 function test_merge_overwrites_primitive_values() {
     const merged = SettingsPatch.mergePatch(
-        { intervalMs: 1000, isPaused: false },
-        { intervalMs: 2000, isPaused: true }
+        { intervalMs: 1000, autoRefineEnabled: false },
+        { intervalMs: 2000, autoRefineEnabled: true }
     );
 
     assert.deepEqual(merged, {
         intervalMs: 2000,
-        isPaused: true,
+        autoRefineEnabled: true,
     });
 }
 
@@ -73,7 +73,7 @@ function test_merge_skips_null_values() {
             historyEnabled: null,
             notificationSettings: {
                 enabled: true,
-                notifyPause: null,
+                notifyAutoRefine: null,
                 notifyResult: true,
             },
             intervalMs: 2000,

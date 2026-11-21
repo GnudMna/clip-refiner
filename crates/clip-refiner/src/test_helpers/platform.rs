@@ -45,7 +45,7 @@ fn test_hotkey_settings() -> HotkeySettings {
     HotkeySettings {
         quick_selector: "Alt+Ctrl+Shift+A".to_string(),
         notification: "Alt+Ctrl+Shift+B".to_string(),
-        pause: "Alt+Ctrl+Shift+C".to_string(),
+        auto_refine: "Alt+Ctrl+Shift+C".to_string(),
         quit: "Alt+Ctrl+Shift+D".to_string(),
         undo: "Alt+Ctrl+Shift+E".to_string(),
         clip_selector: "Alt+Ctrl+Shift+F".to_string(),

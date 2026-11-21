@@ -66,7 +66,7 @@ git branch -m <prefix>/<kebab-case>
 規約は `.claude/rules/` に置く (Claude Code では対象ファイルを扱うときに自動で読み込まれる)。
 
 | ファイル | 内容 |
-| :------- | :--- |
+| :--- | :--- |
 | `comments.md` | Rust のコメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
 | `imports.md` | Rust の `use` 文のグループ順 (`std` → 外部クレート → `self` / `super` / `crate` / 子モジュール)・空行・グループ内の並び |
 | `javascript.md` | WebView UI の JavaScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント)、E2E の TypeScript |

@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 use tao::event_loop::EventLoopProxy;
 
-use super::super::clipboard_monitor::{bump_monitor_generation, bump_monitor_generation_unchecked};
+use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::settings::init_settings_window;
@@ -69,13 +69,7 @@ impl App {
         let hotkey_listener = HotkeyHandler::start_event_listener(proxy.clone());
         menu.refresh_history(&state)?;
         menu.refresh_continuous_record(&state)?;
-        if state.with_config(|c| c.is_paused) {
-            if state.with_config(|c| c.continuous_record_enabled) {
-                bump_monitor_generation_unchecked(&state);
-            }
-        } else {
-            bump_monitor_generation(&state);
-        }
+        bump_monitor_generation(&state);
         if !crate::tray::e2e::is_active() {
             crate::platform::webview2::notify_missing_runtime_on_startup();
         }

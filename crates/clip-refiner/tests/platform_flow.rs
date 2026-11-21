@@ -17,7 +17,7 @@ fn default_hotkey_bindings_parse() {
     let bindings = [
         ("クイックセレクター", &config.hotkeys.quick_selector),
         ("通知切替", &config.hotkeys.notification),
-        ("一時停止", &config.hotkeys.pause),
+        ("自動変換の切替", &config.hotkeys.auto_refine),
         ("終了", &config.hotkeys.quit),
         ("取り消し", &config.hotkeys.undo),
         ("登録クリップ", &config.hotkeys.clip_selector),

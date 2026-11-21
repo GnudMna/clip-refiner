@@ -81,7 +81,6 @@ pub fn apply_config_reload(
         || previous.favorite_modes != loaded.favorite_modes;
     let monitor_changed = previous.monitor_mode != loaded.monitor_mode
         || previous.interval_ms != loaded.interval_ms
-        || previous.is_paused != loaded.is_paused
         || previous.auto_refine_enabled != loaded.auto_refine_enabled
         || previous.effective_pipeline() != loaded.effective_pipeline()
         || previous.continuous_record_enabled != loaded.continuous_record_enabled;

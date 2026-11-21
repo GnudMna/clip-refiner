@@ -129,7 +129,9 @@
     cursor: pointer;
     font-size: 13px;
     text-align: left;
-    transition: background 0.12s ease, color 0.12s ease;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease;
 }
 
 .nav-btn:hover {
@@ -220,22 +222,16 @@
     font-weight: 600;
 }
 
+.status-banner[hidden] {
+    display: none;
+}
+
 .status-banner::before {
     content: '';
     width: 8px;
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
-}
-
-.status-paused {
-    background: var(--warning-soft);
-    border: 1px solid rgba(240, 180, 41, 0.35);
-    color: #f5d06a;
-}
-
-.status-paused::before {
-    background: var(--warning-color);
 }
 
 .status-continuous-record {

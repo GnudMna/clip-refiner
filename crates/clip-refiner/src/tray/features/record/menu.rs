@@ -34,14 +34,14 @@ impl TrayMenu {
         continuous_record_enabled: bool,
     ) -> Result<ContinuousRecordMenu> {
         let enabled_item = CheckMenuItem::new(
-            "連続記録を有効にする",
+            "連続記録モードを有効にする",
             true,
             continuous_record_enabled,
             None,
         );
         let undo_item = MenuItem::new("直近の記録を取り消す", true, None);
         let clear_item = MenuItem::new("記録をクリア", true, None);
-        let main_submenu = Submenu::new("連続記録", true);
+        let main_submenu = Submenu::new("連続記録モード", true);
         let records = Mutex::new(Vec::new());
 
         main_submenu.append_items(&[

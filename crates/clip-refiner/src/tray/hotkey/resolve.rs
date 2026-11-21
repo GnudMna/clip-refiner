@@ -12,7 +12,7 @@ use crate::consts;
 pub(super) struct ResolvedHotkeys {
     pub quick_selector: HotKey,
     pub notification: HotKey,
-    pub pause: HotKey,
+    pub auto_refine: HotKey,
     pub quit: HotKey,
     pub undo: HotKey,
     pub clip_selector: HotKey,
@@ -42,7 +42,11 @@ impl ResolvedHotkeys {
                 consts::DEFAULT_HOTKEY_NOTIFICATION,
                 "notification",
             ),
-            pause: resolve_hotkey(&hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE, "pause"),
+            auto_refine: resolve_hotkey(
+                &hotkeys.auto_refine,
+                consts::DEFAULT_HOTKEY_AUTO_REFINE,
+                "auto_refine",
+            ),
             quit: resolve_hotkey(&hotkeys.quit, consts::DEFAULT_HOTKEY_QUIT, "quit"),
             undo: resolve_hotkey(&hotkeys.undo, consts::DEFAULT_HOTKEY_UNDO, "undo"),
             clip_selector: resolve_hotkey(

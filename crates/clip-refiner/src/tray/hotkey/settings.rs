@@ -42,20 +42,20 @@ pub(crate) fn shortcut_list_entries(
             label: "成功通知の切替".to_string(),
         },
         ShortcutEntry {
-            binding: hotkeys.pause.clone(),
-            label: "一時停止 / 再開".to_string(),
+            binding: hotkeys.auto_refine.clone(),
+            label: "自動変換の切替".to_string(),
         },
         ShortcutEntry {
             binding: hotkeys.continuous_record.clone(),
-            label: "連続記録の切替".to_string(),
+            label: "連続記録モードの切替".to_string(),
         },
         ShortcutEntry {
             binding: hotkeys.continuous_record_undo.clone(),
-            label: "連続記録の取り消し".to_string(),
+            label: "連続記録モードの記録取り消し".to_string(),
         },
         ShortcutEntry {
             binding: hotkeys.continuous_record_paste.clone(),
-            label: "連続記録の貼り付け".to_string(),
+            label: "連続記録モードの記録貼り付け".to_string(),
         },
         ShortcutEntry {
             binding: hotkeys.undo.clone(),

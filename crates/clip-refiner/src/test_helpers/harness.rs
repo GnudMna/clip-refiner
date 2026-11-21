@@ -72,6 +72,18 @@ impl ClipboardHarness {
         self
     }
 
+    /// クリップボードへの書き込みを失敗させる
+    ///
+    /// # Returns
+    /// * `Self` - 書き込み失敗を予約した `self`
+    #[must_use]
+    pub fn with_write_failure(mut self) -> Self {
+        let clipboard =
+            std::mem::replace(&mut self.clipboard, InMemoryTextClipboard::with_text(""));
+        self.clipboard = clipboard.fail_on_write();
+        self
+    }
+
     /// 変換モードを設定する
     ///
     /// # Arguments
@@ -109,19 +121,6 @@ impl ClipboardHarness {
     pub fn with_continuous_record(self, enabled: bool) -> Self {
         self.state
             .with_config_mut(|c| c.continuous_record_enabled = enabled);
-        self
-    }
-
-    /// 監視の一時停止フラグを設定する
-    ///
-    /// # Arguments
-    /// * `paused` - 一時停止中にする場合は `true`
-    ///
-    /// # Returns
-    /// * `Self` - 一時停止設定を反映した `self`
-    #[must_use]
-    pub fn with_paused(self, paused: bool) -> Self {
-        self.state.with_config_mut(|c| c.is_paused = paused);
         self
     }
 
@@ -323,9 +322,6 @@ impl ClipboardHarness {
     /// * `bool` - クリップボードへ書き込んだ場合は `true`
     pub fn run_monitor_update(&mut self, event_driven: bool) -> bool {
         let snap = self.state.monitor_snapshot();
-        if snap.is_paused {
-            return false;
-        }
         self.state.sync_regex_settings(&mut self.refine_ctx.regex);
         if snap.continuous_record_enabled {
             observe_continuous_record(&mut self.clipboard, &self.state);

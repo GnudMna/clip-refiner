@@ -52,13 +52,14 @@ fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
 
-    let line_ending = super::utils::detect_line_ending(text);
     let units = split_units(text);
+    // 改行コードは位置ごとに元のまま残し、並び替えるのは行の内容だけにする
+    let endings: Vec<&str> = units.iter().map(|(_, ending)| *ending).collect();
 
     // (比較キー, 元の文字列)
     let mut entries: Vec<(String, &str)> = units
         .into_iter()
-        .map(|unit| (unit.lines().next().unwrap_or("").to_lowercase(), unit))
+        .map(|(unit, _)| (unit.lines().next().unwrap_or("").to_lowercase(), unit))
         .collect();
     let compare = key_comparator(natural);
     if descending {
@@ -67,8 +68,12 @@ fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
         entries.sort_by(|a, b| compare(&a.0, &b.0));
     }
 
-    let units: Vec<&str> = entries.iter().map(|(_, unit)| *unit).collect();
-    let result = super::utils::join_lines(&units, line_ending, text.ends_with('\n'));
+    let sorted: Vec<(&str, &str)> = entries
+        .iter()
+        .zip(endings)
+        .map(|((_, unit), ending)| (*unit, ending))
+        .collect();
+    let result = super::utils::join_lines(&sorted, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -82,7 +87,7 @@ fn sort_with(text: &str, descending: bool, natural: bool) -> Cow<'_, str> {
 /// テキストから空行を削除する
 ///
 /// 改行のみの行、または空白文字(スペース、タブなど)のみの行を取り除く
-/// 元の改行形式(LF または CRLF)は維持される
+/// 残る行の改行コードは行ごとに元のまま維持される (CRLF と LF が混在していても変えない)
 ///
 /// # Arguments
 /// * `text` - 処理対象のテキスト
@@ -94,13 +99,12 @@ pub fn remove_empty_lines(text: &str) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
 
-    let line_ending = super::utils::detect_line_ending(text);
-    let lines: Vec<&str> = text
-        .lines()
-        .filter(|line| !line.trim().is_empty())
+    let lines: Vec<(&str, &str)> = super::utils::split_line_endings(text)
+        .into_iter()
+        .filter(|(line, _)| !line.trim().is_empty())
         .collect();
 
-    let result = super::utils::join_lines(&lines, line_ending, text.ends_with('\n'));
+    let result = super::utils::join_lines(&lines, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -124,17 +128,16 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
         return Cow::Borrowed(text);
     }
 
-    let line_ending = super::utils::detect_line_ending(text);
     let mut seen = std::collections::HashSet::new();
     let mut units = Vec::new();
 
-    for unit in split_units(text) {
+    for (unit, ending) in split_units(text) {
         if seen.insert(unit) {
-            units.push(unit);
+            units.push((unit, ending));
         }
     }
 
-    let result = super::utils::join_lines(&units, line_ending, text.ends_with('\n'));
+    let result = super::utils::join_lines(&units, text.ends_with('\n'));
     if result == text {
         Cow::Borrowed(text)
     } else {
@@ -153,9 +156,10 @@ pub fn remove_duplicate_lines(text: &str) -> Cow<'_, str> {
 /// * `text` - 分割する対象のテキスト
 ///
 /// # Returns
-/// * `Vec<&str>` - 改行を除いた各単位の元の文字列
-fn split_units(text: &str) -> Vec<&str> {
-    split_csv_records(text).unwrap_or_else(|| text.lines().collect())
+/// * `Vec<(&str, &str)>` - (改行を除いた各単位の元の文字列, 単位末尾の改行コード) の組。
+///   最終行が改行で終わっていなければ、その改行コードは空文字列
+fn split_units(text: &str) -> Vec<(&str, &str)> {
+    split_csv_records(text).unwrap_or_else(|| super::utils::split_line_endings(text))
 }
 
 /// フィールドの読み取り状態
@@ -182,8 +186,9 @@ enum FieldState {
 /// * `text` - 分割する対象のテキスト
 ///
 /// # Returns
-/// * `Option<Vec<&str>>` - 改行を除いた各レコードの元の文字列。CSV として読めない場合は `None`
-fn split_csv_records(text: &str) -> Option<Vec<&str>> {
+/// * `Option<Vec<(&str, &str)>>` - (改行を除いた各レコードの元の文字列, レコード末尾の改行コード) の組。
+///   最終レコードが改行で終わっていなければ、その改行コードは空文字列。CSV として読めない場合は `None`
+fn split_csv_records(text: &str) -> Option<Vec<(&str, &str)>> {
     let bytes = text.as_bytes();
     let mut records = Vec::new();
     let mut field_count: Option<usize> = None;
@@ -206,7 +211,7 @@ fn split_csv_records(text: &str) -> Option<Vec<&str>> {
             if !record.is_empty() && *field_count.get_or_insert(fields) != fields {
                 return None;
             }
-            records.push(record);
+            records.push((record, &text[i..i + line_ending_len]));
             i += line_ending_len;
             record_start = i;
             fields = 1;
@@ -239,7 +244,7 @@ fn split_csv_records(text: &str) -> Option<Vec<&str>> {
         if *field_count.get_or_insert(fields) != fields {
             return None;
         }
-        records.push(&text[record_start..]);
+        records.push((&text[record_start..], ""));
     }
     // 1 列だけのテキストは、引用符で囲んだ複数行の文章と見分けられないため CSV として読まない
     if field_count.is_some_and(|count| count < 2) {
@@ -457,6 +462,26 @@ mod tests {
         assert_eq!(remove_empty_lines(input), expected);
     }
 
+    /// CRLF と LF が混在していても、行ごとの改行コードを保持すること
+    #[test]
+    fn test_line_actions_keep_mixed_line_endings() {
+        // 空行削除は残る行の改行コードをそのまま使う
+        assert_eq!(remove_empty_lines("a\r\n\r\nb\n\nc\r\n"), "a\r\nb\nc\r\n");
+        // 重複行削除も同様
+        assert_eq!(
+            remove_duplicate_lines("a\r\nb\na\r\nc\r\n"),
+            "a\r\nb\nc\r\n"
+        );
+        // 並び替えは改行コードの並びを位置ごとに保つ
+        assert_eq!(sort_lines("b\r\na\nc\r\n", false), "a\r\nb\nc\r\n");
+        assert_eq!(sort_lines("b\r\na\nc", true), "c\r\nb\na");
+        // CSV のレコード単位でも同様
+        assert_eq!(
+            sort_lines("b,1\r\na,\"x\ny\"\nc,3", false),
+            "a,\"x\ny\"\r\nb,1\nc,3"
+        );
+    }
+
     /// 重複行削除(出現順序維持)できるようにすること
     #[test]
     fn test_remove_duplicate_lines() {
@@ -548,12 +573,16 @@ mod tests {
     fn test_split_csv_records_quoted_fields() {
         assert_eq!(
             split_csv_records("a,\"x\ny\"\nb,\"p,\"\"q\"\"\""),
-            Some(vec!["a,\"x\ny\"", "b,\"p,\"\"q\"\"\""])
+            Some(vec![("a,\"x\ny\"", "\n"), ("b,\"p,\"\"q\"\"\"", "")])
         );
         // CRLF はレコードの区切りから除き、クォート内の CRLF はそのまま残す
         assert_eq!(
             split_csv_records("\"x\r\ny\",1\r\n\r\na,2\r\n"),
-            Some(vec!["\"x\r\ny\",1", "", "a,2"])
+            Some(vec![
+                ("\"x\r\ny\",1", "\r\n"),
+                ("", "\r\n"),
+                ("a,2", "\r\n")
+            ])
         );
     }
 
@@ -562,7 +591,7 @@ mod tests {
     fn test_split_csv_records_single_record_or_column() {
         assert_eq!(
             split_csv_records("\"x\na,x\n0\","),
-            Some(vec!["\"x\na,x\n0\","])
+            Some(vec![("\"x\na,x\n0\",", "")])
         );
         // 引用符で囲んだ複数行の文章と見分けられない
         assert_eq!(split_csv_records("\"a\nb\"\nc"), None);
@@ -582,7 +611,7 @@ mod tests {
         assert_eq!(split_csv_records("a,b,c\nd,e"), None);
         assert_eq!(
             split_csv_records("a,b\n\nc,d"),
-            Some(vec!["a,b", "", "c,d"])
+            Some(vec![("a,b", "\n"), ("", "\n"), ("c,d", "")])
         );
     }
 

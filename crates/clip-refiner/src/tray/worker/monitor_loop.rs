@@ -94,7 +94,7 @@ impl MonitorLoopState {
 
     /// コマンド待ちのタイムアウトを計算する
     ///
-    /// 監視が停止中の場合は短い間隔で再確認する。Event / 連続記録でリスナが稼働中のときは
+    /// 監視世代が未開始または追跡中の世代と不一致の場合は短い間隔で再確認する。Event / 連続記録でリスナが稼働中のときは
     /// 設定外部変更の安全網ポーリング間隔まで待ち、`ClipboardChanged` / `ConfigFileChanged` で起床する
     /// リスナ未使用時はシーケンストークンの短周期 peek にフォールバックする
     ///
@@ -114,10 +114,6 @@ impl MonitorLoopState {
         let generation = state.monitor_generation.load(Ordering::SeqCst);
         let snap = state.monitor_snapshot();
         if generation == 0 || self.tracked_generation != generation {
-            return Duration::from_millis(100);
-        }
-
-        if snap.is_paused && !snap.continuous_record_enabled {
             return Duration::from_millis(100);
         }
 
@@ -273,7 +269,7 @@ impl MonitorLoopState {
 
 /// 監視ループの1ティックを実行するかどうかを判定する
 ///
-/// 連続記録が有効なら一時停止中でもティックを実行する
+/// 監視世代が未開始、または追跡中の世代と一致しない間は実行しない
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -283,11 +279,7 @@ impl MonitorLoopState {
 /// * `bool` - 監視ループの1ティックを実行するかどうか
 pub(super) fn should_run_monitor_tick(state: &Arc<AppState>, monitor: &MonitorLoopState) -> bool {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
-    if generation == 0 || monitor.tracked_generation != generation {
-        return false;
-    }
-
-    state.with_config(|c| !c.is_paused || c.continuous_record_enabled)
+    generation != 0 && monitor.tracked_generation == generation
 }
 
 /// 監視世代を同期する
@@ -305,10 +297,8 @@ pub(super) fn sync_monitor_generation(
     state: &Arc<AppState>,
 ) {
     let generation = state.monitor_generation.load(Ordering::SeqCst);
-    let paused = state.with_config(|c| c.is_paused);
-    let continuous_record = state.with_config(|c| c.continuous_record_enabled);
 
-    if generation == 0 || (paused && !continuous_record) {
+    if generation == 0 {
         monitor.tracked_generation = 0;
         return;
     }

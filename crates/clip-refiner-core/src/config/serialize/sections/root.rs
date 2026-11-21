@@ -3,8 +3,8 @@ use std::fmt::Write;
 use toml_edit::{DocumentMut, Table};
 
 use super::super::docs::{
-    DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_IS_PAUSED,
-    DOC_MODE, DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC,
+    DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_MODE,
+    DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC,
     SECTION_CONTINUOUS_RECORD, SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW,
     doc_continuous_record_limit, doc_favorite_modes, doc_history_limit, doc_interval_ms,
     doc_pipeline, doc_selector_webview_idle_minutes,
@@ -99,7 +99,8 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
         "",
         &config.history_limit,
     )?;
-    set_table_value(root, "is_paused", DOC_IS_PAUSED, "", &config.is_paused)?;
+    // 旧キーを除去 (v5 で廃止。一時停止は自動変換の無効化へ統合)
+    root.remove("is_paused");
     Ok(())
 }
 
@@ -142,7 +143,6 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         "monitor_mode",
         &config.monitor_mode,
     )?;
-    write_field(out, "", DOC_IS_PAUSED, "is_paused", &config.is_paused)?;
 
     write_section(out, SECTION_SELECTOR_WEBVIEW)?;
     write_field(

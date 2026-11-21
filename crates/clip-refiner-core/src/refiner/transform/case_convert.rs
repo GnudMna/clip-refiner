@@ -62,35 +62,23 @@ fn convert_lines<F>(input: &str, convert: F) -> Cow<'_, str>
 where
     F: Fn(&str) -> String,
 {
-    let line_ending = super::utils::detect_line_ending(input);
-    let mut changed = false;
-    let lines: Vec<String> = input
-        .split('\n')
-        .map(|line| {
-            let body = line.trim_end_matches('\r');
-            let identifier = body.trim();
-            if identifier.is_empty() {
-                return body.to_string();
-            }
-            let converted = convert(identifier);
-            if converted != identifier {
-                changed = true;
-            }
-            let indent_len = body.len() - body.trim_start().len();
-            let trailing_start = indent_len + identifier.len();
-            format!(
-                "{}{converted}{}",
-                &body[..indent_len],
-                &body[trailing_start..]
-            )
-        })
-        .collect();
-
-    if !changed {
-        return Cow::Borrowed(input);
-    }
-
-    Cow::Owned(lines.join(line_ending))
+    super::utils::process_lines(input, |line| {
+        let identifier = line.trim();
+        if identifier.is_empty() {
+            return None;
+        }
+        let converted = convert(identifier);
+        if converted == identifier {
+            return None;
+        }
+        let indent_len = line.len() - line.trim_start().len();
+        let trailing_start = indent_len + identifier.len();
+        Some(Cow::Owned(format!(
+            "{}{converted}{}",
+            &line[..indent_len],
+            &line[trailing_start..]
+        )))
+    })
 }
 
 // ======================================================================
@@ -278,6 +266,11 @@ mod tests {
     fn test_convert_multiline() {
         assert_eq!(to_snake_case("fooBar\nhelloWorld"), "foo_bar\nhello_world");
         assert_eq!(to_camel_case("foo_bar\r\nbaz_qux"), "fooBar\r\nbazQux");
+        // CRLF と LF が混在していても、行ごとの改行コードを保持する
+        assert_eq!(
+            to_camel_case("foo_bar\r\nbaz_qux\nhello_world\r\n"),
+            "fooBar\r\nbazQux\nhelloWorld\r\n"
+        );
     }
 
     /// 行頭のインデントと行末の空白を維持して変換すること

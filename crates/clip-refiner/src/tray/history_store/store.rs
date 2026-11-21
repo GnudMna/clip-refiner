@@ -206,6 +206,40 @@ impl EncryptedHistoryStore {
             .ok()
     }
 
+    /// 取り出したエントリを元のインデックスへ戻す
+    ///
+    /// 範囲外のインデックスは末尾に積む。上限を超えた場合は最も古い先頭側から捨てる
+    ///
+    /// # Arguments
+    /// * `index` - 戻す位置 (0 が先頭)
+    /// * `text` - 戻すテキスト
+    /// * `limit` - 最大保持数
+    pub fn restore_at(&mut self, index: usize, text: &str, limit: usize) {
+        if text.trim().is_empty() {
+            return;
+        }
+
+        let fingerprint = ContentFingerprint::from_text(text);
+
+        let Some(ciphertext) = self.encrypt(text) else {
+            return;
+        };
+
+        let index = index.min(self.entries.len());
+        self.entries.insert(
+            index,
+            EncryptedEntry {
+                fingerprint,
+                ciphertext,
+            },
+        );
+
+        if self.entries.len() > limit {
+            let overflow = self.entries.len() - limit;
+            self.entries.drain(0..overflow);
+        }
+    }
+
     /// キュー末尾 (最後に記録した項目) を取り除く
     ///
     /// # Arguments

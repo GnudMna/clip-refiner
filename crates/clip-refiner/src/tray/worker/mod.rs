@@ -187,43 +187,27 @@ mod tests {
     /// Event 監視の状態と監視ループを生成する (実効モードが Event にならない環境では `None`)
     fn event_mode_monitor() -> Option<(Arc<AppState>, MonitorLoopState)> {
         let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| {
-            c.is_paused = false;
-            c.monitor_mode = MonitorMode::Event;
-        });
+        state.with_config_mut(|c| c.monitor_mode = MonitorMode::Event);
         state.monitor_generation.store(1, Ordering::SeqCst);
 
         (MonitorLoopState::effective_mode(MonitorMode::Event) == MonitorMode::Event)
             .then(|| (state, active_monitor(1)))
     }
 
-    /// 監視中かつ世代が一致する場合はティックを実行すること
+    /// 世代が一致する場合はティックを実行すること
     #[test]
-    fn should_run_monitor_tick_when_active() {
+    fn should_run_monitor_tick_when_generation_matches() {
         let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| c.is_paused = false);
         state.monitor_generation.store(2, Ordering::SeqCst);
 
         let monitor = active_monitor(2);
         assert!(should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中はティックを実行しないようにすること
-    #[test]
-    fn should_not_run_monitor_tick_when_paused() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| c.is_paused = true);
-        state.monitor_generation.store(1, Ordering::SeqCst);
-
-        let monitor = active_monitor(1);
-        assert!(!should_run_monitor_tick(&state, &monitor));
-    }
-
     /// 監視世代が 0 の場合はティックを実行しないようにすること
     #[test]
     fn should_not_run_monitor_tick_when_generation_zero() {
         let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| c.is_paused = false);
 
         let monitor = active_monitor(0);
         assert!(!should_run_monitor_tick(&state, &monitor));
@@ -233,39 +217,22 @@ mod tests {
     #[test]
     fn should_not_run_monitor_tick_when_generation_mismatch() {
         let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| c.is_paused = false);
         state.monitor_generation.store(2, Ordering::SeqCst);
 
         let monitor = active_monitor(1);
         assert!(!should_run_monitor_tick(&state, &monitor));
     }
 
-    /// 一時停止中でも連続記録が有効ならティックを実行すること
+    /// 世代が未開始の場合は `recv_timeout` が短い間隔を返すようにすること
     #[test]
-    fn should_run_monitor_tick_when_paused_with_continuous_record() {
+    fn recv_timeout_is_short_when_generation_zero() {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| {
-            c.is_paused = true;
-            c.continuous_record_enabled = true;
-        });
-        state.monitor_generation.store(1, Ordering::SeqCst);
-
-        let monitor = active_monitor(1);
-        assert!(should_run_monitor_tick(&state, &monitor));
-    }
-
-    /// 一時停止中は `recv_timeout` が短い間隔を返すようにすること
-    #[test]
-    fn recv_timeout_is_short_when_paused() {
-        let state = Arc::new(test_app_state());
-        state.with_config_mut(|c| {
-            c.is_paused = true;
             c.monitor_mode = MonitorMode::Polling;
             c.interval_ms = 5000;
         });
-        state.monitor_generation.store(1, Ordering::SeqCst);
 
-        let monitor = active_monitor(1);
+        let monitor = active_monitor(0);
         assert_eq!(
             monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
             Duration::from_millis(100)
@@ -305,7 +272,6 @@ mod tests {
     fn recv_timeout_is_idle_when_continuous_record_listener_active() {
         let state = Arc::new(test_app_state());
         state.with_config_mut(|c| {
-            c.is_paused = false;
             c.monitor_mode = MonitorMode::Polling;
             c.continuous_record_enabled = true;
             c.interval_ms = 5000;

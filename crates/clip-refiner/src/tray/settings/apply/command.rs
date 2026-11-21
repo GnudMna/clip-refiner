@@ -69,7 +69,9 @@ pub(crate) fn handle_settings_window_command(
                 dispatch::log_menu_operation_error("連続記録メニューの更新", err);
             }
             refresh_settings_window(state, settings);
-            settings.notify_apply_feedback(&SettingsApplyFeedback::ok("連続記録をクリアしました"));
+            settings.notify_apply_feedback(&SettingsApplyFeedback::ok(
+                "連続記録モードの記録をクリアしました",
+            ));
         }
         SettingsWindowCommand::OpenConfigFile => {
             state.save_config();

@@ -1,34 +1,94 @@
 use std::sync::Arc;
 
-use crate::tray::clipboard_monitor::bump_monitor_generation_unchecked;
+use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
-use crate::tray::notify::{NotificationCategory, show_category_notification};
-use crate::tray::state::{AppState, LockExt};
+use crate::tray::notify::{
+    NotificationCategory, show_category_notification, show_exclusive_mode_notification,
+};
+use crate::tray::state::{AppState, LockExt, SettingsEvent};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 /// 連続記録の有効/無効を切り替える
+///
+/// # Arguments
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `_clipboard_worker` - クリップボード・ワーカーへの送信ハンドル
+/// * `source` - 切替通知のタイトル (操作元)。`None` なら排他時の通知だけを表示する
 pub(crate) fn toggle_continuous_record(
     menu: &TrayMenu,
     state: &Arc<AppState>,
     _clipboard_worker: &ClipboardWorkerHandle,
+    source: Option<&str>,
 ) {
-    let was_enabled = state.with_config(|c| c.continuous_record_enabled);
-    let enabled = !was_enabled;
+    let enabled = !state.with_config(|c| c.continuous_record_enabled);
+    set_continuous_record_enabled(state, menu, enabled, source);
+    state.save_config();
+}
+
+/// 連続記録の有効・無効を設定し、メニュー表示と監視状態へ反映する
+///
+/// 有効にするときに自動変換が有効なら、後から有効にした連続記録を優先して自動変換を無効にし、
+/// その旨を通知する (切替通知を兼ねる)。`source` を渡した場合は、それ以外の切替も通知する。
+/// 設定ファイルへの保存は呼び出し側で行う
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `enabled` - 連続記録を有効にする場合は `true`
+/// * `source` - 切替通知のタイトル (操作元)。`None` なら排他時の通知だけを表示する
+///
+/// # Returns
+/// * `bool` - 連続記録または自動変換の設定値が変わった場合は `true`
+pub(crate) fn set_continuous_record_enabled(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    enabled: bool,
+    source: Option<&str>,
+) -> bool {
+    let (changed, auto_refine_disabled) = state.with_config_mut(|c| {
+        let changed = c.continuous_record_enabled != enabled;
+        c.continuous_record_enabled = enabled;
+        let auto_refine_disabled = enabled && std::mem::replace(&mut c.auto_refine_enabled, false);
+        (changed, auto_refine_disabled)
+    });
+    if !changed && !auto_refine_disabled {
+        return false;
+    }
+
     menu.continuous_record.enabled_item.set_checked(enabled);
-    state.with_config_mut(|c| c.continuous_record_enabled = enabled);
     if enabled {
         // 有効化前の加工書き戻し指紋が、同一内容の再コピーを誤って抑止しないようクリアする
         state
             .clipboard_session()
             .with_processed_state(|ps| ps.last_written = None);
     }
-    state.save_config();
-    bump_monitor_generation_unchecked(state);
+    bump_monitor_generation(state);
     if let Err(err) = menu.refresh_continuous_record(state) {
         dispatch::log_menu_operation_error("連続記録メニューの更新", err);
     }
     menu.sync_auto_processing_state(state);
+    if auto_refine_disabled {
+        show_exclusive_mode_notification(
+            state,
+            source.unwrap_or("連続記録モード"),
+            "連続記録モードを有効にしたため、自動変換を無効にしました",
+        );
+        dispatch::send_app_event(&state.proxy, SettingsEvent::Refresh.into());
+    } else if changed && let Some(source) = source {
+        show_category_notification(
+            state,
+            NotificationCategory::ContinuousRecord,
+            source,
+            if enabled {
+                "連続記録モードを有効にしました"
+            } else {
+                "連続記録モードを無効にしました"
+            },
+        );
+    }
+    true
 }
 
 /// 連続記録キュー末尾 (直近の記録) を 1 件取り消す
@@ -81,11 +141,11 @@ pub(crate) fn handle_continuous_record_event(
     clipboard_worker: &ClipboardWorkerHandle,
 ) -> bool {
     if id == menu.continuous_record.enabled_item.id() {
-        toggle_continuous_record(menu, state, clipboard_worker);
+        toggle_continuous_record(menu, state, clipboard_worker, None);
         return true;
     }
     if id == menu.continuous_record.undo_item.id() {
-        undo_last_continuous_record(menu, state, "連続記録");
+        undo_last_continuous_record(menu, state, "連続記録モード");
         return true;
     }
     if id == menu.continuous_record.clear_item.id() {

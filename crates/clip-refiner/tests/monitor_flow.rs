@@ -77,24 +77,12 @@ fn monitor_applies_updated_mode_from_snapshot() {
     assert_eq!(harness.clipboard_text(), "c%20d");
 }
 
-/// 一時停止中は監視加工を実行しないようにすること
+/// 連続記録が有効なときは自動変換が有効でも自動加工を実行しないようにすること
 #[test]
-fn monitor_skips_processing_when_paused() {
-    let mut harness = ClipboardHarness::with_text("  hello  ")
-        .with_mode(RefineMode::Trim)
-        .with_paused(true);
-
-    assert!(!harness.run_monitor_update(false));
-    assert_eq!(harness.clipboard_text(), "  hello  ");
-}
-
-/// 連続記録 ON かつ一時停止 OFF でも自動加工を実行しないようにすること
-#[test]
-fn continuous_record_disables_auto_processing_when_unpaused() {
+fn continuous_record_disables_auto_processing_even_when_auto_refine_enabled() {
     let mut harness = ClipboardHarness::with_text("  hello  ")
         .with_mode(RefineMode::Trim)
         .with_continuous_record(true)
-        .with_paused(false)
         .with_monitor_mode(MonitorMode::Event);
 
     assert!(!harness.run_configured_monitor_update());

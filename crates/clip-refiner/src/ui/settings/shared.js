@@ -4,11 +4,7 @@
 
 import { ctx } from './ctx.js';
 import { scheduleApply } from './ipc_apply.js';
-import {
-    syncContinuousRecordUi,
-    syncMonitorIntervalSection,
-    syncMonitorPauseBanner,
-} from './monitor_ui.js';
+import { syncContinuousRecordUi, syncMonitorIntervalSection } from './monitor_ui.js';
 
 import SettingsSharedLogic from './shared_logic.js';
 
@@ -265,21 +261,16 @@ export function withPreservedScroll(action) {
     }
 }
 
-/** サーバー主導のフィールド (一時停止・連続記録など) を DOM に反映する */
+/** サーバー主導のフィールド (自動変換・連続記録など) を DOM に反映する */
 export function syncServerFields() {
     const launch = document.getElementById('launch-at-login');
     if (launch) {
         launch.checked = ctx.state.launchAtLogin;
     }
-    const paused = document.getElementById('monitor-paused');
-    if (paused) {
-        paused.checked = ctx.state.isPaused;
-    }
     const autoRefine = document.getElementById('auto-refine-enabled');
     if (autoRefine) {
         autoRefine.checked = ctx.state.autoRefineEnabled;
     }
-    syncMonitorPauseBanner();
     syncContinuousRecordUi();
     syncMonitorIntervalSection();
     syncSelectorWebviewIdleSection();

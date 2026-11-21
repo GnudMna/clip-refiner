@@ -99,7 +99,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 トレイ常駐 UI は **インフラ層** (`menu/`, `event/`, `worker/` など) と **機能ドメイン層** (`features/`, `settings/apply/patch/`) に分ける。新機能を追加するときは、まず `features/` にメニュー構築とクリック処理をまとめ、設定ウィンドウ連携が必要なら `settings/apply/patch/` にパッチ適用を追加する。
 
 | モジュール (`tray/`) | 責務 |
-| :------------------- | :--- |
+| :--- | :--- |
 | `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う (`regex` 含む) |
 | `menu/` | `TrayMenu` 型定義、メニュー全体の組み立て・設定同期・履歴 / 連続記録メニュー再構築の共通化・アイコン |
 | `event/` | tao イベントループへの委譲 (`loop_event`, `user_event/` ルーター + ドメインハンドラ)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング。`loop_event` 末尾でセレクター保持同期とアイドル起床 (`ControlFlow::WaitUntil`) |
@@ -121,7 +121,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 `features/` のドメイン一覧:
 
 | サブモジュール (`tray/features/`) | 対応するトレイメニュー / 操作 |
-| :-------------------------------- | :---------------------------- |
+| :--- | :--- |
 | `refine` | 変換モード (自動変換の切り替えを含む)・お気に入り (`favorites.rs`) |
 | `regex` | 正規表現プリセットのトレイ切替 (変換モード内のサブメニュー) |
 | `monitor` | 監視方式の更新 (トレイメニューは持たず、設定ウィンドウから呼ぶ) |
@@ -129,7 +129,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `history` | 履歴メニュー (有効化・クリア・過去項目の選択) |
 | `record` | 連続記録 |
 | `update` | 更新確認・適用 (`platform/update/` をバックグラウンド起動。設定 UI から呼ぶ) |
-| `app_control` | 終了・一時停止・クイック変換・設定ウィンドウ・監視再開 |
+| `app_control` | 終了・クイック変換・設定ウィンドウ・監視再開 |
 
 設定ウィンドウの JavaScript は [WebView UI](#webview-ui-srcui) を参照する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー・セレクター WebView) に分割されている。設定変更の反映はパッチ側が `AppConfig` を更新し、実際の `WebView` 破棄同期は `loop_event` の `sync_selector_retention` が担う。
 
@@ -148,7 +148,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 `scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。
 
 | `scripts/windows/` | 役割 |
-| :----------------- | :--- |
+| :--- | :--- |
 | `check.ps1` | 品質チェック一式 (`-Coverage` でカバレッジ付きテストに切替可) |
 | `format.ps1` | rustfmt + Prettier 整形 |
 | `test.ps1` / `clippy.ps1` / `coverage.ps1` | 個別の Cargo コマンド (カバレッジは `cargo-llvm-cov`) |
@@ -227,7 +227,7 @@ flowchart TB
 ### 各コンポーネント
 
 | コンポーネント | スレッド | 責務 |
-| :------------- | :------- | :--- |
+| :--- | :--- | :--- |
 | **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け。連続記録貼り付けでは `RecordEvent::SendPaste` を受けて `SendInput` で `Ctrl+V` を送る |
 | **Hotkey Listener** (`tray/hotkey/`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `HotkeyEvent::Received` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
 | **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
@@ -261,12 +261,12 @@ flowchart TB
 通知の呼び出しは 2 層に分ける。
 
 | 層 | モジュール | 責務 |
-| :--- | :--------- | :--- |
+| :--- | :--- | :--- |
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
 | **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダ (MSI は `bin` の親) から開く (`THIRD_PARTY_NOTICES` は拡張子が無いためメモ帳を明示起動)。設定ウィンドウの「情報」タブから呼ぶ |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
 | **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
-| **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
+| **tray** | `tray/notify/message.rs` | 加工完了・自動変換の切替など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
 | **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
 | **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
 
@@ -284,7 +284,7 @@ flowchart TB
 ログレベルは環境変数 `RUST_LOG` で制御できる (例: `RUST_LOG=debug`)。
 
 | ビルド種別 | 出力先 |
-| :--------- | :----- |
+| :--- | :--- |
 | デバッグビルド (`cargo build` / `cargo run`) | ログファイル + 標準出力 |
 | リリースビルド | ログファイルのみ |
 

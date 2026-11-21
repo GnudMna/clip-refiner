@@ -108,25 +108,6 @@ fn handle_menu_event_quit_exits() {
     assert!(matches!(control_flow, ControlFlow::Exit));
 }
 
-/// 一時停止チェック ON で設定が一時停止になるようにすること
-#[test]
-fn handle_menu_event_pause_enables_paused() {
-    let ctx = TrayTestContext::new();
-    let mut control_flow = ControlFlow::Wait;
-
-    ctx.menu().pause_item.set_checked(true);
-    handle_menu_event(
-        &menu_event(ctx.menu().pause_item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert!(ctx.state().with_config(|c| c.is_paused));
-}
-
 /// 自動変換メニューのチェック OFF で自動変換が無効になること
 #[test]
 fn handle_menu_event_auto_refine_toggle_disables_auto_refine() {
@@ -315,13 +296,92 @@ fn handle_menu_event_continuous_record_enabled() {
 
     assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
     assert!(ctx.menu().continuous_record.enabled_item.is_checked());
-    assert!(!ctx.menu().refine.main_submenu.is_enabled());
+    // 変換モードメニューは連続記録中も操作できる (選ぶと連続記録が無効になる)
+    assert!(ctx.menu().refine.main_submenu.is_enabled());
     assert!(!ctx.menu().regex_presets.main_submenu.is_enabled());
     assert_eq!(
         ctx.menu().continuous_record.main_submenu.text(),
-        "連続記録 (自動加工停止)"
+        "連続記録モード (オン)"
     );
     ctx.assert_no_command();
+}
+
+/// 連続記録を有効にすると、有効だった自動変換が無効になること
+#[test]
+fn handle_menu_event_continuous_record_enabled_disables_auto_refine() {
+    let ctx = TrayTestContext::with_config(|c| {
+        c.auto_refine_enabled = true;
+        c.continuous_record_enabled = false;
+    });
+    let mut control_flow = ControlFlow::Wait;
+
+    handle_menu_event(
+        &menu_event(ctx.menu().continuous_record.enabled_item.id()),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu().refine.auto_refine_item.is_checked());
+}
+
+/// 自動変換を有効にすると、有効だった連続記録が無効になること
+#[test]
+fn handle_menu_event_auto_refine_enabled_disables_continuous_record() {
+    let ctx = TrayTestContext::with_config(|c| {
+        c.auto_refine_enabled = false;
+        c.continuous_record_enabled = true;
+    });
+    let mut control_flow = ControlFlow::Wait;
+
+    ctx.menu().refine.auto_refine_item.set_checked(true);
+    handle_menu_event(
+        &menu_event(ctx.menu().refine.auto_refine_item.id()),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert!(ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.menu().continuous_record.enabled_item.is_checked());
+    assert!(ctx.state().monitor_snapshot().auto_processing_enabled());
+}
+
+/// 連続記録中に変換モードを選ぶと、自動変換が有効になり連続記録が無効になること
+#[test]
+fn handle_menu_event_mode_selection_disables_continuous_record() {
+    let ctx = TrayTestContext::with_config(|c| {
+        c.auto_refine_enabled = false;
+        c.continuous_record_enabled = true;
+    });
+    let mut control_flow = ControlFlow::Wait;
+
+    let id = ctx
+        .menu()
+        .refine
+        .all_mode_items()
+        .find(|(_, mode)| *mode == RefineMode::JsonFormat)
+        .map(|(item, _)| item.id().clone())
+        .expect("JsonFormat のメニュー項目");
+    handle_menu_event(
+        &menu_event(&id),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert!(ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.menu().continuous_record.enabled_item.is_checked());
 }
 
 /// 連続記録メニューから直近 1 件を取り消せるようにすること

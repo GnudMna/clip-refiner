@@ -345,6 +345,33 @@ impl ClipboardSessionState {
             .discharge_at(index)
     }
 
+    /// 取り出した連続記録を元のインデックスへ戻す
+    ///
+    /// 空文字やトリム後に空になる文字列は無視される
+    ///
+    /// # Arguments
+    /// * `index` - 戻す位置 (0 が先頭)
+    /// * `text` - 戻すクリップボード本文
+    /// * `limit` - 保持する最大件数
+    ///
+    /// # Returns
+    /// * `bool` - 戻された場合は `true`
+    pub fn restore_continuous_record_at(
+        &self,
+        index: usize,
+        text: impl AsRef<str>,
+        limit: usize,
+    ) -> bool {
+        let text = text.as_ref();
+        if text.trim().is_empty() {
+            return false;
+        }
+        self.continuous_record_store
+            .lock_ignore_poison()
+            .restore_at(index, text, limit);
+        true
+    }
+
     /// 連続記録キュー末尾 (直近の記録) を取り消す
     ///
     /// # Arguments

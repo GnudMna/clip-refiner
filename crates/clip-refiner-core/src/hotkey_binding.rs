@@ -478,7 +478,7 @@ mod tests {
         for binding in [
             consts::DEFAULT_HOTKEY_QUICK_SELECTOR,
             consts::DEFAULT_HOTKEY_NOTIFICATION,
-            consts::DEFAULT_HOTKEY_PAUSE,
+            consts::DEFAULT_HOTKEY_AUTO_REFINE,
             consts::DEFAULT_HOTKEY_QUIT,
             consts::DEFAULT_HOTKEY_UNDO,
             consts::DEFAULT_HOTKEY_OCR,
@@ -490,12 +490,12 @@ mod tests {
         }
     }
 
-    /// 最終フォールバックが一時停止ホットキーと一致すること
+    /// 最終フォールバックが自動変換切替ホットキーと一致すること
     #[test]
-    fn last_resort_hotkey_matches_pause_default() {
+    fn last_resort_hotkey_matches_auto_refine_default() {
         assert_eq!(
             parse_hotkey_or_default("", "also-invalid"),
-            parse_hotkey_binding(consts::DEFAULT_HOTKEY_PAUSE).expect("pause default")
+            parse_hotkey_binding(consts::DEFAULT_HOTKEY_AUTO_REFINE).expect("auto_refine default")
         );
     }
 

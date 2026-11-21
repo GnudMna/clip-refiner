@@ -187,9 +187,10 @@ struct ParsedConfigToml {
 
 /// `config.toml` を解析し、レガシー `[[clips]]` と未知キーを分離して返す
 fn parse_config_toml(content: &str) -> Result<ParsedConfigToml, ConfigError> {
-    let value: toml::Value =
+    let mut value: toml::Value =
         toml::from_str(content).map_err(|e| ConfigError::serialize(e.to_string()))?;
     let unknown_keys = collect_unknown_config_keys(&value);
+    drop_shadowed_legacy_keys(&mut value);
     let legacy_clips = value
         .get("clips")
         .and_then(|clips| clips.clone().try_into().ok())
@@ -202,6 +203,35 @@ fn parse_config_toml(content: &str) -> Result<ParsedConfigToml, ConfigError> {
         legacy_clips,
         unknown_keys,
     })
+}
+
+/// 旧キー名と現行キー名の対応 (テーブル名, 旧キー名, 現行キー名)
+///
+/// 現行キー名は読み込み時の別名として旧キー名も受け付けるため、両方があると重複扱いで解析に失敗する
+const SHADOWED_LEGACY_KEYS: &[(&str, &str, &str)] = &[
+    ("hotkeys", "selector", "quick_selector"),
+    ("hotkeys", "pause", "auto_refine"),
+    ("hotkeys", "paste_queue", "continuous_record_paste"),
+    (
+        "notification_settings",
+        "notify_pause",
+        "notify_auto_refine",
+    ),
+];
+
+/// 現行キー名と同じテーブルにある旧キー名を取り除く
+///
+/// 旧版へ戻して保存した後に再び更新した場合や手編集で、旧キー名と現行キー名が同居することがある。
+/// 現行キー名の値を優先する
+fn drop_shadowed_legacy_keys(value: &mut toml::Value) {
+    for (table, legacy, current) in SHADOWED_LEGACY_KEYS {
+        if let Some(table) = value.get_mut(*table).and_then(toml::Value::as_table_mut)
+            && table.contains_key(*current)
+            && table.remove(*legacy).is_some()
+        {
+            tracing::warn!("旧キー {legacy} を無視し、{current} の値を使う");
+        }
+    }
 }
 
 /// レガシー TOML の平文クリップを暗号文保持の `RegisteredClip` へ変換する
@@ -341,6 +371,53 @@ mod tests {
             assert_eq!(outcome.config.mode, AppConfig::default().mode);
             assert!(outcome.unknown_keys.is_empty());
         });
+    }
+
+    /// 旧キー名と現行キー名が同居していても解析に失敗せず、現行キー名の値を使うこと
+    #[test]
+    fn parse_prefers_current_key_over_legacy_alias() {
+        let parsed = parse_config_toml(
+            r#"
+version = 5
+mode = "Trim"
+interval_ms = 1000
+
+[notification_settings]
+notify_pause = true
+notify_auto_refine = false
+
+[hotkeys]
+pause = "Ctrl+Alt+P"
+auto_refine = "Ctrl+Alt+R"
+paste_queue = "Ctrl+Alt+Q"
+continuous_record_paste = "Ctrl+Alt+X"
+"#,
+        )
+        .unwrap_or_else(|e| panic!("旧キー同居の TOML を解析できること: {e:?}"));
+
+        assert_eq!(parsed.config.hotkeys.auto_refine, "Ctrl+Alt+R");
+        assert_eq!(parsed.config.hotkeys.continuous_record_paste, "Ctrl+Alt+X");
+        assert!(!parsed.config.notification_settings.notify_auto_refine);
+        // 旧キー名は既知キーのため未知キーとして報告しない
+        assert!(parsed.unknown_keys.is_empty());
+    }
+
+    /// 旧キー名だけの場合は従来どおり現行キーとして読み込むこと
+    #[test]
+    fn parse_keeps_legacy_alias_without_current_key() {
+        let parsed = parse_config_toml(
+            r#"
+version = 4
+mode = "Trim"
+interval_ms = 1000
+
+[hotkeys]
+pause = "Ctrl+Alt+P"
+"#,
+        )
+        .unwrap_or_else(|e| panic!("旧キーのみの TOML を解析できること: {e:?}"));
+
+        assert_eq!(parsed.config.hotkeys.auto_refine, "Ctrl+Alt+P");
     }
 
     /// 登録クリップファイルを読み込めなかった起動後の設定保存で、ファイルを削除しないこと

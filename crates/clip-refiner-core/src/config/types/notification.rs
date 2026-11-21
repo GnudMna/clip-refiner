@@ -24,13 +24,15 @@ pub struct NotificationSettings {
         alias = "notifyProcess"
     )]
     pub notify_process: bool,
-    /// 一時停止切替時に通知するかどうか
+    /// 自動変換の切替時に通知するかどうか (v4 以前の `notify_pause` を引き継ぐ)
     #[serde(
         default = "consts::default_true",
-        rename(serialize = "notifyPause", deserialize = "notify_pause"),
+        rename(serialize = "notifyAutoRefine", deserialize = "notify_auto_refine"),
+        alias = "notifyAutoRefine",
+        alias = "notify_pause",
         alias = "notifyPause"
     )]
-    pub notify_pause: bool,
+    pub notify_auto_refine: bool,
     /// 履歴復元時に通知するかどうか
     #[serde(
         default = "consts::default_true",
@@ -128,7 +130,7 @@ impl Default for NotificationSettings {
         Self {
             enabled: false,
             notify_process: true,
-            notify_pause: true,
+            notify_auto_refine: true,
             notify_history_restore: true,
             notify_ocr: true,
             notify_registered_clip: true,

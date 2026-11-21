@@ -23,8 +23,6 @@ pub struct MenuSnapshot {
     pub history_enabled: bool,
     /// 連続記録が有効かどうか
     pub continuous_record_enabled: bool,
-    /// 一時停止中かどうか
-    pub is_paused: bool,
     /// 有効な正規表現プリセット ID
     pub regex_active_preset_id: String,
     /// 正規表現プリセット一覧 (`id`, `name`)

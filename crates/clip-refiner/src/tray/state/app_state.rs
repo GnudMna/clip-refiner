@@ -147,7 +147,6 @@ impl AppState {
         self.with_config(|config| MonitorSnapshot {
             pipeline: config.effective_pipeline(),
             interval_ms: config.interval_ms,
-            is_paused: config.is_paused,
             auto_refine_enabled: config.auto_refine_enabled,
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
@@ -187,7 +186,6 @@ impl AppState {
             hotkeys: config.hotkeys.clone(),
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
-            is_paused: config.is_paused,
             regex_active_preset_id: config.regex.active_preset_id.clone(),
             regex_presets: config
                 .regex
@@ -255,6 +253,23 @@ impl AppState {
             dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
         }
         discharged
+    }
+
+    /// 取り出した連続記録を元のインデックスへ戻す
+    ///
+    /// クリップボードへの書き込みに失敗した場合に使う。戻した後、UI スレッドへ連続記録更新イベントを通知する
+    ///
+    /// # Arguments
+    /// * `index` - 戻す位置 (0 が先頭)
+    /// * `text` - 戻すクリップボード本文
+    pub fn restore_continuous_record_at(&self, index: usize, text: impl AsRef<str>) {
+        let limit = self.with_config(|c| c.continuous_record_limit);
+        if self
+            .clipboard_session
+            .restore_continuous_record_at(index, text.as_ref(), limit)
+        {
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
+        }
     }
 
     /// 連続記録キュー末尾 (直近の記録) を取り消す

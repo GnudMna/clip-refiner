@@ -109,8 +109,6 @@ pub struct TrayMenu {
     pub(in crate::tray::menu) tray_icon: TrayIcon,
     /// 終了項目
     pub quit_item: MenuItem,
-    /// 一時停止項目
-    pub pause_item: CheckMenuItem,
     /// 変換モード関連メニュー
     pub refine: RefineMenu,
     /// クリップボード履歴メニュー

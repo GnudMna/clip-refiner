@@ -75,6 +75,7 @@ fn migrate_config_to(config: AppConfig, target_version: u32) -> ConfigMigration 
             1 => migrate_v1_to_v2(config),
             2 => migrate_v2_to_v3(config),
             3 => migrate_v3_to_v4(config),
+            4 => migrate_v4_to_v5(config),
             v => {
                 tracing::warn!(
                     "未対応の設定 version={v} (現行={target_version})。既存項目を維持する。ディスクへは自動保存しない"
@@ -137,6 +138,22 @@ fn migrate_v2_to_v3(mut config: AppConfig) -> AppConfig {
 fn migrate_v3_to_v4(mut config: AppConfig) -> AppConfig {
     config.auto_refine_enabled = true;
     config.version = 4;
+    config
+}
+
+/// v4 から v5 へ移行
+///
+/// v5 で廃止: `is_paused` (一時停止は自動変換の無効化へ統合)
+/// v5 で変更: `hotkeys.pause` → `hotkeys.auto_refine`、`notify_pause` → `notify_auto_refine` (読み込み時の alias で引き継ぐ)
+/// 一時停止中だった設定は自動変換を無効にして挙動を維持する。
+/// 自動変換と連続記録が同時に有効だった設定は、従来の挙動どおり連続記録を残して自動変換を無効にする
+fn migrate_v4_to_v5(mut config: AppConfig) -> AppConfig {
+    if config.legacy_is_paused {
+        config.auto_refine_enabled = false;
+    }
+    config.legacy_is_paused = false;
+    config.normalize_exclusive_modes();
+    config.version = 5;
     config
 }
 
@@ -314,6 +331,79 @@ interval_ms = 1000
         assert!(!config.auto_refine_enabled);
         let result = migrate_config(config);
         assert!(result.config.auto_refine_enabled);
+    }
+
+    /// v4 で一時停止中だった設定は、自動変換を無効にして移行すること
+    #[test]
+    fn migrate_v4_paused_disables_auto_refine() {
+        let toml = r#"
+version = 4
+auto_refine_enabled = true
+mode = "Trim"
+interval_ms = 1000
+is_paused = true
+"#;
+        let config: AppConfig = toml::from_str(toml).expect("v4 TOML のデシリアライズ");
+        assert!(config.legacy_is_paused);
+
+        let result = migrate_config(config);
+
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert!(!result.config.auto_refine_enabled);
+        assert!(!result.config.legacy_is_paused);
+        assert_eq!(result.config.mode, RefineMode::Trim);
+    }
+
+    /// v4 で一時停止中でなければ、自動変換の有効状態を維持して移行すること
+    #[test]
+    fn migrate_v4_not_paused_keeps_auto_refine() {
+        let config = AppConfig {
+            version: 4,
+            auto_refine_enabled: true,
+            ..Default::default()
+        };
+
+        let result = migrate_config(config);
+
+        assert!(result.migrated);
+        assert!(result.config.auto_refine_enabled);
+    }
+
+    /// v4 で自動変換と連続記録が同時に有効だった設定は、連続記録を残して移行すること
+    #[test]
+    fn migrate_v4_auto_refine_with_continuous_record_keeps_continuous_record() {
+        let config = AppConfig {
+            version: 4,
+            auto_refine_enabled: true,
+            continuous_record_enabled: true,
+            ..Default::default()
+        };
+
+        let result = migrate_config(config);
+
+        assert!(!result.config.auto_refine_enabled);
+        assert!(result.config.continuous_record_enabled);
+    }
+
+    /// v3 以前から移行しても、一時停止中や連続記録中の設定で自動変換が有効にならないこと
+    #[test]
+    fn migrate_v3_paused_or_recording_does_not_enable_auto_refine() {
+        let paused = AppConfig {
+            version: 3,
+            legacy_is_paused: true,
+            ..Default::default()
+        };
+        assert!(!migrate_config(paused).config.auto_refine_enabled);
+
+        let recording = AppConfig {
+            version: 3,
+            continuous_record_enabled: true,
+            ..Default::default()
+        };
+        let result = migrate_config(recording);
+        assert!(!result.config.auto_refine_enabled);
+        assert!(result.config.continuous_record_enabled);
     }
 
     /// 新規の既定設定ではコピー時の自動変換を無効とすること

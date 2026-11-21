@@ -30,8 +30,8 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 統合テスト (`crates/clip-refiner/tests/`) では監視ループ・ワーカー・履歴・正規表現・連続記録・登録クリップの主要経路を検証する。`ClipboardHarness` が監視ループとワーカーコマンドを横断的に駆動する。
 
 | ファイル | 検証内容 |
-| :------- | :------- |
-| `monitor_flow.rs` | 監視加工、Undo、自動変換無効時・一時停止時のスキップ、履歴上限、本文上限超過時の非加工、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン、連続記録中の自動加工停止、HTML 形式の読み取り (`html-to-markdown`) と書き込み (`markdown-to-rich-text`) |
+| :--- | :--- |
+| `monitor_flow.rs` | 監視加工、Undo、自動変換無効時のスキップ、履歴上限、本文上限超過時の非加工、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン、連続記録中の自動加工停止、HTML 形式の読み取り (`html-to-markdown`) と書き込み (`markdown-to-rich-text`) |
 | `worker_flow.rs` | 手動加工 (`ProcessMode`)、変更なし加工、Undo 空実行、履歴復元後の再加工抑制 (Polling / Event) |
 | `worker_recovery_flow.rs` | クリップボードワーカーの起動、`restart` による復旧、復旧メニュー表示 |
 | `history_flow.rs` | 暗号化履歴の記録・重複処理・復号 |
@@ -39,7 +39,7 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 | `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
 | `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
 | `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制、テンプレートの展開 (通常クリップは展開しない・書式不正時はクリップボードを変えない) |
-| `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止・`config.toml` 永続化往復 |
+| `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/自動変換と連続記録の排他・`config.toml` 永続化往復 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
 | `update_flow.rs` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・キー必須 DL の成功 / 認証失敗含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
@@ -49,6 +49,7 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 | `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `ui_bundle_flow.rs` | コミット済み `*.bundle.js` 先頭の入力一覧・SHA-256 をソースから再計算し、バンドルの再生成忘れを検出 (Node.js 不要) |
+| `license_ui_flow.rs` | 設定ウィンドウの情報タブ (`panels.js`) に載せた著作権表記とライセンス形態が `LICENSE` 冒頭と一致することを検証 (`LICENSE` だけ更新した取り残しを検出。Node.js 不要) |
 | `architecture_doc_flow.rs` | `docs/dev/architecture.md` の構成図・基準ディレクトリ付きの表・バッククォート内のパスが実在することを検証 (移動・改名後の記述の取り残しを検出) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `oneshot_ipc_flow.rs` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 複数ステッププリセット / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲 / 無応答接続の並行 / 同時処理上限からの回復 / 読み取り期限による無応答・途中送信接続の切断)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
@@ -56,7 +57,7 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
 
 | モジュール | 検証内容 |
-| :--------- | :------- |
+| :--- | :--- |
 | `platform/screen_capture/capture.rs` | 空矩形拒否、BGRA→RGBA 変換、仮想画面境界、左上小領域の実キャプチャ |
 | `platform/ocr/recognize.rs` | 空画像拒否、RGBA→BGRA 変換、`SoftwareBitmap` 生成、単色画像でのパイプライン完走 (エンジン未導入時は初期化失敗を許容) |
 | `platform/ocr/prepare.rs` / `normalize.rs` | 小画像拡大・最近傍補間・日本語スペース除去 |
@@ -68,7 +69,7 @@ OCR / 画面キャプチャの直接テストは統合テストではなく、�
 core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で検証する。設定仕様 (スキーマ番号・既定値・上限) と `docs/user/configuration.md` / README / 生成 TOML の同期は `crates/clip-refiner-core/src/config/spec.rs` のユニットテストが担う。設定項目・上限・既定ホットキーを変えたら、実装・生成コメント・Markdown を同じ変更に含める ([ドキュメント同期](contributing.md#ドキュメント同期))。
 
 | ファイル | 検証内容 |
-| :------- | :------- |
+| :--- | :--- |
 | `refine_modes.rs` | 全 `RefineMode` の代表入力・出力とモード追加時のカバレッジ |
 | `pipeline_api.rs` | テキスト / クリップボードのパイプライン API |
 | `property_transforms.rs` | `proptest` による任意入力で成り立つ性質 ([プロパティテスト](#プロパティテスト-proptest)) |
@@ -81,7 +82,7 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | :--- | :--- | :--- |
 | JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
 | Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,lazy,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
-| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・並べ替えボタン・テンプレートバッジ・画像サムネ/ホバー、クイックのお気に入り順と `Ctrl+Shift+↑/↓` 並べ替え→TOML・`Ctrl+Enter`・カテゴリ見出しの開閉と再表示時の復元 (`settings.spec.ts` / `quick_selector.spec.ts` / `clip_selector.spec.ts`)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
+| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、自動変換と連続記録の排他 (チェック・バナーの反映→TOML)、お気に入り並べ替え→TOML、登録クリップの空表示・検索・並べ替えボタン・テンプレートバッジ・画像サムネ/ホバー、クイックのお気に入り順と `Ctrl+Shift+↑/↓` 並べ替え→TOML・`Ctrl+Enter`・連続記録中の `Ctrl+Enter` による自動変換への切替→TOML・カテゴリ見出しの開閉と再表示時の復元 (`settings.spec.ts` / `quick_selector.spec.ts` / `clip_selector.spec.ts`)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
 OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクル・ドラッグ確定・枠描画は上記 Rust テストで回帰検知する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
@@ -129,7 +130,7 @@ Visual Studio の「C++ によるデスクトップ開発」(AddressSanitizer �
 ```
 
 | ターゲット | 検証内容 |
-| :--------- | :------- |
+| :--- | :--- |
 | `all_modes` | 全モードがパニックしない (正規表現は既定と置換設定ありの 2 通り) |
 | `line_sort` | 並べ替えがパニックせず、行数と行の集合を変えない (CSV レコード単位の経路を含む) |
 | `markdown_table` | Markdown 表⇄Excel がパニックしない (互いの出力を入力にした経路を含む) |
@@ -144,7 +145,7 @@ Visual Studio の「C++ によるデスクトップ開発」(AddressSanitizer �
 fuzz とは別の観点で、巨大入力での処理時間の悪化を検知する。`crates/clip-refiner-core/benches/transforms.rs` が、パーサ入力上限 (1 MiB) の手前までの入力で次のモードを計測する。
 
 | 計測対象 | モード |
-| :------- | :----- |
+| :--- | :--- |
 | JSON・YAML | JSON 整形 (順序保持の有無) / JSON→YAML / YAML→JSON |
 | Markdown・HTML・表 | Markdown→HTML / Markdown 表→Excel / HTML→Markdown |
 | 行・文字列 | 昇順ソート / URL エンコード / 半角→全角 |
@@ -196,7 +197,7 @@ npm run test:e2e
 `clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy・テスト・ドキュメントテストを走らせる場合は `--features test-helpers` を付ける (`cargo test --release --all-targets --features test-helpers` も通る)。テスト専用の公開シンボル (`ipc::ClientError`、`apply_update_at_with_key` など) も同じ条件に限定し、通常のリリースビルドでは未使用警告を出さない。
 
 | モジュール | 所在 | 内容 |
-| :--------- | :--- | :--- |
+| :--- | :--- | :--- |
 | `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`, `update` モック bridge、oneshot IPC など) |
 | `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
 
@@ -223,20 +224,19 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 **ビルダー (設定の事前セット)**
 
 | メソッド | 用途 |
-| :------- | :--- |
+| :--- | :--- |
 | `with_html` | クリップボードに置く HTML 形式 (`html-to-markdown` の入力) |
 | `with_external_copy_after_read` | 本文の読み取り直後に別の内容がコピーされた状況 (加工中の割り込みコピー) |
 | `with_mode` | 監視・手動加工のデフォルトモード |
 | `with_pipeline` | 監視時の加工パイプライン |
 | `with_history` | 履歴の有効・無効 |
 | `with_continuous_record` | 連続記録の有効・無効 |
-| `with_paused` | 監視の一時停止 |
 | `with_monitor_mode` | `MonitorMode::Polling` / `Event` |
 
 **監視ループ経路**
 
 | メソッド | 本番の対応 |
-| :------- | :--------- |
+| :--- | :--- |
 | `run_monitor_update(event_driven)` | 監視ループ 1 ティック (`event_driven` は OS イベント有無) |
 | `run_configured_monitor_update()` | 設定の `monitor_mode` に応じた `event_driven` で実行 |
 | `replace_clipboard` / `reset_clipboard` | 外部コピー・クリップボード差し替えの模倣 |
@@ -246,7 +246,7 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 **ワーカーコマンド経路** (`ClipboardCommand` 相当)
 
 | メソッド | コマンド |
-| :------- | :------- |
+| :--- | :--- |
 | `process_mode` | `ProcessMode` |
 | `process_oneshot_pipeline` | `ProcessOneshotPipeline` (ワンショットの常駐委譲) |
 | `set_text` | `SetText` (履歴復元) |
@@ -288,7 +288,7 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 ```
 
 | メソッド | 用途 |
-| :------- | :--- |
+| :--- | :--- |
 | `enqueue_apply_ipc` | JSON IPC の `apply` を適用待ちキューへ積む |
 | `enqueue_patch_json` | 部分更新 JSON をキューへ積む (マージ検証用) |
 | `take_pending_patch_json` | マージ済みパッチ JSON を取り出す |
@@ -302,7 +302,7 @@ assert!(ctx.state().with_config(|c| c.history_enabled));
 本番パイプ名と衝突しないテスト用パイプで `OneshotIpcServer` を起動し、クライアント往復を検証する。クリップボード I/O はスタブワーカー (`spawn_oneshot_stub_responder`) で差し替え、トランスポートとプロトコル境界に焦点を当てる。通信失敗は `ClientError` (`thiserror`) として返す (テストヘルパー経由で利用)。
 
 | ヘルパー | 用途 |
-| :------- | :--- |
+| :--- | :--- |
 | `start_oneshot_ipc_for_test` | 一意なパイプ名で待受開始 (`WaitNamedPipeW` で準備完了を待つ) |
 | `start_oneshot_ipc_with_read_timeout_for_test` | 要求の読み取り期限を短くして待受開始 (無応答接続の切断検証用) |
 | `process_oneshot_via_pipe` | 指定パイプへ正式な加工要求を送る |
@@ -328,7 +328,7 @@ $env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
 `check.ps1` は次の順に実行し、最初の失敗で止まる。
 
 | 順 | 内容 | 相当するコマンド |
-| :- | :--- | :--------------- |
+| :--- | :--- | :--- |
 | 1 | Rust の整形検証 | `cargo fmt --check` |
 | 2 | Clippy (アプリ全体 + core の feature なし) | `cargo clippy ... -- -D warnings` |
 | 3 | サプライチェーン監査 | `cargo deny check` |
@@ -398,7 +398,7 @@ cargo install cargo-llvm-cov --locked
 ```
 
 | フック | 実行内容 | 所要時間の目安 |
-| :----- | :------- | :------------- |
+| :--- | :--- | :--- |
 | `pre-commit` | `cargo fmt --check` (`check-pre-commit.ps1`) | 数秒 |
 | `pre-push` | `check.ps1` 一式 (fmt / clippy / deny / eslint / test / e2e) | 数分〜十数分 |
 
@@ -430,7 +430,7 @@ git hook run pre-push
 UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refiner/tests/`) は ESLint と Prettier で検証する。`check.ps1` / `format.ps1` は `scripts/common/npm.ps1` 経由で実行する。
 
 | ツール | 役割 |
-| :----- | :--- |
+| :--- | :--- |
 | [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。設定 / セレクター UI と Node ロジックテストは ESM (`import`/`export`)。ルート `package.json` は `"type": "module"` |
 | [Prettier](https://prettier.io/) | JavaScript の整形 (タブ幅 4、シングルクォート) |
 | [esbuild](https://esbuild.github.io/) | 設定 UI とセレクターの ESM を IIFE バンドル (`*.bundle.js`) にまとめる |
@@ -466,7 +466,7 @@ UI のファイル構成と `innerHTML` の扱いは [アーキテクチャ](arc
 [`deny.toml`](../../deny.toml) で依存関係の脆弱性・ライセンス・取得元を検証する。`check.ps1` は `cargo deny check` を含む。
 
 | チェック | 内容 |
-| :------- | :--- |
+| :--- | :--- |
 | **advisories** | RustSec 公表の脆弱性・yanked crate。`unmaintained` はワークスペース直接依存のみ失敗 |
 | **licenses** | 商用利用可能なパーミッシブライセンス (MIT / Apache-2.0 / BSD 等) のみ許可。GPL / LGPL / MPL 等のコピーレフトは拒否 |
 | **bans** | 同一 crate の多重バージョンなど |

@@ -150,7 +150,7 @@ cargo install cargo-about --locked --features cli
 パッケージへの同梱:
 
 | プラットフォーム | 同梱先 |
-| :--------------- | :----- |
+| :--- | :--- |
 | **Windows MSI** | `%LOCALAPPDATA%\ClipRefiner\THIRD_PARTY_NOTICES` (`build-msi.ps1` が生成後に同梱) |
 | **ポータブル ZIP** | 配布フォルダ直下の `THIRD_PARTY_NOTICES` (`build-portable.ps1` が生成後に同梱) |
 

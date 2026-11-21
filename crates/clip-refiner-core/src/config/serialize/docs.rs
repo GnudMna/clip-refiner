@@ -13,29 +13,29 @@ pub(crate) const DOC_MODE: &str = "使用する変換モード (`pipeline` が�
 pub(crate) const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \"Event\")";
 pub(crate) const DOC_SELECTOR_WEBVIEW_RETENTION: &str =
     "セレクター WebView の保持方針 (\"Keep\" / \"DisposeOnHide\" / \"DisposeAfterIdle\")";
-pub(crate) const DOC_IS_PAUSED: &str = "監視を一時停止するかどうか";
 pub(crate) const DOC_HISTORY_ENABLED: &str = "加工履歴の有効・無効";
 pub(crate) const DOC_CONTINUOUS_RECORD_ENABLED: &str =
     "連続記録モード (監視時は加工せず元テキストを記録)";
 pub(crate) const DOC_NS_ENABLED: &str = "デスクトップ通知の有効・無効 (エラー通知は常に表示)";
 pub(crate) const DOC_NS_NOTIFY_PROCESS: &str = "加工完了時の通知";
-pub(crate) const DOC_NS_NOTIFY_PAUSE: &str = "一時停止切替時の通知";
+pub(crate) const DOC_NS_NOTIFY_AUTO_REFINE: &str = "自動変換の切替時の通知";
 pub(crate) const DOC_NS_NOTIFY_HISTORY_RESTORE: &str = "履歴復元時の通知";
 pub(crate) const DOC_NS_NOTIFY_OCR: &str = "OCR 完了時の通知";
 pub(crate) const DOC_NS_NOTIFY_REGISTERED_CLIP: &str = "登録クリップ操作時の通知";
 pub(crate) const DOC_NS_NOTIFY_FAVORITES: &str = "お気に入り操作時の通知";
-pub(crate) const DOC_NS_NOTIFY_CONTINUOUS_RECORD: &str = "連続記録操作時の通知";
+pub(crate) const DOC_NS_NOTIFY_CONTINUOUS_RECORD: &str = "連続記録モードの操作時の通知";
 pub(crate) const DOC_NS_NOTIFY_RESULT: &str = "通知にクリップボードの内容を表示するかどうか";
 pub(crate) const DOC_HOTKEY_SELECTOR: &str = "クイックセレクタ表示";
 pub(crate) const DOC_HOTKEY_NOTIFICATION: &str = "成功通知の ON/OFF";
-pub(crate) const DOC_HOTKEY_PAUSE: &str = "監視の一時停止・再開";
+pub(crate) const DOC_HOTKEY_AUTO_REFINE: &str = "自動変換の有効・無効切替";
 pub(crate) const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
 pub(crate) const DOC_HOTKEY_CLIP_SELECTOR: &str = "登録クリップセレクター表示";
 pub(crate) const DOC_HOTKEY_OCR: &str = "画面範囲選択 OCR";
-pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD: &str = "連続記録の有効・無効切替";
-pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_UNDO: &str = "連続記録の直近 1 件取り消し";
+pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD: &str = "連続記録モードの有効・無効切替";
+pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_UNDO: &str =
+    "連続記録モードの直近 1 件の記録を取り消し";
 pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_PASTE: &str =
-    "連続記録キュー先頭をクリップボードへ載せて貼り付け";
+    "連続記録モードのキュー先頭をクリップボードへ載せて貼り付け";
 pub(crate) const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 pub(crate) const DOC_REGEX_ACTIVE_PRESET_ID: &str = "有効な正規表現プリセットの ID";
 
@@ -43,7 +43,7 @@ pub(crate) const SECTION_BASIC: &str = "基本";
 pub(crate) const SECTION_MONITOR: &str = "監視";
 pub(crate) const SECTION_SELECTOR_WEBVIEW: &str = "セレクター WebView";
 pub(crate) const SECTION_HISTORY: &str = "履歴";
-pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
+pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録モード";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";
 pub(crate) const SECTION_REGEX: &str = "正規表現プリセット (パターン・置換文字列の名前付きセット)";
 
@@ -89,7 +89,7 @@ pub(crate) fn doc_selector_webview_idle_minutes() -> String {
 /// 連続記録件数上限の説明コメントを返す
 pub(crate) fn doc_continuous_record_limit() -> String {
     format!(
-        "連続記録の最大保持件数 ({}〜{})",
+        "連続記録モードの最大保持件数 ({}〜{})",
         consts::MIN_CONTINUOUS_RECORD_LIMIT,
         consts::MAX_CONTINUOUS_RECORD_LIMIT
     )

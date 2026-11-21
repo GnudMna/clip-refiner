@@ -15,8 +15,6 @@ pub struct MonitorSnapshot {
     pub pipeline: Vec<RefineMode>,
     /// ポーリング間隔(ミリ秒)
     pub interval_ms: u64,
-    /// 一時停止中かどうか
-    pub is_paused: bool,
     /// コピー時の自動変換が有効かどうか
     pub auto_refine_enabled: bool,
     /// クリップボード履歴が有効かどうか
@@ -43,7 +41,8 @@ impl MonitorSnapshot {
 
     /// コピー監視による自動加工が有効かどうか
     ///
-    /// 自動変換が無効なとき・連続記録モード中・一時停止中は `false`
+    /// 自動変換が無効なとき・連続記録モード中は `false`
+    /// 設定上は同時に有効にならないが、手編集された設定の取り込み直後に備えて連続記録を優先する
     ///
     /// # Arguments
     /// * `self` - この `MonitorSnapshot`
@@ -51,7 +50,7 @@ impl MonitorSnapshot {
     /// # Returns
     /// * `bool` - 自動加工が有効な場合は `true`
     pub fn auto_processing_enabled(&self) -> bool {
-        self.auto_refine_enabled && !self.is_paused && !self.continuous_record_enabled
+        self.auto_refine_enabled && !self.continuous_record_enabled
     }
 }
 

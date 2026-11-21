@@ -329,7 +329,6 @@ mod tests {
         MonitorSnapshot {
             pipeline,
             interval_ms: 1000,
-            is_paused: false,
             auto_refine_enabled: true,
             history_enabled,
             continuous_record_enabled,

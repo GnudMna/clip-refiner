@@ -4,10 +4,10 @@ use toml_edit::DocumentMut;
 
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
-    DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_CONTINUOUS_RECORD, DOC_HOTKEY_CONTINUOUS_RECORD_PASTE,
-    DOC_HOTKEY_CONTINUOUS_RECORD_UNDO, DOC_HOTKEY_NOTIFICATION, DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE,
-    DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO, doc_hotkey_favorite_slots,
-    section_hotkeys,
+    DOC_HOTKEY_AUTO_REFINE, DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_CONTINUOUS_RECORD,
+    DOC_HOTKEY_CONTINUOUS_RECORD_PASTE, DOC_HOTKEY_CONTINUOUS_RECORD_UNDO, DOC_HOTKEY_NOTIFICATION,
+    DOC_HOTKEY_OCR, DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO,
+    doc_hotkey_favorite_slots, section_hotkeys,
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
@@ -46,11 +46,13 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
     )?;
     set_table_value(
         hotkeys,
-        "pause",
-        DOC_HOTKEY_PAUSE,
+        "auto_refine",
+        DOC_HOTKEY_AUTO_REFINE,
         TABLE_INDENT,
-        &config.hotkeys.pause,
+        &config.hotkeys.auto_refine,
     )?;
+    // 旧キー名を除去 (auto_refine へ移行済み)
+    hotkeys.remove("pause");
     set_table_value(
         hotkeys,
         "undo",
@@ -140,9 +142,9 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         TABLE_INDENT,
-        DOC_HOTKEY_PAUSE,
-        "pause",
-        &config.hotkeys.pause,
+        DOC_HOTKEY_AUTO_REFINE,
+        "auto_refine",
+        &config.hotkeys.auto_refine,
     )?;
     write_field(
         out,

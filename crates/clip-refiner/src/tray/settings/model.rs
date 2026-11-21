@@ -68,7 +68,6 @@ define_settings_model! {
     regex: RegexSettings,
     hotkeys: HotkeySettings,
     launch_at_login: bool,
-    is_paused: bool,
     auto_refine_enabled: bool,
 }
 
@@ -96,7 +95,6 @@ impl SettingsWritable {
             regex: config.regex.clone(),
             hotkeys: config.hotkeys.clone(),
             launch_at_login: autostart::is_enabled(),
-            is_paused: config.is_paused,
             auto_refine_enabled: config.auto_refine_enabled,
         }
     }
@@ -232,7 +230,7 @@ mod tests {
             "historyEnabled": null,
             "notificationSettings": {
                 "enabled": true,
-                "notifyPause": null,
+                "notifyAutoRefine": null,
                 "notifyResult": true
             },
             "intervalMs": 2000
@@ -245,6 +243,10 @@ mod tests {
         assert_eq!(base["notificationSettings"]["enabled"], true);
         assert_eq!(base["notificationSettings"]["notifyProcess"], true);
         assert_eq!(base["notificationSettings"]["notifyResult"], true);
-        assert!(base["notificationSettings"].get("notifyPause").is_none());
+        assert!(
+            base["notificationSettings"]
+                .get("notifyAutoRefine")
+                .is_none()
+        );
     }
 }

@@ -34,7 +34,7 @@ fn partial_notification_ipc_merge_preserves_sibling_fields() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.enqueue_apply_ipc(
-        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyPause":true,"notifyOcr":true}}}"#,
+        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":true,"notifyProcess":false,"notifyResult":false,"notifyAutoRefine":true,"notifyOcr":true}}}"#,
     ));
     assert!(ctx.enqueue_patch_json(r#"{"notificationSettings":{"notifyResult":true}}"#,));
 
@@ -47,7 +47,7 @@ fn partial_notification_ipc_merge_preserves_sibling_fields() {
     assert_eq!(notification["enabled"], true);
     assert_eq!(notification["notifyProcess"], false);
     assert_eq!(notification["notifyResult"], true);
-    assert_eq!(notification["notifyPause"], true);
+    assert_eq!(notification["notifyAutoRefine"], true);
     assert_eq!(notification["notifyOcr"], true);
 }
 
@@ -127,11 +127,11 @@ fn apply_ipc_updates_pipeline() {
 fn dequeue_and_apply_merged_patch() {
     let ctx = SettingsTestContext::new();
 
-    ctx.enqueue_apply_ipc(r#"{"type":"apply","patch":{"isPaused":true}}"#);
+    ctx.enqueue_apply_ipc(r#"{"type":"apply","patch":{"autoRefineEnabled":false}}"#);
 
     assert!(ctx.apply_pending_patch());
-    assert!(ctx.state().with_config(|c| c.is_paused));
-    assert!(ctx.menu().pause_item.is_checked());
+    assert!(!ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu().refine.auto_refine_item.is_checked());
 }
 
 /// `autoRefineEnabled` パッチで自動変換とトレイのチェック状態が切り替わること
@@ -188,12 +188,12 @@ fn apply_ipc_updates_hotkeys_and_fixes_invalid() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.apply_ipc(
-        r#"{"type":"apply","patch":{"hotkeys":{"quickSelector":"Ctrl+Shift+S","pause":"Bad+Key","favoriteModeSlots":[""]}}}"#,
+        r#"{"type":"apply","patch":{"hotkeys":{"quickSelector":"Ctrl+Shift+S","autoRefine":"Bad+Key","favoriteModeSlots":[""]}}}"#,
     ));
 
     let hotkeys = ctx.state().with_config(|c| c.hotkeys.clone());
     assert_eq!(hotkeys.quick_selector, "Ctrl+Shift+S");
-    assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
+    assert_eq!(hotkeys.auto_refine, consts::DEFAULT_HOTKEY_AUTO_REFINE);
     assert_eq!(hotkeys.favorite_mode_slots, vec![String::new()]);
 }
 
@@ -222,15 +222,36 @@ fn apply_ipc_enables_continuous_record() {
     assert!(ctx.menu().continuous_record.enabled_item.is_checked());
 }
 
-/// 一時停止パッチが設定とトレイメニューへ反映されるようにすること
+/// 連続記録を有効にすると、有効だった自動変換が無効になること
 #[test]
-fn apply_ipc_pauses_monitoring() {
+fn apply_ipc_continuous_record_disables_auto_refine() {
     let ctx = SettingsTestContext::new();
+    ctx.state().with_config_mut(|c| {
+        c.auto_refine_enabled = true;
+        c.continuous_record_enabled = false;
+    });
 
-    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"isPaused":true}}"#));
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"continuousRecordEnabled":true}}"#));
 
-    assert!(ctx.state().with_config(|c| c.is_paused));
-    assert!(ctx.menu().pause_item.is_checked());
+    assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu().refine.auto_refine_item.is_checked());
+}
+
+/// 自動変換を有効にすると、有効だった連続記録が無効になること
+#[test]
+fn apply_ipc_auto_refine_disables_continuous_record() {
+    let ctx = SettingsTestContext::new();
+    ctx.state().with_config_mut(|c| {
+        c.auto_refine_enabled = false;
+        c.continuous_record_enabled = true;
+    });
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"autoRefineEnabled":true}}"#));
+
+    assert!(ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(!ctx.menu().continuous_record.enabled_item.is_checked());
 }
 
 /// IPC `apply` 後に `config.toml` へ保存され再読込できるようにすること

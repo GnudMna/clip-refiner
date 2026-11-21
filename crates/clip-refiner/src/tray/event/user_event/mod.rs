@@ -66,7 +66,7 @@ mod tests {
         let hotkeys = HotkeySettings {
             quick_selector: "Ctrl+Alt+Shift+1".to_string(),
             notification: "Ctrl+Alt+Shift+2".to_string(),
-            pause: "Ctrl+Alt+Shift+3".to_string(),
+            auto_refine: "Ctrl+Alt+Shift+3".to_string(),
             quit: "Ctrl+Alt+Shift+4".to_string(),
             undo: "Ctrl+Alt+Shift+5".to_string(),
             clip_selector: "Ctrl+Alt+Shift+6".to_string(),

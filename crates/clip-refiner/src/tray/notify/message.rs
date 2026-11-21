@@ -14,8 +14,8 @@ use crate::security::format_public_snippet;
 pub enum NotificationCategory {
     /// 加工完了
     Process,
-    /// 一時停止切替
-    Pause,
+    /// 自動変換の切替
+    AutoRefine,
     /// 履歴復元
     HistoryRestore,
     /// OCR 完了
@@ -39,7 +39,7 @@ pub(crate) fn category_enabled(
 
     match category {
         NotificationCategory::Process => settings.notify_process,
-        NotificationCategory::Pause => settings.notify_pause,
+        NotificationCategory::AutoRefine => settings.notify_auto_refine,
         NotificationCategory::HistoryRestore => settings.notify_history_restore,
         NotificationCategory::Ocr => settings.notify_ocr,
         NotificationCategory::RegisteredClip => settings.notify_registered_clip,
@@ -149,32 +149,58 @@ pub fn show_image_process_notification(
 }
 
 // ======================================================================
-// 一時停止通知
+// 自動変換の切替通知
 // ======================================================================
-/// 一時停止通知を表示すべきか判定する
-pub(crate) fn should_show_pause_notification(settings: &NotificationSettings) -> bool {
-    category_enabled(settings, NotificationCategory::Pause)
+/// 自動変換の切替通知を表示すべきか判定する
+pub(crate) fn should_show_auto_refine_notification(settings: &NotificationSettings) -> bool {
+    category_enabled(settings, NotificationCategory::AutoRefine)
 }
 
-/// 一時停止状態に応じた通知本文を返す
-pub(crate) fn pause_notification_body(paused: bool) -> &'static str {
-    if paused {
-        "クリップボード監視を一時停止しました"
+/// 自動変換の状態に応じた通知本文を返す
+pub(crate) fn auto_refine_notification_body(enabled: bool) -> &'static str {
+    if enabled {
+        "自動変換を有効にしました"
     } else {
-        "クリップボード監視を再開しました"
+        "自動変換を無効にしました"
     }
 }
 
-/// 監視の一時停止または再開時のデスクトップ通知を表示する
+/// 自動変換の有効化または無効化時のデスクトップ通知を表示する
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
-/// * `paused` - 新しい一時停止状態 (`true`: 一時停止中, `false`: 監視中)
-/// * `source` - 通知のタイトル (操作元を示す文字列、例: "ショートカット", "設定変更")
-pub fn show_pause_notification(state: &Arc<AppState>, paused: bool, source: &str) {
+/// * `enabled` - 新しい自動変換の状態 (`true`: 有効, `false`: 無効)
+/// * `source` - 通知のタイトル (操作元を示す文字列、例: "ショートカット", "設定ウィンドウ")
+pub fn show_auto_refine_notification(state: &Arc<AppState>, enabled: bool, source: &str) {
     let settings = state.with_config(|c| c.notification_settings.clone());
-    if should_show_pause_notification(&settings) {
-        platform::show_notification(source, pause_notification_body(paused));
+    if should_show_auto_refine_notification(&settings) {
+        platform::show_notification(source, auto_refine_notification_body(enabled));
+    }
+}
+
+// ======================================================================
+// 自動変換と連続記録の排他通知
+// ======================================================================
+/// 自動変換と連続記録の排他通知を表示すべきか判定する
+///
+/// 両方の状態が同時に変わるため、どちらかのカテゴリが有効なら表示する
+pub(crate) fn should_show_exclusive_mode_notification(settings: &NotificationSettings) -> bool {
+    category_enabled(settings, NotificationCategory::AutoRefine)
+        || category_enabled(settings, NotificationCategory::ContinuousRecord)
+}
+
+/// 自動変換と連続記録の一方を有効にしてもう一方を無効にしたときのデスクトップ通知を表示する
+///
+/// 有効化した側の切替通知を兼ねるため、呼び出し側は切替通知を別に表示しない
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `summary` - 通知のタイトル (操作元を示す文字列)
+/// * `body` - 通知本文
+pub fn show_exclusive_mode_notification(state: &Arc<AppState>, summary: &str, body: &str) {
+    let settings = state.with_config(|c| c.notification_settings.clone());
+    if should_show_exclusive_mode_notification(&settings) {
+        platform::show_notification(summary, body);
     }
 }
 
@@ -281,19 +307,38 @@ mod tests {
         assert!(!body.contains("supersecretvalue"));
     }
 
-    /// 通知無効時は一時停止通知を表示しないようにすること
+    /// 通知無効時は自動変換の切替通知を表示しないようにすること
     #[test]
-    fn pause_notification_disabled_when_settings_off() {
+    fn auto_refine_notification_disabled_when_settings_off() {
         let settings = NotificationSettings::default();
-        assert!(!should_show_pause_notification(&settings));
+        assert!(!should_show_auto_refine_notification(&settings));
     }
 
-    /// `notify_pause` のみ OFF の場合は一時停止通知を表示しないようにすること
+    /// `notify_auto_refine` のみ OFF の場合は自動変換の切替通知を表示しないようにすること
     #[test]
-    fn pause_notification_disabled_when_notify_pause_off() {
+    fn auto_refine_notification_disabled_when_notify_auto_refine_off() {
         let mut settings = enabled_settings();
-        settings.notify_pause = false;
-        assert!(!should_show_pause_notification(&settings));
+        settings.notify_auto_refine = false;
+        assert!(!should_show_auto_refine_notification(&settings));
+    }
+
+    /// 排他通知は自動変換・連続記録のどちらかのカテゴリが有効なら表示すること
+    #[test]
+    fn exclusive_mode_notification_follows_either_category() {
+        // 片方だけ OFF なら表示する
+        let mut settings = enabled_settings();
+        settings.notify_auto_refine = false;
+        assert!(should_show_exclusive_mode_notification(&settings));
+        settings.notify_auto_refine = true;
+        settings.notify_continuous_record = false;
+        assert!(should_show_exclusive_mode_notification(&settings));
+
+        // 両方 OFF、またはマスター OFF なら表示しない
+        settings.notify_auto_refine = false;
+        assert!(!should_show_exclusive_mode_notification(&settings));
+        assert!(!should_show_exclusive_mode_notification(
+            &NotificationSettings::default()
+        ));
     }
 
     /// 履歴復元カテゴリ OFF 時は通知しないようにすること
@@ -307,21 +352,21 @@ mod tests {
         ));
     }
 
-    /// 一時停止時の通知本文できるようにすること
+    /// 自動変換の有効化時の通知本文を返すこと
     #[test]
-    fn pause_notification_body_when_paused() {
+    fn auto_refine_notification_body_when_enabled() {
         assert_eq!(
-            pause_notification_body(true),
-            "クリップボード監視を一時停止しました"
+            auto_refine_notification_body(true),
+            "自動変換を有効にしました"
         );
     }
 
-    /// 再開時の通知本文できるようにすること
+    /// 自動変換の無効化時の通知本文を返すこと
     #[test]
-    fn pause_notification_body_when_resumed() {
+    fn auto_refine_notification_body_when_disabled() {
         assert_eq!(
-            pause_notification_body(false),
-            "クリップボード監視を再開しました"
+            auto_refine_notification_body(false),
+            "自動変換を無効にしました"
         );
     }
 }

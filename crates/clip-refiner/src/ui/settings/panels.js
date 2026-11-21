@@ -31,6 +31,7 @@ import SettingsSharedLogic from './shared_logic.js';
 
 /** @type {Record<string, () => string>} */
 export const PANEL_RENDERERS = {
+    monitor: renderMonitorPanel,
     convert: renderConvertPanel,
     regex: renderRegexPanel,
     clipboard: renderClipboardPanel,
@@ -129,30 +130,12 @@ export function ensureSidebar() {
     syncSidebarActiveTab();
 }
 
-/** @returns {string} 一般タブの監視の状態カード HTML */
-function renderMonitorStateCards() {
-    return (
-        '<div id="monitor-pause-banner" class="status-banner status-paused" role="status"' +
-        (ctx.state.isPaused ? '' : ' hidden') +
-        '>クリップボード監視は一時停止中です</div>' +
-        card(
-            '監視の状態',
-            optionCheckbox(
-                'monitor-paused',
-                ctx.state.isPaused,
-                'クリップボード監視を一時停止',
-                '有効にすると加工と履歴の記録を止める'
-            )
-        )
-    );
-}
-
-/** @returns {string} 一般タブの詳細設定に置く監視方式・監視周期カード HTML */
-function renderMonitorAdvancedCards() {
+/** @returns {string} 監視タブのパネル HTML (監視方式・監視周期カード) */
+function renderMonitorPanel() {
     const intervalDisabled = ctx.state.monitorMode === 'Event' ? ' disabled' : '';
     const intervalBounds = intervalMsBounds();
 
-    return (
+    const body =
         card(
             '監視方式',
             '' +
@@ -185,8 +168,9 @@ function renderMonitorAdvancedCards() {
                 '〜' +
                 intervalBounds.max +
                 ' ms。イベント監視時は使用されない</p></div>'
-        )
-    );
+        );
+
+    return panelWrap('monitor', body);
 }
 
 /** @returns {string} 変換タブのパネル HTML */
@@ -197,19 +181,19 @@ function renderConvertPanel() {
     const body =
         '<div id="monitor-record-banner" class="status-banner status-continuous-record" role="status"' +
         (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
-        '>連続記録中はコピー時の自動加工を停止しています</div>' +
-        '<div id="monitor-processing-section"' +
-        processingDisabled +
-        '>' +
+        '>連続記録モード中はコピー時の自動加工を停止しています。自動変換を有効にすると連続記録モードは無効になります</div>' +
         card(
             '自動変換',
             optionCheckbox(
                 'auto-refine-enabled',
                 ctx.state.autoRefineEnabled,
                 'コピー時に自動変換する',
-                '無効のときはクイックセレクターやお気に入りホットキーで手動変換だけを行う'
+                '無効のときはクイックセレクターやお気に入りホットキーで手動変換だけを行う。連続記録モードとは同時に有効にならない'
             )
         ) +
+        '<div id="monitor-processing-section"' +
+        processingDisabled +
+        '>' +
         card(
             'デフォルトモード',
             '' +
@@ -264,7 +248,11 @@ function renderNotificationsPanel() {
             '' +
                 '<div class="option-list notify-sub">' +
                 optionCheckbox('notify-process', ns.notifyProcess, '加工完了時に通知') +
-                optionCheckbox('notify-pause', ns.notifyPause, '一時停止切替時に通知') +
+                optionCheckbox(
+                    'notify-auto-refine',
+                    ns.notifyAutoRefine,
+                    '自動変換の切替時に通知'
+                ) +
                 optionCheckbox(
                     'notify-history-restore',
                     ns.notifyHistoryRestore,
@@ -280,7 +268,7 @@ function renderNotificationsPanel() {
                 optionCheckbox(
                     'notify-continuous-record',
                     ns.notifyContinuousRecord,
-                    '連続記録操作時に通知'
+                    '連続記録モードの操作時に通知'
                 ) +
                 '</div>'
         ) +
@@ -337,17 +325,17 @@ function renderClipboardPanel() {
     );
 
     const recordCard = card(
-        '連続記録',
+        '連続記録モード',
         '' +
             '<div id="record-active-banner" class="status-banner status-continuous-record" role="status"' +
             (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
-            '>連続記録中はコピー時の自動加工を停止しています</div>' +
+            '>連続記録モード中はコピー時の自動加工を停止しています</div>' +
             '<div class="option-list">' +
             optionCheckbox(
                 'record-enabled',
                 ctx.state.continuousRecordEnabled,
-                '連続記録を有効にする',
-                '加工せず元テキストを順に記録する。有効中は自動加工が停止する'
+                '連続記録モードを有効にする',
+                '加工せず元テキストを順に記録する。有効にすると自動変換は無効になる'
             ) +
             '</div>' +
             '<div class="field"><label for="record-limit">最大保持件数</label>' +
@@ -363,7 +351,7 @@ function renderClipboardPanel() {
             '〜' +
             recordBounds.max +
             '</p></div>' +
-            '<div class="card-actions"><button type="button" class="danger-btn" id="clear-record-btn">連続記録をクリア</button></div>'
+            '<div class="card-actions"><button type="button" class="danger-btn" id="clear-record-btn">記録をクリア</button></div>'
     );
 
     return panelWrap(
@@ -602,14 +590,9 @@ function renderGeneralPanel() {
 
     return panelWrap(
         'general',
-        renderMonitorStateCards() +
-            launchCard +
+        launchCard +
             versionCard +
-            advancedSection(
-                '詳細設定',
-                renderMonitorAdvancedCards() + selectorCard,
-                ctx.advancedSectionOpen
-            )
+            advancedSection('詳細設定', selectorCard, ctx.advancedSectionOpen)
     );
 }
 
@@ -623,8 +606,16 @@ function renderAboutPanel() {
                 '<p class="hint">使い方・設定の詳細をブラウザで開く</p>' +
                 '<div class="card-actions"><button type="button" class="ghost-btn" id="open-user-docs-btn">ドキュメントを開く</button></div>'
         ) +
+            // 表記は LICENSE の 1〜2 行目と同じ。ずれは tests/license_ui_flow.rs が検出する
             card(
                 'ライセンス',
+                '' +
+                    '<p class="hint">Copyright (c) 2026 Yuto Hirata</p>' +
+                    '<p class="hint">All Rights Reserved.</p>' +
+                    '<div class="card-actions"><button type="button" class="ghost-btn" id="open-license-btn">LICENSE を開く</button></div>'
+            ) +
+            card(
+                '第三者ライセンス',
                 '' +
                     '<p class="hint">利用者向けドキュメントに含まれる mdBook のテーマ・highlight.js・clipboard.js・Font Awesome を含む、第三者ソフトウェアのライセンス表示</p>' +
                     '<div class="card-actions"><button type="button" class="ghost-btn" id="open-third-party-notices-btn">THIRD_PARTY_NOTICES を開く</button></div>'

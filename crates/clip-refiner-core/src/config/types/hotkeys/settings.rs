@@ -25,9 +25,14 @@ pub struct HotkeySettings {
     /// 成功通知のON/OFF切替
     #[serde(default = "default_hotkey_notification")]
     pub notification: String,
-    /// 監視の一時停止・再開
-    #[serde(default = "default_hotkey_pause")]
-    pub pause: String,
+    /// 自動変換の有効・無効切替 (v4 以前の `pause` を引き継ぐ)
+    #[serde(
+        default = "default_hotkey_auto_refine",
+        rename(serialize = "autoRefine", deserialize = "auto_refine"),
+        alias = "autoRefine",
+        alias = "pause"
+    )]
+    pub auto_refine: String,
     /// アプリケーションの終了
     #[serde(default = "default_hotkey_quit")]
     pub quit: String,
@@ -86,7 +91,7 @@ impl Default for HotkeySettings {
         Self {
             quick_selector: default_hotkey_quick_selector(),
             notification: default_hotkey_notification(),
-            pause: default_hotkey_pause(),
+            auto_refine: default_hotkey_auto_refine(),
             quit: default_hotkey_quit(),
             undo: default_hotkey_undo(),
             clip_selector: default_hotkey_clip_selector(),
@@ -140,12 +145,12 @@ fn default_hotkey_notification() -> String {
     consts::DEFAULT_HOTKEY_NOTIFICATION.to_string()
 }
 
-/// 一時停止のデフォルトホットキーを返す
+/// 自動変換切替のデフォルトホットキーを返す
 ///
 /// # Returns
-/// * `String` - 一時停止のデフォルトホットキー
-fn default_hotkey_pause() -> String {
-    consts::DEFAULT_HOTKEY_PAUSE.to_string()
+/// * `String` - 自動変換切替のデフォルトホットキー
+fn default_hotkey_auto_refine() -> String {
+    consts::DEFAULT_HOTKEY_AUTO_REFINE.to_string()
 }
 
 /// 終了のデフォルトホットキーを返す

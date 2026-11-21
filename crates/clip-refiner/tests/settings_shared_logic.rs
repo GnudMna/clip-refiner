@@ -18,10 +18,10 @@ fn notification_patch_merge_preserves_sub_toggles_when_master_off() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.enqueue_apply_ipc(
-        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":false,"notifyProcess":true,"notifyPause":false,"notifyOcr":true}}}"#,
+        r#"{"type":"apply","patch":{"notificationSettings":{"enabled":false,"notifyProcess":true,"notifyAutoRefine":false,"notifyOcr":true}}}"#,
     ));
     assert!(ctx.enqueue_patch_json(
-        r#"{"notificationSettings":{"notifyPause":true,"notifyResult":true}}"#,
+        r#"{"notificationSettings":{"notifyAutoRefine":true,"notifyResult":true}}"#,
     ));
 
     let json = ctx
@@ -32,7 +32,7 @@ fn notification_patch_merge_preserves_sub_toggles_when_master_off() {
     let notification = &patch["notificationSettings"];
     assert_eq!(notification["enabled"], false);
     assert_eq!(notification["notifyProcess"], true);
-    assert_eq!(notification["notifyPause"], true);
+    assert_eq!(notification["notifyAutoRefine"], true);
     assert_eq!(notification["notifyOcr"], true);
     assert_eq!(notification["notifyResult"], true);
 }

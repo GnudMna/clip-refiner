@@ -162,10 +162,6 @@ fn spec_root_fields(config: &AppConfig) -> Vec<SpecField> {
             default_cell: config.selector_webview_idle_minutes.to_string(),
         },
         SpecField {
-            key: "is_paused",
-            default_cell: config.is_paused.to_string(),
-        },
-        SpecField {
             key: "history_enabled",
             default_cell: config.history_enabled.to_string(),
         },
@@ -196,8 +192,8 @@ fn spec_notification_fields(ns: &NotificationSettings) -> Vec<SpecField> {
             default_cell: ns.notify_process.to_string(),
         },
         SpecField {
-            key: "notification_settings.notify_pause",
-            default_cell: ns.notify_pause.to_string(),
+            key: "notification_settings.notify_auto_refine",
+            default_cell: ns.notify_auto_refine.to_string(),
         },
         SpecField {
             key: "notification_settings.notify_history_restore",
@@ -246,8 +242,8 @@ fn spec_hotkey_fields(hk: &HotkeySettings) -> Vec<SpecField> {
             default_cell: quoted(&hk.notification),
         },
         SpecField {
-            key: "hotkeys.pause",
-            default_cell: quoted(&hk.pause),
+            key: "hotkeys.auto_refine",
+            default_cell: quoted(&hk.auto_refine),
         },
         SpecField {
             key: "hotkeys.continuous_record",
@@ -326,7 +322,7 @@ fn default_hotkeys() -> [&'static str; 10] {
         consts::DEFAULT_HOTKEY_CLIP_SELECTOR,
         consts::DEFAULT_HOTKEY_OCR,
         consts::DEFAULT_HOTKEY_NOTIFICATION,
-        consts::DEFAULT_HOTKEY_PAUSE,
+        consts::DEFAULT_HOTKEY_AUTO_REFINE,
         consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
         consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,
         consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE,
