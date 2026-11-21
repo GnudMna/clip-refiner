@@ -1,0 +1,10 @@
+{
+    "extends": "../tsconfig.base.json",
+    "compilerOptions": {
+        "lib": ["es2022", "dom"],
+        "types": ["node"],
+        // `page.evaluate` で呼ぶ `window.*` の型を UI の IPC 宣言から得る (JSDoc の typedef を解決するため JS も読む)
+        "allowJs": true
+    },
+    "include": ["**/*.ts", "../crates/clip-refiner/src/ui/ipc.d.ts"]
+}

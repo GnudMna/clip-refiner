@@ -3,12 +3,21 @@
 // ======================================================================
 
 /**
+ * `main.js` が代入する前の描画関数
+ *
+ * @returns {never}
+ */
+function notInitialized() {
+    throw new Error('設定 UI の描画関数が未初期化');
+}
+
+/**
  * 設定 UI 全体で共有するミュータブル状態
  *
  * ESM では import 束縛を再代入できないため、再代入が必要な値はここに集約する
  */
 export const ctx = {
-    /** @type {Record<string, unknown>|null} */
+    /** @type {import('../ipc').SettingsSnapshot|null} */
     state: null,
     /** @type {string} */
     activeTab: 'general',
@@ -16,7 +25,7 @@ export const ctx = {
     applyTimer: null,
     /** @type {ReturnType<typeof setTimeout>|null} */
     applyFeedbackTimer: null,
-    /** @type {Record<string, unknown>} */
+    /** @type {import('../ipc').SettingsPatch} */
     pendingPatch: {},
     /** @type {boolean} */
     clipRegisterPending: false,
@@ -39,7 +48,7 @@ export const ctx = {
      *
      * `label` / `preview` は開いた時点の値で、一覧が他の操作で変わったかの判定に使う
      *
-     * @type {{ index: number, label: string, preview: string, saving: boolean }|null}
+     * @type {{ index: number, token: string, label: string, preview: string, saving: boolean }|null}
      */
     clipEditor: null,
     /** @type {Record<string, number>} */
@@ -54,28 +63,45 @@ export const ctx = {
     sidebarInitialized: false,
     /** @type {boolean} */
     contentDelegationBound: false,
-    /** @type {boolean} */
+    /** @type {string|null} */
     selectedRegexPresetId: null,
     /**
      * 直近の更新確認 / 適用結果
      *
-     * @type {Record<string, unknown>|null}
+     * @type {import('../ipc').UpdateCheckResponse|import('../ipc').UpdateApplyResponse|null}
      */
     updateStatus: null,
+    /** @type {boolean} 更新確認 / 適用の応答待ちか */
+    updateBusy: false,
     /**
      * サイドバーとアクティブパネルを描画する
      *
      * `main.js` が初期化時に代入する
      *
-     * @type {((forcePanel?: boolean) => void)|null}
+     * @type {(forcePanel?: boolean) => void}
      */
-    render: null,
+    render: notInitialized,
     /**
      * アクティブタブのパネルを破棄して再描画する
      *
      * `main.js` が初期化時に代入する
      *
-     * @type {(() => void)|null}
+     * @type {() => void}
      */
-    refreshActivePanel: null,
+    refreshActivePanel: notInitialized,
 };
+
+/**
+ * 読み込み済みの設定スナップショットを返す
+ *
+ * パネルの描画とフォームのイベントは `loadSettings` の後にしか動かないため、
+ * 未読み込みでの呼び出しは実装の誤りとして例外にする
+ *
+ * @returns {import('../ipc').SettingsSnapshot}
+ */
+export function loadedState() {
+    if (!ctx.state) {
+        throw new Error('設定スナップショットが未読み込み');
+    }
+    return ctx.state;
+}

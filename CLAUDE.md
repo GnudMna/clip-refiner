@@ -19,16 +19,18 @@
 ```powershell
 cargo fmt
 cargo test --all-targets --features test-helpers  # 単体テスト + 統合テスト (check.ps1 と同じ。--release でも通る)
-cargo test --test monitor_flow      # 統合テストを絞る (tests/*_flow.rs)
+cargo test --test flow monitor::    # 統合テストを絞る (tests/flow/ の 1 モジュール = 1 ファイル)
 cargo test -p clip-refiner-core --no-default-features --all-targets
 ./scripts/windows/clippy.ps1        # clippy (-D warnings)
-./scripts/windows/format.ps1        # rustfmt + Prettier
+./scripts/windows/format.ps1        # rustfmt + Prettier + markdownlint の自動修正
 npm run build:ui                    # UI バンドル再生成
 npm run lint                        # ESLint
+npm run lint:md                     # markdownlint (Markdown の表などの書式)
+npm run typecheck                   # TypeScript 型チェック (UI の checkJs と E2E)
 ./scripts/windows/fuzz.ps1          # ファジング (nightly + cargo-fuzz。不定期にローカルで実行)
 ./scripts/windows/bench.ps1         # 処理時間ベンチ (criterion。-Save / -Compare で基準と比較)
 
-# 完了前の品質チェック一式 (fmt / clippy / deny / eslint / test / e2e)
+# 完了前の品質チェック一式 (fmt / clippy / deny / eslint / prettier / tsc / markdownlint / test / e2e)
 ./scripts/windows/check.ps1
 # GUI セッションが無い場合は WebView E2E をスキップする
 $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
@@ -53,4 +55,4 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 ## 注意点
 
 - `unwrap` / `expect` は clippy で警告になる (テストは除く)
-- Git フック (`scripts/git/hooks/`: pre-commit は fmt、pre-push は `check.ps1`) は `./scripts/windows/install-hooks.ps1` で有効化できる。スキップは `CLIP_REFINER_SKIP_HOOK=1` (pre-commit / pre-push)、`CLIP_REFINER_SKIP_E2E=1` (E2E のみ)
+- Git フック (`scripts/git/hooks/`: pre-commit は fmt、pre-push は E2E 抜きの `check.ps1 -SkipE2E`) は `./scripts/windows/install-hooks.ps1` で有効化できる。E2E は pre-push に含まれないため、`/check` の実行時とリリース前に必ず通す。スキップは `CLIP_REFINER_SKIP_HOOK=1` (pre-commit / pre-push)、`CLIP_REFINER_SKIP_E2E=1` (`check.ps1` の E2E のみ)

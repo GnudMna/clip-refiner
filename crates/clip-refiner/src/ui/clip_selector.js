@@ -1,6 +1,8 @@
 /**
  * 登録クリップセレクター UI (DOM / IPC)
  */
+import { requiredById, requiredChild } from './dom.js';
+
 import SelectorCommon from './selector-common.js';
 import ClipSelectorLogic from './clip_selector_logic.js';
 
@@ -41,10 +43,8 @@ const {
     buildRegisterRowInnerHtml,
 } = ClipSelectorLogic;
 
-/** @type {HTMLInputElement} */
-const input = document.getElementById('input');
-/** @type {HTMLElement} */
-const results = document.getElementById('results');
+const input = /** @type {HTMLInputElement} */ (document.getElementById('input'));
+const results = requiredById('results');
 
 /** @type {Array<{ id: string, label: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string, hover_preview?: string }>} */
 let items = [];
@@ -52,9 +52,11 @@ let items = [];
 let filtered = [];
 const selection = createSelection(results, () => totalRows(filtered.length));
 
-const imageHoverPreview = document.getElementById('image-hover-preview');
-const imageHoverPreviewImg = imageHoverPreview.querySelector('img');
-const imageHoverPreviewCaption = imageHoverPreview.querySelector('.image-hover-preview-caption');
+const imageHoverPreview = requiredById('image-hover-preview');
+const imageHoverPreviewImg = /** @type {HTMLImageElement} */ (
+    requiredChild(imageHoverPreview, 'img')
+);
+const imageHoverPreviewCaption = requiredChild(imageHoverPreview, '.image-hover-preview-caption');
 
 /** 画像ホバープレビューを非表示にする */
 function hideImageHoverPreview() {
@@ -127,7 +129,7 @@ input.addEventListener('mouseenter', hideImageHoverPreview);
 /** 全文を要求するまでのカーソル静止時間 (ms) */
 const TEXT_HOVER_DELAY_MS = 400;
 
-const textHoverPreview = document.getElementById('text-hover-preview');
+const textHoverPreview = requiredById('text-hover-preview');
 
 /** @type {ReturnType<typeof setTimeout>|null} */
 let textHoverTimer = null;
@@ -331,10 +333,12 @@ function createReorderButtons(index) {
     const container = document.createElement('div');
     container.className = 'reorder-buttons';
 
-    for (const [direction, text, title] of [
+    /** @type {Array<['up'|'down', string, string]>} */
+    const buttons = [
         ['up', '▲', '上へ移動'],
         ['down', '▼', '下へ移動'],
-    ]) {
+    ];
+    for (const [direction, text, title] of buttons) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'reorder-button';

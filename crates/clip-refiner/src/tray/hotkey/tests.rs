@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Instant;
 
-use global_hotkey::HotKeyState;
+use global_hotkey::{GlobalHotKeyManager, HotKeyState};
 use tao::event_loop::ControlFlow;
 
 use super::register::HotkeyRegistrationFailure;
@@ -244,9 +244,7 @@ fn assert_favorite_hotkeys(
         config.mode = RefineMode::UrlDecode;
         config.pipeline = vec![RefineMode::UrlDecode, RefineMode::Trim];
     });
-    let failures = handler
-        .reload_favorite_slots(&test_hotkeys(), 2)
-        .expect("お気に入りホットキーの登録解除に失敗");
+    let failures = handler.reload_favorite_slots(&test_hotkeys(), 2);
     assert_registered(&failures, "お気に入りホットキーの登録に失敗");
 
     let favorite_slot_one = handler
@@ -393,18 +391,14 @@ fn reload_updates_registered_hotkey_ids() {
 
     let mut updated = initial.clone();
     updated.quit = "Alt+Ctrl+Shift+W".to_string();
-    let failures = handler
-        .reload(&updated, &[])
-        .expect("ホットキーの登録解除に失敗");
+    let failures = handler.reload(&updated, &[]);
     assert_registered(&failures, "ホットキーの再登録に失敗");
 
     assert_ne!(handler.quit_hotkey_id(), quit_before);
 
     let ocr_before = handler.ocr_hotkey_id();
     updated.ocr = "Alt+Ctrl+Shift+Y".to_string();
-    let failures = handler
-        .reload(&updated, &[])
-        .expect("ホットキーの登録解除に失敗");
+    let failures = handler.reload(&updated, &[]);
     assert_registered(&failures, "OCR ホットキーの再登録に失敗");
     assert_ne!(handler.ocr_hotkey_id(), ocr_before);
 }
@@ -478,4 +472,46 @@ fn hotkey_ui_overlay_mutual_exclusion() {
 #[test]
 fn hotkey_recv_timeout_is_responsive() {
     assert_eq!(HOTKEY_RECV_TIMEOUT.as_millis(), 10);
+}
+
+/// 他アプリと衝突したホットキーがあっても、`reload` で残りのホットキーを再登録できること
+///
+/// 衝突キーは別の `GlobalHotKeyManager` で先に占有して再現する
+#[test]
+fn reload_registers_remaining_hotkeys_when_one_conflicts() {
+    let initial = HotkeySettings {
+        quick_selector: "Alt+Ctrl+Shift+F11".to_string(),
+        notification: "Alt+Ctrl+Shift+F12".to_string(),
+        auto_refine: "Alt+Ctrl+Shift+F13".to_string(),
+        quit: "Alt+Ctrl+Shift+F14".to_string(),
+        undo: "Alt+Ctrl+Shift+F15".to_string(),
+        clip_selector: "Alt+Ctrl+Shift+F16".to_string(),
+        ocr: "Alt+Ctrl+Shift+F17".to_string(),
+        continuous_record: "Alt+Ctrl+Shift+F18".to_string(),
+        continuous_record_undo: "Alt+Ctrl+Shift+F19".to_string(),
+        continuous_record_paste: "Alt+Ctrl+Shift+F20".to_string(),
+        favorite_mode_slots: Vec::new(),
+    };
+
+    // 途中のキー (undo) を別マネージャーに占有させ、起動時に登録できなかった状態にする
+    let occupier = GlobalHotKeyManager::new().expect("衝突用マネージャーの初期化に失敗");
+    let conflict_key = resolve::ResolvedHotkeys::from_settings(&initial).undo;
+    occupier
+        .register(conflict_key)
+        .expect("衝突キーの占有に失敗");
+
+    let (mut handler, failures) =
+        HotkeyHandler::new(&initial, &[]).expect("ホットキーハンドラの初期化に失敗");
+    assert_eq!(failures.len(), 1, "衝突した 1 件だけが失敗する");
+
+    // 衝突キー以外を変更して再登録する
+    let mut updated = initial.clone();
+    updated.quit = "Alt+Ctrl+Shift+F21".to_string();
+    let quit_before = handler.quit_hotkey_id();
+    let failures = handler.reload(&updated, &[]);
+
+    // 衝突キーだけが失敗し、変更したキーは新しく登録される
+    assert_eq!(failures.len(), 1, "再登録でも衝突した 1 件だけが失敗する");
+    assert_eq!(failures[0].binding, "Alt+Ctrl+Shift+F15");
+    assert_ne!(handler.quit_hotkey_id(), quit_before);
 }

@@ -141,11 +141,11 @@ fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
         None => (query_and_fragment, None),
     };
 
-    let params: Vec<&str> = query.split('&').collect();
-    let filtered_params: Vec<&str> = params
+    let params = split_params(query);
+    let filtered_params: Vec<(&str, &str)> = params
         .iter()
         .copied()
-        .filter(|param| {
+        .filter(|(_, param)| {
             let key = param.split('=').next().unwrap_or("");
             !is_tracking_param(key)
         })
@@ -162,9 +162,43 @@ fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
         // すべて削除された場合は `?` も消す
         Some(fragment_str)
     } else {
-        // 一部削除された場合
-        Some(format!("?{}{}", filtered_params.join("&"), fragment_str))
+        // 一部削除された場合は、残したパラメータの直前にあった区切りで連結する (先頭のパラメータには区切りを付けない)
+        let mut cleaned = String::from("?");
+        for (index, (separator, param)) in filtered_params.iter().enumerate() {
+            if index > 0 {
+                cleaned.push_str(separator);
+            }
+            cleaned.push_str(param);
+        }
+        cleaned.push_str(&fragment_str);
+        Some(cleaned)
     }
+}
+
+/// クエリ文字列をパラメータに分割する
+///
+/// 区切りは `&` と、HTML エスケープされた `&amp;` の両方。HTML ソースやメールからコピーした URL に対応する
+///
+/// # Arguments
+/// * `query` - `?` の直後から `#` の手前までのクエリ文字列
+///
+/// # Returns
+/// * `Vec<(&str, &str)>` - (直前の区切り, パラメータ) の一覧。先頭のパラメータの区切りは空文字列
+fn split_params(query: &str) -> Vec<(&str, &str)> {
+    let mut params = Vec::new();
+    let mut separator = "";
+    let mut rest = query;
+    while let Some(index) = rest.find('&') {
+        params.push((separator, &rest[..index]));
+        separator = if rest[index..].starts_with("&amp;") {
+            "&amp;"
+        } else {
+            "&"
+        };
+        rest = &rest[index + separator.len()..];
+    }
+    params.push((separator, rest));
+    params
 }
 
 // ======================================================================
@@ -408,6 +442,41 @@ mod tests {
             remove_utm_params("https://a.com/?id=1.5&q=a,b"),
             "https://a.com/?id=1.5&q=a,b"
         );
+    }
+
+    /// HTML エスケープされた `&amp;` を `&` と同じ区切りとして扱い、残すパラメータの区切りは維持すること
+    #[test]
+    fn test_remove_utm_params_html_escaped_ampersand() {
+        // 先頭の計測用パラメータを除去しても、次のキーが `amp;` で壊れないこと
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x&amp;id=1"),
+            "https://a.com/?id=1"
+        );
+        // 末尾の計測用パラメータを除去し、余分な `&amp;` を残さないこと
+        assert_eq!(
+            remove_utm_params("https://a.com/?id=1&amp;utm_source=x"),
+            "https://a.com/?id=1"
+        );
+        // 残すパラメータ同士の `&amp;` は維持すること
+        assert_eq!(
+            remove_utm_params("https://a.com/?a=1&amp;utm_medium=m&amp;b=2&amp;fbclid=y&amp;c=3"),
+            "https://a.com/?a=1&amp;b=2&amp;c=3"
+        );
+        // 計測用パラメータだけの場合は `?` ごと消すこと
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_source=x&amp;utm_medium=y#top"),
+            "https://a.com/#top"
+        );
+        // `&` と `&amp;` が混在しても、それぞれの区切りを維持すること
+        assert_eq!(
+            remove_utm_params("https://a.com/?a=1&b=2&amp;utm_source=x&c=3"),
+            "https://a.com/?a=1&b=2&c=3"
+        );
+        // 計測用パラメータを含まなければ変更しないこと
+        assert!(matches!(
+            remove_utm_params("https://a.com/?a=1&amp;b=2"),
+            Cow::Borrowed(_)
+        ));
     }
 
     /// 変更するURLがない文章は元の参照をそのまま返すようにすること

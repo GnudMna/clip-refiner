@@ -132,6 +132,8 @@ Invoke-ScriptMain {
         Write-Host '品質チェックを実行します (check.ps1)...'
         Write-Host ''
         $checkScript = Join-Path $PSScriptRoot 'check.ps1'
+        # リリース前は E2E を必ず通す (環境変数でのスキップを無効にする)
+        $env:CLIP_REFINER_SKIP_E2E = $null
         & $checkScript
         if ($LASTEXITCODE -ne 0) {
             throw "エラー: check.ps1 が終了コード $LASTEXITCODE で失敗しました"

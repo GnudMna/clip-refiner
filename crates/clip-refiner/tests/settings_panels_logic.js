@@ -281,6 +281,29 @@ function test_resolve_content_click_action() {
         }),
         null
     );
+    // 必要な data 属性が欠けたボタンは IPC を送らない
+    assert.equal(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'favorite-remove';
+                },
+            },
+            dataset: {},
+        }),
+        null
+    );
+    assert.equal(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'clip-delete';
+                },
+            },
+            dataset: { index: '0' },
+        }),
+        null
+    );
 }
 
 /** 登録クリップボタンの表示状態を切り替えられること */

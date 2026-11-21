@@ -1,6 +1,8 @@
 /**
  * クイックセレクター UI (DOM / IPC)
  */
+import { requiredById } from './dom.js';
+
 import SelectorCommon from './selector-common.js';
 import QuickSelectorLogic from './quick_selector_logic.js';
 
@@ -39,11 +41,9 @@ const {
 } = QuickSelectorLogic;
 
 /** @type {import('./quick_selector_logic').QuickSelectorMode[]} */
-let modes = JSON.parse(document.getElementById('modes-data').textContent);
-/** @type {HTMLInputElement} */
-const input = document.getElementById('input');
-/** @type {HTMLElement} */
-const results = document.getElementById('results');
+let modes = JSON.parse(requiredById('modes-data').textContent ?? '[]');
+const input = /** @type {HTMLInputElement} */ (document.getElementById('input'));
+const results = requiredById('results');
 
 /**
  * 展開中カテゴリをアプリ側へ通知する
@@ -224,8 +224,11 @@ function renderList(scrollToSelection) {
     }
 
     let itemIndex = 0;
+    /** @type {string|null} */
     let lastCategory = null;
+    /** @type {HTMLDivElement|null} */
     let currentSection = null;
+    /** @type {HTMLDivElement|null} */
     let rootSection = null;
 
     filtered.forEach((mode) => {
@@ -258,7 +261,7 @@ function renderList(scrollToSelection) {
                     results.appendChild(currentSection);
                     lastCategory = category;
                 }
-                parent = currentSection;
+                parent = currentSection ?? results;
             } else {
                 if (!rootSection) {
                     rootSection = document.createElement('div');

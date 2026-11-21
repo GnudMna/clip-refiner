@@ -11,40 +11,40 @@
 | カテゴリ | モード名 (`--mode`) | 表示名 | 説明 |
 | :--- | :--- | :--- | :--- |
 | **URL 操作** | `url-encode` / `url-decode` | URLエンコード / URLデコード | URL のエンコード・デコード (エンコードは英数字と `-` `.` `_` `~` 以外の文字が対象。デコードは `+` を変えない) |
-|  | `remove-utm` | UTM除去 | URL から `utm_*` と `fbclid` / `gclid` などの計測パラメータを削除 |
+| | `remove-utm` | UTM除去 | URL から `utm_*` と `fbclid` / `gclid` などの計測パラメータを削除 |
 | **Base64** | `base64-encode` / `base64-decode` | Base64エンコード / Base64デコード | UTF-8 の文字列と Base64 (標準アルファベット・パディングあり) の相互変換。画像にも対応する ([Base64 と画像](#base64-と画像)) |
 | **ファイルパス** | `extract-basename` / `extract-basename-quoted` | ベースネーム抽出 / ベースネーム抽出(引用符付) | パスからファイル名のみを抽出 (引用符付きオプションあり) |
-|  | `add-path-quotes` / `remove-path-quotes` | 引用符を付与 / 引用符を削除 | パスへの引用符 (`"`) の付与・削除 |
-|  | `path-to-slash` / `path-to-backslash` | スラッシュ区切りに変換 / バックスラッシュ区切りに変換 | パス区切り文字をスラッシュ / バックスラッシュに変換 |
+| | `add-path-quotes` / `remove-path-quotes` | 引用符を付与 / 引用符を削除 | パスへの引用符 (`"`) の付与・削除 |
+| | `path-to-slash` / `path-to-backslash` | スラッシュ区切りに変換 / バックスラッシュ区切りに変換 | パス区切り文字をスラッシュ / バックスラッシュに変換 |
 | **行の並べ替え・削除** | `sort-lines-asc` / `sort-lines-desc` | 昇順で並び替え / 降順で並び替え | 行単位での昇順・降順ソート (クォート内改行を含む 2 列以上の CSV はレコード単位) |
-|  | `sort-lines-natural-asc` / `sort-lines-natural-desc` | 昇順で並び替え(自然順) / 降順で並び替え(自然順) | 連続する数字を数値として比較する自然順ソート (`2` は `10` より前。それ以外は `sort-lines-asc` と同じ) |
-|  | `remove-empty-lines` | 空行削除 | 空行を削除 |
-|  | `remove-duplicate-lines` | 重複行削除 | 重複行を削除 (クォート内改行を含む 2 列以上の CSV はレコード単位) |
-| **空白の除去** | `trim` | 全体をトリム | テキスト全体の前後の空白・改行を削除 |
-|  | `trim-lines` | 行単位でトリム | 行ごとに前後の空白 (全角含む) を削除 |
+| | `sort-lines-natural-asc` / `sort-lines-natural-desc` | 昇順で並び替え(自然順) / 降順で並び替え(自然順) | 連続する数字を数値として比較する自然順ソート (`2` は `10` より前。それ以外は `sort-lines-asc` と同じ) |
+| | `remove-empty-lines` | 空行削除 | 空行を削除 |
+| | `remove-duplicate-lines` | 重複行削除 | 重複行を削除 (クォート内改行を含む 2 列以上の CSV はレコード単位) |
+| **空白の除去** | `trim` | 全体をトリム | テキスト全体の前後の空白・改行を削除 (BOM・ゼロ幅スペースを含む) |
+| | `trim-lines` | 行単位でトリム | 行ごとに前後の空白 (全角・BOM・ゼロ幅スペースを含む) を削除 |
 | **エスケープ・解除** | `escape` / `unescape` | エスケープ / アンエスケープ | バックスラッシュエスケープの付与・解除 |
-|  | `regex-escape` / `regex-unescape` | 正規表現エスケープ / 正規表現アンエスケープ | 正規表現メタ文字のエスケープ・解除 |
+| | `regex-escape` / `regex-unescape` | 正規表現エスケープ / 正規表現アンエスケープ | 正規表現メタ文字のエスケープ・解除 |
 | **正規表現** | `regex-replace` | 正規表現置換 | パターンに一致する部分を置換 (`[regex]` 設定を使用) |
-|  | `regex-extract` | 正規表現抽出 | パターンに一致する部分を行単位で抽出 |
-|  | `regex-delete` | 正規表現削除 | パターンに一致する部分を削除 |
-|  | `regex-split` | 正規表現分割 | パターンで分割し改行で結合 |
+| | `regex-extract` | 正規表現抽出 | パターンに一致する部分を行単位で抽出 |
+| | `regex-delete` | 正規表現削除 | パターンに一致する部分を削除 |
+| | `regex-split` | 正規表現分割 | パターンで分割し改行で結合 |
 | **JSON 整形** | `json-format` | JSON整形(キー順序ソート) | JSON をインデント整形 (キーを辞書順にソート) |
-|  | `json-format-preserve-order` | JSON整形(キー順序保持) | JSON をインデント整形 (キー順序保持) |
+| | `json-format-preserve-order` | JSON整形(キー順序保持) | JSON をインデント整形 (キー順序保持) |
 | **YAML→JSON** | `yaml-to-json` | YAML→JSON(キー順序不同) | YAML を JSON へ変換 (キー順序不同) |
-|  | `yaml-to-json-preserve-order` | YAML→JSON(キー順序保持) | YAML を JSON へ変換 (キー順序保持) |
+| | `yaml-to-json-preserve-order` | YAML→JSON(キー順序保持) | YAML を JSON へ変換 (キー順序保持) |
 | **JSON→YAML** | `json-to-yaml` | JSON→YAML(キー順序ソート) | JSON を YAML へ変換 (キーを辞書順にソート) |
-|  | `json-to-yaml-preserve-order` | JSON→YAML(キー順序保持) | JSON を YAML へ変換 (キー順序保持) |
+| | `json-to-yaml-preserve-order` | JSON→YAML(キー順序保持) | JSON を YAML へ変換 (キー順序保持) |
 | **Markdown・HTML** | `markdown-to-html` | Markdown→HTML | Markdown を HTML ソース (テキスト) へ変換 |
-|  | `markdown-to-rich-text` | Markdown→リッチテキスト | Markdown をリッチテキスト (HTML 形式) としてクリップボードへ書き込む |
-|  | `html-to-markdown` | HTML→Markdown | HTML を Markdown へ変換 (ブラウザでコピーした HTML 形式を優先) |
+| | `markdown-to-rich-text` | Markdown→リッチテキスト | Markdown をリッチテキスト (HTML 形式) としてクリップボードへ書き込む |
+| | `html-to-markdown` | HTML→Markdown | HTML を Markdown へ変換 (ブラウザでコピーした HTML 形式を優先) |
 | **Excel** | `excel-to-markdown` | Excel→Markdown | Excel コピーデータを Markdown テーブルへ変換 |
-|  | `markdown-to-excel` | Markdown→Excel | Markdown 表を Excel (TSV) 形式へ変換 |
-|  | `excel-to-image` | Excel→画像 | Excel コピーデータの見た目を画像としてクリップボードへ保存 (エクスプローラへもファイルとして貼り付けられる。[画像のファイル貼り付け](#画像のファイル貼り付け)) |
+| | `markdown-to-excel` | Markdown→Excel | Markdown 表を Excel (TSV) 形式へ変換 (区切り行 `\|---\|` のある表だけを変換し、表以外の行はそのまま残す) |
+| | `excel-to-image` | Excel→画像 | Excel コピーデータの見た目を画像としてクリップボードへ保存 (エクスプローラへもファイルとして貼り付けられる。[画像のファイル貼り付け](#画像のファイル貼り付け)) |
 | **日時変換** | `to-datetime-string` / `to-unix-timestamp` | 日時→日時文字列 / 日時→Unixタイムスタンプ | 日時 ↔ Unix タイムスタンプ・日時文字列の変換。入力の形式は行ごとに自動判定 (ローカルタイムゾーン。複数行対応) |
-|  | `to-datetime-string-utc` | 日時→日時文字列(UTC) | 日時を UTC の日時文字列へ変換 |
-|  | `to-iso8601` / `to-iso8601-utc` | 日時→ISO 8601 / 日時→ISO 8601(UTC) | 日時を ISO 8601 (RFC 3339) 形式へ変換 (ローカルタイムゾーンのオフセット付き / UTC) |
-|  | `to-rfc2822` | 日時→RFC 2822 | 日時を RFC 2822 形式へ変換 (ローカルタイムゾーン) |
-|  | `to-japanese-datetime` | 日時→和文日時 | 日時を和文形式 (`2023年11月15日 07時13分20秒`) へ変換 (ローカルタイムゾーン) |
+| | `to-datetime-string-utc` | 日時→日時文字列(UTC) | 日時を UTC の日時文字列へ変換 |
+| | `to-iso8601` / `to-iso8601-utc` | 日時→ISO 8601 / 日時→ISO 8601(UTC) | 日時を ISO 8601 (RFC 3339) 形式へ変換 (ローカルタイムゾーンのオフセット付き / UTC) |
+| | `to-rfc2822` | 日時→RFC 2822 | 日時を RFC 2822 形式へ変換 (ローカルタイムゾーン) |
+| | `to-japanese-datetime` | 日時→和文日時 | 日時を和文形式 (`2023年11月15日 07時13分20秒`) へ変換 (ローカルタイムゾーン) |
 | **桁区切りカンマ** | `add-comma` / `remove-comma` | カンマ追加 / カンマ除去 | 数値への 3 桁カンマ区切り付与・削除 (複数行対応。`00123456` のように先頭がゼロの整数は ID・電話番号などとみなし、カンマ追加では変換しない) |
 | **識別子の書式** | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | camelCaseへ変換 / snake_caseへ変換 / PascalCaseへ変換 / kebab-caseへ変換 / SCREAMING_SNAKE_CASEへ変換 | 識別子のケース変換 (行頭のインデントは維持) |
 | **全角・半角** | `to-halfwidth` / `to-fullwidth` | 半角へ変換 / 全角へ変換 | 英数字・記号・スペース・カタカナの全角 ↔ 半角変換 |
@@ -101,10 +101,10 @@
 <summary><strong>URL デコード</strong> (<code>url-decode</code>)</summary>
 <br>
 
-|          |                                                                   |
+| | |
 | :--- | :--- |
 | **入力** | `https://example.com/search?q=%E3%83%86%E3%82%B9%E3%83%88&page=2` |
-| **出力** | `https://example.com/search?q=テスト&page=2`                      |
+| **出力** | `https://example.com/search?q=テスト&page=2` |
 
 </details>
 
@@ -146,6 +146,8 @@
 }
 ```
 
+先頭に BOM が付いた JSON も整形する。同じオブジェクトにキーが重複している JSON は、後の値で黙って上書きせず、整形しない (`json-format-preserve-order` も同じ)。
+
 </details>
 
 <details>
@@ -173,7 +175,27 @@ items:
 }
 ```
 
-`.inf` / `.nan` のように JSON で表現できない値を含む YAML は、`null` へ変えず変換しない。
+`.inf` / `.nan` のように JSON で表現できない値を含む YAML は、`null` へ変えず変換しない。同じマッピングにキーが重複している YAML も、後の値で黙って上書きせず変換しない。
+
+`---` で区切った複数のドキュメントは、ドキュメントを順に並べた配列にする。ドキュメントが 1 つだけなら配列にしない。
+
+マージキー (`<<: *base`) は展開する。明示したキーを優先し、マージ元にだけあるキーはオブジェクトの末尾に加える。
+
+`!Ref` や `!custom` のようなタグは捨てて、付けられた値だけを変換する (`a: !Ref b` は `{"a": "b"}`)。
+
+先頭に BOM が付いた YAML も変換する。
+
+数値は桁を保って変換する。128 bit 整数を超える整数 (`123456789012345678901234567890123456789012`) や 17 桁を超える小数 (`3.141592653589793238462643`) も丸めず、元の表記のまま JSON の数値にする。
+
+</details>
+
+<details>
+<summary><strong>JSON から YAML へ</strong> (<code>json-to-yaml</code>)</summary>
+<br>
+
+数値は桁を保って変換する。128 bit 整数を超える整数や 17 桁を超える小数も丸めず、元の表記のまま YAML の数値にする。指数表記は YAML 1.1 のパーサーでも小数として読めるよう、`1e5` を `1.0e+5` の形に直す。
+
+倍精度で表せない大きさの数値 (`1e400` など) を含む JSON や、同じオブジェクトにキーが重複している JSON は、変換しない。先頭に BOM が付いた JSON は変換する。
 
 </details>
 
@@ -206,12 +228,12 @@ items:
 <summary><strong>行の並べ替え・重複削除</strong> (<code>sort-lines-asc</code> / <code>remove-duplicate-lines</code>)</summary>
 <br>
 
-| モード                   | 入力                          | 出力                          |
+| モード | 入力 | 出力 |
 | :--- | :--- | :--- |
-| `sort-lines-asc`         | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
-| `sort-lines-asc`         | `10` / `9` / `2`              | `10` / `2` / `9`              |
-| `sort-lines-natural-asc` | `10` / `9` / `2`              | `2` / `9` / `10`              |
-| `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b`   | `a` / `b` / `c`               |
+| `sort-lines-asc` | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
+| `sort-lines-asc` | `10` / `9` / `2` | `10` / `2` / `9` |
+| `sort-lines-natural-asc` | `10` / `9` / `2` | `2` / `9` / `10` |
+| `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b` | `a` / `b` / `c` |
 
 (`/` は行の区切りを表す)
 
@@ -221,10 +243,10 @@ items:
 <summary><strong>ファイルパス</strong> (<code>extract-basename</code> / <code>add-path-quotes</code>)</summary>
 <br>
 
-| モード             | 入力                                       | 出力                                  |
+| モード | 入力 | 出力 |
 | :--- | :--- | :--- |
-| `extract-basename` | `C:\Users\sample\Documents\report.txt`     | `report.txt`                          |
-| `add-path-quotes`  | `C:\Program Files\App\app.exe`             | `"C:\Program Files\App\app.exe"`      |
+| `extract-basename` | `C:\Users\sample\Documents\report.txt` | `report.txt` |
+| `add-path-quotes` | `C:\Program Files\App\app.exe` | `"C:\Program Files\App\app.exe"` |
 
 </details>
 
@@ -232,10 +254,13 @@ items:
 <summary><strong>空白・空行の除去</strong> (<code>trim-lines</code> / <code>remove-empty-lines</code>)</summary>
 <br>
 
-| モード               | 入力                                         | 出力            |
+<!-- 入力例は前後の空白を見せるため、コード内の空白を許す -->
+<!-- markdownlint-disable MD038 -->
+| モード | 入力 | 出力 |
 | :--- | :--- | :--- |
-| `trim-lines`         | `  foo  ` / `    bar   `                     | `foo` / `bar`   |
-| `remove-empty-lines` | `a` / (空行) / `b` / (空行 2 行) / `c`       | `a` / `b` / `c` |
+| `trim-lines` | `  foo  ` / `    bar   ` | `foo` / `bar` |
+| `remove-empty-lines` | `a` / (空行) / `b` / (空行 2 行) / `c` | `a` / `b` / `c` |
+<!-- markdownlint-enable MD038 -->
 
 (`/` は行の区切りを表す)
 
@@ -245,12 +270,14 @@ items:
 <summary><strong>UTM パラメータの削除</strong> (<code>remove-utm</code>)</summary>
 <br>
 
-|          |                                                                        |
+| | |
 | :--- | :--- |
 | **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
-| **出力** | `https://example.com/page?id=123`                                      |
+| **出力** | `https://example.com/page?id=123` |
 
 削除するのは `utm_` で始まるパラメータと、広告のクリック ID (`fbclid` `gclid` `dclid` `gbraid` `wbraid` `msclkid` `yclid` `twclid` `ttclid` `igshid`)。キーの大文字・小文字は区別しない (`UTM_Source` も削除する)。
+
+HTML ソースやメールからコピーした、区切りが `&amp;` にエスケープされた URL も扱える (`?utm_source=x&amp;id=1` → `?id=1`)。残すパラメータの間の `&amp;` はそのまま維持する。
 
 URL を含む文章や URL の一覧も扱える。URL 以外の文字列はそのまま残す。クエリの終わりは、空白 (改行を含む)・日本語などの ASCII 以外の文字・`)` `>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点 (`.` `,` `;` `:` `!` `?`) は含めない。
 
@@ -262,7 +289,7 @@ URL を含む文章や URL の一覧も扱える。URL 以外の文字列はそ�
 
 **入力 (TSV):**
 
-```
+```text
 ID	Name	Price
 1	Apple	150
 2	Banana	100
@@ -320,7 +347,7 @@ presets = [
 ]
 ```
 
-|          |                                        |
+| | |
 | :--- | :--- |
 | **入力** | `会議日: 2024-01-15、締切: 2024-02-28` |
 | **出力** | `会議日: 2024/01/15、締切: 2024/02/28` |
@@ -333,9 +360,9 @@ presets = [
 
 ローカルタイムゾーン基準。出力例はタイムゾーンにより異なる。旧名 `timestamp-to-datetime` / `datetime-to-timestamp` も CLI の `--mode` と `config.toml` (`TimestampToDatetime` / `DatetimeToTimestamp`) で使える。
 
-|                  |                       |
+| | |
 | :--- | :--- |
-| **入力**         | `1700000000`          |
+| **入力** | `1700000000` |
 | **出力例 (JST)** | `2023-11-15 07:13:20` |
 
 - ミリ秒 (13 桁) は小数点以下 3 桁を付けて変換する (`1700000000123` → `2023-11-15 07:13:20.123`)。`to-unix-timestamp` は小数点以下の秒がある日時をミリ秒に戻す
@@ -373,9 +400,9 @@ presets = [
 <summary><strong>ケース変換</strong> (<code>to-snake-case</code>)</summary>
 <br>
 
-|          |               |
+| | |
 | :--- | :--- |
-| **入力** | `HelloWorld`  |
+| **入力** | `HelloWorld` |
 | **出力** | `hello_world` |
 
 </details>
@@ -384,10 +411,10 @@ presets = [
 <summary><strong>全角・半角変換</strong> (<code>to-halfwidth</code>)</summary>
 <br>
 
-|          |                          |
+| | |
 | :--- | :--- |
 | **入力** | `ＡＢＣ　１２３　データ` |
-| **出力** | `ABC 123 ﾃﾞｰﾀ`           |
+| **出力** | `ABC 123 ﾃﾞｰﾀ` |
 
 </details>
 
@@ -395,9 +422,9 @@ presets = [
 <summary><strong>カンマ区切り付与</strong> (<code>add-comma</code>)</summary>
 <br>
 
-|          |             |
+| | |
 | :--- | :--- |
-| **入力** | `1234567`   |
+| **入力** | `1234567` |
 | **出力** | `1,234,567` |
 
 </details>

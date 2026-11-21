@@ -8,6 +8,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
+#[cfg(windows)]
+use std::time::Duration;
 
 // ======================================================================
 // 定数
@@ -18,6 +20,17 @@ static TEMP_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
 ///
 /// Windows では同じ出力先への `MoveFileExW` が同時に走ると `ERROR_ACCESS_DENIED` で失敗するため
 static REPLACE_LOCK: Mutex<()> = Mutex::new(());
+/// 一時的な失敗の再試行までの待ち時間 (指数的に延ばし、合計 約 310ms)
+///
+/// ウイルス対策ソフト・検索インデクサー・外部エディタによる短時間のファイル占有を待つ
+#[cfg(windows)]
+const REPLACE_RETRY_DELAYS: [Duration; 5] = [
+    Duration::from_millis(10),
+    Duration::from_millis(20),
+    Duration::from_millis(40),
+    Duration::from_millis(80),
+    Duration::from_millis(160),
+];
 
 // ======================================================================
 // パブリック関数
@@ -118,6 +131,8 @@ fn rename_or_cleanup(tmp: &Path, dest: &Path) -> io::Result<()> {
 }
 
 /// Windows 向けの上書きリネーム
+///
+/// 他プロセスによる一時的なファイル占有で失敗した場合は、短い間隔で再試行する
 #[cfg(windows)]
 fn replace_file_windows(tmp: &Path, dest: &Path) -> io::Result<()> {
     use windows::Win32::Storage::FileSystem::{
@@ -127,14 +142,16 @@ fn replace_file_windows(tmp: &Path, dest: &Path) -> io::Result<()> {
 
     let tmp_wide = path_to_wide(tmp)?;
     let dest_wide = path_to_wide(dest)?;
-    // SAFETY: `tmp_wide` / `dest_wide` は NUL 終端の UTF-16 で、呼び出し中は生存する
-    let result = unsafe {
-        MoveFileExW(
-            PCWSTR(tmp_wide.as_ptr()),
-            PCWSTR(dest_wide.as_ptr()),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
+    let result = retry_transient(&REPLACE_RETRY_DELAYS, is_transient_replace_error, || {
+        // SAFETY: `tmp_wide` / `dest_wide` は NUL 終端の UTF-16 で、呼び出し中は生存する
+        unsafe {
+            MoveFileExW(
+                PCWSTR(tmp_wide.as_ptr()),
+                PCWSTR(dest_wide.as_ptr()),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        }
+    });
     match result {
         Ok(()) => Ok(()),
         Err(err) => {
@@ -144,6 +161,51 @@ fn replace_file_windows(tmp: &Path, dest: &Path) -> io::Result<()> {
             )))
         }
     }
+}
+
+/// 一時的なエラーの間、待ち時間を挟みながら操作を再試行する
+///
+/// 初回を含め最大 `delays.len() + 1` 回実行する。一時的でないエラーは即座に返す
+///
+/// # Arguments
+/// * `delays` - 再試行ごとの待ち時間
+/// * `is_transient` - エラーが再試行に値するかの判定
+/// * `op` - 実行する操作
+///
+/// # Returns
+/// * `Result<T, E>` - 成功した結果、または最後の失敗
+#[cfg(windows)]
+fn retry_transient<T, E>(
+    delays: &[Duration],
+    is_transient: impl Fn(&E) -> bool,
+    mut op: impl FnMut() -> Result<T, E>,
+) -> Result<T, E> {
+    for delay in delays {
+        match op() {
+            Err(err) if is_transient(&err) => std::thread::sleep(*delay),
+            result => return result,
+        }
+    }
+    op()
+}
+
+/// 他プロセスの一時的なファイル占有が原因になりうるエラーか判定する
+///
+/// アクセス拒否・共有違反・ロック違反が対象
+#[cfg(windows)]
+fn is_transient_replace_error(err: &windows::core::Error) -> bool {
+    use windows::Win32::Foundation::{
+        ERROR_ACCESS_DENIED, ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION,
+    };
+    use windows::core::HRESULT;
+
+    [
+        ERROR_ACCESS_DENIED,
+        ERROR_SHARING_VIOLATION,
+        ERROR_LOCK_VIOLATION,
+    ]
+    .into_iter()
+    .any(|code| err.code() == HRESULT::from_win32(code.0))
 }
 
 /// `Path` を NUL 終端の UTF-16 へ変換する
@@ -284,6 +346,97 @@ mod tests {
                 "置き換え後の内容が読めること: {content}"
             );
         }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 一時的なエラーは成功するまで再試行し、一時的でないエラーは即座に返すこと
+    #[cfg(windows)]
+    #[test]
+    fn retry_transient_retries_only_transient_errors() {
+        let delays = [Duration::ZERO; 3];
+
+        // 2 回失敗した後に成功する
+        let mut calls = 0;
+        let result = retry_transient(
+            &delays,
+            |_: &&str| true,
+            || {
+                calls += 1;
+                if calls < 3 { Err("busy") } else { Ok(calls) }
+            },
+        );
+        assert_eq!(result, Ok(3));
+
+        // 再試行の上限を超えたら最後の失敗を返す (初回 + 3 回)
+        let mut calls = 0;
+        let result: Result<(), _> = retry_transient(
+            &delays,
+            |_: &&str| true,
+            || {
+                calls += 1;
+                Err("busy")
+            },
+        );
+        assert_eq!(result, Err("busy"));
+        assert_eq!(calls, 4);
+
+        // 一時的でないエラーは再試行しない
+        let mut calls = 0;
+        let result: Result<(), _> = retry_transient(
+            &delays,
+            |_: &&str| false,
+            || {
+                calls += 1;
+                Err("fatal")
+            },
+        );
+        assert_eq!(result, Err("fatal"));
+        assert_eq!(calls, 1);
+    }
+
+    /// 他プロセスが出力先を一瞬掴んでいても、解放後の再試行で置き換えに成功すること
+    ///
+    /// `FILE_SHARE_DELETE` なしで開いたファイルは置き換えできず、アクセス拒否または共有違反になる
+    #[cfg(windows)]
+    #[test]
+    fn write_bytes_atomically_retries_while_destination_is_held() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_WRITE: u32 = 0x2;
+
+        let dir = unique_temp_dir("atomic-held");
+        let path = dir.join("config.toml");
+        fs::write(
+            &path, "old
+",
+        )
+        .expect("初期書き込み");
+
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&path)
+            .expect("出力先を占有");
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(60));
+            drop(held);
+        });
+
+        write_text_atomically(
+            &path, "new
+",
+        )
+        .expect("占有の解放後に置き換え");
+        releaser.join().expect("スレッドの終了");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("読み取り"),
+            "new
+"
+        );
+        assert_no_leftovers(&dir);
 
         let _ = fs::remove_dir_all(&dir);
     }

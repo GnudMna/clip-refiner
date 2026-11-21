@@ -119,15 +119,10 @@ fn reload_favorite_hotkeys(ctx: &mut AppEventContext<'_>) {
     let (hotkeys, favorite_count) = ctx
         .state
         .with_config(|c| (c.hotkeys.clone(), c.favorite_modes.len()));
-    match ctx
+    let failures = ctx
         .hotkey_handler
-        .reload_favorite_slots(&hotkeys, favorite_count)
-    {
-        Ok(failures) => notify_registration_failures(&failures),
-        Err(err) => {
-            crate::log_warn!("お気に入りホットキーの再登録に失敗: {}", err);
-        }
-    }
+        .reload_favorite_slots(&hotkeys, favorite_count);
+    notify_registration_failures(&failures);
     refresh_settings_favorites_and_shortcuts(ctx.state, ctx.settings);
 }
 
@@ -136,15 +131,7 @@ fn reload_hotkeys(ctx: &mut AppEventContext<'_>) {
     let (hotkeys, favorite_modes) = ctx
         .state
         .with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
-    match ctx.hotkey_handler.reload(&hotkeys, &favorite_modes) {
-        Ok(failures) => notify_registration_failures(&failures),
-        Err(err) => {
-            crate::log_warn!("ホットキーの再登録に失敗: {}", err);
-            crate::platform::show_notification(
-                "ホットキー",
-                &format!("ホットキーの再登録に失敗しました: {err}"),
-            );
-        }
-    }
+    let failures = ctx.hotkey_handler.reload(&hotkeys, &favorite_modes);
+    notify_registration_failures(&failures);
     refresh_settings_favorites_and_shortcuts(ctx.state, ctx.settings);
 }

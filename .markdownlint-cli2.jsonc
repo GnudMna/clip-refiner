@@ -1,0 +1,22 @@
+// Markdown の静的検査 (`npm run lint:md`)。規約は .claude/rules/docs.md
+{
+    "config": {
+        "default": true,
+        // 日本語の文は改行せずに 1 段落 1 行で書くため、行の長さは制限しない
+        "MD013": false,
+        // CHANGELOG の `### Fixed` などはバージョンごとに繰り返すため、同じ親の下だけ検査する
+        "MD024": { "siblings_only": true },
+        // README の中央寄せのロゴ、mdBook の `<details>` など HTML を使う
+        "MD033": false,
+        // README は HTML のロゴから、docs/user/changelog.md は mdBook の include から始まる
+        "MD041": false,
+        // Excel のコピーデータ (TSV) の例はタブを含む
+        "MD010": { "code_blocks": false },
+        // 表のセルは空白で埋めず、区切りの前後に空白を 1 つだけ置く
+        "MD060": { "style": "compact" }
+    },
+    "customRules": ["./scripts/common/markdownlint-table-delimiter.mjs"],
+    "globs": ["**/*.md"],
+    "ignores": ["node_modules/**", "target/**", "fuzz/target/**", "fuzz/corpus/**"],
+    "gitignore": true
+}

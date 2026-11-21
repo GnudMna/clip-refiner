@@ -12,6 +12,9 @@ pub enum ClipboardIoError {
     /// テキストまたは画像の読み取りに失敗
     #[error("クリップボードの読み取りに失敗しました: {0}")]
     ReadFailed(String),
+    /// クリップボードが空、またはテキスト形式ではない
+    #[error("クリップボードにテキストがありません")]
+    TextUnavailable,
     /// テキストまたは画像の書き込みに失敗
     #[error("クリップボードの書き込みに失敗しました: {0}")]
     WriteFailed(String),
@@ -124,7 +127,10 @@ pub trait HtmlClipboard {
 #[cfg(feature = "clipboard")]
 impl TextClipboard for arboard::Clipboard {
     fn get_text(&mut self) -> Result<String, ClipboardIoError> {
-        arboard::Clipboard::get_text(self).map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))
+        arboard::Clipboard::get_text(self).map_err(|e| match e {
+            arboard::Error::ContentNotAvailable => ClipboardIoError::TextUnavailable,
+            other => ClipboardIoError::ReadFailed(other.to_string()),
+        })
     }
 
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError> {

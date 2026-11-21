@@ -11,7 +11,11 @@ mod webview_script;
 mod window;
 
 pub use clip::ClipSelectorWindow;
+#[cfg(test)]
+pub(crate) use clip::{clip_selector_focus_script, clip_selector_refresh_script};
 pub use quick::QuickSelectorWindow;
+#[cfg(test)]
+pub(crate) use quick::{quick_selector_focus_script, quick_selector_refresh_script};
 pub(crate) use retention::{apply_idle_control_flow, hide_with_retention, sync_selector_retention};
 pub use ui::SelectorUi;
 pub(crate) use view_model::{

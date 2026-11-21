@@ -28,7 +28,7 @@ git switch -c release/v1.1.0
 4. `Cargo.lock` の workspace パッケージ version を同期
 5. [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
 6. `crates/clip-refiner/src/lib.rs` のドキュメント内バージョン例を更新
-7. `check.ps1` で品質チェック (fmt / clippy / deny / eslint / test / e2e)
+7. `check.ps1` で [品質チェック](testing.md#品質チェック) (E2E を含む全項目)。pre-push は E2E を含まないため、E2E はここで必ず通す (`CLIP_REFINER_SKIP_E2E` は無効化する)
 8. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
 9. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
 10. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)

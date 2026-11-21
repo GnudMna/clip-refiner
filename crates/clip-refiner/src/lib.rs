@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "3.0.1" }
+//! clip-refiner-core = { version = "3.0.2" }
 //! # テキスト変換のみ: default-features = false
 //! ```
 //!
@@ -45,6 +45,7 @@ mod user_error;
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 #[cfg(feature = "app")]
+#[doc(hidden)]
 pub mod test_helpers;
 
 // ======================================================================

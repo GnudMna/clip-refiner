@@ -412,7 +412,7 @@ root/
 #[test]
 fn wildcard_match_stays_within_segment() {
     assert!(wildcard_match("*.rs", "lib.rs"));
-    assert!(wildcard_match("tests/*_flow.rs", "tests/monitor_flow.rs"));
+    assert!(wildcard_match("tests/flow/*.rs", "tests/flow/monitor.rs"));
     assert!(wildcard_match("css/*.css", "css/base.css"));
     assert!(!wildcard_match("*.rs", "src/lib.rs"));
     assert!(!wildcard_match("*.rs", "lib.js"));

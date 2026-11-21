@@ -1,11 +1,20 @@
 use std::borrow::Cow;
 
 // ======================================================================
+// 定数
+// ======================================================================
+/// 空白文字に加えてトリム対象にする、コピー元によって混ざる見えない文字
+///
+/// BOM (`U+FEFF`) とゼロ幅スペース (`U+200B`)。どちらも `char::is_whitespace` は `false` を返す
+const INVISIBLE_TRIM_CHARS: [char; 2] = ['\u{FEFF}', '\u{200B}'];
+
+// ======================================================================
 // 全体トリム
 // ======================================================================
 /// 文字列全体の前後にある空白文字を削除する
 ///
 /// 入力文字列の最初と最後にあるスペース、タブ、改行などの空白文字を取り除く
+/// BOM (`U+FEFF`) とゼロ幅スペース (`U+200B`) も取り除く
 ///
 /// # Arguments
 /// * `input` - トリム対象の文字列
@@ -13,7 +22,7 @@ use std::borrow::Cow;
 /// # Returns
 /// * `Cow<'_, str>` - 前後の空白が削除された文字列
 pub fn trim_text(input: &str) -> Cow<'_, str> {
-    Cow::Borrowed(input.trim())
+    Cow::Borrowed(trim_edges(input))
 }
 
 // ======================================================================
@@ -22,7 +31,7 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 /// 文字列の各行について、前後の空白文字を削除する
 ///
 /// 行ごとにトリムを行い、各行の改行コードは元のまま保持する (CRLF と LF が混在していても変えない)
-/// 削除する空白文字は `trim_text` と同じ (全角スペースを含む)
+/// 削除する文字は `trim_text` と同じ (全角スペース・BOM・ゼロ幅スペースを含む)
 ///
 /// # Arguments
 /// * `input` - 各行をトリムする対象の文字列
@@ -30,7 +39,15 @@ pub fn trim_text(input: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - 各行の前後の空白が削除された文字列。変更がない場合は元の文字列への参照を返す
 pub fn trim_lines(input: &str) -> Cow<'_, str> {
-    super::utils::process_lines(input, |line| Some(Cow::Borrowed(line.trim())))
+    super::utils::process_lines(input, |line| Some(Cow::Borrowed(trim_edges(line))))
+}
+
+// ======================================================================
+// プライベート関数
+// ======================================================================
+/// 前後の空白文字・BOM・ゼロ幅スペースを取り除く
+fn trim_edges(input: &str) -> &str {
+    input.trim_matches(|c: char| c.is_whitespace() || INVISIBLE_TRIM_CHARS.contains(&c))
 }
 
 // ======================================================================
@@ -83,6 +100,24 @@ mod tests {
         assert_eq!(
             trim_lines("\u{3000}x\u{3000}"),
             trim_text("\u{3000}x\u{3000}")
+        );
+    }
+
+    /// BOM とゼロ幅スペースも前後から削除し、途中にあるものは残すこと
+    #[test]
+    fn test_trim_text_invisible_chars() {
+        assert_eq!(trim_text("\u{FEFF}hello"), "hello");
+        assert_eq!(trim_text("\u{200B} \u{200B}hello\u{200B}\n"), "hello");
+        assert_eq!(trim_text("a\u{200B}b"), "a\u{200B}b");
+        assert_eq!(trim_text("\u{FEFF}\u{200B}"), "");
+    }
+
+    /// 行ごとのトリムでも BOM とゼロ幅スペースを各行の前後から削除すること
+    #[test]
+    fn test_trim_lines_invisible_chars() {
+        assert_eq!(
+            trim_lines("\u{FEFF}a\u{200B}\r\n\u{200B} b \u{FEFF}\nc\u{200B}d"),
+            "a\r\nb\nc\u{200B}d"
         );
     }
 

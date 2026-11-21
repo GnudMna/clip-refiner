@@ -70,10 +70,9 @@ Invoke-ScriptMain {
     Write-Host ''
     Write-Host "  core.hooksPath = $hooksRelativePath"
     Write-Host '  pre-commit: cargo fmt --check (check-pre-commit.ps1)'
-    Write-Host '  pre-push:   check.ps1 (fmt / clippy / deny / eslint / test / e2e)'
+    Write-Host '  pre-push:   check.ps1 -SkipE2E (fmt / clippy / deny / eslint / test。E2E は /check とリリース前に実行)'
     Write-Host ''
     Write-Host 'スキップ:'
     Write-Host '  CLIP_REFINER_SKIP_HOOK=1'
-    Write-Host '  CLIP_REFINER_SKIP_E2E=1  (WebView E2E のみ)'
     Write-Host '  git commit --no-verify / git push --no-verify'
 }

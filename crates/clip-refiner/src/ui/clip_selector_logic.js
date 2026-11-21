@@ -1,22 +1,23 @@
 /**
+ * @typedef {Object} ClipSelectorItem
+ * @property {string} id
+ * @property {string} label
+ * @property {string} [preview]
+ * @property {string} kind
+ * @property {string} [token] - 識別トークン (16 桁の 16 進数。IPC の操作対象の照合に使う)
+ * @property {boolean} [template] - コピー時にプレースホルダを展開するか
+ * @property {number} [counter] - `{counter}` で最後に払い出した連番 (未使用は 0)
+ * @property {string} [thumbnail]
+ * @property {string} [hover_preview]
+ */
+
+/**
  * 登録クリップセレクターの DOM 非依存ロジック
  *
  * @namespace ClipSelectorLogic
  */
 const ClipSelectorLogic = (function () {
     'use strict';
-
-    /**
-     * @typedef {Object} ClipSelectorItem
-     * @property {string} id
-     * @property {string} label
-     * @property {string} [preview]
-     * @property {string} kind
-     * @property {boolean} [template] - コピー時にプレースホルダを展開するか
-     * @property {number} [counter] - `{counter}` で最後に払い出した連番 (未使用は 0)
-     * @property {string} [thumbnail]
-     * @property {string} [hover_preview]
-     */
 
     /**
      * 画像プレビュー用の URL を取得する
@@ -228,7 +229,7 @@ const ClipSelectorLogic = (function () {
      * @returns {string} 連番が未使用のときは空文字
      */
     function counterBadgeText(item) {
-        return item.counter > 0 ? '連番 ' + item.counter : '';
+        return (item.counter ?? 0) > 0 ? '連番 ' + item.counter : '';
     }
 
     /**

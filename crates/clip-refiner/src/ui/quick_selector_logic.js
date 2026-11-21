@@ -1,4 +1,18 @@
 /**
+ * @typedef {Object} QuickSelectorMode
+ * @property {string} id
+ * @property {string} label
+ * @property {string} category
+ * @property {string} [value]
+ * @property {boolean} [favorite]
+ * @property {number} [favoriteIndex]
+ * @property {boolean} [producesImage] - 画像を出力するモードか
+ * @property {'favorites'|'category'|'header'} [listSection] - `header` はカテゴリ見出し行
+ * @property {boolean} [expanded] - 見出し行のカテゴリが展開中かどうか
+ * @property {number} [count] - 見出し行のカテゴリに属するモード数
+ */
+
+/**
  * クイックセレクターの DOM 非依存ロジック
  *
  * @namespace QuickSelectorLogic
@@ -11,19 +25,6 @@ const QuickSelectorLogic = (function () {
 
     /** @type {string} カテゴリ見出し行の ID 接頭辞 (モード ID と衝突しない) */
     const CATEGORY_ROW_PREFIX = 'category:';
-
-    /**
-     * @typedef {Object} QuickSelectorMode
-     * @property {string} id
-     * @property {string} label
-     * @property {string} category
-     * @property {string} [value]
-     * @property {boolean} [favorite]
-     * @property {number} [favoriteIndex]
-     * @property {'favorites'|'category'|'header'} [listSection] - `header` はカテゴリ見出し行
-     * @property {boolean} [expanded] - 見出し行のカテゴリが展開中かどうか
-     * @property {number} [count] - 見出し行のカテゴリに属するモード数
-     */
 
     /**
      * ID からモードを取得する
@@ -105,11 +106,12 @@ const QuickSelectorLogic = (function () {
             return modes.filter((mode) => modeMatches(mode, query));
         }
 
+        /** @type {QuickSelectorMode[]} */
         const display = [];
         for (const id of favoriteIds(modes)) {
             const mode = modeById(modes, id);
             if (mode) {
-                display.push(Object.assign({}, mode, { listSection: 'favorites' }));
+                display.push({ ...mode, listSection: 'favorites' });
             }
         }
 
@@ -117,13 +119,15 @@ const QuickSelectorLogic = (function () {
         const byCategory = new Map();
         for (const mode of modes) {
             if (!mode.category) {
-                display.push(Object.assign({}, mode, { listSection: 'category' }));
+                display.push({ ...mode, listSection: 'category' });
                 continue;
             }
-            if (!byCategory.has(mode.category)) {
-                byCategory.set(mode.category, []);
+            let members = byCategory.get(mode.category);
+            if (!members) {
+                members = [];
+                byCategory.set(mode.category, members);
             }
-            byCategory.get(mode.category).push(mode);
+            members.push(mode);
         }
 
         for (const [category, members] of byCategory) {
@@ -138,7 +142,7 @@ const QuickSelectorLogic = (function () {
             });
             if (expanded) {
                 for (const mode of members) {
-                    display.push(Object.assign({}, mode, { listSection: 'category' }));
+                    display.push({ ...mode, listSection: 'category' });
                 }
             }
         }

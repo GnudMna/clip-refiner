@@ -2,8 +2,9 @@
 // 設定画面 イベントバインド
 // ======================================================================
 
+import { buttonById, eventInput, inputById, queryInputs, selectById } from '../dom.js';
 import { showConfirmDialog } from './confirm_dialog.js';
-import { ctx } from './ctx.js';
+import { ctx, loadedState } from './ctx.js';
 import {
     postIpcEnvelope,
     openConfigFile,
@@ -46,6 +47,7 @@ import SettingsSharedLogic from './shared_logic.js';
  */
 function handlePipelineAction(button) {
     const index = Number(button.dataset.index);
+    /** @type {'up'|'down'|'remove'} */
     let action = 'remove';
     if (button.classList.contains('pipeline-up')) {
         action = 'up';
@@ -53,7 +55,11 @@ function handlePipelineAction(button) {
         action = 'down';
     }
 
-    const next = SettingsPanelsLogic.applyPipelineAction(ctx.state.pipeline || [], index, action);
+    const next = SettingsPanelsLogic.applyPipelineAction(
+        loadedState().pipeline || [],
+        index,
+        action
+    );
     if (!next) {
         return;
     }
@@ -66,7 +72,7 @@ function handlePipelineAction(button) {
  * @param {MouseEvent} event
  */
 function handleContentClick(event) {
-    const button = event.target.closest('button');
+    const button = /** @type {Element} */ (event.target).closest('button');
     if (!button) {
         return;
     }
@@ -174,19 +180,19 @@ export function bindContentDelegation() {
 /** 監視・自動変換のフォームイベントをバインドする (変換タブと監視タブで共有) */
 export function bindMonitorEvents() {
     document.getElementById('auto-refine-enabled')?.addEventListener('change', (event) => {
-        ctx.state.autoRefineEnabled = event.target.checked;
-        scheduleApply({ autoRefineEnabled: event.target.checked });
+        loadedState().autoRefineEnabled = eventInput(event).checked;
+        scheduleApply({ autoRefineEnabled: eventInput(event).checked });
     });
 
-    document.querySelectorAll('input[name="monitorMode"]').forEach((input) => {
+    queryInputs('input[name="monitorMode"]').forEach((input) => {
         input.addEventListener('change', () => {
-            ctx.state.monitorMode = input.value;
-            scheduleApply({ monitorMode: ctx.state.monitorMode });
+            loadedState().monitorMode = /** @type {import('../ipc').MonitorMode} */ (input.value);
+            scheduleApply({ monitorMode: loadedState().monitorMode });
             syncMonitorIntervalSection();
         });
     });
 
-    const intervalInput = document.getElementById('interval-ms');
+    const intervalInput = inputById('interval-ms');
     if (intervalInput) {
         const bounds = intervalMsBounds();
         /** ポーリング間隔入力をコミットする */
@@ -196,7 +202,7 @@ export function bindMonitorEvents() {
         intervalInput.addEventListener('blur', commitIntervalMs);
     }
 
-    const defaultMode = document.getElementById('default-mode');
+    const defaultMode = selectById('default-mode');
     if (defaultMode) {
         defaultMode.addEventListener('change', () => {
             scheduleApply({ mode: defaultMode.value });
@@ -204,10 +210,13 @@ export function bindMonitorEvents() {
     }
 
     document.getElementById('pipeline-add-btn')?.addEventListener('click', () => {
-        const select = document.getElementById('pipeline-add-mode');
+        const select = selectById('pipeline-add-mode');
+        if (!select) {
+            return;
+        }
         const modeId = select.value;
         const next = SettingsPanelsLogic.appendPipelineMode(
-            ctx.state.pipeline || [],
+            loadedState().pipeline || [],
             modeId,
             maxPipelineLength()
         );
@@ -226,9 +235,10 @@ export function bindMonitorEvents() {
 export function bindNotificationEvents() {
     /** DOM の通知設定を読み取りパッチをスケジュールする */
     function applyNotifications() {
+        /** @type {Record<string, boolean>} */
         const fieldStates = {};
         for (const [elementId] of SettingsSharedLogic.NOTIFICATION_FIELD_MAP) {
-            const element = document.getElementById(elementId);
+            const element = inputById(elementId);
             if (element) {
                 fieldStates[elementId] = element.checked;
             }
@@ -240,7 +250,7 @@ export function bindNotificationEvents() {
 
     for (const [elementId, key] of SettingsSharedLogic.NOTIFICATION_FIELD_MAP) {
         document.getElementById(elementId)?.addEventListener('change', (event) => {
-            ctx.state.notificationSettings[key] = event.target.checked;
+            loadedState().notificationSettings[key] = eventInput(event).checked;
             applyNotifications();
         });
     }
@@ -249,15 +259,15 @@ export function bindNotificationEvents() {
 /** クリップボードタブの履歴・連続記録フォームイベントをバインドする */
 export function bindHistoryEvents() {
     document.getElementById('history-enabled')?.addEventListener('change', (event) => {
-        scheduleApply({ historyEnabled: event.target.checked });
+        scheduleApply({ historyEnabled: eventInput(event).checked });
     });
     document.getElementById('record-enabled')?.addEventListener('change', (event) => {
-        ctx.state.continuousRecordEnabled = event.target.checked;
-        scheduleApply({ continuousRecordEnabled: event.target.checked });
+        loadedState().continuousRecordEnabled = eventInput(event).checked;
+        scheduleApply({ continuousRecordEnabled: eventInput(event).checked });
         syncContinuousRecordUi();
     });
 
-    const historyLimit = document.getElementById('history-limit');
+    const historyLimit = inputById('history-limit');
     if (historyLimit) {
         const bounds = historyLimitBounds();
         /** 履歴保持件数入力をコミットする */
@@ -267,7 +277,7 @@ export function bindHistoryEvents() {
         historyLimit.addEventListener('blur', commitHistoryLimit);
     }
 
-    const recordLimit = document.getElementById('record-limit');
+    const recordLimit = inputById('record-limit');
     if (recordLimit) {
         const bounds = recordLimitBounds();
         /** 連続記録保持件数入力をコミットする */
@@ -303,7 +313,7 @@ export function bindRegexEvents() {
         if (!validation.valid) {
             return;
         }
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
     }
 
@@ -326,11 +336,15 @@ export function bindRegexEvents() {
         .getElementById('regex-preview-sample')
         ?.addEventListener('input', scheduleRegexFeedback);
 
-    document.querySelectorAll('.regex-active-radio').forEach((el) => {
+    queryInputs('.regex-active-radio').forEach((el) => {
         el.addEventListener('change', () => {
+            const presetId = el.dataset.id;
+            if (!presetId) {
+                return;
+            }
             const settings = readRegexForApply();
-            settings.activePresetId = el.dataset.id;
-            ctx.state.regex = settings;
+            settings.activePresetId = presetId;
+            loadedState().regex = settings;
             scheduleApply({ regex: settings });
             updateRegexFeedback();
         });
@@ -348,7 +362,7 @@ export function bindRegexEvents() {
             steps: [emptyStep()],
         });
         ctx.selectedRegexPresetId = id;
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
     });
@@ -361,7 +375,7 @@ export function bindRegexEvents() {
             return;
         }
         preset.steps.push(emptyStep());
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
     });
@@ -376,7 +390,7 @@ export function bindRegexEvents() {
  */
 function handleRegexAction(button) {
     if (button.classList.contains('regex-preset-select')) {
-        ctx.selectedRegexPresetId = button.dataset.id;
+        ctx.selectedRegexPresetId = button.dataset.id ?? null;
         ctx.refreshActivePanel();
         return;
     }
@@ -391,7 +405,7 @@ function handleRegexAction(button) {
         const index = Number(button.dataset.index);
         const direction = button.classList.contains('regex-preset-up') ? 'up' : 'down';
         settings.presets = moveListItem(settings.presets, index, direction);
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
         return;
@@ -409,7 +423,7 @@ function handleRegexAction(button) {
         if (ctx.selectedRegexPresetId === removed.id) {
             ctx.selectedRegexPresetId = settings.activePresetId;
         }
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
         return;
@@ -427,7 +441,7 @@ function handleRegexAction(button) {
         const index = Number(button.dataset.index);
         const direction = button.classList.contains('regex-step-up') ? 'up' : 'down';
         preset.steps = moveListItem(preset.steps, index, direction);
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
         return;
@@ -439,7 +453,7 @@ function handleRegexAction(button) {
             return;
         }
         preset.steps.splice(index, 1);
-        ctx.state.regex = settings;
+        loadedState().regex = settings;
         scheduleApply({ regex: settings });
         ctx.refreshActivePanel();
     }
@@ -451,10 +465,11 @@ export function bindShortcutsEvents() {
 
     /** DOM からホットキーパッチを組み立てて適用する */
     function applyHotkeysFromDom() {
+        /** @type {Record<string, string>} */
         const fixedFieldStates = {};
         let valid = true;
         for (const [elementId] of SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP) {
-            const element = document.getElementById(elementId);
+            const element = inputById(elementId);
             if (!element) {
                 continue;
             }
@@ -473,10 +488,10 @@ export function bindShortcutsEvents() {
             }
         }
 
-        const favoriteModes = ctx.state.favoriteModes || [];
+        const favoriteModes = loadedState().favoriteModes || [];
         const favoriteSlotBindings = [];
         for (let index = 0; index < favoriteModes.length; index += 1) {
-            const element = document.getElementById('hotkey-favorite-slot-' + index);
+            const element = inputById('hotkey-favorite-slot-' + index);
             const value = element ? element.value.trim() : '';
             favoriteSlotBindings.push(value);
             if (element) {
@@ -503,11 +518,11 @@ export function bindShortcutsEvents() {
             fixedFieldStates,
             favoriteSlotBindings
         );
-        ctx.state.hotkeys = Object.assign({}, ctx.state.hotkeys || {}, hotkeys);
+        loadedState().hotkeys = Object.assign({}, loadedState().hotkeys, hotkeys);
         scheduleApply({ hotkeys });
     }
 
-    document.querySelectorAll('.shortcut-input').forEach((input) => {
+    queryInputs('.shortcut-input').forEach((input) => {
         input.addEventListener('blur', applyHotkeysFromDom);
         input.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -521,8 +536,7 @@ export function bindShortcutsEvents() {
 /** お気に入りタブのイベントをバインドする */
 export function bindFavoriteEvents() {
     document.getElementById('favorite-add-btn')?.addEventListener('click', () => {
-        const select = document.getElementById('favorite-add-mode');
-        const modeId = select.value;
+        const modeId = selectById('favorite-add-mode')?.value;
         if (!modeId) {
             return;
         }
@@ -533,22 +547,23 @@ export function bindFavoriteEvents() {
 /** 一般タブのイベントをバインドする */
 export function bindGeneralEvents() {
     document.querySelector('.advanced-section')?.addEventListener('toggle', (event) => {
-        ctx.advancedSectionOpen = event.target.open;
+        ctx.advancedSectionOpen = /** @type {HTMLDetailsElement} */ (event.target).open;
     });
 
     document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
-        scheduleApply({ launchAtLogin: event.target.checked });
+        scheduleApply({ launchAtLogin: eventInput(event).checked });
     });
 
-    document.querySelectorAll('input[name="selectorWebviewRetention"]').forEach((input) => {
+    queryInputs('input[name="selectorWebviewRetention"]').forEach((input) => {
         input.addEventListener('change', () => {
-            ctx.state.selectorWebviewRetention = input.value;
-            scheduleApply({ selectorWebviewRetention: ctx.state.selectorWebviewRetention });
+            loadedState().selectorWebviewRetention =
+                /** @type {import('../ipc').SelectorWebviewRetention} */ (input.value);
+            scheduleApply({ selectorWebviewRetention: loadedState().selectorWebviewRetention });
             syncSelectorWebviewIdleSection();
         });
     });
 
-    const idleInput = document.getElementById('selector-webview-idle-minutes');
+    const idleInput = inputById('selector-webview-idle-minutes');
     if (idleInput) {
         const bounds = selectorWebviewIdleMinutesBounds();
         /** アイドル分数入力をコミットする */
@@ -569,12 +584,12 @@ export function bindGeneralEvents() {
         }
         ctx.updateBusy = true;
         ctx.updateStatus = null;
-        const checkBtn = document.getElementById('check-update-btn');
+        const checkBtn = buttonById('check-update-btn');
         if (checkBtn) {
             checkBtn.disabled = true;
             checkBtn.textContent = '確認中...';
         }
-        const applyBtn = document.getElementById('apply-update-btn');
+        const applyBtn = buttonById('apply-update-btn');
         if (applyBtn) {
             applyBtn.disabled = true;
         }
@@ -589,11 +604,11 @@ export function bindGeneralEvents() {
             return;
         }
         ctx.updateBusy = true;
-        const checkBtn = document.getElementById('check-update-btn');
+        const checkBtn = buttonById('check-update-btn');
         if (checkBtn) {
             checkBtn.disabled = true;
         }
-        const applyBtn = document.getElementById('apply-update-btn');
+        const applyBtn = buttonById('apply-update-btn');
         if (applyBtn) {
             applyBtn.disabled = true;
             applyBtn.textContent = '適用中...';

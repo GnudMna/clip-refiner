@@ -1,5 +1,6 @@
 #!/bin/sh
-# ClipRefiner pre-push: check.ps1 (fmt / clippy / deny / test)
+# ClipRefiner pre-push: check.ps1 -SkipE2E (fmt / clippy / deny / eslint / test)
+# WebView E2E は GUI を開いて重いため含めない。/check とリリース前 (release.ps1) で実行する
 
 if [ "$CLIP_REFINER_SKIP_HOOK" = "1" ]; then
     exit 0
@@ -16,4 +17,4 @@ else
     exit 1
 fi
 
-exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/windows/check.ps1"
+exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/windows/check.ps1" -SkipE2E

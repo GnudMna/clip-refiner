@@ -39,11 +39,13 @@ pub use migrate::format_unsupported_config_version_message;
     feature = "config",
     any(test, debug_assertions, feature = "test-helpers")
 ))]
+#[doc(hidden)]
 pub use paths::{begin_capture_open_path_for_test, take_captured_open_path_for_test};
 #[cfg(all(
     feature = "config",
     any(test, debug_assertions, feature = "test-helpers")
 ))]
+#[doc(hidden)]
 pub use paths::{clear_test_config_dir, set_test_config_dir};
 #[cfg(feature = "config")]
 pub use paths::{get_config_dir, is_portable_mode, open_config_file};

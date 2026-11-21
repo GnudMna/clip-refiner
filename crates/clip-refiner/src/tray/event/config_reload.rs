@@ -34,9 +34,6 @@ pub(crate) enum ApplyConfigReloadError {
     /// トレイメニュー同期失敗
     #[error("メニュー同期に失敗: {0}")]
     MenuSync(String),
-    /// ホットキー再登録失敗
-    #[error("ホットキーの再登録に失敗: {0}")]
-    HotkeyReload(String),
     /// 履歴メニュー更新失敗
     #[error("履歴メニュー更新に失敗: {0}")]
     HistoryMenu(String),
@@ -100,9 +97,7 @@ pub fn apply_config_reload(
     if hotkeys_changed || favorite_hotkeys_changed {
         let hotkeys = state.with_config(|c| c.hotkeys.clone());
         let favorite_modes = state.with_config(|c| c.favorite_modes.clone());
-        let registration_failures = hotkey_handler
-            .reload(&hotkeys, &favorite_modes)
-            .map_err(|e| ApplyConfigReloadError::HotkeyReload(e.to_string()))?;
+        let registration_failures = hotkey_handler.reload(&hotkeys, &favorite_modes);
         change_labels.push("ホットキーを更新");
         if !registration_failures.is_empty() {
             change_labels.push("一部ホットキーの登録に失敗");

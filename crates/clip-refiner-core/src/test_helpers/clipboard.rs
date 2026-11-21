@@ -17,6 +17,7 @@ pub struct InMemoryTextClipboard {
     written_image: Option<(u32, u32, Vec<u8>)>,
     image_written_as_file: bool,
     fail_on_read: bool,
+    text_unavailable: bool,
     fail_on_write: bool,
     excluded_from_monitoring: bool,
     change_token: u64,
@@ -46,6 +47,7 @@ impl InMemoryTextClipboard {
             written_image: None,
             image_written_as_file: false,
             fail_on_read: false,
+            text_unavailable: false,
             fail_on_write: false,
             excluded_from_monitoring: false,
             change_token: 0,
@@ -97,6 +99,19 @@ impl InMemoryTextClipboard {
     #[must_use]
     pub fn fail_on_read(mut self) -> Self {
         self.fail_on_read = true;
+        self
+    }
+
+    /// 以降の `get_text` を、テキスト形式が無い (画像・ファイル・空) 状態として失敗させる
+    ///
+    /// # Arguments
+    /// * `self` - 設定対象のインメモリクリップボード
+    ///
+    /// # Returns
+    /// * `Self` - テキスト不在フラグを立てたクリップボード
+    #[must_use]
+    pub fn text_unavailable(mut self) -> Self {
+        self.text_unavailable = true;
         self
     }
 
@@ -204,6 +219,9 @@ impl TextClipboard for InMemoryTextClipboard {
     fn get_text(&mut self) -> Result<String, ClipboardIoError> {
         if self.fail_on_read {
             return Err(ClipboardIoError::ReadFailed("read failed".to_string()));
+        }
+        if self.text_unavailable {
+            return Err(ClipboardIoError::TextUnavailable);
         }
         let text = self.text.clone();
         if let Some(copy) = self.external_copy_after_read.take() {

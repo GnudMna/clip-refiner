@@ -2,7 +2,8 @@
 // 設定画面 UI 共有状態・フォーム補助
 // ======================================================================
 
-import { ctx } from './ctx.js';
+import { buttonById, inputById } from '../dom.js';
+import { ctx, loadedState } from './ctx.js';
 import { scheduleApply } from './ipc_apply.js';
 import { syncContinuousRecordUi, syncMonitorIntervalSection } from './monitor_ui.js';
 
@@ -14,7 +15,7 @@ export function syncSelectorWebviewIdleSection() {
     if (section) {
         section.classList.toggle(
             'disabled',
-            ctx.state.selectorWebviewRetention !== 'DisposeAfterIdle'
+            loadedState().selectorWebviewRetention !== 'DisposeAfterIdle'
         );
     }
 }
@@ -22,7 +23,7 @@ export function syncSelectorWebviewIdleSection() {
 /**
  * サーバーから渡された制限値オブジェクトを返す
  *
- * @returns {Record<string, number>}
+ * @returns {Partial<import('../ipc').SettingsLimits>}
  */
 export function limits() {
     return ctx.state?.limits ?? {};
@@ -153,6 +154,7 @@ export function showFieldFeedback(input, message) {
     if (!field) {
         return;
     }
+    /** @type {HTMLElement|null} */
     let feedback = field.querySelector('.field-feedback');
     if (!feedback) {
         feedback = document.createElement('p');
@@ -174,6 +176,7 @@ export function clearFieldFeedback(input) {
     if (!field) {
         return;
     }
+    /** @type {HTMLElement|null} */
     const feedback = field.querySelector('.field-feedback');
     if (feedback) {
         feedback.hidden = true;
@@ -182,11 +185,17 @@ export function clearFieldFeedback(input) {
 }
 
 /**
+ * 件数入力で更新する設定キー
+ *
+ * @typedef {'intervalMs'|'historyLimit'|'continuousRecordLimit'|'selectorWebviewIdleMinutes'} LimitKey
+ */
+
+/**
  * 件数入力をコミットし state とパッチを更新する
  *
  * @param {HTMLInputElement} input
- * @param {string} patchKey - `scheduleApply` に渡すキー
- * @param {string} stateKey - `state` 上のキー
+ * @param {LimitKey} patchKey - `scheduleApply` に渡すキー
+ * @param {LimitKey} stateKey - `state` 上のキー
  * @param {{ min: number, max: number }} bounds
  */
 export function commitLimitInput(input, patchKey, stateKey, bounds) {
@@ -197,7 +206,7 @@ export function commitLimitInput(input, patchKey, stateKey, bounds) {
     } else {
         clearFieldFeedback(input);
     }
-    ctx.state[stateKey] = result.value;
+    loadedState()[stateKey] = result.value;
     scheduleApply({ [patchKey]: result.value });
 }
 
@@ -240,7 +249,7 @@ export function showActivePanel() {
     if (!content) {
         return;
     }
-    content.querySelectorAll('.panel').forEach((panel) => {
+    /** @type {NodeListOf<HTMLElement>} */ (content.querySelectorAll('.panel')).forEach((panel) => {
         const isActive = panel.id === 'panel-' + ctx.activeTab;
         panel.classList.toggle('active', isActive);
         panel.hidden = !isActive;
@@ -268,13 +277,13 @@ export function withPreservedScroll(action) {
 
 /** サーバー主導のフィールド (自動変換・連続記録など) を DOM に反映する */
 export function syncServerFields() {
-    const launch = document.getElementById('launch-at-login');
+    const launch = inputById('launch-at-login');
     if (launch) {
-        launch.checked = ctx.state.launchAtLogin;
+        launch.checked = loadedState().launchAtLogin;
     }
-    const autoRefine = document.getElementById('auto-refine-enabled');
+    const autoRefine = inputById('auto-refine-enabled');
     if (autoRefine) {
-        autoRefine.checked = ctx.state.autoRefineEnabled;
+        autoRefine.checked = loadedState().autoRefineEnabled;
     }
     syncContinuousRecordUi();
     syncMonitorIntervalSection();
@@ -287,11 +296,12 @@ export function syncServerFields() {
 
 /** ショートカット入力欄を `state.hotkeys` へ同期する (フォーカス中はスキップ) */
 export function syncHotkeyInputsFromState() {
-    const hotkeys = ctx.state.hotkeys || {};
+    /** @type {Partial<import('../ipc').HotkeySettings>} */
+    const hotkeys = loadedState().hotkeys || {};
     const active = document.activeElement;
 
     for (const [elementId, key] of SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP) {
-        const element = document.getElementById(elementId);
+        const element = inputById(elementId);
         if (!element || element === active) {
             continue;
         }
@@ -302,10 +312,10 @@ export function syncHotkeyInputsFromState() {
         element.classList.remove('is-invalid');
     }
 
-    const favoriteModes = ctx.state.favoriteModes || [];
+    const favoriteModes = loadedState().favoriteModes || [];
     const slots = Array.isArray(hotkeys.favoriteModeSlots) ? hotkeys.favoriteModeSlots : [];
     for (let index = 0; index < favoriteModes.length; index += 1) {
-        const element = document.getElementById('hotkey-favorite-slot-' + index);
+        const element = inputById('hotkey-favorite-slot-' + index);
         if (!element || element === active) {
             continue;
         }
@@ -331,7 +341,7 @@ export function setClipRegisterPending(pending) {
 
 /** クリップ登録ボタンの表示を `clipRegisterPending` に合わせて更新する */
 export function updateClipRegisterButton() {
-    const btn = document.getElementById('clip-register-btn');
+    const btn = buttonById('clip-register-btn');
     if (!btn) {
         return;
     }

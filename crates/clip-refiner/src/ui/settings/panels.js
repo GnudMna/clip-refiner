@@ -2,7 +2,7 @@
 // 設定画面 パネル HTML 生成
 // ======================================================================
 
-import { ctx } from './ctx.js';
+import { ctx, loadedState } from './ctx.js';
 import {
     TABS,
     advancedSection,
@@ -47,13 +47,15 @@ function syncSidebarActiveTab() {
     if (!sidebar) {
         return;
     }
-    sidebar.querySelectorAll('[role="tab"]').forEach((button) => {
-        const isActive = button.dataset.tab === ctx.activeTab;
-        const selection = SettingsPanelsLogic.tabSelectionState(isActive);
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', selection.ariaSelected);
-        button.tabIndex = Number(selection.tabIndex);
-    });
+    /** @type {NodeListOf<HTMLElement>} */ (sidebar.querySelectorAll('[role="tab"]')).forEach(
+        (button) => {
+            const isActive = button.dataset.tab === ctx.activeTab;
+            const selection = SettingsPanelsLogic.tabSelectionState(isActive);
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-selected', selection.ariaSelected);
+            button.tabIndex = Number(selection.tabIndex);
+        }
+    );
 }
 
 /** サイドバー tablist の内部 HTML を組み立てる */
@@ -99,17 +101,21 @@ export function ensureSidebar() {
     if (!ctx.sidebarInitialized) {
         sidebar.innerHTML = buildSidebarNavInnerHtml();
         sidebar.addEventListener('click', (event) => {
-            const button = event.target.closest('[role="tab"]');
-            if (!button || !sidebar.contains(button)) {
+            /** @type {HTMLElement|null} */
+            const button = /** @type {Element} */ (event.target).closest('[role="tab"]');
+            const tab = button?.dataset.tab;
+            if (!button || !tab || !sidebar.contains(button)) {
                 return;
             }
-            activateTab(button.dataset.tab, { focus: true });
+            activateTab(tab, { focus: true });
         });
         sidebar.addEventListener('keydown', (event) => {
-            const button = event.target.closest('[role="tab"]');
+            /** @type {HTMLElement|null} */
+            const button = /** @type {Element} */ (event.target).closest('[role="tab"]');
             if (!button || !sidebar.contains(button)) {
                 return;
             }
+            /** @type {HTMLElement[]} */
             const tabs = Array.from(sidebar.querySelectorAll('[role="tab"]'));
             const currentIndex = tabs.indexOf(button);
             const nextIndex = SettingsPanelsLogic.nextTabIndexForKey(
@@ -121,7 +127,10 @@ export function ensureSidebar() {
                 return;
             }
             event.preventDefault();
-            activateTab(tabs[nextIndex].dataset.tab, { focus: true });
+            const tab = tabs[nextIndex].dataset.tab;
+            if (tab) {
+                activateTab(tab, { focus: true });
+            }
         });
         ctx.sidebarInitialized = true;
         return;
@@ -132,7 +141,7 @@ export function ensureSidebar() {
 
 /** @returns {string} 監視タブのパネル HTML (監視方式・監視周期カード) */
 function renderMonitorPanel() {
-    const intervalDisabled = ctx.state.monitorMode === 'Event' ? ' disabled' : '';
+    const intervalDisabled = loadedState().monitorMode === 'Event' ? ' disabled' : '';
     const intervalBounds = intervalMsBounds();
 
     const body =
@@ -141,10 +150,10 @@ function renderMonitorPanel() {
             '' +
                 '<div class="segmented" role="radiogroup" aria-label="監視方式">' +
                 '<label><input type="radio" name="monitorMode" value="Polling"' +
-                (ctx.state.monitorMode === 'Polling' ? ' checked' : '') +
+                (loadedState().monitorMode === 'Polling' ? ' checked' : '') +
                 '> ポーリング</label>' +
                 '<label><input type="radio" name="monitorMode" value="Event"' +
-                (ctx.state.monitorMode === 'Event' ? ' checked' : '') +
+                (loadedState().monitorMode === 'Event' ? ' checked' : '') +
                 '> イベント</label>' +
                 '</div>' +
                 '<p class="hint">イベント方式は Windows のクリップボード変更通知を利用し、低 CPU で動作する</p>'
@@ -161,7 +170,7 @@ function renderMonitorPanel() {
                 '" max="' +
                 intervalBounds.max +
                 '" step="1" value="' +
-                ctx.state.intervalMs +
+                loadedState().intervalMs +
                 '">' +
                 '<p class="field-hint">有効範囲: ' +
                 intervalBounds.min +
@@ -176,17 +185,17 @@ function renderMonitorPanel() {
 /** @returns {string} 変換タブのパネル HTML */
 function renderConvertPanel() {
     const pipelineMax = maxPipelineLength();
-    const processingDisabled = ctx.state.continuousRecordEnabled ? ' is-disabled' : '';
+    const processingDisabled = loadedState().continuousRecordEnabled ? ' is-disabled' : '';
 
     const body =
         '<div id="monitor-record-banner" class="status-banner status-continuous-record" role="status"' +
-        (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
+        (loadedState().continuousRecordEnabled ? '' : ' hidden') +
         '>連続記録モード中はコピー時の自動加工を停止しています。自動変換を有効にすると連続記録モードは無効になります</div>' +
         card(
             '自動変換',
             optionCheckbox(
                 'auto-refine-enabled',
-                ctx.state.autoRefineEnabled,
+                loadedState().autoRefineEnabled,
                 'コピー時に自動変換する',
                 '無効のときはクイックセレクターやお気に入りホットキーで手動変換だけを行う。連続記録モードとは同時に有効にならない'
             )
@@ -200,7 +209,7 @@ function renderConvertPanel() {
                 '<div class="field">' +
                 '<label for="default-mode">適用モード</label>' +
                 '<select id="default-mode">' +
-                buildModeOptions(ctx.state.mode) +
+                buildModeOptions(loadedState().mode) +
                 '</select>' +
                 '<p class="hint">パイプラインが空のときに自動変換で適用するモード</p></div>'
         ) +
@@ -229,7 +238,7 @@ function renderConvertPanel() {
 
 /** @returns {string} 通知タブのパネル HTML */
 function renderNotificationsPanel() {
-    const ns = ctx.state.notificationSettings;
+    const ns = loadedState().notificationSettings;
     const body =
         card(
             'デスクトップ通知',
@@ -301,7 +310,7 @@ function renderClipboardPanel() {
             '<div class="option-list">' +
             optionCheckbox(
                 'history-enabled',
-                ctx.state.historyEnabled,
+                loadedState().historyEnabled,
                 '履歴を有効にする',
                 '加工したテキストを暗号化して保持する'
             ) +
@@ -312,7 +321,7 @@ function renderClipboardPanel() {
             '" max="' +
             historyBounds.max +
             '" value="' +
-            ctx.state.historyLimit +
+            loadedState().historyLimit +
             '">' +
             '<p class="field-hint">有効範囲: ' +
             historyBounds.min +
@@ -328,12 +337,12 @@ function renderClipboardPanel() {
         '連続記録モード',
         '' +
             '<div id="record-active-banner" class="status-banner status-continuous-record" role="status"' +
-            (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
+            (loadedState().continuousRecordEnabled ? '' : ' hidden') +
             '>連続記録モード中はコピー時の自動加工を停止しています</div>' +
             '<div class="option-list">' +
             optionCheckbox(
                 'record-enabled',
-                ctx.state.continuousRecordEnabled,
+                loadedState().continuousRecordEnabled,
                 '連続記録モードを有効にする',
                 '加工せず元テキストを順に記録する。有効にすると自動変換は無効になる'
             ) +
@@ -344,7 +353,7 @@ function renderClipboardPanel() {
             '" max="' +
             recordBounds.max +
             '" value="' +
-            ctx.state.continuousRecordLimit +
+            loadedState().continuousRecordLimit +
             '">' +
             '<p class="field-hint">有効範囲: ' +
             recordBounds.min +
@@ -369,7 +378,7 @@ function renderRegexPanel() {
             '' +
                 '<div class="field"><label for="regex-preview-sample">サンプル</label>' +
                 '<textarea id="regex-preview-sample" rows="3">' +
-                escapeHtml(ctx.state.regexPreviewSample) +
+                escapeHtml(loadedState().regexPreviewSample) +
                 '</textarea></div>' +
                 '<div class="regex-preview">' +
                 '<div class="regex-preview-row"><span class="regex-preview-label">結果</span>' +
@@ -383,7 +392,7 @@ function renderRegexPanel() {
 
 /** @returns {string} 変換タブのお気に入り変換モードカード HTML */
 function renderFavoritesCard() {
-    const favorites = ctx.state.favoriteModes || [];
+    const favorites = loadedState().favoriteModes || [];
     const listHtml =
         favorites.length === 0
             ? '<div class="empty-hint">お気に入りは未登録です</div>'
@@ -393,7 +402,10 @@ function renderFavoritesCard() {
                       '</tbody></table>'
               );
 
-    const availableModes = SettingsPanelsLogic.availableFavoriteModes(ctx.state.modes, favorites);
+    const availableModes = SettingsPanelsLogic.availableFavoriteModes(
+        loadedState().modes,
+        favorites
+    );
     return card(
         'お気に入り変換モード',
         listHtml +
@@ -421,8 +433,9 @@ function renderFavoritesCard() {
 
 /** @returns {string} ショートカットタブのパネル HTML */
 function renderShortcutsPanel() {
-    const hotkeys = ctx.state.hotkeys || {};
-    const favoriteModes = ctx.state.favoriteModes || [];
+    /** @type {Partial<import('../ipc').HotkeySettings>} */
+    const hotkeys = loadedState().hotkeys || {};
+    const favoriteModes = loadedState().favoriteModes || [];
     const fixedRows = SettingsSharedLogic.HOTKEY_FIXED_LABELS.map(([key, label], index) => {
         const elementId = SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP[index][0];
         const value = hotkeys[key] || '';
@@ -518,10 +531,10 @@ function renderGeneralPanel() {
     const portable = Boolean(ctx.state?.portableMode);
     const edition = portable ? 'ポータブル' : 'インストール版 (MSI)';
     const checkLabel = ctx.updateBusy ? '確認中...' : '更新を確認';
-    const retention = ctx.state.selectorWebviewRetention || 'Keep';
+    const retention = loadedState().selectorWebviewRetention || 'Keep';
     const idleDisabled = retention === 'DisposeAfterIdle' ? '' : ' disabled';
     const idleBounds = selectorWebviewIdleMinutesBounds();
-    const idleMinutes = ctx.state.selectorWebviewIdleMinutes ?? 5;
+    const idleMinutes = loadedState().selectorWebviewIdleMinutes ?? 5;
 
     const launchCard = card(
         '起動',
@@ -529,7 +542,7 @@ function renderGeneralPanel() {
             '<div class="option-list">' +
             optionCheckbox(
                 'launch-at-login',
-                ctx.state.launchAtLogin,
+                loadedState().launchAtLogin,
                 'ログイン時に起動',
                 'Windows ログイン時に ClipRefiner を自動起動する'
             ) +
@@ -606,7 +619,7 @@ function renderAboutPanel() {
                 '<p class="hint">使い方・設定の詳細をブラウザで開く</p>' +
                 '<div class="card-actions"><button type="button" class="ghost-btn" id="open-user-docs-btn">ドキュメントを開く</button></div>'
         ) +
-            // 表記は LICENSE の 1〜2 行目と同じ。ずれは tests/license_ui_flow.rs が検出する
+            // 表記は LICENSE の 1〜2 行目と同じ。ずれは tests/flow/license_ui.rs が検出する
             card(
                 'ライセンス',
                 '' +
@@ -626,7 +639,7 @@ function renderAboutPanel() {
 /**
  * 登録クリップ 1 行分のテーブル行 HTML
  *
- * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string }} clip
+ * @param {import('../clip_selector_logic').ClipSelectorItem} clip
  * @param {number} index
  * @param {number} count
  * @returns {string}
@@ -637,7 +650,7 @@ function renderClipRow(clip, index, count) {
 
 /** @returns {string} クリップボードタブの登録クリップカード HTML */
 function renderClipsCard() {
-    const clips = ctx.state.clips || [];
+    const clips = loadedState().clips || [];
     const listHtml =
         clips.length === 0
             ? '<div class="empty-hint">登録クリップはありません</div>'

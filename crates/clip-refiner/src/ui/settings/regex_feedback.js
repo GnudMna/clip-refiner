@@ -2,6 +2,7 @@
 // 設定画面 正規表現プレビュー (DOM 連携)
 // ======================================================================
 
+import { inputById } from '../dom.js';
 import { ctx } from './ctx.js';
 import { postIpcEnvelope } from './ipc_apply.js';
 import { maxRegexPatternBytes } from './shared.js';
@@ -17,9 +18,7 @@ export { readRegexFromDom, readRegexForApply } from './regex_ui.js';
  * @returns {string}
  */
 export function readRegexSampleFromDom() {
-    return (
-        document.getElementById('regex-preview-sample')?.value ?? ctx.state.regexPreviewSample ?? ''
-    );
+    return inputById('regex-preview-sample')?.value ?? ctx.state?.regexPreviewSample ?? '';
 }
 
 /**
@@ -112,6 +111,6 @@ export function updateRegexFeedback() {
 
 /** 正規表現プレビュー更新をデバウンスする */
 export function scheduleRegexFeedback() {
-    clearTimeout(ctx.regexFeedbackTimer);
+    clearTimeout(ctx.regexFeedbackTimer ?? undefined);
     ctx.regexFeedbackTimer = setTimeout(updateRegexFeedback, 150);
 }

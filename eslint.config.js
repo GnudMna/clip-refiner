@@ -1,17 +1,13 @@
 import eslint from '@eslint/js';
+import { defineConfig } from 'eslint/config';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import noUnsanitized from 'eslint-plugin-no-unsanitized';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
-/** @type {import('eslint').Linter.Config[]} */
-export default [
+export default defineConfig([
     {
-        ignores: [
-            'node_modules/**',
-            'target/**',
-            'e2e/**',
-            'crates/clip-refiner/src/ui/**/*.bundle.js',
-        ],
+        ignores: ['node_modules/**', 'target/**', 'crates/clip-refiner/src/ui/**/*.bundle.js'],
     },
     eslint.configs.recommended,
     eslintConfigPrettier,
@@ -81,6 +77,15 @@ export default [
         },
     },
     {
+        files: ['e2e/**/*.ts', 'crates/clip-refiner/src/ui/**/*.d.ts'],
+        extends: [tseslint.configs.recommended],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
         files: ['crates/clip-refiner/tests/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
@@ -90,4 +95,4 @@ export default [
             },
         },
     },
-];
+]);

@@ -179,7 +179,7 @@ impl MonitorLoopState {
         if let Some(token) = clipboard_seq::token() {
             if token != self.last_token {
                 let result = clipboard_monitor::observe_continuous_record(clipboard, state);
-                Self::apply_token_after_observe(self, token, result);
+                Self::apply_token_after_observe(self, state, token, result);
             }
             return;
         }
@@ -212,7 +212,7 @@ impl MonitorLoopState {
             ClipboardTrigger::Event,
             &self.refine_ctx,
         );
-        Self::apply_token_after_observe(self, token, result);
+        Self::apply_token_after_observe(self, state, token, result);
     }
 
     /// ポーリング監視で加工処理を試みる
@@ -248,21 +248,45 @@ impl MonitorLoopState {
             trigger,
             &self.refine_ctx,
         );
-        if result != ClipboardObserveResult::ReadFailed {
-            self.last_poll_at = Instant::now();
-        }
+        // 読み取り失敗でも次回はポーリング間隔を空ける (OpenClipboard の連続再試行を避ける)
+        self.last_poll_at = Instant::now();
         if let Some(token) = token {
-            Self::apply_token_after_observe(self, token, result);
+            Self::apply_token_after_observe(self, state, token, result);
         }
     }
 
     /// 観測結果に応じて変更トークンを更新する
-    fn apply_token_after_observe(monitor: &mut Self, token: u64, result: ClipboardObserveResult) {
+    fn apply_token_after_observe(
+        monitor: &mut Self,
+        state: &Arc<AppState>,
+        token: u64,
+        result: ClipboardObserveResult,
+    ) {
+        Self::apply_token_with_current(monitor, state, token, result, clipboard_seq::token());
+    }
+
+    /// 書き戻し後の現在トークンを受け取って変更トークンを更新する
+    ///
+    /// 書き戻しを反映したトークンを取得できた場合、自身の書き戻しによる変更はトークン一致で
+    /// 読み飛ばされ判定側の `last_written` が消費されないため、ここで消す。
+    /// 消さないと直後に同じ文字列をコピーしたとき、書き戻しのエコーと誤認して加工されない
+    fn apply_token_with_current(
+        monitor: &mut Self,
+        state: &Arc<AppState>,
+        token: u64,
+        result: ClipboardObserveResult,
+        current_token: Option<u64>,
+    ) {
         match result {
             ClipboardObserveResult::ReadFailed => {}
             ClipboardObserveResult::Observed => monitor.last_token = token,
             ClipboardObserveResult::ClipboardWritten => {
-                monitor.last_token = clipboard_seq::token().unwrap_or(token);
+                monitor.last_token = current_token.unwrap_or(token);
+                if current_token.is_some() {
+                    state
+                        .clipboard_session()
+                        .with_processed_state(|ps| ps.last_written = None);
+                }
             }
         }
     }
@@ -306,5 +330,90 @@ pub(super) fn sync_monitor_generation(
 
     if monitor.tracked_generation != generation {
         monitor.reset(clipboard, state);
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::security::ContentFingerprint;
+    use crate::tray::state::test_app_state;
+
+    /// `last_written` を持つ状態と監視ループを生成する
+    fn state_with_last_written() -> (Arc<AppState>, MonitorLoopState) {
+        let state = Arc::new(test_app_state());
+        state.clipboard_session().with_processed_state(|ps| {
+            ps.last_written = Some(ContentFingerprint::from_text("out"));
+        });
+        (state, MonitorLoopState::new())
+    }
+
+    /// 書き戻し後のトークンを取得できた場合は `last_written` を消してトークンを進めること
+    ///
+    /// エコーはトークン一致で読み飛ばされ判定側で消費されないため、ここで消さないと
+    /// 直後の同じ文字列のコピーが加工されない
+    #[test]
+    fn written_clears_last_written_when_token_available() {
+        let (state, mut monitor) = state_with_last_written();
+
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            5,
+            ClipboardObserveResult::ClipboardWritten,
+            Some(6),
+        );
+
+        // 書き戻し後のトークンへ進み、エコー用の記録は残さない
+        assert_eq!(monitor.last_token, 6);
+        let remains = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_written("out"));
+        assert!(!remains);
+    }
+
+    /// 書き戻し後のトークンを取得できない場合は `last_written` を残すこと
+    ///
+    /// エコーを判定側で読み飛ばす必要があるため
+    #[test]
+    fn written_keeps_last_written_when_token_unavailable() {
+        let (state, mut monitor) = state_with_last_written();
+
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            5,
+            ClipboardObserveResult::ClipboardWritten,
+            None,
+        );
+
+        assert_eq!(monitor.last_token, 5);
+        let remains = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_written("out"));
+        assert!(remains);
+    }
+
+    /// 観測のみの場合は `last_written` を変更しないこと
+    #[test]
+    fn observed_keeps_last_written() {
+        let (state, mut monitor) = state_with_last_written();
+
+        MonitorLoopState::apply_token_with_current(
+            &mut monitor,
+            &state,
+            5,
+            ClipboardObserveResult::Observed,
+            Some(6),
+        );
+
+        assert_eq!(monitor.last_token, 5);
+        let remains = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_written("out"));
+        assert!(remains);
     }
 }

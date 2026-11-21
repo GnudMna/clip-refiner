@@ -68,10 +68,9 @@
  */
 
 /**
- * @typedef {Object} RegexPreviewResolveResult
- * @property {'ignore'|'stale'|'apply'} action - 応答の処理方針
- * @property {RegexPreviewCache} [lastRegexPreview] - キャッシュ更新 (action が `apply` のとき)
- * @property {RegexPreviewUi} [ui] - UI 更新用フィールド (action が `apply` のとき)
+ * 応答の処理方針。`apply` のときだけキャッシュ更新 (`lastRegexPreview`) と UI 更新用フィールド (`ui`) を持つ
+ *
+ * @typedef {{ action: 'ignore' } | { action: 'stale' } | { action: 'apply', lastRegexPreview: RegexPreviewCache, ui: RegexPreviewUi }} RegexPreviewResolveResult
  */
 
 const RegexPreview = (function () {

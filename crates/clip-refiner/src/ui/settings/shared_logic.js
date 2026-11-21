@@ -12,7 +12,11 @@ import { escapeHtml } from '../html_escape.js';
 const SettingsSharedLogic = (function () {
     'use strict';
 
-    /** @type {ReadonlyArray<readonly [string, string]>} 通知タブの DOM ID と設定キー */
+    /**
+     * 通知タブの DOM ID と設定キー
+     *
+     * @type {ReadonlyArray<readonly [string, keyof import('../ipc').NotificationSettings]>}
+     */
     const NOTIFICATION_FIELD_MAP = [
         ['notify-enabled', 'enabled'],
         ['notify-process', 'notifyProcess'],
@@ -25,7 +29,11 @@ const SettingsSharedLogic = (function () {
         ['notify-result', 'notifyResult'],
     ];
 
-    /** @type {ReadonlyArray<readonly [string, string]>} 固定ホットキーの DOM ID と設定キー */
+    /**
+     * 固定ホットキーの DOM ID と設定キー
+     *
+     * @type {ReadonlyArray<readonly [string, Exclude<keyof import('../ipc').HotkeySettings, 'favoriteModeSlots'>]>}
+     */
     const HOTKEY_FIXED_FIELD_MAP = [
         ['hotkey-quick-selector', 'quickSelector'],
         ['hotkey-clip-selector', 'clipSelector'],
@@ -39,7 +47,11 @@ const SettingsSharedLogic = (function () {
         ['hotkey-quit', 'quit'],
     ];
 
-    /** @type {ReadonlyArray<readonly [string, string]>} 固定ホットキーの設定キーと表示ラベル */
+    /**
+     * 固定ホットキーの設定キーと表示ラベル
+     *
+     * @type {ReadonlyArray<readonly [Exclude<keyof import('../ipc').HotkeySettings, 'favoriteModeSlots'>, string]>}
+     */
     const HOTKEY_FIXED_LABELS = [
         ['quickSelector', 'クイックセレクター'],
         ['clipSelector', '登録クリップセレクター'],
@@ -115,9 +127,10 @@ const SettingsSharedLogic = (function () {
      * 通知タブのチェック状態から IPC パッチ用オブジェクトを組み立てる
      *
      * @param {Record<string, boolean>} fieldStates - DOM ID をキーとしたチェック状態
-     * @returns {Record<string, boolean>}
+     * @returns {Partial<import('../ipc').NotificationSettings>}
      */
     function buildNotificationSettingsPatch(fieldStates) {
+        /** @type {Partial<import('../ipc').NotificationSettings>} */
         const notificationSettings = {};
         for (const [elementId, key] of NOTIFICATION_FIELD_MAP) {
             if (Object.prototype.hasOwnProperty.call(fieldStates, elementId)) {
@@ -243,9 +256,10 @@ const SettingsSharedLogic = (function () {
      *
      * @param {Record<string, string>} fixedFieldStates - DOM ID をキーとした固定ホットキー
      * @param {string[]} favoriteSlotBindings - お気に入りスロットのバインディング
-     * @returns {Record<string, unknown>}
+     * @returns {Partial<import('../ipc').HotkeySettings>}
      */
     function buildHotkeysPatch(fixedFieldStates, favoriteSlotBindings) {
+        /** @type {Partial<import('../ipc').HotkeySettings>} */
         const hotkeys = {
             favoriteModeSlots: Array.isArray(favoriteSlotBindings)
                 ? favoriteSlotBindings.map((binding) => String(binding || '').trim())
@@ -270,6 +284,7 @@ const SettingsSharedLogic = (function () {
         if (!hotkeys || typeof hotkeys !== 'object') {
             return false;
         }
+        /** @type {Array<keyof import('../ipc').HotkeySettings>} */
         const required = HOTKEY_FIXED_FIELD_MAP.map(([, key]) => key);
         required.push('favoriteModeSlots');
         return required.every((key) => Object.prototype.hasOwnProperty.call(hotkeys, key));
@@ -338,7 +353,7 @@ const SettingsSharedLogic = (function () {
      * @returns {'syncInputs'|'refreshPanel'}
      */
     function resolveShortcutsDiffUpdate(options) {
-        const opts = options || {};
+        const opts = options || /** @type {typeof options} */ ({});
         if (opts.wasEditingShortcuts && opts.previousFavoriteCount === opts.nextFavoriteCount) {
             return 'syncInputs';
         }
@@ -354,7 +369,7 @@ const SettingsSharedLogic = (function () {
      * @returns {boolean}
      */
     function shouldCloseSettingsOnEscape(options) {
-        const opts = options || {};
+        const opts = options || /** @type {typeof options} */ ({});
         return !opts.dialogVisible && !opts.isEditing;
     }
 

@@ -2,6 +2,7 @@
 // 正規表現タブ UI (プリセット / ステップ)
 // ======================================================================
 
+import { inputById } from '../dom.js';
 import { ctx } from './ctx.js';
 import { escapeHtml, optionCheckbox, wrappedTable } from './html_builders.js';
 import { maxRegexPresets, maxRegexStepsPerPreset } from './shared.js';
@@ -74,7 +75,7 @@ export function readRegexFromDom() {
         return regex;
     }
 
-    const nameInput = document.getElementById('regex-preset-name');
+    const nameInput = inputById('regex-preset-name');
     if (nameInput) {
         regex.presets[presetIndex].name = nameInput.value;
     }
@@ -83,10 +84,10 @@ export function readRegexFromDom() {
     const steps = [];
     for (let i = 0; i < stepCount; i += 1) {
         steps.push({
-            pattern: document.getElementById('regex-step-pattern-' + i)?.value ?? '',
-            replacement: document.getElementById('regex-step-replacement-' + i)?.value ?? '',
-            caseInsensitive: !!document.getElementById('regex-step-ci-' + i)?.checked,
-            multiline: !!document.getElementById('regex-step-ml-' + i)?.checked,
+            pattern: inputById('regex-step-pattern-' + i)?.value ?? '',
+            replacement: inputById('regex-step-replacement-' + i)?.value ?? '',
+            caseInsensitive: !!inputById('regex-step-ci-' + i)?.checked,
+            multiline: !!inputById('regex-step-ml-' + i)?.checked,
         });
     }
     if (steps.length === 0) {

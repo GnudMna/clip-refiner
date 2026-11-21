@@ -2,7 +2,7 @@
 // 設定画面 HTML 組み立てヘルパー
 // ======================================================================
 
-import { ctx } from './ctx.js';
+import { ctx, loadedState } from './ctx.js';
 
 import SettingsSharedLogic from './shared_logic.js';
 
@@ -197,7 +197,7 @@ export function wrappedTable(tableHtml) {
  * @returns {string}
  */
 export function modeLabel(modeId) {
-    const mode = ctx.state.modes.find((entry) => entry.id === modeId);
+    const mode = loadedState().modes.find((entry) => entry.id === modeId);
     return mode ? mode.label : modeId;
 }
 
@@ -208,8 +208,9 @@ export function modeLabel(modeId) {
  * @returns {string}
  */
 export function buildModeOptions(selectedId) {
+    /** @type {string[]} */
     const categories = [];
-    for (const mode of ctx.state.modes) {
+    for (const mode of loadedState().modes) {
         if (!categories.includes(mode.category)) {
             categories.push(mode.category);
         }
@@ -217,7 +218,7 @@ export function buildModeOptions(selectedId) {
     let html = '';
     for (const category of categories) {
         html += '<optgroup label="' + escapeHtml(category) + '">';
-        for (const mode of ctx.state.modes.filter((entry) => entry.category === category)) {
+        for (const mode of loadedState().modes.filter((entry) => entry.category === category)) {
             const selected = mode.id === selectedId ? ' selected' : '';
             html +=
                 '<option value="' +

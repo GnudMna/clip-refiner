@@ -49,7 +49,7 @@ pub use ipc::{
     unique_oneshot_pipe_name, wait_for_oneshot_pipe,
 };
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
-pub use js_runner::run_js_test_script;
+pub use js_runner::{run_js_test_script, run_typescript_check};
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use platform::{
     assert_test_hotkeys_register, query_autostart_enabled, query_webview2_runtime_available,

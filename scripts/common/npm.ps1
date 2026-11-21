@@ -131,7 +131,7 @@ function Invoke-NpmScript {
 # `*.bundle.js` は `include_str!` で埋め込むためリポジトリにコミットする。
 # ソースだけ更新してバンドルを忘れると配布物の UI が古いままになるため、
 # 作業ツリーを書き換えずに再生成結果と比較し、差分があれば失敗させる。
-# コミット済みのバンドルとソースの整合は `cargo test` (`tests/ui_bundle_flow.rs`) が Node なしで検証する
+# コミット済みのバンドルとソースの整合は `cargo test` (`tests/flow/ui_bundle.rs`) が Node なしで検証する
 function Assert-UiBundlesSynced {
     [CmdletBinding()]
     param()
@@ -139,7 +139,7 @@ function Assert-UiBundlesSynced {
     Invoke-NpmScript -Name 'build:ui:check'
 }
 
-# ESLint と Prettier 整形チェックを実行する
+# ESLint・Prettier 整形チェック・TypeScript 型チェック (UI の checkJs と E2E) を実行する
 function Invoke-JavaScriptLintCheck {
     [CmdletBinding()]
     param()
@@ -147,6 +147,23 @@ function Invoke-JavaScriptLintCheck {
     Assert-UiBundlesSynced
     Invoke-NpmScript -Name 'lint'
     Invoke-NpmScript -Name 'format:check'
+    Invoke-NpmScript -Name 'typecheck'
+}
+
+# markdownlint で Markdown の書式 (表の書き方など) を検証する
+function Invoke-MarkdownLintCheck {
+    [CmdletBinding()]
+    param()
+
+    Invoke-NpmScript -Name 'lint:md'
+}
+
+# markdownlint で Markdown の自動修正できる違反を直す
+function Invoke-MarkdownLintFix {
+    [CmdletBinding()]
+    param()
+
+    Invoke-NpmScript -Name 'lint:md:fix'
 }
 
 # Prettier で JavaScript を整形する

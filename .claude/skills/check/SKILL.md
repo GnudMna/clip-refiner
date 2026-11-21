@@ -29,7 +29,8 @@ description: 品質チェック一式 (scripts/windows/check.ps1) を実行し�
 | UI バンドルの最新性 | `npm run build:ui` | `npm run build:ui:check` |
 | ESLint | 指摘をコードで直す | `npm run lint` |
 | Prettier | `./scripts/windows/format.ps1` | `npm run format:check` |
-| テスト | 失敗の原因を直す | `cargo test --test <名前>` などで絞る |
+| markdownlint | `npm run lint:md:fix` で直し、差分を確認する。残りは手で直す | `npm run lint:md` |
+| テスト | 失敗の原因を直す | `cargo test --test flow <モジュール名>::` などで絞る |
 | WebView E2E | 失敗の原因を直す | `npm run test:e2e` (`CLIP_REFINER_E2E_EXE` は `check.ps1` と同じに設定する) |
 
 次はしない。

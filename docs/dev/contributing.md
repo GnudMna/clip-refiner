@@ -74,7 +74,7 @@ git branch -m <prefix>/<kebab-case>
 
 定型作業は `.claude/skills/` のスキルにまとめている。`check` は `check.ps1` を実行して失敗を直し、`changelog` は利用者に影響する変更を `CHANGELOG.md` の `[Unreleased]` に追記する。
 
-JavaScript の整形・静的検査は ESLint / Prettier の設定に従う (`e2e/` は対象外。[JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。
+JavaScript / TypeScript の整形・静的検査・型チェックは ESLint / Prettier / `tsc` の設定に従う ([JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。Markdown の書式は markdownlint で検証する ([Markdown リンター](testing.md#markdown-リンター-markdownlint))。
 
 `.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。UI の JavaScript を編集すると PostToolUse フックが `npm run build:ui` を実行する。読み取り系の Git コマンドと `git fetch` は許可する。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
 
@@ -113,7 +113,8 @@ JavaScript の整形・静的検査は ESLint / Prettier の設定に従う (`e2
 | 既定ホットキー | README のホットキー表、`docs/user/configuration.md` の `[hotkeys]` |
 | 利用者向けの挙動 | README / `docs/user/` の該当節、[CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` |
 | README のクイックスタート | `docs/user/introduction.md` の「はじめて使う」 |
-| UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`ui_bundle_flow.rs` が検出) |
-| ディレクトリ・ファイルの移動 / 改名 / 削除 | [アーキテクチャ](architecture.md) の構成図と表 (`architecture_doc_flow.rs` が実在しないパスを検出) |
+| UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`tests/flow/ui_bundle.rs` が検出) |
+| WebView と受け渡す JSON の Rust 型 (設定スナップショット・`SettingsPatch`・IPC メッセージ・更新確認の応答など) | `crates/clip-refiner/src/ui/ipc.d.ts` の型宣言 (Rust 側とのずれは `cargo test` の `tray::settings::webview_contract_tests`、UI 側の使い方とのずれは `npm run typecheck` が検出する)。IPC メッセージや更新応答の種類を足したら、同テストのサンプルにも足す |
+| ディレクトリ・ファイルの移動 / 改名 / 削除 | [アーキテクチャ](architecture.md) の構成図と表 (`tests/flow/architecture_doc.rs` が実在しないパスを検出) |
 
 公開 API の破壊的変更は CHANGELOG の **Breaking changes** / **Changed** / **Removed** へ書き、設定スキーマ変更は **Settings** 節にも移行方法を記載する。

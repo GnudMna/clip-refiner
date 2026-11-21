@@ -5,6 +5,7 @@ pub(crate) mod base64_image;
 pub(crate) mod case_convert;
 pub(crate) mod datetime;
 pub(crate) mod escape;
+pub(crate) mod exact_number;
 pub(crate) mod html;
 pub(crate) mod json;
 pub(crate) mod line_actions;

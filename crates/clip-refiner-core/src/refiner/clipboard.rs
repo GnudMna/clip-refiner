@@ -121,6 +121,7 @@ impl From<ClipboardIoError> for ClipboardProcessError {
     fn from(err: ClipboardIoError) -> Self {
         match err {
             ClipboardIoError::ReadFailed(detail) => Self::ReadFailed(detail),
+            ClipboardIoError::TextUnavailable => Self::NoText,
             ClipboardIoError::WriteFailed(detail) => Self::WriteFailed(detail),
             ClipboardIoError::ImageUnavailable => Self::NoImage,
         }

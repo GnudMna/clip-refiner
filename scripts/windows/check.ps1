@@ -1,15 +1,17 @@
 # ========================================================================
 # Script Name : check.ps1
-# Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / test / e2e)
-# Usage       : ./check.ps1 [-Coverage]
+# Description : Windows 用の品質チェック (fmt / clippy / deny / eslint / markdownlint / test / e2e)
+# Usage       : ./check.ps1 [-Coverage] [-SkipE2E]
 # Requires    : PowerShell 7.0+, Node.js (npm), WebView2 Runtime (E2E)
 #               -Coverage 時は cargo-llvm-cov と llvm-tools-preview も必要
+#               -SkipE2E は WebView E2E だけを省く (pre-push フックが指定する)
 # ========================================================================
 
 #requires -Version 7.0
 
 param(
-    [switch]$Coverage
+    [switch]$Coverage,
+    [switch]$SkipE2E
 )
 
 Set-StrictMode -Version Latest
@@ -48,6 +50,10 @@ Invoke-ScriptMain {
     Invoke-JavaScriptLintCheck
     Write-Host ''
 
+    Write-Host 'Markdown リンターを実行中...'
+    Invoke-MarkdownLintCheck
+    Write-Host ''
+
     if ($runCoverage) {
         Write-Host 'カバレッジ付きテストを実行中...'
         Invoke-CargoLlvmCov
@@ -63,7 +69,11 @@ Invoke-ScriptMain {
         Write-Host ''
     }
 
-    if ($env:CLIP_REFINER_SKIP_E2E -eq '1') {
+    if ($SkipE2E) {
+        Write-Host 'note: WebView E2E をスキップしました (-SkipE2E)'
+        Write-Host ''
+    }
+    elseif ($env:CLIP_REFINER_SKIP_E2E -eq '1') {
         Write-Host 'note: WebView E2E をスキップしました (CLIP_REFINER_SKIP_E2E=1)'
         Write-Host ''
     }

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::decision::{should_process_clipboard, should_record_continuous_clipboard};
 use super::guard::ObservedClipboard;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, HtmlClipboard, ImageClipboard, RefineContext,
-    RefineMode, TextClipboard, process_clipboard_pipeline_io,
+    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, HtmlClipboard,
+    ImageClipboard, RefineContext, RefineMode, TextClipboard, process_clipboard_pipeline_io,
 };
 use crate::security::is_within_clipboard_limit;
 use crate::tray::notify;
@@ -123,6 +123,8 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
 
     let text = match clipboard.get_text() {
         Ok(text) => text,
+        // テキストが無い (画像・ファイル・空) 場合は読み取り失敗ではなく観測済みとして扱う
+        Err(ClipboardIoError::TextUnavailable) => String::new(),
         Err(_) if snap.produces_image() => String::new(),
         Err(_) => return ClipboardObserveResult::ReadFailed,
     };
@@ -216,8 +218,11 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
         return ClipboardObserveResult::Observed;
     }
 
-    let Ok(text) = clipboard.get_text() else {
-        return ClipboardObserveResult::ReadFailed;
+    let text = match clipboard.get_text() {
+        Ok(text) => text,
+        // テキストが無い内容は記録対象が無いため観測済みとして扱う
+        Err(ClipboardIoError::TextUnavailable) => return ClipboardObserveResult::Observed,
+        Err(_) => return ClipboardObserveResult::ReadFailed,
     };
 
     // 除外判定の後に別のコピーが入った場合、読んだ本文は判定対象と異なるため記録しない
@@ -592,6 +597,62 @@ mod tests {
 
         assert_eq!(result, ClipboardObserveResult::ClipboardWritten);
         assert_eq!(clipboard.written_image_size(), Some((1, 1)));
+    }
+
+    /// テキストが無いクリップボードは読み取り失敗ではなく観測済みとして扱うこと
+    ///
+    /// `ReadFailed` では変更トークンが進まず、同じ内容を繰り返し読み続けてしまう
+    #[test]
+    fn handle_update_treats_missing_text_as_observed() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
+        let mut clipboard = InMemoryTextClipboard::with_text("").text_unavailable();
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::PollingChanged,
+            &RefineContext::default(),
+        );
+
+        assert_eq!(result, ClipboardObserveResult::Observed);
+        assert_eq!(state.clipboard_session().history_len(), 0);
+    }
+
+    /// テキスト以外の読み取り失敗は `ReadFailed` として再試行対象にすること
+    #[test]
+    fn handle_update_reports_read_failure() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::Trim], true, false);
+        let mut clipboard = InMemoryTextClipboard::with_text("x").fail_on_read();
+
+        let result = handle_clipboard_update(
+            &mut clipboard,
+            &state,
+            &snap,
+            ClipboardTrigger::PollingChanged,
+            &RefineContext::default(),
+        );
+
+        assert_eq!(result, ClipboardObserveResult::ReadFailed);
+    }
+
+    /// 連続記録でテキストが無いクリップボードは観測済みとして扱うこと
+    #[test]
+    fn continuous_record_treats_missing_text_as_observed() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        state.with_config_mut(|c| c.continuous_record_enabled = true);
+        let mut clipboard = InMemoryTextClipboard::with_text("").text_unavailable();
+
+        assert_eq!(
+            observe_continuous_record(&mut clipboard, &state),
+            ClipboardObserveResult::Observed
+        );
+        assert_eq!(
+            state.clipboard_session().continuous_record_texts(),
+            Vec::<String>::new()
+        );
     }
 
     /// 監視除外指定付きの内容は連続記録キューへ積まないようにすること

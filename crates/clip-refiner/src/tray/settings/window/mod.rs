@@ -193,12 +193,7 @@ impl SettingsWindow {
         let Some(inner) = inner.as_ref() else {
             return;
         };
-        let payload = serde_json::json!({
-            "index": index,
-            "token": ClipRef::format_token(token),
-            "label": label,
-            "text": text,
-        });
+        let payload = clip_editor_payload(index, token, label, text);
         inner.evaluate_script(&json_parse_call_script(
             "showClipEditor",
             &payload.to_string(),
@@ -217,7 +212,7 @@ impl SettingsWindow {
         let Some(inner) = inner.as_ref() else {
             return;
         };
-        let payload = serde_json::json!({ "ok": ok, "message": message });
+        let payload = clip_edit_result_payload(ok, message);
         inner.evaluate_script(&json_parse_call_script(
             "onClipEditResult",
             &payload.to_string(),
@@ -358,6 +353,45 @@ impl SettingsWindow {
     pub fn id(&self) -> Option<WindowId> {
         self.inner.borrow().as_ref().map(WebSelectorWindow::id)
     }
+}
+
+// ======================================================================
+// JavaScript へ渡すペイロード
+// ======================================================================
+/// `showClipEditor` に渡す登録クリップ編集ダイアログの初期値
+///
+/// # Arguments
+/// * `index` - 登録クリップのインデックス
+/// * `token` - 登録クリップの識別トークン
+/// * `label` - 現在の表示ラベル
+/// * `text` - 現在の本文
+///
+/// # Returns
+/// * `serde_json::Value` - JavaScript の `ClipEditorPayload` (`ui/ipc.d.ts`)
+pub(super) fn clip_editor_payload(
+    index: usize,
+    token: u64,
+    label: &str,
+    text: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "index": index,
+        "token": ClipRef::format_token(token),
+        "label": label,
+        "text": text,
+    })
+}
+
+/// `onClipEditResult` に渡す登録クリップ編集の結果
+///
+/// # Arguments
+/// * `ok` - 成功した場合は `true`
+/// * `message` - 失敗時に表示する理由
+///
+/// # Returns
+/// * `serde_json::Value` - JavaScript の `ClipEditResult` (`ui/ipc.d.ts`)
+pub(super) fn clip_edit_result_payload(ok: bool, message: &str) -> serde_json::Value {
+    serde_json::json!({ "ok": ok, "message": message })
 }
 
 // ======================================================================

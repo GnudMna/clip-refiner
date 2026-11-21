@@ -125,7 +125,7 @@ export function hideClipEditor() {
  *
  * 保存中は自分の保存で一覧が変わるため対象外にする
  *
- * @param {Array<{ label?: string, preview?: string, kind: string }>|undefined} clips
+ * @param {import('../clip_selector_logic').ClipSelectorItem[]|undefined} clips
  */
 export function closeClipEditorIfStale(clips) {
     const editor = ctx.clipEditor;
@@ -156,7 +156,7 @@ function saveClipEditor() {
         textInput.value,
         maxRegisteredClipLabelChars()
     );
-    if (!check.ok) {
+    if (check.ok === false) {
         setEditorError(check.message);
         (check.field === 'label' ? labelInput : textInput).focus();
         return;
@@ -205,6 +205,7 @@ export function onClipEditResult(result) {
  * @param {HTMLElement} dialog
  */
 function trapFocus(event, dialog) {
+    /** @type {HTMLElement[]} */
     const focusable = Array.from(
         dialog.querySelectorAll('input, textarea, button:not([disabled])')
     );

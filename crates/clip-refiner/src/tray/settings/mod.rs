@@ -6,6 +6,8 @@ mod ipc;
 mod model;
 mod regex_preview;
 mod snapshot;
+#[cfg(test)]
+mod webview_contract_tests;
 mod window;
 
 pub use window::{SettingsWindow, init_settings_window};

@@ -1,4 +1,25 @@
 /**
+ * 委譲クリックの対象ボタン (DOM 非依存で扱う最小限の形)
+ *
+ * @typedef {{ classList: { contains: (name: string) => boolean }, dataset: Record<string, string|undefined> }} ActionButton
+ */
+
+/**
+ * コンテンツクリックから解決した委譲アクション
+ *
+ * `clip-*` は IPC の `IpcClipTarget` と同じく `index` と識別トークンを持つ
+ *
+ * @typedef {{ type: 'pipeline', action: 'up'|'down'|'remove', index: number }
+ *   | { type: 'regex-action', button: ActionButton }
+ *   | { type: 'favorite-toggle', mode: string }
+ *   | { type: 'favorite-move', mode: string, direction: 'up'|'down' }
+ *   | { type: 'clip-move', index: number, token: string, direction: 'up'|'down' }
+ *   | { type: 'clip-template', index: number, token: string, enabled: boolean }
+ *   | { type: 'clip-counter-reset' | 'clip-edit' | 'clip-copy' | 'clip-delete', index: number, token: string }
+ * } ContentClickAction
+ */
+
+/**
  * 設定画面のパネル / イベント向け DOM 非依存ロジック
  *
  * @namespace SettingsPanelsLogic
@@ -152,7 +173,7 @@ const SettingsPanelsLogic = (function () {
     /**
      * 登録クリップ 1 行分のテーブル行 HTML を組み立てる
      *
-     * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, counter?: number, thumbnail?: string }} clip
+     * @param {import('../clip_selector_logic').ClipSelectorItem} clip
      * @param {(text: string) => string} escapeHtml
      * @param {number} index - 一覧内の位置 (先頭は上へ移動を無効にする)
      * @param {number} count - 一覧の件数 (末尾は下へ移動を無効にする)
@@ -200,7 +221,7 @@ const SettingsPanelsLogic = (function () {
                   indexAttrEnd +
                   ' title="ラベルと本文を編集する">編集</button>';
         // 連番は払い出し済みのテキストだけに出す。リセットはその横のボタンで行う
-        const hasCounter = clip.kind !== 'image' && clip.counter > 0;
+        const hasCounter = clip.kind !== 'image' && (clip.counter ?? 0) > 0;
         const counterBadge = hasCounter
             ? '<span class="clip-kind clip-counter-badge" title="{counter} で最後に使った連番">連番 ' +
               escapeHtml(String(clip.counter)) +
@@ -317,8 +338,8 @@ const SettingsPanelsLogic = (function () {
     /**
      * コンテンツクリックから委譲アクションを解決する
      *
-     * @param {{ classList: { contains: (name: string) => boolean }, dataset: Record<string, string> }} button
-     * @returns {{ type: string, mode?: string, direction?: string, index?: number, token?: string, enabled?: boolean }|null}
+     * @param {ActionButton} button
+     * @returns {ContentClickAction|null}
      */
     function resolveContentClickAction(button) {
         if (
@@ -330,6 +351,7 @@ const SettingsPanelsLogic = (function () {
             if (Number.isNaN(index)) {
                 return null;
             }
+            /** @type {'up'|'down'|'remove'} */
             let action = 'remove';
             if (button.classList.contains('pipeline-up')) {
                 action = 'up';
@@ -351,66 +373,50 @@ const SettingsPanelsLogic = (function () {
             return { type: 'regex-action', button };
         }
 
-        if (button.classList.contains('favorite-remove')) {
-            return { type: 'favorite-toggle', mode: button.dataset.mode };
+        const mode = button.dataset.mode;
+        if (mode !== undefined) {
+            if (button.classList.contains('favorite-remove')) {
+                return { type: 'favorite-toggle', mode };
+            }
+            if (button.classList.contains('favorite-up')) {
+                return { type: 'favorite-move', mode, direction: 'up' };
+            }
+            if (button.classList.contains('favorite-down')) {
+                return { type: 'favorite-move', mode, direction: 'down' };
+            }
         }
-        if (button.classList.contains('favorite-up')) {
-            return { type: 'favorite-move', mode: button.dataset.mode, direction: 'up' };
+
+        // 登録クリップの操作は識別トークンが無いと Rust が受け付けないため、送らずに打ち切る
+        const token = button.dataset.token;
+        if (token === undefined) {
+            return null;
         }
-        if (button.classList.contains('favorite-down')) {
-            return { type: 'favorite-move', mode: button.dataset.mode, direction: 'down' };
-        }
+        const index = Number(button.dataset.index);
         if (button.classList.contains('clip-up')) {
-            return {
-                type: 'clip-move',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-                direction: 'up',
-            };
+            return { type: 'clip-move', index, token, direction: 'up' };
         }
         if (button.classList.contains('clip-down')) {
-            return {
-                type: 'clip-move',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-                direction: 'down',
-            };
+            return { type: 'clip-move', index, token, direction: 'down' };
         }
         if (button.classList.contains('clip-template')) {
             return {
                 type: 'clip-template',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
+                index,
+                token,
                 enabled: button.dataset.enabled === 'true',
             };
         }
         if (button.classList.contains('clip-counter-reset')) {
-            return {
-                type: 'clip-counter-reset',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-            };
+            return { type: 'clip-counter-reset', index, token };
         }
         if (button.classList.contains('clip-edit')) {
-            return {
-                type: 'clip-edit',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-            };
+            return { type: 'clip-edit', index, token };
         }
         if (button.classList.contains('clip-copy')) {
-            return {
-                type: 'clip-copy',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-            };
+            return { type: 'clip-copy', index, token };
         }
         if (button.classList.contains('clip-delete')) {
-            return {
-                type: 'clip-delete',
-                index: Number(button.dataset.index),
-                token: button.dataset.token,
-            };
+            return { type: 'clip-delete', index, token };
         }
         return null;
     }
@@ -459,7 +465,7 @@ const SettingsPanelsLogic = (function () {
      * 他の操作で削除・並べ替えされると、保存先のインデックスがずれて別のクリップを上書きするため
      *
      * @param {{ index: number, token?: string, label: string, preview: string }|null} editor
-     * @param {Array<{ label?: string, preview?: string, kind: string, token?: string }>} clips
+     * @param {Array<{ label?: string, preview?: string, kind: string, token?: string }>|undefined} clips
      * @returns {boolean}
      */
     function clipEditorTargetUnchanged(editor, clips) {
@@ -499,7 +505,7 @@ const SettingsPanelsLogic = (function () {
     /**
      * 更新ステータス表示 HTML を組み立てる
      *
-     * @param {Record<string, unknown>|null|undefined} status
+     * @param {import('../ipc').UpdateCheckResponse|import('../ipc').UpdateApplyResponse|null|undefined} status
      * @param {boolean} updateBusy
      * @param {(text: string) => string} escapeHtml
      * @returns {string}
@@ -546,7 +552,11 @@ const SettingsPanelsLogic = (function () {
         if (kind === 'error' || kind === 'busy') {
             return (
                 '<p id="update-status" class="hint">' +
-                escapeHtml(String(status.message ?? '更新処理に失敗しました')) +
+                escapeHtml(
+                    String(
+                        ('message' in status ? status.message : null) ?? '更新処理に失敗しました'
+                    )
+                ) +
                 '</p>'
             );
         }

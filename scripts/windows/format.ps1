@@ -1,6 +1,6 @@
 # ========================================================================
 # Script Name : format.ps1
-# Description : Windows 用のコード整形 (rustfmt / Prettier)
+# Description : Windows 用のコード整形 (rustfmt / Prettier / markdownlint の自動修正)
 # Usage       : ./format.ps1
 # Requires    : PowerShell 7.0+, Node.js (npm)
 # ========================================================================
@@ -25,6 +25,11 @@ Invoke-ScriptMain {
     Write-Host 'Prettier による JavaScript 整形を実行しています...'
     Write-Host ''
     Invoke-JavaScriptFormat
+    Write-Host ''
+
+    Write-Host 'markdownlint による Markdown の自動修正を実行しています...'
+    Write-Host ''
+    Invoke-MarkdownLintFix
     Write-Host ''
 
     Write-Host 'コード整形が完了しました'

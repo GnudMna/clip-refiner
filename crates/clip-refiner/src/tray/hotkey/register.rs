@@ -50,6 +50,8 @@ pub struct HotkeyHandler {
     pub(super) continuous_record_undo_hotkey: HotKey,
     pub(super) continuous_record_paste_hotkey: HotKey,
     pub(super) ocr_hotkey: HotKey,
+    /// OS への登録に成功した固定ホットキー
+    active_hotkeys: Vec<HotKey>,
     favorite_hotkeys: Vec<FavoriteHotkeyBinding>,
 }
 
@@ -70,7 +72,8 @@ impl HotkeyHandler {
     ) -> Result<(Self, Vec<HotkeyRegistrationFailure>)> {
         let manager = GlobalHotKeyManager::new().map_err(|e| anyhow::anyhow!(e))?;
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
-        let mut failures = register_resolved_hotkeys(&manager, hotkeys, &resolved);
+        let (mut failures, active_hotkeys) =
+            register_resolved_hotkeys(&manager, hotkeys, &resolved);
 
         let mut handler = Self {
             manager,
@@ -84,6 +87,7 @@ impl HotkeyHandler {
             continuous_record_undo_hotkey: resolved.continuous_record_undo,
             continuous_record_paste_hotkey: resolved.continuous_record_paste,
             ocr_hotkey: resolved.ocr,
+            active_hotkeys,
             favorite_hotkeys: Vec::new(),
         };
         failures.extend(handler.register_favorite_hotkeys(hotkeys, favorite_modes.len()));
@@ -94,26 +98,28 @@ impl HotkeyHandler {
     ///
     /// 設定ファイルの再読み込み後など、再起動なしでショートカットを反映する
     ///
+    /// OS へ登録済みのホットキーだけを解除し、解除に失敗しても残りの再登録を続ける
+    ///
     /// # Arguments
     /// * `hotkeys` - 新しいホットキー割り当て
     /// * `favorite_modes` - お気に入り登録済み変換モード
     ///
     /// # Returns
-    /// * `Result<Vec<HotkeyRegistrationFailure>>` - 再登録失敗一覧
+    /// * `Vec<HotkeyRegistrationFailure>` - 再登録失敗一覧
     pub fn reload(
         &mut self,
         hotkeys: &HotkeySettings,
         favorite_modes: &[RefineMode],
-    ) -> Result<Vec<HotkeyRegistrationFailure>> {
-        for hotkey in self.registered_hotkeys() {
-            self.manager
-                .unregister(hotkey)
-                .map_err(|e| anyhow::anyhow!(e))?;
+    ) -> Vec<HotkeyRegistrationFailure> {
+        for hotkey in std::mem::take(&mut self.active_hotkeys) {
+            self.unregister_hotkey(hotkey);
         }
-        self.unregister_favorite_hotkeys()?;
+        self.unregister_favorite_hotkeys();
 
         let resolved = ResolvedHotkeys::from_settings(hotkeys);
-        let mut failures = register_resolved_hotkeys(&self.manager, hotkeys, &resolved);
+        let (mut failures, active_hotkeys) =
+            register_resolved_hotkeys(&self.manager, hotkeys, &resolved);
+        self.active_hotkeys = active_hotkeys;
 
         self.quick_selector_hotkey = resolved.quick_selector;
         self.notification_hotkey = resolved.notification;
@@ -127,7 +133,7 @@ impl HotkeyHandler {
         self.ocr_hotkey = resolved.ocr;
 
         failures.extend(self.register_favorite_hotkeys(hotkeys, favorite_modes.len()));
-        Ok(failures)
+        failures
     }
 
     /// お気に入り変換モード用ホットキーのみ再登録する
@@ -137,14 +143,14 @@ impl HotkeyHandler {
     /// * `favorite_count` - 再登録するお気に入りスロット数
     ///
     /// # Returns
-    /// * `Result<Vec<HotkeyRegistrationFailure>>` - 再登録失敗一覧
+    /// * `Vec<HotkeyRegistrationFailure>` - 再登録失敗一覧
     pub fn reload_favorite_slots(
         &mut self,
         hotkeys: &HotkeySettings,
         favorite_count: usize,
-    ) -> Result<Vec<HotkeyRegistrationFailure>> {
-        self.unregister_favorite_hotkeys()?;
-        Ok(self.register_favorite_hotkeys(hotkeys, favorite_count))
+    ) -> Vec<HotkeyRegistrationFailure> {
+        self.unregister_favorite_hotkeys();
+        self.register_favorite_hotkeys(hotkeys, favorite_count)
     }
 
     /// 固定ホットキーの割り当て一覧を返す
@@ -198,14 +204,19 @@ impl HotkeyHandler {
     }
 
     /// お気に入り変換モード用ホットキーの登録を解除する
-    fn unregister_favorite_hotkeys(&mut self) -> Result<()> {
-        for binding in &self.favorite_hotkeys {
-            self.manager
-                .unregister(binding.hotkey)
-                .map_err(|e| anyhow::anyhow!(e))?;
+    fn unregister_favorite_hotkeys(&mut self) {
+        for binding in std::mem::take(&mut self.favorite_hotkeys) {
+            self.unregister_hotkey(binding.hotkey);
         }
-        self.favorite_hotkeys.clear();
-        Ok(())
+    }
+
+    /// 単一ホットキーの OS 登録を解除する
+    ///
+    /// 失敗しても残りの解除と再登録を妨げないよう、ログに残すだけで続行する
+    fn unregister_hotkey(&self, hotkey: HotKey) {
+        if let Err(error) = self.manager.unregister(hotkey) {
+            crate::log_warn!("ホットキーの登録解除に失敗: {error}");
+        }
     }
 
     /// ホットキー ID に対応するお気に入りスロットインデックスを返す
@@ -221,12 +232,15 @@ impl HotkeyHandler {
 // 登録ヘルパー
 // ======================================================================
 /// 固定ホットキー割り当てを OS へ登録する
+///
+/// 登録失敗一覧と、実際に登録できたホットキーを返す
 fn register_resolved_hotkeys(
     manager: &GlobalHotKeyManager,
     hotkeys: &HotkeySettings,
     resolved: &ResolvedHotkeys,
-) -> Vec<HotkeyRegistrationFailure> {
+) -> (Vec<HotkeyRegistrationFailure>, Vec<HotKey>) {
     let mut failures = Vec::new();
+    let mut registered = Vec::new();
     let entries: [(&str, &str, HotKey); 10] = [
         (
             "quick_selector",
@@ -269,14 +283,13 @@ fn register_resolved_hotkeys(
     ];
 
     for (label, binding, hotkey) in entries {
-        if let Some(failure) =
-            try_register_hotkey(manager, hotkey_action_label(label), binding, hotkey)
-        {
-            failures.push(failure);
+        match try_register_hotkey(manager, hotkey_action_label(label), binding, hotkey) {
+            Some(failure) => failures.push(failure),
+            None => registered.push(hotkey),
         }
     }
 
-    failures
+    (failures, registered)
 }
 
 /// 単一ホットキーの OS 登録を試みる

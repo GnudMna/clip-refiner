@@ -155,42 +155,87 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 // ======================================================================
 /// Markdownの表形式テキストをExcel(TSV)形式へ変換する
 ///
-/// パイプ区切りのMarkdownテーブルを解析し、タブ区切り(TSV)に変換する
+/// 見出し行の直後に区切り行 (`|---|`) が続く塊だけを表とみなし、タブ区切り(TSV)に変換する (GFM と同じ)
+/// 表は `|` を含まない行で終わる。表以外の行はそのまま残す
 /// セル内の `<br>` (`<br/>`・`<br />` を含む) は改行に戻し、エスケープされたパイプ (`\|`) は復元する
 /// インラインコード内の `|` はセルの区切りとみなさない
-/// 表の 2 行目 (見出し行の直後) にある区切り行 (`|---|`) はスキップする
 ///
 /// # Arguments
 /// * `text` - 変換対象のMarkdownテーブル文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のTSV文字列。表が検出できない場合は元の文字列を返す
+/// * `Cow<'_, str>` - 変換後のTSV文字列。表が無い場合 (`|` を含むだけの文など) は元の文字列を返す
 pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
-    let records = parse_markdown_table_rows(text);
-    if records.is_empty() {
-        return Cow::Borrowed(text);
+    let lines: Vec<&str> = text.lines().collect();
+    let mut output: Vec<Cow<'_, str>> = Vec::with_capacity(lines.len());
+    let mut found_table = false;
+    let mut i = 0;
+
+    while let Some(&line) = lines.get(i) {
+        let Some(header) = table_header(line, lines.get(i + 1).copied()) else {
+            output.push(Cow::Borrowed(line));
+            i += 1;
+            continue;
+        };
+
+        // 見出し行と区切り行の後は `|` を含む行をデータ行として読む
+        let mut rows = vec![header];
+        i += 2;
+        while let Some(row) = lines.get(i).filter(|row| row.contains('|')) {
+            rows.push(split_table_row(row));
+            i += 1;
+        }
+
+        let Some(tsv) = table_rows_to_tsv(&rows) else {
+            return Cow::Borrowed(text);
+        };
+        output.push(Cow::Owned(tsv));
+        found_table = true;
     }
 
-    let max_cols = records.iter().map(Vec::len).max().unwrap_or(0);
-    if max_cols == 0 {
-        return Cow::Borrowed(text);
+    if found_table {
+        Cow::Owned(output.join("\n"))
+    } else {
+        Cow::Borrowed(text)
     }
+}
 
+/// 表の見出し行なら、そのセルを返す
+///
+/// 次の行が見出し行と同じ列数の区切り行である場合だけ表の見出しとみなす
+fn table_header(line: &str, next: Option<&str>) -> Option<Vec<String>> {
+    let next = next?;
+    if !line.contains('|') || !next.contains('|') {
+        return None;
+    }
+    let header = split_table_row(line);
+    let separator = split_table_row(next);
+    (header.len() == separator.len() && is_separator_row(&separator)).then_some(header)
+}
+
+/// 表の行 (区切り行を除く) を TSV に組み立てる
+///
+/// 列数は表の中で最も多い行に合わせ、足りないセルは空にする。書き込みに失敗した場合は `None` を返す
+fn table_rows_to_tsv(rows: &[Vec<String>]) -> Option<String> {
+    let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
     let mut writer = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .has_headers(false)
         .from_writer(Vec::new());
 
-    for record in records {
-        let row: Vec<&str> = (0..max_cols)
-            .map(|i| record.get(i).map_or("", String::as_str))
+    for row in rows {
+        let cells: Vec<String> = (0..max_cols)
+            .map(|i| {
+                row.get(i)
+                    .map_or_else(String::new, |cell| unescape_table_cell(cell))
+            })
             .collect();
-        if let Err(e) = writer.write_record(&row) {
+        if let Err(e) = writer.write_record(&cells) {
             tracing::debug!(
                 "TSV レコードの書き込みに失敗 (markdown_table_to_excel): {}",
                 e
             );
-            return Cow::Borrowed(text);
+            return None;
         }
     }
 
@@ -201,46 +246,12 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
                 "TSV ライターのフラッシュに失敗 (markdown_table_to_excel): {}",
                 e
             );
-            return Cow::Borrowed(text);
+            return None;
         }
     };
 
-    let result = String::from_utf8(bytes).unwrap_or_default();
-    let result = result.trim_end_matches('\n').to_string();
-
-    if result == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(result)
-    }
-}
-
-/// Markdownテーブル行をパースしてセル配列のリストを返す
-///
-/// 区切り行とみなすのは表の 2 行目 (見出し行の直後) だけとする (GFM と同じ)
-/// 見出しやデータ行のセルがすべて `-` でも (`| - | - |`) データとして残す
-fn parse_markdown_table_rows(text: &str) -> Vec<Vec<String>> {
-    let mut records = Vec::new();
-    // 連続する表の行のうち何行目か (`|` を含まない行で表が途切れる)
-    let mut row_in_table = 0;
-
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if !trimmed.contains('|') {
-            row_in_table = 0;
-            continue;
-        }
-
-        let cells = split_table_row(trimmed);
-        row_in_table += 1;
-        if row_in_table == 2 && is_separator_row(&cells) {
-            continue;
-        }
-
-        records.push(cells.iter().map(|cell| unescape_table_cell(cell)).collect());
-    }
-
-    records
+    let tsv = String::from_utf8(bytes).ok()?;
+    Some(tsv.trim_end_matches('\n').to_string())
 }
 
 /// パイプ区切りのテーブル行をセルに分割する
@@ -531,8 +542,43 @@ mod tests {
     /// `markdown_table_to_excel`: 表ごとに 2 行目の区切り行を読み飛ばすようにすること
     #[test]
     fn test_markdown_table_to_excel_skips_separator_per_table() {
-        let input = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
-        assert_eq!(markdown_table_to_excel(input), "A\n1\nB\n2");
+        // 表の間の空行は残し、列数は表ごとにそろえる
+        let input = "| A |\n|---|\n| 1 |\n\n| B | C |\n|---|---|\n| 2 |";
+        assert_eq!(markdown_table_to_excel(input), "A\n1\n\nB\tC\n2\t");
+    }
+
+    /// `markdown_table_to_excel`: 表の前後にある表以外の行を消さずに残すこと
+    #[test]
+    fn test_markdown_table_to_excel_keeps_non_table_lines() {
+        let input = "intro text\n| a | b |\n|---|---|\n| 1 | 2 |\noutro";
+        assert_eq!(
+            markdown_table_to_excel(input),
+            "intro text\na\tb\n1\t2\noutro"
+        );
+
+        // 表以外の行は `"` やタブを含んでもそのまま残す
+        let input = "say \"hi\"\tnow\n\n| a |\n|---|\n| 1 |";
+        assert_eq!(markdown_table_to_excel(input), "say \"hi\"\tnow\n\na\n1");
+    }
+
+    /// `markdown_table_to_excel`: 区切り行の無い `|` を含む文は表とみなさず元の文字列を返すこと
+    #[test]
+    fn test_markdown_table_to_excel_ignores_pipe_without_separator() {
+        // シェルのパイプ
+        let input = "cat a | grep b";
+        assert_eq!(markdown_table_to_excel(input), input);
+
+        // 区切り行の無い表らしい行
+        let input = "| a | b |\n| 1 | 2 |";
+        assert_eq!(markdown_table_to_excel(input), input);
+
+        // 区切り行の列数が見出し行と異なる
+        let input = "| a | b |\n|---|\n| 1 | 2 |";
+        assert_eq!(markdown_table_to_excel(input), input);
+
+        // `|` を含まない区切り行 (見出しの下線や水平線)
+        let input = "a | b\n---\nc";
+        assert_eq!(markdown_table_to_excel(input), input);
     }
 
     /// `markdown_table_to_excel`: 空入力は元の文字列を返すようにすること

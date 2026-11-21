@@ -5,7 +5,7 @@
  * 生成物 `*.bundle.js` はリポジトリにコミットする。
  *
  * 生成物の先頭には入力ファイル一覧とその SHA-256 を刻む。Rust の統合テスト
- * (`tests/ui_bundle_flow.rs`) が Node なしで同じハッシュを再計算し、ソースだけ更新して
+ * (`tests/flow/ui_bundle.rs`) が Node なしで同じハッシュを再計算し、ソースだけ更新して
  * バンドルを忘れたコミットを検出する。
  *
  * `--check` を付けると書き込まずに再生成結果と既存ファイルを比較し、差分があれば終了コード 1 を返す
@@ -60,7 +60,7 @@ const shared = {
 /**
  * 入力ファイル群の SHA-256 を求める
  *
- * Rust 側 (`tests/ui_bundle_flow.rs`) と同じ手順: パス昇順に `パス \0 内容 \0` を連結してハッシュする
+ * Rust 側 (`tests/flow/ui_bundle.rs`) と同じ手順: パス昇順に `パス \0 内容 \0` を連結してハッシュする
  *
  * @param {ReadonlyArray<string>} inputs ルート相対の `/` 区切りパス (昇順)
  * @returns {Promise<string>} 小文字 16 進

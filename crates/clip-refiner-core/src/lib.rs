@@ -75,5 +75,7 @@ pub use refiner::{
 };
 pub use security::{is_within_clipboard_limit, is_within_parser_limit};
 
+// テスト専用 API。デバッグビルドでも見えるため、利用者向けドキュメントには出さない
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
+#[doc(hidden)]
 pub mod test_helpers;

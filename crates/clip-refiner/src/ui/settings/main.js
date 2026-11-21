@@ -2,6 +2,7 @@
 // 設定画面 描画・Rust 連携エントリ
 // ======================================================================
 
+import { requiredById } from '../dom.js';
 import {
     bindClipEditor,
     closeClipEditorIfStale,
@@ -45,7 +46,7 @@ function resolvePanelInnerHtml(tabId) {
  */
 function renderActivePanel(force = false) {
     bindContentDelegation();
-    const content = document.getElementById('content');
+    const content = requiredById('content');
     const panelId = 'panel-' + ctx.activeTab;
 
     if (!force && ctx.renderedPanels.has(ctx.activeTab)) {
@@ -93,8 +94,8 @@ ctx.refreshActivePanel = refreshActivePanel;
 /**
  * Rust から設定スナップショットを受信して UI を更新する
  *
- * @param {Record<string, unknown>} snapshot
- * @param {{ force?: boolean, externalSync?: boolean }} [options]
+ * @param {import('../ipc').SettingsSnapshot} snapshot
+ * @param {import('../ipc').LoadSettingsOptions} [options]
  */
 window.loadSettings = function loadSettings(snapshot, options) {
     const opts = options || {};
@@ -149,7 +150,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
 /**
  * 登録クリップ一覧の差分更新
  *
- * @param {Array<Record<string, unknown>>} clips
+ * @param {import('../clip_selector_logic').ClipSelectorItem[]} clips
  */
 window.updateClips = function updateClips(clips) {
     if (!ctx.state) {
@@ -169,7 +170,7 @@ window.onClipEditResult = onClipEditResult;
 /**
  * お気に入りとショートカット一覧の差分更新
  *
- * @param {{ favoriteModes?: string[], hotkeys?: Record<string, unknown>, shortcuts?: Array<{ binding: string, label: string }> }} payload
+ * @param {import('../ipc').FavoritesAndShortcutsPayload} payload
  */
 window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payload) {
     if (!ctx.state) {
@@ -179,7 +180,7 @@ window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payloa
     const nextFavoriteModes = payload.favoriteModes || [];
     const wasEditingShortcuts =
         ctx.activeTab === 'shortcuts' &&
-        document.activeElement?.classList?.contains('shortcut-input');
+        Boolean(document.activeElement?.classList?.contains('shortcut-input'));
 
     ctx.state.favoriteModes = nextFavoriteModes;
     if (payload.hotkeys) {
@@ -244,7 +245,7 @@ window.onRegexPreview = handleRegexPreview;
  *
  * Rust から `window.onUpdateCheck(payload)` として呼び出す
  *
- * @param {Record<string, unknown>} payload
+ * @param {import('../ipc').UpdateCheckResponse} payload
  */
 window.onUpdateCheck = function onUpdateCheck(payload) {
     ctx.updateBusy = false;
@@ -259,7 +260,7 @@ window.onUpdateCheck = function onUpdateCheck(payload) {
  *
  * Rust から `window.onUpdateApply(payload)` として呼び出す
  *
- * @param {Record<string, unknown>} payload
+ * @param {import('../ipc').UpdateApplyResponse} payload
  */
 window.onUpdateApply = function onUpdateApply(payload) {
     ctx.updateBusy = false;
@@ -272,8 +273,8 @@ window.onUpdateApply = function onUpdateApply(payload) {
 bindConfirmDialog();
 // Escape をこのダイアログで消費させるため、下の設定ウィンドウ用 keydown より先に登録する
 bindClipEditor();
-document.getElementById('open-config-btn').addEventListener('click', openConfigFile);
-document.getElementById('close-btn').addEventListener('click', closeWindow);
+requiredById('open-config-btn').addEventListener('click', openConfigFile);
+requiredById('close-btn').addEventListener('click', closeWindow);
 
 document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') {

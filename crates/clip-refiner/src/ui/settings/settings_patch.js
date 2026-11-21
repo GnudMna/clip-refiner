@@ -26,11 +26,12 @@ const SettingsPatch = (function () {
                 continue;
             }
             if (typeof value === 'object' && !Array.isArray(value)) {
+                const current = target[key];
                 const nested =
-                    target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
-                        ? target[key]
+                    current && typeof current === 'object' && !Array.isArray(current)
+                        ? /** @type {Record<string, unknown>} */ (current)
                         : {};
-                target[key] = mergePatch(nested, value);
+                target[key] = mergePatch(nested, /** @type {Record<string, unknown>} */ (value));
             } else {
                 target[key] = value;
             }

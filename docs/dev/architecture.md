@@ -4,14 +4,16 @@
 
 ## プロジェクト構成
 
-```
+```text
 clip-refiner/
 ├── Cargo.toml           # workspace ルート (virtual manifest / `workspace.dependencies`)
-├── package.json         # UI JavaScript の ESLint / Prettier / Playwright E2E (本番バイナリには同梱しない)
+├── package.json         # UI JavaScript の ESLint / Prettier / TypeScript 型チェック / Playwright E2E、Markdown の markdownlint (本番バイナリには同梱しない)
 ├── eslint.config.js
+├── tsconfig.base.json   # `tsc` の共通設定 (UI の checkJs と E2E が継承する)
 ├── e2e/                 # Playwright + WebView2 CDP による設定 / セレクター E2E
 │   ├── fixtures.ts
 │   ├── playwright.config.ts
+│   ├── tsconfig.json
 │   └── *.spec.ts
 ├── fuzz/                # パーサ系変換の cargo-fuzz ターゲット (nightly。ワークスペース外)
 │   ├── fuzz_targets/
@@ -35,7 +37,7 @@ clip-refiner/
 │   │   │   ├── logger.rs    # 日次ローテーション付きファイルログ
 │   │   │   ├── user_error.rs # UpdateError 等から UserNotification を生成
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
-│   │   ├── tests/           # 統合テスト (`*_flow.rs`)
+│   │   ├── tests/           # 統合テスト (`flow/` は 1 つの実行ファイル。モジュール = ファイル)
 │   │   └── build.rs
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)。ライブラリ利用はこちら
 │       ├── README.md    # ライブラリとしての利用
@@ -79,7 +81,7 @@ OS 連携と IPC の置き場所は次のとおり。
 - **`native/` (`clip-refiner-core`):** feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く。`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける
 - **`ipc/`:** 常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなる。パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護し、名前に `.<ログオンセッション ID>` を付けてセッションごとに分ける (多重起動防止の mutex がセッション単位のため。利用者向けは [ワンショット IPC](../user/security.md#ワンショット-ipc))
 
-本書のパス (構成図・表の 1 列目・バッククォートで囲んだパス) は `cargo test` (`tests/architecture_doc_flow.rs`) が実在を検証する。個々のファイルの責務はモジュールコメントに任せ、本書はディレクトリと命名規則の単位で書く。
+本書のパス (構成図・表の 1 列目・バッククォートで囲んだパス) は `cargo test` (`tests/flow/architecture_doc.rs`) が実在を検証する。個々のファイルの責務はモジュールコメントに任せ、本書はディレクトリと命名規則の単位で書く。
 
 ### WebView UI (`src/ui/`)
 
@@ -88,12 +90,14 @@ OS 連携と IPC の置き場所は次のとおり。
 | 種類 | 責務 |
 | :--- | :--- |
 | `quick_selector.js` / `clip_selector.js` / `settings/main.js` | esbuild のエントリ。初期化・DOM 操作・IPC 受信・キーボードイベント |
-| `*_logic.js`・`selector-common.js`・`html_escape.js` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/*_logic.rs`) からも `import` で読み込んで検証する |
+| `*_logic.js`・`selector-common.js`・`html_escape.js` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/flow/*_logic.rs`) からも `import` で読み込んで検証する |
 | その他の `*.js` | DOM を扱う描画・入力イベント・IPC 送信 |
 | `*.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:ui` で再生成) |
 | `*.html` / `*.css` | シェル HTML とスタイル |
 
 設定ウィンドウの共有ミュータブル状態は `settings/ctx.js` に置き、描画関数の相互参照もここに集約して循環 import を避ける。`settings/css/*.css` は `tray/settings/window/assets.rs` が `base` → `layout` → `fields` → `regex` → `controls` → `lists` の順に連結して埋め込む (カスケード順のため並びを変えない)。
+
+型は JSDoc で書き、`npm run typecheck` (`tsc`。`src/ui/tsconfig.json` の `checkJs`) が検証する。Rust と受け渡す JSON (設定スナップショット・パッチ・IPC メッセージ・`window` に公開する関数) の型は `ipc.d.ts` に宣言する (型チェック専用でバンドルには含めない)。Rust の serde 型と JSON の形がずれないよう、Rust 側 (`tray/settings/snapshot.rs`・`model.rs`・`ipc/message.rs`・`platform/update/types.rs` など) を変えたら `ipc.d.ts` も合わせる。ずれは `tray/settings/webview_contract_tests.rs` が `cargo test` で検出する。シェル HTML に必ずある要素は `dom.js` の `requiredById` で取得し、設定ウィンドウの描画・イベントは `settings/ctx.js` の `loadedState` で読み込み済みのスナップショットを参照する (どちらも見つからなければ例外にする)。
 
 `innerHTML` へ代入してよいのは `escapeHtml` / `highlightText` と、信頼済み HTML を組み立てる関数の戻り値だけとする。許可する関数は `eslint.config.js` の `no-unsanitized` 設定に列挙し、それ以外の代入は ESLint が拒否する。
 
@@ -146,16 +150,16 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 
 確認・適用の失敗は `UpdateError` (`error.rs`) に集約する。トレイ / 設定 UI 側 (`tray/features/update.rs`) は `Display` 文字列を Outcome へ載せ、デスクトップ通知は `UserNotification` (`user_error.rs`) 経由で送る。
 
-統合テストは `update_flow.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
+統合テストは `flow/update.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
 
 ### スクリプト構成
 
-`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。
+`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、markdownlint のカスタムルール、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。
 
 | `scripts/windows/` | 役割 |
 | :--- | :--- |
 | `check.ps1` | 品質チェック一式 (`-Coverage` でカバレッジ付きテストに切替可) |
-| `format.ps1` | rustfmt + Prettier 整形 |
+| `format.ps1` | rustfmt + Prettier 整形、markdownlint の自動修正 |
 | `test.ps1` / `clippy.ps1` / `coverage.ps1` | 個別の Cargo コマンド (カバレッジは `cargo-llvm-cov`) |
 | `fuzz.ps1` | パーサ系変換のファジング (`cargo-fuzz`。`check.ps1` には含めない) |
 | `bench.ps1` | 変換の処理時間ベンチマーク (`criterion`。基準の保存と比較。`check.ps1` には含めない) |

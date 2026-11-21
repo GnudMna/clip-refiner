@@ -36,7 +36,7 @@ export function showApplyFeedback(feedback) {
     if (!el) {
         return;
     }
-    clearTimeout(ctx.applyFeedbackTimer);
+    clearTimeout(ctx.applyFeedbackTimer ?? undefined);
     const ok = feedback?.ok !== false;
     el.hidden = false;
     el.textContent = feedback?.message || (ok ? '設定を保存しました' : '設定の適用に失敗しました');
@@ -129,7 +129,7 @@ function mergePatch(target, patch) {
  */
 export function scheduleApply(patch) {
     mergePatch(ctx.pendingPatch, patch);
-    clearTimeout(ctx.applyTimer);
+    clearTimeout(ctx.applyTimer ?? undefined);
     ctx.applyTimer = setTimeout(() => {
         stripInvalidPendingRegex();
         if (Object.keys(ctx.pendingPatch).length === 0) {
