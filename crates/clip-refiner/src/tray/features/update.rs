@@ -7,7 +7,7 @@ use crate::platform::update::{
 };
 use crate::tray::dispatch;
 use crate::tray::settings::SettingsWindow;
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::state::{AppState, UpdateEvent};
 use crate::user_error::{UserNotification, titles};
 
 // ======================================================================
@@ -45,7 +45,7 @@ pub(crate) fn start_update_check(
         let outcome = check_for_update();
         state.settings_pending().set_update_check_result(outcome);
         state.settings_pending().end_update_op();
-        dispatch::send_app_event(&state.proxy, AppEvent::UpdateCheckFinished);
+        dispatch::send_app_event(&state.proxy, UpdateEvent::CheckFinished.into());
     });
     true
 }
@@ -79,7 +79,7 @@ pub(crate) fn start_update_apply(state: &Arc<AppState>, settings: &SettingsWindo
         let outcome = apply_update(&update);
         state.settings_pending().set_update_apply_result(outcome);
         state.settings_pending().end_update_op();
-        dispatch::send_app_event(&state.proxy, AppEvent::UpdateApplyFinished);
+        dispatch::send_app_event(&state.proxy, UpdateEvent::ApplyFinished.into());
     });
     true
 }

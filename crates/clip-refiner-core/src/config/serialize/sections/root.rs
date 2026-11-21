@@ -3,8 +3,9 @@ use std::fmt::Write;
 use super::super::docs::{
     DOC_CONTINUOUS_RECORD_ENABLED, DOC_CONTINUOUS_RECORD_LIMIT, DOC_FAVORITE_MODES,
     DOC_HISTORY_ENABLED, DOC_HISTORY_LIMIT, DOC_INTERVAL_MS, DOC_IS_PAUSED, DOC_MODE,
-    DOC_MONITOR_MODE, DOC_PIPELINE, DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD,
-    SECTION_HISTORY, SECTION_MONITOR,
+    DOC_MONITOR_MODE, DOC_PIPELINE, DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+    DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD,
+    SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW,
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
@@ -47,6 +48,20 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
         DOC_MONITOR_MODE,
         "",
         &config.monitor_mode,
+    )?;
+    set_table_value(
+        root,
+        "selector_webview_retention",
+        DOC_SELECTOR_WEBVIEW_RETENTION,
+        "",
+        &config.selector_webview_retention,
+    )?;
+    set_table_value(
+        root,
+        "selector_webview_idle_minutes",
+        DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+        "",
+        &config.selector_webview_idle_minutes,
     )?;
     set_table_value(
         root,
@@ -107,6 +122,22 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         &config.monitor_mode,
     )?;
     write_field(out, "", DOC_IS_PAUSED, "is_paused", &config.is_paused)?;
+
+    write_section(out, SECTION_SELECTOR_WEBVIEW)?;
+    write_field(
+        out,
+        "",
+        DOC_SELECTOR_WEBVIEW_RETENTION,
+        "selector_webview_retention",
+        &config.selector_webview_retention,
+    )?;
+    write_field(
+        out,
+        "",
+        DOC_SELECTOR_WEBVIEW_IDLE_MINUTES,
+        "selector_webview_idle_minutes",
+        &config.selector_webview_idle_minutes,
+    )?;
 
     write_section(out, SECTION_CONTINUOUS_RECORD)?;
     write_field(

@@ -6,7 +6,7 @@ use super::super::notify::{
     NotificationCategory, show_category_notification, show_image_process_notification,
     show_process_notification,
 };
-use super::super::state::{AppEvent, AppState};
+use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent};
 use super::command::ClipboardCommand;
 
 use crate::config::{AddRegisteredClipError, ResolvedClip};
@@ -80,7 +80,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
         ClipboardCommand::PasteContinuousRecordFront => {
             // 書き込み成否に関わらず Ctrl+V を送る (空キュー時は現在のクリップボードを貼付)
             let _ = crate::tray::try_paste_continuous_record_front(state, clipboard);
-            dispatch::send_app_event(&state.proxy, AppEvent::SendContinuousRecordPaste);
+            dispatch::send_app_event(&state.proxy, RecordEvent::SendPaste.into());
         }
         ClipboardCommand::ProcessMode(mode) => {
             handle_process_mode_command(clipboard, state, refine_ctx, mode);
@@ -299,7 +299,7 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
 
 /// 登録クリップ操作後に設定ウィンドウの pending 状態を解除する
 fn refresh_settings_after_register(state: &Arc<AppState>) {
-    dispatch::send_app_event(&state.proxy, AppEvent::RefreshSettingsWindow);
+    dispatch::send_app_event(&state.proxy, SettingsEvent::Refresh.into());
 }
 
 /// クリップボードの内容を登録クリップとして保存する
@@ -312,7 +312,7 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
         match outcome {
             Ok(()) => {
                 state.save_config();
-                dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
+                dispatch::send_app_event(&state.proxy, ClipsEvent::Refresh.into());
                 show_category_notification(
                     state,
                     NotificationCategory::RegisteredClip,
@@ -351,7 +351,7 @@ pub(super) fn register_clip_from_clipboard<C: TextClipboard + ImageClipboard>(
     match outcome {
         Ok(()) => {
             state.save_config();
-            dispatch::send_app_event(&state.proxy, AppEvent::RefreshClips);
+            dispatch::send_app_event(&state.proxy, ClipsEvent::Refresh.into());
             show_category_notification(
                 state,
                 NotificationCategory::RegisteredClip,

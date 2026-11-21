@@ -18,6 +18,7 @@ use super::register::HotkeyHandler;
 
 use crate::config::AppConfig;
 use crate::platform;
+use crate::tray::selector::hide_with_retention;
 use crate::tray::state::AppEvent;
 
 use global_hotkey::GlobalHotKeyEvent;
@@ -98,12 +99,14 @@ impl HotkeyHandler {
         };
 
         if let Some(quick_selector) = ctx.quick_selector {
-            quick_selector.hide();
+            let retention = ctx.state.with_config(|c| c.selector_webview_retention);
+            hide_with_retention(quick_selector, retention);
         }
         if let Some(clip_selector) = ctx.clip_selector
             && clip_selector.is_visible()
         {
-            clip_selector.hide();
+            let retention = ctx.state.with_config(|c| c.selector_webview_retention);
+            hide_with_retention(clip_selector, retention);
         }
 
         update_refine(
@@ -120,14 +123,15 @@ impl HotkeyHandler {
         let Some(quick_selector) = ctx.quick_selector else {
             return;
         };
+        let retention = ctx.state.with_config(|c| c.selector_webview_retention);
 
         if quick_selector.is_visible() {
-            quick_selector.hide();
+            hide_with_retention(quick_selector, retention);
         } else {
             if let Some(clip_selector) = ctx.clip_selector
                 && clip_selector.is_visible()
             {
-                clip_selector.hide();
+                hide_with_retention(clip_selector, retention);
             }
             *ctx.last_quick_selector_show = Instant::now();
             let Some(event_loop) = ctx.event_loop else {
@@ -143,14 +147,15 @@ impl HotkeyHandler {
         let Some(clip_selector) = ctx.clip_selector else {
             return;
         };
+        let retention = ctx.state.with_config(|c| c.selector_webview_retention);
 
         if clip_selector.is_visible() {
-            clip_selector.hide();
+            hide_with_retention(clip_selector, retention);
         } else {
             if let Some(quick_selector) = ctx.quick_selector
                 && quick_selector.is_visible()
             {
-                quick_selector.hide();
+                hide_with_retention(quick_selector, retention);
             }
             *ctx.last_clip_selector_show = Instant::now();
             let Some(event_loop) = ctx.event_loop else {
@@ -172,15 +177,16 @@ impl HotkeyHandler {
             return;
         }
 
+        let retention = ctx.state.with_config(|c| c.selector_webview_retention);
         if let Some(quick_selector) = ctx.quick_selector
             && quick_selector.is_visible()
         {
-            quick_selector.hide();
+            hide_with_retention(quick_selector, retention);
         }
         if let Some(clip_selector) = ctx.clip_selector
             && clip_selector.is_visible()
         {
-            clip_selector.hide();
+            hide_with_retention(clip_selector, retention);
         }
 
         ocr_capture.show();

@@ -12,6 +12,8 @@ const ROOT_KEYS: &[&str] = &[
     "favorite_modes",
     "interval_ms",
     "monitor_mode",
+    "selector_webview_retention",
+    "selector_webview_idle_minutes",
     "history_enabled",
     "continuous_record_enabled",
     "continuous_record_limit",

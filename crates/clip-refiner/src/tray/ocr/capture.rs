@@ -12,7 +12,7 @@ use crate::platform::ocr_overlay::OverlayWindow;
 use crate::platform::screen_capture::{ScreenRect, capture_screen_region};
 use crate::tray::dispatch;
 use crate::tray::event::dispatch_ocr_result;
-use crate::tray::state::{AppEvent, LockExt};
+use crate::tray::state::{AppEvent, LockExt, OcrEvent};
 use crate::tray::worker::ClipboardWorkerHandle;
 
 use anyhow::{Context, Result};
@@ -134,7 +134,7 @@ impl OcrCaptureWindow {
                 });
             }
             // wndproc から戻ったあとに破棄する (同一コール内の DestroyWindow を避ける)
-            dispatch::send_app_event(&proxy, AppEvent::DisposeOcrOverlay);
+            dispatch::send_app_event(&proxy, OcrEvent::DisposeOverlay.into());
         }))
         .context("OCR オーバーレイの生成に失敗")?;
         *self.overlay.borrow_mut() = Some(overlay);

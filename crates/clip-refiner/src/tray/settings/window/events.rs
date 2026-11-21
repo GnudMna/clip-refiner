@@ -12,7 +12,8 @@ use crate::platform::update::UpdateCheckSource;
 use crate::tray::features::{start_update_apply, start_update_check};
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::settings::refresh_settings_window;
+use crate::tray::state::{AppEvent, AppState, SettingsEvent};
 use crate::tray::worker::ClipboardWorkerHandle;
 
 use tao::event_loop::EventLoopWindowTarget;
@@ -21,10 +22,10 @@ use tao::event_loop::EventLoopWindowTarget;
 // イベント処理
 // ======================================================================
 impl SettingsWindow {
-    /// 設定ウィンドウ関連の `AppEvent` を処理する
+    /// 設定ウィンドウ関連の `SettingsEvent` を処理する
     pub(crate) fn handle_event(
         &self,
-        event: AppEvent,
+        event: SettingsEvent,
         event_loop: &EventLoopWindowTarget<AppEvent>,
         state: &Arc<AppState>,
         menu: &TrayMenu,
@@ -32,9 +33,9 @@ impl SettingsWindow {
         clipboard_worker: &ClipboardWorkerHandle,
     ) {
         match event {
-            AppEvent::ShowSettingsWindow => open_settings_window(event_loop, state, self),
-            AppEvent::HideSettingsWindow => self.hide(),
-            AppEvent::SettingsApplyPatch => {
+            SettingsEvent::Show => open_settings_window(event_loop, state, self),
+            SettingsEvent::Hide => self.hide(),
+            SettingsEvent::ApplyPatch => {
                 if let Some(json) = state.settings_pending().take_patch() {
                     match serde_json::from_str::<SettingsPatch>(&json) {
                         Ok(patch) => handle_settings_window_command(
@@ -55,7 +56,7 @@ impl SettingsWindow {
                     }
                 }
             }
-            AppEvent::SettingsClearHistory => {
+            SettingsEvent::ClearHistory => {
                 handle_settings_window_command(
                     SettingsWindowCommand::ClearHistory,
                     state,
@@ -65,7 +66,7 @@ impl SettingsWindow {
                     clipboard_worker,
                 );
             }
-            AppEvent::SettingsClearContinuousRecord => {
+            SettingsEvent::ClearContinuousRecord => {
                 handle_settings_window_command(
                     SettingsWindowCommand::ClearContinuousRecord,
                     state,
@@ -75,7 +76,7 @@ impl SettingsWindow {
                     clipboard_worker,
                 );
             }
-            AppEvent::SettingsOpenConfigFile => {
+            SettingsEvent::OpenConfigFile => {
                 handle_settings_window_command(
                     SettingsWindowCommand::OpenConfigFile,
                     state,
@@ -85,19 +86,19 @@ impl SettingsWindow {
                     clipboard_worker,
                 );
             }
-            AppEvent::SettingsRegexPreview => {
+            SettingsEvent::RegexPreview => {
                 if let Some(request) = state.settings_pending().take_regex_preview_request() {
                     let response = RegexPreviewResponse::from_request(&request);
                     self.notify_regex_preview(&response);
                 }
             }
-            AppEvent::SettingsCheckUpdate => {
+            SettingsEvent::CheckUpdate => {
                 let _ = start_update_check(state, UpdateCheckSource::Settings, Some(self));
             }
-            AppEvent::SettingsApplyUpdate => {
+            SettingsEvent::ApplyUpdate => {
                 let _ = start_update_apply(state, self);
             }
-            _ => {}
+            SettingsEvent::Refresh => refresh_settings_window(state, self),
         }
     }
 }

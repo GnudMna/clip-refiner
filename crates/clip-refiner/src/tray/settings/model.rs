@@ -1,4 +1,7 @@
-use crate::config::{AppConfig, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings};
+use crate::config::{
+    AppConfig, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings,
+    SelectorWebviewRetention,
+};
 use crate::platform::autostart;
 use crate::refiner::RefineMode;
 
@@ -53,6 +56,8 @@ macro_rules! define_settings_model {
 define_settings_model! {
     monitor_mode: MonitorMode,
     interval_ms: u64,
+    selector_webview_retention: SelectorWebviewRetention,
+    selector_webview_idle_minutes: u64,
     mode: RefineMode,
     pipeline: Vec<RefineMode>,
     notification_settings: NotificationSettings,
@@ -78,6 +83,8 @@ impl SettingsWritable {
         Self {
             monitor_mode: config.monitor_mode,
             interval_ms: config.interval_ms,
+            selector_webview_retention: config.selector_webview_retention,
+            selector_webview_idle_minutes: config.selector_webview_idle_minutes,
             mode: config.mode,
             pipeline: config.pipeline.clone(),
             notification_settings: config.notification_settings.clone(),

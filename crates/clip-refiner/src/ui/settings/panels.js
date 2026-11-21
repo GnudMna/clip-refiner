@@ -22,6 +22,7 @@ import {
     maxPipelineLength,
     maxRegisteredClips,
     recordLimitBounds,
+    selectorWebviewIdleMinutesBounds,
 } from './shared.js';
 
 import SettingsPanelsLogic from './panels_logic.js';
@@ -521,6 +522,10 @@ function renderGeneralPanel() {
     const portable = Boolean(ctx.state?.portableMode);
     const edition = portable ? 'ポータブル' : 'インストール版 (MSI)';
     const checkLabel = ctx.updateBusy ? '確認中...' : '更新を確認';
+    const retention = ctx.state.selectorWebviewRetention || 'Keep';
+    const idleDisabled = retention === 'DisposeAfterIdle' ? '' : ' disabled';
+    const idleBounds = selectorWebviewIdleMinutesBounds();
+    const idleMinutes = ctx.state.selectorWebviewIdleMinutes ?? 5;
 
     const launchCard = card(
         '起動',
@@ -534,6 +539,39 @@ function renderGeneralPanel() {
             ) +
             '</div>' +
             '<p class="hint">実行ファイルを移動した場合は一度オフにしてから再度オンにする</p>'
+    );
+
+    const selectorCard = card(
+        'セレクター WebView',
+        '' +
+            '<div class="segmented" role="radiogroup" aria-label="セレクター WebView の保持">' +
+            '<label><input type="radio" name="selectorWebviewRetention" value="Keep"' +
+            (retention === 'Keep' ? ' checked' : '') +
+            '> 保持する</label>' +
+            '<label><input type="radio" name="selectorWebviewRetention" value="DisposeOnHide"' +
+            (retention === 'DisposeOnHide' ? ' checked' : '') +
+            '> 非表示時に破棄</label>' +
+            '<label><input type="radio" name="selectorWebviewRetention" value="DisposeAfterIdle"' +
+            (retention === 'DisposeAfterIdle' ? ' checked' : '') +
+            '> アイドル後に破棄</label>' +
+            '</div>' +
+            '<p class="hint">クイック / 登録クリップセレクターの WebView。保持すると再表示が速く、破棄するとアイドル時のメモリを抑えられる</p>' +
+            '<div class="field' +
+            idleDisabled +
+            '" id="selector-webview-idle-section">' +
+            '<label for="selector-webview-idle-minutes">アイドル分数</label>' +
+            '<input type="number" id="selector-webview-idle-minutes" min="' +
+            idleBounds.min +
+            '" max="' +
+            idleBounds.max +
+            '" step="1" value="' +
+            idleMinutes +
+            '">' +
+            '<p class="field-hint">有効範囲: ' +
+            idleBounds.min +
+            '〜' +
+            idleBounds.max +
+            ' 分。「アイドル後に破棄」選択時のみ使用</p></div>'
     );
 
     const versionCard = card(
@@ -554,7 +592,7 @@ function renderGeneralPanel() {
             renderUpdateStatusHtml()
     );
 
-    return panelWrap('general', launchCard + versionCard);
+    return panelWrap('general', launchCard + selectorCard + versionCard);
 }
 
 /**

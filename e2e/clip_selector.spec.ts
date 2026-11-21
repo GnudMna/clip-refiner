@@ -109,6 +109,7 @@ test.describe('登録クリップセレクター WebView', () => {
   test('Escape でセレクターが閉じる', async ({ page }) => {
     await expect(page.locator('#container')).toBeVisible();
     const closed = page.waitForEvent('close', { timeout: 15_000 });
+    // E2E では閉じた後にプロセス終了するため CDP が切れる
     await Promise.all([
       closed,
       page.keyboard.press('Escape').catch(() => undefined),

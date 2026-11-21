@@ -870,6 +870,15 @@
 
   // crates/clip-refiner/src/ui/settings/shared.js
   var import_shared_logic3 = __toESM(require_shared_logic());
+  function syncSelectorWebviewIdleSection() {
+    const section = document.getElementById("selector-webview-idle-section");
+    if (section) {
+      section.classList.toggle(
+        "disabled",
+        ctx.state.selectorWebviewRetention !== "DisposeAfterIdle"
+      );
+    }
+  }
   function limits() {
     return ctx.state?.limits ?? {};
   }
@@ -892,6 +901,13 @@
     return {
       min: l.intervalMinMs ?? 100,
       max: l.intervalMaxMs ?? 6e4
+    };
+  }
+  function selectorWebviewIdleMinutesBounds() {
+    const l = limits();
+    return {
+      min: l.selectorWebviewIdleMinMinutes ?? 1,
+      max: l.selectorWebviewIdleMaxMinutes ?? 1440
     };
   }
   function maxPipelineLength() {
@@ -992,6 +1008,7 @@
     syncMonitorPauseBanner();
     syncContinuousRecordUi();
     syncMonitorIntervalSection();
+    syncSelectorWebviewIdleSection();
     updateClipRegisterButton();
     if (ctx.activeTab === "shortcuts") {
       syncHotkeyInputsFromState();
@@ -1480,6 +1497,25 @@
     document.getElementById("launch-at-login")?.addEventListener("change", (event) => {
       scheduleApply({ launchAtLogin: event.target.checked });
     });
+    document.querySelectorAll('input[name="selectorWebviewRetention"]').forEach((input) => {
+      input.addEventListener("change", () => {
+        ctx.state.selectorWebviewRetention = input.value;
+        scheduleApply({ selectorWebviewRetention: ctx.state.selectorWebviewRetention });
+        syncSelectorWebviewIdleSection();
+      });
+    });
+    const idleInput = document.getElementById("selector-webview-idle-minutes");
+    if (idleInput) {
+      const bounds = selectorWebviewIdleMinutesBounds();
+      const commitIdleMinutes = () => commitLimitInput(
+        idleInput,
+        "selectorWebviewIdleMinutes",
+        "selectorWebviewIdleMinutes",
+        bounds
+      );
+      idleInput.addEventListener("change", commitIdleMinutes);
+      idleInput.addEventListener("blur", commitIdleMinutes);
+    }
     document.getElementById("check-update-btn")?.addEventListener("click", () => {
       if (ctx.updateBusy) {
         return;
@@ -1794,6 +1830,10 @@
     const portable = Boolean(ctx.state?.portableMode);
     const edition = portable ? "ポータブル" : "インストール版 (MSI)";
     const checkLabel = ctx.updateBusy ? "確認中..." : "更新を確認";
+    const retention = ctx.state.selectorWebviewRetention || "Keep";
+    const idleDisabled = retention === "DisposeAfterIdle" ? "" : " disabled";
+    const idleBounds = selectorWebviewIdleMinutesBounds();
+    const idleMinutes = ctx.state.selectorWebviewIdleMinutes ?? 5;
     const launchCard = card(
       "起動",
       '<div class="option-list">' + optionCheckbox(
@@ -1803,11 +1843,15 @@
         "Windows ログイン時に ClipRefiner を自動起動する"
       ) + '</div><p class="hint">実行ファイルを移動した場合は一度オフにしてから再度オンにする</p>'
     );
+    const selectorCard = card(
+      "セレクター WebView",
+      '<div class="segmented" role="radiogroup" aria-label="セレクター WebView の保持"><label><input type="radio" name="selectorWebviewRetention" value="Keep"' + (retention === "Keep" ? " checked" : "") + '> 保持する</label><label><input type="radio" name="selectorWebviewRetention" value="DisposeOnHide"' + (retention === "DisposeOnHide" ? " checked" : "") + '> 非表示時に破棄</label><label><input type="radio" name="selectorWebviewRetention" value="DisposeAfterIdle"' + (retention === "DisposeAfterIdle" ? " checked" : "") + '> アイドル後に破棄</label></div><p class="hint">クイック / 登録クリップセレクターの WebView。保持すると再表示が速く、破棄するとアイドル時のメモリを抑えられる</p><div class="field' + idleDisabled + '" id="selector-webview-idle-section"><label for="selector-webview-idle-minutes">アイドル分数</label><input type="number" id="selector-webview-idle-minutes" min="' + idleBounds.min + '" max="' + idleBounds.max + '" step="1" value="' + idleMinutes + '"><p class="field-hint">有効範囲: ' + idleBounds.min + "〜" + idleBounds.max + " 分。「アイドル後に破棄」選択時のみ使用</p></div>"
+    );
     const versionCard = card(
       "バージョン",
       '<p class="hint">現在のバージョン: v' + escapeHtml(version) + " (" + escapeHtml(edition) + ')</p><div class="update-actions"><button type="button" id="check-update-btn" class="ghost-btn"' + (ctx.updateBusy ? " disabled" : "") + ">" + escapeHtml(checkLabel) + "</button></div>" + renderUpdateStatusHtml()
     );
-    return panelWrap("general", launchCard + versionCard);
+    return panelWrap("general", launchCard + selectorCard + versionCard);
   }
   function renderClipRow(clip) {
     return import_panels_logic2.default.renderClipRow(clip, escapeHtml);

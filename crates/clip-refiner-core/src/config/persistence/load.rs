@@ -1,143 +1,21 @@
+//! 設定ファイルの読み込み・再読み込み
+
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::path::Path;
 
-use super::atomic_io::write_text_atomically;
-use super::paths::{config_file_modified_time, get_config_file_path};
-use super::permissions::restrict_private_file_permissions;
-use super::registered_clips::{
+use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
+
+use super::super::paths::get_config_file_path;
+use super::super::permissions::restrict_private_file_permissions;
+use super::super::registered_clips::{
     load_registered_clips, migrate_legacy_clip_images, registered_clip_from_plain_text,
-    save_registered_clips,
 };
-use super::serialize::config_to_toml;
-use super::types::{AppConfig, RegisteredClip};
-use super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
-
-use crate::error::ConfigError;
+use super::super::types::{AppConfig, RegisteredClip};
+use super::super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 
 use serde::Deserialize;
 
-// ======================================================================
-// 設定の永続化
-// ======================================================================
-/// 設定ファイルの再読み込みエラー
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ConfigReloadError {
-    /// 設定ファイルパスの取得に失敗
-    #[error("設定ファイルの場所を取得できませんでした: {0}")]
-    Path(String),
-    /// 設定ファイルが存在しない
-    #[error("設定ファイルが見つかりません")]
-    NotFound,
-    /// ファイル読み取りに失敗
-    #[error("設定ファイルを読み取れませんでした: {0}")]
-    Read(String),
-    /// TOML 解析に失敗
-    #[error("設定ファイルの形式が不正です: {0}")]
-    Parse(String),
-}
-
-impl ConfigReloadError {
-    /// ユーザー向けのエラーメッセージを返す
-    ///
-    /// # Arguments
-    /// * `self` - 再読み込みエラー
-    ///
-    /// # Returns
-    /// * `&str` - UI 表示用の固定メッセージ
-    #[must_use]
-    pub fn user_message(&self) -> &str {
-        match self {
-            Self::Path(_) => "設定ファイルの場所を取得できませんでした",
-            Self::NotFound => "設定ファイルが見つかりません",
-            Self::Read(_) => "設定ファイルを読み取れませんでした",
-            Self::Parse(_) => "設定ファイルの形式が不正です",
-        }
-    }
-}
-
-/// 設定読み込みの結果
-#[derive(Debug, Clone)]
-pub struct ConfigLoadOutcome {
-    /// 読み込んだ設定 (失敗時はデフォルト)
-    pub config: AppConfig,
-    /// デフォルトへフォールバックした場合の理由
-    pub fallback: Option<ConfigLoadFallback>,
-    /// 認識できない設定キー (解析成功時のみ。読み込み自体は継続)
-    pub unknown_keys: Vec<String>,
-}
-
-/// ディスクからの設定再読み込み結果
-#[derive(Debug, Clone)]
-pub struct ConfigDiskReload {
-    /// 読み込んだ設定
-    pub config: AppConfig,
-    /// スキーマ移行またはレガシー移行を実行したか
-    pub migrated: bool,
-    /// 将来の `version` を現行へ揃えたか
-    pub newer_version_clamped: bool,
-    /// 認識できない設定キー (読み込み自体は継続)
-    pub unknown_keys: Vec<String>,
-}
-
-/// 設定読み込み失敗時にデフォルトへフォールバックした理由
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigLoadFallback {
-    /// 失敗理由
-    pub error: ConfigReloadError,
-    /// 解析失敗時に `config.toml.bak` を作成できたか
-    pub backup_created: bool,
-}
-
-impl ConfigLoadFallback {
-    /// デスクトップ通知・CLI 向けのメッセージを返す
-    ///
-    /// # Arguments
-    /// * `self` - フォールバック理由
-    ///
-    /// # Returns
-    /// * `String` - エラー内容とバックアップ成否を含むメッセージ
-    #[must_use]
-    pub fn user_message(&self) -> String {
-        let core = match &self.error {
-            ConfigReloadError::Parse(detail) => {
-                format!("{} ({detail})", self.error.user_message())
-            }
-            _ => self.error.user_message().to_string(),
-        };
-        let suffix = match (&self.error, self.backup_created) {
-            (ConfigReloadError::Parse(_), true) => {
-                "。デフォルト設定で起動します。元ファイルは config.toml.bak に保存しました"
-            }
-            (ConfigReloadError::Parse(_), false) => {
-                "。デフォルト設定で起動します。元ファイルのバックアップに失敗しました"
-            }
-            _ => "。デフォルト設定で起動します",
-        };
-        format!("{core}{suffix}")
-    }
-}
-
-/// ディスク上の設定ファイルの最終更新時刻を取得する
-///
-/// # Returns
-/// * `Result<Option<SystemTime>>` - 更新時刻。取得失敗時は `Err`
-///
-/// # Errors
-/// 設定ファイルのメタデータ取得に失敗した場合
-pub fn disk_config_modified_time() -> Result<Option<SystemTime>, ConfigError> {
-    config_file_modified_time()
-}
-
 impl AppConfig {
-    /// 設定ファイルの保存先パスをシステムOSに合わせて取得する
-    ///
-    /// # Returns
-    /// * `Result<PathBuf>` - 設定ファイルの完全なパス
-    fn config_path() -> Result<PathBuf, ConfigError> {
-        get_config_file_path()
-    }
-
     /// 設定ファイルを読み込む
     ///
     /// 存在しない場合はデフォルト設定を生成し、説明コメント付きの `config.toml` を保存する
@@ -148,7 +26,7 @@ impl AppConfig {
     /// # Returns
     /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由・未知キー
     pub fn load() -> ConfigLoadOutcome {
-        let config_path = match Self::config_path() {
+        let config_path = match get_config_file_path() {
             Ok(path) => path,
             Err(e) => {
                 let fallback = ConfigLoadFallback {
@@ -232,7 +110,7 @@ impl AppConfig {
     /// 設定ファイルが存在しない、読み取り失敗、TOML 解析失敗のいずれか
     pub fn reload_from_disk() -> Result<ConfigDiskReload, ConfigReloadError> {
         let config_path =
-            Self::config_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
+            get_config_file_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
 
         if !config_path.exists() {
             return Err(ConfigReloadError::NotFound);
@@ -262,54 +140,6 @@ impl AppConfig {
         })
     }
 
-    /// 現在の設定をファイルへ保存する
-    ///
-    /// # Arguments
-    /// * `self` - 保存対象の設定
-    ///
-    /// # Returns
-    /// * `Result<()>` - 保存に成功した場合は `Ok(())`
-    ///
-    /// # Errors
-    /// 設定パス取得、登録クリップ保存、TOML 書き出し、パーミッション設定のいずれかに失敗した場合
-    pub fn save(&self) -> Result<(), ConfigError> {
-        let config_path = Self::config_path().map_err(|e| {
-            tracing::error!("設定ファイルパスの取得に失敗: {}", e);
-            e
-        })?;
-
-        let mut to_save = self.clone();
-        to_save.normalize();
-
-        save_registered_clips(&to_save.clips).map_err(|e| {
-            tracing::error!("登録クリップの保存に失敗: {:?}", e);
-            ConfigError::RegisteredClipsSave(e.to_string())
-        })?;
-
-        let existing = if config_path.exists() {
-            fs::read_to_string(&config_path).ok()
-        } else {
-            None
-        };
-
-        let content = config_to_toml(&to_save, existing.as_deref()).map_err(|e| {
-            tracing::error!("設定のシリアライズに失敗: {:?}", e);
-            ConfigError::Serialize(e.to_string())
-        })?;
-
-        // 一時ファイル経由で置き換え、途中書き込みによる破損を防ぐ
-        write_text_atomically(&config_path, &content).map_err(|e| {
-            tracing::error!("設定ファイルの書き込みに失敗: {:?}", e);
-            ConfigError::Write(e)
-        })?;
-
-        if let Err(e) = restrict_private_file_permissions(&config_path) {
-            tracing::warn!("設定ファイルのパーミッション設定に失敗: {:?}", e);
-        }
-
-        Ok(())
-    }
-
     /// 初回起動用のデフォルト設定を生成し、説明コメント付きで保存する
     ///
     /// 保存に失敗してもデフォルト設定は返す
@@ -328,7 +158,7 @@ impl AppConfig {
 }
 
 // ======================================================================
-// プライベート関数
+// 解析・移行
 // ======================================================================
 /// `config.toml` のレガシー `[[clips]]` (平文 `text`)
 #[derive(Debug, Deserialize)]
@@ -525,58 +355,6 @@ typo_hotkey = "Alt+Shift+Z"
         });
     }
 
-    /// `save` が既存設定を原子的に置き換え、一時ファイルを残さないこと
-    #[test]
-    fn save_replaces_config_atomically_without_temp_files() {
-        crate::test_helpers::with_temp_config_dir(|| {
-            let path = get_config_file_path().expect("path");
-            let mut config = AppConfig {
-                interval_ms: 1500,
-                ..AppConfig::default()
-            };
-            config.save().expect("初回保存");
-            assert!(path.is_file());
-
-            config.interval_ms = 2500;
-            config.save().expect("2 回目の保存");
-
-            let content = fs::read_to_string(&path).expect("保存後の読み取り");
-            assert!(
-                content.contains("2500"),
-                "更新後の interval_ms が書き込まれていること: {content}"
-            );
-            assert!(!path.with_file_name("config.toml.tmp").exists());
-            assert!(!path.with_file_name("config.toml.prev").exists());
-        });
-    }
-
-    /// フォールバック理由からユーザー向けメッセージを組み立てられるようにすること
-    #[test]
-    fn config_load_fallback_user_message_includes_backup_hint() {
-        let with_backup = ConfigLoadFallback {
-            error: ConfigReloadError::Parse("unexpected key".to_string()),
-            backup_created: true,
-        };
-        let message = with_backup.user_message();
-        assert!(message.contains("形式が不正"));
-        assert!(message.contains("config.toml.bak"));
-
-        let without_backup = ConfigLoadFallback {
-            error: ConfigReloadError::Read("access denied".to_string()),
-            backup_created: false,
-        };
-        assert!(
-            without_backup
-                .user_message()
-                .contains("読み取れませんでした")
-        );
-        assert!(
-            without_backup
-                .user_message()
-                .contains("デフォルト設定で起動")
-        );
-    }
-
     /// `config.toml` の `[[clips]]` は別ファイルへ移行され、TOML から除去されるようにすること
     #[test]
     fn legacy_clips_in_config_toml_are_migrated_to_separate_file() {
@@ -601,22 +379,21 @@ text = "secret-body"
             assert!(!newer_version_clamped);
             assert_eq!(config.clips.len(), 1);
             assert!(!config.clips[0].text_ciphertext.is_empty());
-            let plain = super::super::registered_clips::decrypt_registered_clip_text(
+            let plain = super::super::super::registered_clips::decrypt_registered_clip_text(
                 &config.clips[0].text_ciphertext,
             )
             .expect("decrypt");
             assert_eq!(plain.as_str(), "secret-body");
 
             config.save().expect("save");
-            let content =
-                fs::read_to_string(AppConfig::config_path().expect("path")).expect("read");
+            let content = fs::read_to_string(get_config_file_path().expect("path")).expect("read");
             assert!(!content.contains("[[clips]]"));
             assert!(!content.contains("secret-body"));
 
             let (file_clips, format_migrated) = load_registered_clips().expect("load clips file");
             assert!(!format_migrated);
             assert_eq!(file_clips.len(), 1);
-            let plain = super::super::registered_clips::decrypt_registered_clip_text(
+            let plain = super::super::super::registered_clips::decrypt_registered_clip_text(
                 &file_clips[0].text_ciphertext,
             )
             .expect("decrypt file");

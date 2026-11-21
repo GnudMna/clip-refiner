@@ -16,10 +16,16 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use super::dispatch;
-use super::state::AppEvent;
+use super::state::{AppEvent, HotkeyEvent};
 
 use global_hotkey::GlobalHotKeyEvent;
 use tao::event_loop::EventLoopProxy;
+
+// ======================================================================
+// 定数
+// ======================================================================
+/// ホットキー受信の最大待ち時間 (応答性と CPU 使用のバランス)
+pub(crate) const HOTKEY_RECV_TIMEOUT: Duration = Duration::from_millis(10);
 
 // ======================================================================
 // リスナー停止制御
@@ -55,13 +61,11 @@ impl HotkeyHandler {
         let thread = thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
             while !stop_for_thread.load(Ordering::Relaxed) {
-                let mut had_hotkey_event = false;
-                while let Ok(event) = receiver.try_recv() {
-                    had_hotkey_event = true;
-                    dispatch::send_app_event(&proxy, AppEvent::Hotkey(event));
-                }
-                if !had_hotkey_event {
-                    thread::sleep(Duration::from_millis(100));
+                if let Ok(event) = receiver.recv_timeout(HOTKEY_RECV_TIMEOUT) {
+                    dispatch::send_app_event(&proxy, HotkeyEvent::Received(event).into());
+                    while let Ok(event) = receiver.try_recv() {
+                        dispatch::send_app_event(&proxy, HotkeyEvent::Received(event).into());
+                    }
                 }
             }
         });

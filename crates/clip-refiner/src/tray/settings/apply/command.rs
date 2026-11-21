@@ -19,7 +19,7 @@ use crate::user_error::{UserNotification, titles};
 /// 設定ウィンドウ内で完結する操作
 ///
 /// クリップ操作やお気に入り変更などは `ipc::dispatch_settings_ipc` 経由で
-/// 共通の `AppEvent` ハンドラへ委譲する
+/// 共通の `SettingsEvent` ハンドラへ委譲する
 pub(crate) enum SettingsWindowCommand {
     /// 部分更新パッチを適用する
     Apply(Box<SettingsPatch>),

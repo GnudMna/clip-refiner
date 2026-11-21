@@ -4,6 +4,7 @@ use super::monitor::MonitorMode;
 use super::notification::NotificationSettings;
 use super::regex::RegexSettings;
 use super::registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
+use super::selector_webview::{SelectorWebviewRetention, default_selector_webview_idle_minutes};
 
 use crate::consts;
 use crate::refiner::RefineMode;
@@ -52,6 +53,12 @@ pub struct AppConfig {
     /// 使用する監視方式 (`Event` 既定。`Polling` も可)
     #[serde(default)]
     pub monitor_mode: MonitorMode,
+    /// セレクター `WebView` の保持方針 (`Keep` 既定)
+    #[serde(default)]
+    pub selector_webview_retention: SelectorWebviewRetention,
+    /// `DisposeAfterIdle` 時に非表示から破棄するまでの分数
+    #[serde(default = "default_selector_webview_idle_minutes")]
+    pub selector_webview_idle_minutes: u64,
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
@@ -98,6 +105,8 @@ impl Default for AppConfig {
             pipeline: Vec::new(),
             interval_ms: 1000,
             monitor_mode: MonitorMode::default(),
+            selector_webview_retention: SelectorWebviewRetention::default(),
+            selector_webview_idle_minutes: consts::DEFAULT_SELECTOR_WEBVIEW_IDLE_MINUTES,
             history_enabled: false,
             continuous_record_enabled: false,
             continuous_record_limit: consts::DEFAULT_CONTINUOUS_RECORD_LIMIT,
@@ -159,6 +168,10 @@ impl AppConfig {
         self.interval_ms = self
             .interval_ms
             .clamp(consts::MIN_INTERVAL_MS, consts::MAX_INTERVAL_MS);
+        self.selector_webview_idle_minutes = self.selector_webview_idle_minutes.clamp(
+            consts::MIN_SELECTOR_WEBVIEW_IDLE_MINUTES,
+            consts::MAX_SELECTOR_WEBVIEW_IDLE_MINUTES,
+        );
     }
 
     /// 登録クリップを許容範囲内に正規化する

@@ -1,13 +1,13 @@
-#[cfg(test)]
-use std::cell::Cell;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::time::Instant;
 
+use super::retention::RetainedSelector;
 use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
     embed_quick_selector_assets,
 };
 use crate::tray::dispatch;
-use crate::tray::state::AppEvent;
+use crate::tray::state::{AppEvent, FavoritesEvent, SelectorEvent};
 
 use crate::config::FavoriteMoveDirection;
 use crate::consts;
@@ -83,12 +83,15 @@ pub(crate) fn quick_selector_refresh_script(current_mode: RefineMode, modes_json
 // ======================================================================
 /// 変換モード選択用クイックセレクター (コマンドパレット風 UI) を管理する構造体
 ///
-/// `WebView` は初回表示時に生成し、非表示時に破棄してアイドル RSS を抑える
+/// `WebView` は初回表示時に生成する。非表示後の保持 / 破棄は
+/// `selector_webview_retention` 設定に従う
 pub struct QuickSelectorWindow {
     /// イベント送信用プロキシ
     proxy: EventLoopProxy<AppEvent>,
-    /// 遅延生成された `WebView` (非表示時は `None`)
+    /// 遅延生成された `WebView` (未生成または破棄後は `None`)
     inner: RefCell<Option<WebSelectorWindow>>,
+    /// `DisposeAfterIdle` 用の非表示開始時刻
+    idle_hidden_at: Cell<Option<Instant>>,
     /// テスト用の擬似表示フラグ (`WebView` なしで相互排他を検証する)
     #[cfg(test)]
     force_visible: Cell<bool>,
@@ -109,6 +112,7 @@ impl QuickSelectorWindow {
         Self {
             proxy,
             inner: RefCell::new(None),
+            idle_hidden_at: Cell::new(None),
             #[cfg(test)]
             force_visible: Cell::new(false),
         }
@@ -139,22 +143,25 @@ impl QuickSelectorWindow {
                 let msg = req.body();
                 match parse_quick_selector_ipc_message(msg) {
                     Some(QuickSelectorIpcAction::SelectMode(mode)) => {
-                        dispatch::send_app_event(&proxy_clone, AppEvent::RequestModeChange(mode));
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            SelectorEvent::RequestModeChange(mode).into(),
+                        );
                     }
                     Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            AppEvent::RequestFavoriteToggle(mode),
+                            FavoritesEvent::RequestToggle(mode).into(),
                         );
                     }
                     Some(QuickSelectorIpcAction::MoveFavorite(mode, direction)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            AppEvent::RequestFavoriteMove(mode, direction),
+                            FavoritesEvent::RequestMove(mode, direction).into(),
                         );
                     }
                     Some(QuickSelectorIpcAction::Close) => {
-                        dispatch::send_app_event(&proxy_clone, AppEvent::HideQuickSelector);
+                        dispatch::send_app_event(&proxy_clone, SelectorEvent::HideQuick.into());
                     }
                     None => {}
                 }
@@ -204,6 +211,7 @@ impl QuickSelectorWindow {
         current_mode: RefineMode,
         modes_json: &str,
     ) {
+        self.idle_hidden_at.set(None);
         if let Err(err) = self.ensure_created(event_loop) {
             crate::user_error::notify_webview_window_init_failure("クイックセレクター", &err);
             return;
@@ -230,14 +238,38 @@ impl QuickSelectorWindow {
         inner.evaluate_script(&script);
     }
 
-    /// クイックセレクターを非表示にし、`WebView` を破棄する
+    /// クイックセレクターを非表示にする (`WebView` の破棄は呼び出し側の保持方針に任せる)
     ///
     /// # Arguments
     /// * `self` - この `QuickSelectorWindow`
     pub fn hide(&self) {
         #[cfg(test)]
         self.force_visible.set(false);
+        if let Some(inner) = self.inner.borrow().as_ref() {
+            inner.hide();
+        }
+    }
+
+    /// `WebView` を破棄する (未生成なら何もしない)
+    ///
+    /// # Arguments
+    /// * `self` - この `QuickSelectorWindow`
+    pub fn dispose(&self) {
+        #[cfg(test)]
+        self.force_visible.set(false);
+        self.idle_hidden_at.set(None);
         *self.inner.borrow_mut() = None;
+    }
+
+    /// `WebView` が生成済みかどうか
+    ///
+    /// # Arguments
+    /// * `self` - この `QuickSelectorWindow`
+    ///
+    /// # Returns
+    /// * `bool` - 生成済みなら `true`
+    pub fn is_created(&self) -> bool {
+        self.inner.borrow().is_some()
     }
 
     /// クイックセレクターが現在表示されているかどうかを確認する
@@ -279,6 +311,32 @@ impl QuickSelectorWindow {
     }
 }
 
+impl RetainedSelector for QuickSelectorWindow {
+    fn hide_visual(&self) {
+        QuickSelectorWindow::hide(self);
+    }
+
+    fn dispose_webview(&self) {
+        QuickSelectorWindow::dispose(self);
+    }
+
+    fn is_visible(&self) -> bool {
+        QuickSelectorWindow::is_visible(self)
+    }
+
+    fn is_created(&self) -> bool {
+        QuickSelectorWindow::is_created(self)
+    }
+
+    fn idle_hidden_at(&self) -> Option<Instant> {
+        self.idle_hidden_at.get()
+    }
+
+    fn set_idle_hidden_at(&self, at: Option<Instant>) {
+        self.idle_hidden_at.set(at);
+    }
+}
+
 // ======================================================================
 // ウィンドウ初期化
 // ======================================================================
@@ -302,17 +360,20 @@ mod tests {
 
     use crate::tray::state::test_app_state;
 
-    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` が no-op であること
+    /// 空シェルは非表示でウィンドウ ID もなく、`hide` / `refresh` / `dispose` が no-op であること
     #[test]
     fn empty_shell_lifecycle_is_safe() {
         let state = test_app_state();
         let quick = QuickSelectorWindow::new_shell(state.proxy.clone());
 
         assert!(!quick.is_visible());
+        assert!(!quick.is_created());
         assert!(quick.id().is_none());
         quick.refresh_modes("[]", RefineMode::Trim);
         quick.hide();
+        quick.dispose();
         assert!(!quick.is_visible());
+        assert!(!quick.is_created());
         assert!(quick.id().is_none());
     }
 

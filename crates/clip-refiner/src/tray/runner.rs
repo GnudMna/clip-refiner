@@ -1,6 +1,6 @@
 use super::app::App;
 use super::e2e::E2eWindow;
-use super::state::AppEvent;
+use super::state::{AppEvent, SelectorEvent, SettingsEvent};
 
 use anyhow::Result;
 use tao::event_loop::{EventLoop, EventLoopBuilder};
@@ -27,9 +27,9 @@ pub fn run_loop(e2e_window: Option<E2eWindow>) -> Result<()> {
 
     if let Some(target) = e2e_window {
         let event = match target {
-            E2eWindow::Settings => AppEvent::ShowSettingsWindow,
-            E2eWindow::Quick => AppEvent::ShowQuickSelector,
-            E2eWindow::Clip => AppEvent::ShowClipSelector,
+            E2eWindow::Settings => SettingsEvent::Show.into(),
+            E2eWindow::Quick => SelectorEvent::ShowQuick.into(),
+            E2eWindow::Clip => SelectorEvent::ShowClip.into(),
         };
         let _ = proxy.send_event(event);
     }

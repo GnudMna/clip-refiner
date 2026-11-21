@@ -12,6 +12,17 @@ import {
 
 import SettingsSharedLogic from './shared_logic.js';
 
+/** セレクター WebView 保持方針に応じてアイドル分数欄の有効状態を同期する */
+export function syncSelectorWebviewIdleSection() {
+    const section = document.getElementById('selector-webview-idle-section');
+    if (section) {
+        section.classList.toggle(
+            'disabled',
+            ctx.state.selectorWebviewRetention !== 'DisposeAfterIdle'
+        );
+    }
+}
+
 /**
  * サーバーから渡された制限値オブジェクトを返す
  *
@@ -57,6 +68,19 @@ export function intervalMsBounds() {
     return {
         min: l.intervalMinMs ?? 100,
         max: l.intervalMaxMs ?? 60_000,
+    };
+}
+
+/**
+ * セレクター WebView アイドル破棄分数の min/max
+ *
+ * @returns {{ min: number, max: number }}
+ */
+export function selectorWebviewIdleMinutesBounds() {
+    const l = limits();
+    return {
+        min: l.selectorWebviewIdleMinMinutes ?? 1,
+        max: l.selectorWebviewIdleMaxMinutes ?? 1440,
     };
 }
 
@@ -214,6 +238,7 @@ export function syncServerFields() {
     syncMonitorPauseBanner();
     syncContinuousRecordUi();
     syncMonitorIntervalSection();
+    syncSelectorWebviewIdleSection();
     updateClipRegisterButton();
     if (ctx.activeTab === 'shortcuts') {
         syncHotkeyInputsFromState();

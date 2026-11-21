@@ -1,0 +1,205 @@
+//! ワンショット加工 (IPC 委譲またはローカル実行)
+
+use super::args::Args;
+
+use crate::config::{self, AppConfig};
+use crate::refiner::{
+    self, ClipboardProcessError, ClipboardProcessOutcome, OwnedClipboard, RefineContext, RefineMode,
+};
+use crate::{log_error, log_info, log_warn};
+
+use anyhow::{Context, Result};
+
+// ======================================================================
+// ワンショット実行
+// ======================================================================
+/// クリップボードの内容を一度だけ加工して終了する
+///
+/// 常駐プロセスがある場合は IPC で委譲し、監視のエコー再加工を避ける。
+/// 常駐が無い場合はローカルでクリップボードを直接加工する
+///
+/// # Arguments
+/// * `args` - CLI 引数
+///
+/// # Returns
+/// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
+pub(super) fn run_once(args: &Args) -> Result<()> {
+    let pipeline = resolve_oneshot_pipeline(args)?;
+    log_info!("ワンショットモードで実行: {:?}", pipeline);
+    let load_outcome = AppConfig::load();
+    if let Some(ref fallback) = load_outcome.fallback {
+        log_warn!("{}", fallback.user_message());
+        eprintln!("警告: {}", fallback.user_message());
+    }
+    if !load_outcome.unknown_keys.is_empty() {
+        let message = config::format_unknown_config_keys_message(&load_outcome.unknown_keys);
+        log_warn!("{message}");
+        eprintln!("警告: {message}");
+    }
+    let config = load_outcome.config;
+    let ctx = build_refinement_context(&config, args);
+
+    if crate::ipc::is_resident_running() {
+        match crate::ipc::process_via_resident(&pipeline, &ctx) {
+            Ok(response) => return report_oneshot_ipc_response(&response),
+            Err(err) => {
+                // 常駐ありで IPC に失敗した場合はローカル実行しない (二重操作を避ける)
+                log_error!("常駐プロセスへのワンショット委譲に失敗: {err}");
+                eprintln!("エラー: {err}");
+                return Err(anyhow::anyhow!(err.to_string()));
+            }
+        }
+    }
+
+    run_once_local(&pipeline, &ctx)
+}
+
+/// 常駐 IPC の応答を CLI 出力へ反映する
+fn report_oneshot_ipc_response(response: &crate::ipc::OneshotIpcResponse) -> Result<()> {
+    use crate::ipc::OneshotIpcStatus;
+
+    match response.status {
+        OneshotIpcStatus::Processed | OneshotIpcStatus::ImageProcessed => {
+            log_info!("ワンショット処理が完了しました (常駐委譲)");
+            eprintln!("{}", response.message);
+            Ok(())
+        }
+        OneshotIpcStatus::Unchanged => {
+            log_info!("テキストに変更はありませんでした (常駐委譲)");
+            eprintln!("{}", response.message);
+            Ok(())
+        }
+        OneshotIpcStatus::Error => {
+            log_error!("ワンショット処理に失敗 (常駐委譲): {}", response.message);
+            eprintln!("エラー: {}", response.message);
+            if let Some(detail) = &response.detail {
+                eprintln!("詳細: {detail}");
+            }
+            Err(anyhow::anyhow!(response.message.clone()))
+        }
+    }
+}
+
+/// 常駐が無い場合にローカルでワンショット加工する
+fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
+    let mut clipboard = OwnedClipboard::new().context("クリップボードの初期化に失敗しました")?;
+
+    match refiner::process_clipboard_pipeline(&mut clipboard, pipeline, ctx) {
+        Ok(
+            ClipboardProcessOutcome::Processed(_) | ClipboardProcessOutcome::ImageProcessed { .. },
+        ) => {
+            log_info!("ワンショット処理が完了しました");
+            eprintln!("加工が完了しました");
+            Ok(())
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => {
+            log_info!("テキストに変更はありませんでした");
+            eprintln!("テキストに変更はありませんでした");
+            Ok(())
+        }
+        Err(e) => {
+            log_error!("ワンショット処理に失敗: {} ({:?})", e.user_message(), e);
+            eprintln!("エラー: {}", e.user_message());
+            if let ClipboardProcessError::ReadFailed(detail)
+            | ClipboardProcessError::WriteFailed(detail) = &e
+            {
+                eprintln!("詳細: {detail}");
+            }
+            Err(anyhow::anyhow!(e.user_message().to_string()))
+        }
+    }
+}
+
+/// 設定と CLI 引数から加工コンテキストを組み立てる
+fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
+    let mut ctx = RefineContext::from_config(config);
+
+    if let Some(pattern) = &args.regex_pattern {
+        ctx.regex.pattern.clone_from(pattern);
+    }
+    if let Some(replacement) = &args.regex_replacement {
+        ctx.regex.replacement.clone_from(replacement);
+    }
+    if args.regex_case_insensitive {
+        ctx.regex.case_insensitive = true;
+    }
+    if args.regex_multiline {
+        ctx.regex.multiline = true;
+    }
+
+    ctx
+}
+
+/// ワンショット実行用の加工パイプラインを解決する
+fn resolve_oneshot_pipeline(args: &Args) -> Result<Vec<RefineMode>> {
+    if args.pipeline.is_empty() {
+        args.mode
+            .map(|mode| vec![mode])
+            .ok_or_else(|| anyhow::anyhow!("--mode または --pipeline を指定してください"))
+    } else {
+        Ok(args.pipeline.clone())
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::super::args::{Args, sample_args_for_test};
+    use super::{build_refinement_context, resolve_oneshot_pipeline};
+
+    use crate::config::AppConfig;
+    use crate::refiner::RefineMode;
+
+    /// `--mode` 指定時は単一モードのパイプラインになるようにすること
+    #[test]
+    fn resolve_oneshot_pipeline_from_mode() {
+        let args = sample_args_for_test();
+        let pipeline = resolve_oneshot_pipeline(&args).expect("pipeline");
+        assert_eq!(pipeline, vec![RefineMode::Trim]);
+    }
+
+    /// `--pipeline` 指定時は複数モードを順に適用すること
+    #[test]
+    fn resolve_oneshot_pipeline_from_pipeline_flag() {
+        let args = Args {
+            pipeline: vec![RefineMode::UrlDecode, RefineMode::Trim],
+            mode: Some(RefineMode::JsonFormat),
+            ..sample_args_for_test()
+        };
+        let pipeline = resolve_oneshot_pipeline(&args).expect("pipeline");
+        assert_eq!(pipeline, vec![RefineMode::UrlDecode, RefineMode::Trim]);
+    }
+
+    /// モード未指定時はエラーになるようにすること
+    #[test]
+    fn resolve_oneshot_pipeline_requires_mode_or_pipeline() {
+        let args = Args {
+            mode: None,
+            pipeline: Vec::new(),
+            ..sample_args_for_test()
+        };
+        assert!(resolve_oneshot_pipeline(&args).is_err());
+    }
+
+    /// CLI 引数が正規表現設定を上書きすること
+    #[test]
+    fn build_refinement_context_applies_regex_overrides() {
+        let config = AppConfig::default();
+        let args = Args {
+            regex_pattern: Some("foo".to_string()),
+            regex_replacement: Some("bar".to_string()),
+            regex_case_insensitive: true,
+            regex_multiline: true,
+            ..sample_args_for_test()
+        };
+
+        let ctx = build_refinement_context(&config, &args);
+
+        assert_eq!(ctx.regex.pattern, "foo");
+        assert_eq!(ctx.regex.replacement, "bar");
+        assert!(ctx.regex.case_insensitive);
+        assert!(ctx.regex.multiline);
+    }
+}

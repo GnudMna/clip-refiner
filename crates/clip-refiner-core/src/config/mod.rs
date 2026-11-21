@@ -29,7 +29,7 @@ pub use persistence::{
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
     HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
-    format_hotkey_fixes_message,
+    SelectorWebviewRetention, format_hotkey_fixes_message,
 };
 pub use unknown_keys::format_unknown_config_keys_message;
 
@@ -52,6 +52,14 @@ mod tests {
         assert_eq!(config.mode, RefineMode::UrlDecode);
         assert_eq!(config.history_limit, consts::DEFAULT_HISTORY_LIMIT);
         assert_eq!(config.hotkeys, HotkeySettings::default());
+        assert_eq!(
+            config.selector_webview_retention,
+            SelectorWebviewRetention::Keep
+        );
+        assert_eq!(
+            config.selector_webview_idle_minutes,
+            consts::DEFAULT_SELECTOR_WEBVIEW_IDLE_MINUTES
+        );
     }
 
     /// `AppConfig` のシリアライズ/デシリアライズ往復できるようにすること

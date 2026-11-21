@@ -23,7 +23,9 @@ import {
     intervalMsBounds,
     maxPipelineLength,
     recordLimitBounds,
+    selectorWebviewIdleMinutesBounds,
     setClipRegisterPending,
+    syncSelectorWebviewIdleSection,
 } from './shared.js';
 
 import SettingsPanelsLogic from './panels_logic.js';
@@ -357,6 +359,30 @@ export function bindGeneralEvents() {
     document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
         scheduleApply({ launchAtLogin: event.target.checked });
     });
+
+    document.querySelectorAll('input[name="selectorWebviewRetention"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            ctx.state.selectorWebviewRetention = input.value;
+            scheduleApply({ selectorWebviewRetention: ctx.state.selectorWebviewRetention });
+            syncSelectorWebviewIdleSection();
+        });
+    });
+
+    const idleInput = document.getElementById('selector-webview-idle-minutes');
+    if (idleInput) {
+        const bounds = selectorWebviewIdleMinutesBounds();
+        /** アイドル分数入力をコミットする */
+        const commitIdleMinutes = () =>
+            commitLimitInput(
+                idleInput,
+                'selectorWebviewIdleMinutes',
+                'selectorWebviewIdleMinutes',
+                bounds
+            );
+        idleInput.addEventListener('change', commitIdleMinutes);
+        idleInput.addEventListener('blur', commitIdleMinutes);
+    }
+
     document.getElementById('check-update-btn')?.addEventListener('click', () => {
         if (ctx.updateBusy) {
             return;

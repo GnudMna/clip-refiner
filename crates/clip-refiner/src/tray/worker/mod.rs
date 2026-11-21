@@ -19,7 +19,7 @@ use clipboard_listener::{ClipboardFormatListener, clear_clipboard_changed_pendin
 use monitor_loop::{MonitorLoopState, should_run_monitor_tick, sync_monitor_generation};
 
 use super::dispatch;
-use super::state::{AppEvent, AppState};
+use super::state::{AppState, ConfigEvent, WorkerEvent};
 
 use crate::refiner::OwnedClipboard;
 
@@ -46,7 +46,7 @@ fn run_worker_loop(
         Err(e) => {
             crate::log_error!("クリップボード初期化エラー: {:?}", e);
             state.worker().set_recovery_pending(true);
-            dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerStopped);
+            dispatch::send_app_event(&state.proxy, WorkerEvent::Stopped.into());
             return;
         }
     };
@@ -54,7 +54,7 @@ fn run_worker_loop(
     let notify_recovery = state.worker().take_recovery_pending();
     state.worker().set_alive(true);
     if notify_recovery {
-        dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerReady);
+        dispatch::send_app_event(&state.proxy, WorkerEvent::Ready.into());
     }
 
     let pending_clipboard_change = Arc::new(AtomicBool::new(false));
@@ -84,7 +84,7 @@ fn run_worker_loop(
         if last_config_poll.elapsed() >= CONFIG_POLL_INTERVAL {
             last_config_poll = Instant::now();
             if state.config_sync().has_external_change() {
-                dispatch::send_app_event(&state.proxy, AppEvent::ReloadConfig);
+                dispatch::send_app_event(&state.proxy, ConfigEvent::Reload.into());
             }
         }
 

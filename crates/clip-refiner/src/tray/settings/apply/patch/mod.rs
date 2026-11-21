@@ -6,6 +6,7 @@ mod notification;
 mod outcome;
 mod refine;
 mod regex;
+mod selector_webview;
 mod system;
 
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use notification::apply_notification_patch;
 use outcome::PatchApplyOutcome;
 use refine::apply_refine_patch;
 use regex::apply_regex_patch;
+use selector_webview::apply_selector_webview_patch;
 use system::apply_system_patch;
 
 use crate::tray::clipboard_monitor::bump_monitor_generation;
@@ -70,6 +72,7 @@ pub(crate) fn apply_settings_patch_without_ui(
     let mut config_dirty = false;
 
     apply_monitor_patch(patch, state, menu, &mut outcome, &mut config_dirty);
+    apply_selector_webview_patch(patch, state, menu, &mut outcome, &mut config_dirty);
     apply_notification_patch(patch, state, menu, &mut config_dirty);
     apply_history_patch(patch, state, menu, &mut outcome, &mut config_dirty);
     apply_continuous_record_patch(

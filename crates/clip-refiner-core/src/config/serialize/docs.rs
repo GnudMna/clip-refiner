@@ -8,6 +8,10 @@ pub(crate) const DOC_FAVORITE_MODES: &str =
     "お気に入り変換モード (PascalCase の配列。例: [\"UrlDecode\", \"Trim\"])";
 pub(crate) const DOC_INTERVAL_MS: &str = "クリップボードのポーリング間隔 (ミリ秒、100〜60000)";
 pub(crate) const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \"Event\")";
+pub(crate) const DOC_SELECTOR_WEBVIEW_RETENTION: &str =
+    "セレクター WebView の保持方針 (\"Keep\" / \"DisposeOnHide\" / \"DisposeAfterIdle\")";
+pub(crate) const DOC_SELECTOR_WEBVIEW_IDLE_MINUTES: &str =
+    "DisposeAfterIdle 時に非表示から破棄するまでの分数 (1〜1440。既定 5)";
 pub(crate) const DOC_IS_PAUSED: &str = "監視を一時停止するかどうか";
 pub(crate) const DOC_HISTORY_ENABLED: &str = "加工履歴の有効・無効";
 pub(crate) const DOC_CONTINUOUS_RECORD_ENABLED: &str =
@@ -43,6 +47,7 @@ pub(crate) const DOC_REGEX_MULTILINE: &str = "複数行モード ((?m) 相当)";
 
 pub(crate) const SECTION_BASIC: &str = "基本";
 pub(crate) const SECTION_MONITOR: &str = "監視";
+pub(crate) const SECTION_SELECTOR_WEBVIEW: &str = "セレクター WebView";
 pub(crate) const SECTION_HISTORY: &str = "履歴";
 pub(crate) const SECTION_CONTINUOUS_RECORD: &str = "連続記録";
 pub(crate) const SECTION_NOTIFICATION: &str = "通知";

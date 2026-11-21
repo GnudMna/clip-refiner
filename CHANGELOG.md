@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-07-31
+
+### Added
+
+- セレクター `WebView` の保持方針を設定可能にした: `Keep` (既定・非表示後も保持) / `DisposeOnHide` (非表示時に破棄) / `DisposeAfterIdle` (N 分アイドル後に破棄)。設定ウィンドウ「一般」タブと `selector_webview_retention` / `selector_webview_idle_minutes` で変更できる
+
+### Changed
+
+- 肥大モジュールを分割した: `config/types/hotkeys/` (settings / fix / normalize)、`config/persistence/` (outcome / load / save)、`platform/update/check/` (evaluate / asset / version)、`bootstrap/` (args / logging / instance / oneshot / portable)。公開 API と挙動は変更なし
+- `AppEvent` をドメイン別サブイベント (`Selector` / `Clips` / `Settings` / `Hotkey` 等) に分割し、`user_event` を薄いルーターとドメインハンドラへ再構成した (挙動変更なし)
+- クイックセレクター・登録クリップセレクターは非表示時も `WebView` を保持するようにし、ショートカットからの再表示を高速化した (アイドル時の RSS は増加する。保持方針は上記設定で変更可)
+- ホットキー監視の受信待ちを 100ms ポーリングから 10ms `recv_timeout` へ短縮し、押下から UI 処理までの遅延を減らした
+
 ## [0.14.1] - 2026-07-29
 
 ### Security
@@ -500,7 +513,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.2...develop
+[0.14.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.1...v0.14.2
 [0.14.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.14.0...v0.14.1
 [0.14.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.1...v0.14.0
 [0.13.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...v0.13.1

@@ -4,6 +4,8 @@ use super::handle_menu_event;
 use super::handle_window_event;
 use super::user_event::handle_user_event;
 
+use crate::tray::selector::{apply_idle_control_flow, sync_selector_retention};
+
 use tao::event::Event;
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
@@ -24,12 +26,22 @@ pub(crate) fn handle_loop_event(event: Event<AppEvent>, ctx: &mut AppEventContex
         Event::WindowEvent {
             window_id, event, ..
         } if ctx.selectors.quick.id() == Some(window_id) => {
-            handle_window_event(&event, &ctx.selectors.quick, ctx.last_quick_selector_show);
+            handle_window_event(
+                &event,
+                &ctx.selectors.quick,
+                ctx.last_quick_selector_show,
+                ctx.state,
+            );
         }
         Event::WindowEvent {
             window_id, event, ..
         } if ctx.selectors.clip.id() == Some(window_id) => {
-            handle_window_event(&event, &ctx.selectors.clip, ctx.last_clip_selector_show);
+            handle_window_event(
+                &event,
+                &ctx.selectors.clip,
+                ctx.last_clip_selector_show,
+                ctx.state,
+            );
         }
         Event::WindowEvent {
             window_id,
@@ -42,6 +54,30 @@ pub(crate) fn handle_loop_event(event: Event<AppEvent>, ctx: &mut AppEventContex
     }
 
     drain_pending_menu_events(ctx);
+    sync_and_schedule_selector_retention(ctx);
+}
+
+/// セレクター `WebView` の保持方針を同期し、アイドル破棄の起床を予約する
+fn sync_and_schedule_selector_retention(ctx: &mut AppEventContext<'_>) {
+    let (retention, idle_minutes) = ctx.state.with_config(|c| {
+        (
+            c.selector_webview_retention,
+            c.selector_webview_idle_minutes,
+        )
+    });
+    sync_selector_retention(
+        &ctx.selectors.quick,
+        &ctx.selectors.clip,
+        retention,
+        idle_minutes,
+    );
+    apply_idle_control_flow(
+        ctx.control_flow,
+        &ctx.selectors.quick,
+        &ctx.selectors.clip,
+        retention,
+        idle_minutes,
+    );
 }
 
 /// 滞留しているトレイメニューイベントをすべて処理する

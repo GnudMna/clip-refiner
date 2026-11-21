@@ -5,7 +5,7 @@ use super::super::feedback::SettingsApplyFeedback;
 use crate::config::format_hotkey_fixes_message;
 use crate::tray::dispatch;
 use crate::tray::settings::ipc::SettingsPatch;
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::state::{AppState, HotkeyEvent};
 
 // ======================================================================
 // ホットキーパッチ
@@ -28,7 +28,7 @@ pub(super) fn apply_hotkeys_patch(
         c.hotkeys.fix_invalid()
     });
     *config_dirty = true;
-    dispatch::send_app_event(&state.proxy, AppEvent::ReloadHotkeys);
+    dispatch::send_app_event(&state.proxy, HotkeyEvent::ReloadAll.into());
 
     let feedback = format_hotkey_fixes_message(&fixes)
         .map(|message| SettingsApplyFeedback::ok(message).with_field(Some("hotkeys")));

@@ -75,6 +75,9 @@ mod tests {
         assert!(js.contains("onUpdateCheck"));
         assert!(js.contains("onUpdateApply"));
         assert!(js.contains("更新を確認"));
+        assert!(js.contains("セレクター WebView"));
+        assert!(js.contains("selectorWebviewRetention"));
+        assert!(js.contains("DisposeAfterIdle"));
     }
 
     /// 設定 UI に表示マスキングと同一ユーザー信頼境界の注意が含まれるようにすること

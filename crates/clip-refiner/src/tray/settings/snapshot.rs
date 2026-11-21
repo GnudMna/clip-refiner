@@ -28,6 +28,10 @@ pub struct SettingsLimits {
     pub interval_min_ms: u64,
     /// ポーリング間隔の最大値 (ミリ秒)
     pub interval_max_ms: u64,
+    /// セレクター `WebView` アイドル破棄分数の下限
+    pub selector_webview_idle_min_minutes: u64,
+    /// セレクター `WebView` アイドル破棄分数の上限
+    pub selector_webview_idle_max_minutes: u64,
     /// 加工パイプラインの最大段数
     pub max_pipeline_length: usize,
     /// お気に入り変換モードの最大件数
@@ -51,6 +55,8 @@ impl SettingsLimits {
             continuous_record_max: consts::MAX_CONTINUOUS_RECORD_LIMIT,
             interval_min_ms: consts::MIN_INTERVAL_MS,
             interval_max_ms: consts::MAX_INTERVAL_MS,
+            selector_webview_idle_min_minutes: consts::MIN_SELECTOR_WEBVIEW_IDLE_MINUTES,
+            selector_webview_idle_max_minutes: consts::MAX_SELECTOR_WEBVIEW_IDLE_MINUTES,
             max_pipeline_length: consts::MAX_PIPELINE_LENGTH,
             max_favorite_modes: consts::MAX_FAVORITE_MODES,
             max_registered_clips: consts::MAX_REGISTERED_CLIPS,

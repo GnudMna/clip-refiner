@@ -7,9 +7,13 @@ use super::features::{
     handle_refine_mode_event,
 };
 use super::menu::TrayMenu;
-use super::selector::{ClipSelectorWindow, QuickSelectorWindow};
+use super::selector::{
+    ClipSelectorWindow, QuickSelectorWindow, hide_with_retention as apply_selector_hide_retention,
+};
 use super::state::AppState;
 use super::worker::ClipboardWorkerHandle;
+
+use crate::config::SelectorWebviewRetention;
 
 use tao::event::WindowEvent;
 use tao::event_loop::ControlFlow;
@@ -46,15 +50,15 @@ pub(crate) fn should_hide_selector_on_focus_loss(elapsed_ms: u128) -> bool {
 
 /// フォーカス喪失で自動非表示する UI ウィンドウ
 pub(crate) trait FocusDismissibleSelector {
-    /// ウィンドウを非表示にする
-    fn hide(&self);
+    /// 保持方針に従ってウィンドウを非表示にする
+    fn hide_with_retention(&self, retention: SelectorWebviewRetention);
     /// ウィンドウが表示中かどうか
     fn is_visible(&self) -> bool;
 }
 
 impl FocusDismissibleSelector for QuickSelectorWindow {
-    fn hide(&self) {
-        QuickSelectorWindow::hide(self);
+    fn hide_with_retention(&self, retention: SelectorWebviewRetention) {
+        apply_selector_hide_retention(self, retention);
     }
 
     fn is_visible(&self) -> bool {
@@ -63,8 +67,8 @@ impl FocusDismissibleSelector for QuickSelectorWindow {
 }
 
 impl FocusDismissibleSelector for ClipSelectorWindow {
-    fn hide(&self) {
-        ClipSelectorWindow::hide(self);
+    fn hide_with_retention(&self, retention: SelectorWebviewRetention) {
+        apply_selector_hide_retention(self, retention);
     }
 
     fn is_visible(&self) -> bool {
@@ -125,10 +129,12 @@ pub fn handle_menu_event(
 /// * `event` - 受信したウィンドウイベント
 /// * `selector` - セレクターウィンドウのインスタンス
 /// * `last_selector_show` - セレクターが最後に表示された時刻
+/// * `state` - アプリケーションの共有状態 (保持方針の参照用)
 pub fn handle_window_event<S: FocusDismissibleSelector>(
     event: &WindowEvent,
     selector: &S,
     last_selector_show: &Instant,
+    state: &AppState,
 ) {
     // E2E 中は Playwright 操作でフォーカスが外れるため自動非表示しない
     if crate::tray::e2e::is_active() {
@@ -139,6 +145,7 @@ pub fn handle_window_event<S: FocusDismissibleSelector>(
         && selector.is_visible()
         && should_hide_selector_on_focus_loss(last_selector_show.elapsed().as_millis())
     {
-        selector.hide();
+        let retention = state.with_config(|c| c.selector_webview_retention);
+        selector.hide_with_retention(retention);
     }
 }

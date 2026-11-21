@@ -243,6 +243,11 @@ impl WebSelectorWindow {
         self.evaluate_script(script);
     }
 
+    /// ウィンドウを非表示にする (`WebView` は保持する)
+    pub fn hide(&self) {
+        self.window.set_visible(false);
+    }
+
     /// JavaScript を実行する
     ///
     /// # Arguments

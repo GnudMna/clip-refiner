@@ -4,7 +4,7 @@ use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
 use crate::tray::selector::QuickSelectorWindow;
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::state::{AppState, HotkeyEvent};
 
 use crate::config::{AppConfig, FavoriteMoveDirection, FavoriteToggleResult};
 use crate::refiner::RefineMode;
@@ -112,7 +112,7 @@ pub(crate) fn refresh_favorites_views(
         dispatch::log_menu_operation_error("お気に入りメニューの更新", err);
     }
     refresh_quick_selector_modes(state, quick_selector);
-    dispatch::send_app_event(&state.proxy, AppEvent::ReloadFavoriteHotkeys);
+    dispatch::send_app_event(&state.proxy, HotkeyEvent::ReloadFavorites.into());
 }
 
 /// 表示中のクイックセレクターへモード一覧と現在モードを反映する

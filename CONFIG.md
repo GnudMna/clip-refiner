@@ -12,6 +12,7 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 | アップグレード後のホットキー差分を確認する | [ホットキー形式](#ホットキー形式) の「既定値の変更と既存設定」 |
 | アプリを最新版へ更新する | [アプリの更新](#アプリの更新) |
 | 通知・履歴・連続記録を調整する | [通知](#通知-notification_settings) / [連続記録](#連続記録) / [セキュリティ](#クリップボード履歴のセキュリティ) |
+| セレクターのメモリ使用を抑える | [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) |
 | ローカル保護の前提 (同一ユーザー) を確認する | [信頼境界 (同一ユーザー前提)](#信頼境界-同一ユーザー前提) |
 | ワンショット IPC の前提を確認する | [ワンショット IPC](#ワンショット-ipc) |
 | 動作しない原因を調べる | [処理の制限](#処理の制限) / [ログ](#ログ) / [トラブルシューティング](#トラブルシューティング) |
@@ -145,6 +146,8 @@ notify_result = false
 | `favorite_modes`                                 | array  | (空)                    | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`)                                                                                     |
 | `interval_ms`                                    | number | `1000`                  | クリップボードのポーリング間隔 (ミリ秒、100〜60000)。設定ウィンドウでは数値入力。トレイメニューは 0.5 / 1 / 2 / 5 秒のプリセットと「カスタム…」(設定ウィンドウを開く) |
 | `monitor_mode`                                   | string | `"Event"`               | 監視方式。`"Polling"` または `"Event"`                                                                                                                                |
+| `selector_webview_retention`                     | string | `"Keep"`                | セレクター WebView の保持方針。`"Keep"` (非表示後も保持) / `"DisposeOnHide"` (非表示時に破棄) / `"DisposeAfterIdle"` (アイドル後に破棄)                              |
+| `selector_webview_idle_minutes`                  | number | `5`                     | `DisposeAfterIdle` 時に非表示から破棄するまでの分数 (1〜1440)。設定ウィンドウ「一般」タブでも変更可                                                                  |
 | `is_paused`                                      | bool   | `false`                 | 監視を一時停止するかどうか                                                                                                                                            |
 | `history_enabled`                                | bool   | `false`                 | 加工履歴の有効・無効                                                                                                                                                  |
 | `continuous_record_enabled`                      | bool   | `false`                 | 連続記録モード (監視時は加工せず元テキストを記録)                                                                                                                     |
@@ -404,12 +407,14 @@ notify_result = false
 - **検索:** モード名・カテゴリ・CLI 名の部分一致 (ハイライト表示)
 - **お気に入り:** 星印または `Ctrl+D` で登録・解除。`Ctrl+Shift+↑/↓` で並び替え
 - **キー:** `↑/↓` 移動、`Enter` 決定、`Esc` クリアまたは閉じる
+- **WebView 保持:** [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) を参照
 
 ### 登録クリップセレクター (`Alt+Shift+T`)
 
 - **登録:** トレイ「登録クリップ → クリップボードを登録」、またはセレクター内 `Ctrl+Enter` (画像優先)
 - **上限:** 最大 100 件、ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 8192 px
 - **キー:** `Enter` でコピー、`Del` で削除、`Esc` クリアまたは閉じる
+- **WebView 保持:** [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) を参照
 
 登録クリップは `registered-clips.dat` (暗号化) と `registered-images/` に保存される (`config.toml` には含まれない)。
 
@@ -453,7 +458,7 @@ favorite_mode_slots = ["", "Alt+Ctrl+J"]  # 2 件目のみカスタム、1 件�
 
 | タブ               | 内容                                                                                                                                                        |
 | :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **一般**           | ログイン時の自動起動・バージョン表示・[更新確認 / 適用](#アプリの更新)                                                                                      |
+| **一般**           | ログイン時の自動起動・セレクター WebView 保持方針・バージョン表示・[更新確認 / 適用](#アプリの更新)                                                      |
 | **お気に入り**     | お気に入り変換モードの追加・並び替え・削除 (最大 20 件)                                                                                                     |
 | **正規表現**       | `[regex]` のパターン・置換文字列・オプション。Rust 正規表現エンジンによるライブプレビュー付き                                                               |
 | **履歴・連続記録** | 有効化・保持件数・クリア。連続記録 ON 時はバナーで自動加工停止を表示                                                                                        |
@@ -508,6 +513,29 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 | `Polling` | 一定間隔 (`interval_ms`) でクリップボードの内容を読み取り、変更を検知する方式 |
 
 どちらの方式でも、クリップボード本文の読み書きは専用ワーカーに集約する。変更検知 (シーケンストークン / OS リスナ) と Excel 向け画像取得は別経路とし、同じ操作でクリップボードを二重に開かない。実装の詳細は [DEVELOPMENT.md のスレッドモデル](DEVELOPMENT.md#スレッドモデル) を参照。
+
+---
+
+## セレクター WebView の保持 (`selector_webview_retention`)
+
+クイックセレクター / 登録クリップセレクターの `WebView` を、非表示後どう扱うか。再表示の速さ (保持) とアイドル時のメモリ (破棄) のトレードオフ。設定ウィンドウと画面 OCR オーバーレイは従来どおり非表示時に破棄する (この設定の対象外)。
+
+| 値                 | 動作 |
+| :----------------- | :--- |
+| `Keep` (既定)      | 非表示後も `WebView` を保持し、再表示を高速化する (アイドル時の RSS は増える) |
+| `DisposeOnHide`    | 非表示時に `WebView` を破棄する |
+| `DisposeAfterIdle` | 非表示から `selector_webview_idle_minutes` 分 (1〜1440、既定 5) 経過後に破棄する |
+
+設定ウィンドウ「一般」タブからも変更できる。`DisposeAfterIdle` のときだけアイドル分数入力が有効になる。
+
+```toml
+# 再表示を優先 (既定)
+selector_webview_retention = "Keep"
+
+# メモリを優先する場合の例
+# selector_webview_retention = "DisposeAfterIdle"
+# selector_webview_idle_minutes = 5
+```
 
 ---
 
@@ -673,5 +701,6 @@ ClipRefiner のローカル保護はいずれも **現在の Windows ユーザ�
 | 設定や登録クリップを保存できない | 設定ディレクトリ (通常は `%APPDATA%\ClipRefiner`、ポータブル時は `data\`) の書き込み権限、空き容量、セキュリティソフトのブロックを確認する |
 | ポータブルなのに `%APPDATA%` を見ている | 実行ファイルと同じフォルダにファイル名ちょうど `portable` があるか確認する。`CLIP_REFINER_CONFIG_DIR` が優先されていないかも確認する |
 | 設定・セレクターが開かない | WebView2 Runtime 未導入の可能性。起動時通知や表示失敗時の導入ページ案内に従い Evergreen Runtime を入れ、アプリを再起動する。手動導入は [Microsoft Edge WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| アイドル時のメモリ使用量が増える | セレクターは既定 `Keep` で非表示後も `WebView` を保持する。[セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) で `DisposeOnHide` / `DisposeAfterIdle` に切り替える |
 | 更新確認が失敗する / 適用できない | ネットワークと当日ログを確認する。digest 欠落・SHA-256 / サイズ不一致・アーキテクチャ不一致のアセットは適用しない。[アプリの更新](#アプリの更新) を参照 |
 | ポータブル更新後も古い版のまま | 差し替えヘルパー起動失敗時は展開先がエクスプローラーで開く。実行フォルダへ手動で上書きし、`portable` と `data\` を残したまま新しい `ClipRefiner.exe` を起動する |

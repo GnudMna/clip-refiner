@@ -245,7 +245,7 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | 層 | 手段 | カバー範囲 |
 | :--- | :--- | :--- |
 | JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
-| Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `selector/{window,quick,clip}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
+| Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
 | Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・画像サムネ/ホバー、クイックのお気に入り順 (設定 / クイック / 登録クリップ)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
@@ -339,7 +339,7 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 | `undo` | `Undo` |
 | `register_clip_from_clipboard` | `RegisterClipFromClipboard` |
 | `copy_registered_clip` | `CopyRegisteredClip` |
-| `discharge_continuous_record_on_paste` | `PasteContinuousRecordFront` (`Alt+Shift+X` 経路と同じ。書き込み後に `AppEvent::SendContinuousRecordPaste` も送る) |
+| `discharge_continuous_record_on_paste` | `PasteContinuousRecordFront` (`Alt+Shift+X` 経路と同じ。書き込み後に `RecordEvent::SendPaste` も送る) |
 | `discharge_continuous_record_at` | `DischargeContinuousRecordAt` |
 
 **検証用アクセサ**
@@ -654,16 +654,16 @@ clip-refiner/
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)
 │   │   ├── src/
-│   │   │   ├── bootstrap.rs # 常駐 / ワンショット起動分岐
+│   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / instance / oneshot / portable)
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC
 │   │   │   ├── platform/    # OS 連携 (通知・自動起動・OCR・画面キャプチャ・WebView2・アプリ更新)
-│   │   │   │   └── update/  # 確認 / digest 検証 / UpdateError / MSI・ポータブル適用
+│   │   │   │   └── update/  # 確認 (check/) / digest 検証 / UpdateError / MSI・ポータブル適用
 │   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
 │   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event、`update.rs` 含む)
 │   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期・履歴/連続記録 rebuild
 │   │   │   │   ├── event/       # イベントループ制御・ルーティング
-│   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView
+│   │   │   │   ├── selector/    # クイック/登録クリップセレクター WebView (retention 含む)
 │   │   │   │   ├── settings/    # 設定ウィンドウ (model, ipc/, window/, apply/, snapshot など)
 │   │   │   │   ├── worker/      # クリップボードワーカー・監視ループ・OS リスナ
 │   │   │   │   └── ...
@@ -673,7 +673,7 @@ clip-refiner/
 │   │   └── build.rs
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)
 │       └── src/
-│           ├── config/
+│           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize など
 │           ├── platform/    # DPAPI・クリップボード画像など GUI 非依存の OS 連携
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
@@ -711,11 +711,11 @@ clip-refiner/
 | :------------------- | :--- |
 | `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う |
 | `menu/` | `TrayMenu` 型定義、`build.rs` (全体組み立て)、`sync.rs` (設定同期)、`rebuild.rs` (履歴 / 連続記録メニュー再構築の共通化)、`icon.rs` |
-| `event/` | tao イベントループへの委譲 (`loop_event`, `user_event`)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング |
-| `selector/` | クイックセレクター・登録クリップセレクター・OCR オーバーレイの WebView 束 (`SelectorUi`) |
+| `event/` | tao イベントループへの委譲 (`loop_event`, `user_event/` ルーター + ドメインハンドラ)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング。`loop_event` 末尾でセレクター保持同期とアイドル起床 (`ControlFlow::WaitUntil`) |
+| `selector/` | クイック / 登録クリップセレクターの WebView 束 (`SelectorUi`)。`retention.rs` が保持方針 (`RetainedSelector` / `hide_with_retention` / `sync_selector_retention`) を担う |
 | `settings/` | 設定ウィンドウ (下表参照) |
 | `worker/` | クリップボード I/O 集約・監視ループ。`clipboard_listener` (OS 通知)、`clipboard_seq` (シーケンストークン)、`monitor_loop` / `handlers` / `handle` |
-| `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、メニュー構築用の `MenuSnapshot` (必要フィールドのみ)、`AppEvent` |
+| `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、メニュー構築用の `MenuSnapshot` (必要フィールドのみ)、`AppEvent` (ドメイン別サブイベントのハブ) |
 | `hotkey/` | グローバルホットキー登録・イベント変換 |
 | `clipboard_monitor/` | 監視ループの判断・世代管理 |
 | `notify/` | デスクトップ通知本文の組み立て (`NotificationSettings` 連動) |
@@ -758,7 +758,7 @@ clip-refiner/
 | `regex_preview.js` | プレビュー表示ロジック (DOM 非依存 / CJS) |
 | `settings.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:settings-ui` で再生成) |
 
-`shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー) に分割されている。
+`shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー・セレクター WebView) に分割されている。設定変更の反映はパッチ側が `AppConfig` を更新し、実際の `WebView` 破棄同期は `loop_event` の `sync_selector_retention` が担う。
 
 | モジュール (`tray/settings/`) | 責務 |
 | :---------------------------- | :--- |
@@ -768,7 +768,7 @@ clip-refiner/
 | `apply/` | パッチ適用のオーケストレーション (`patch/` でドメイン別、`feedback` で成功 / エラー通知。ホットキー補正時は割り当て名付きメッセージ) |
 | `regex_preview` | 正規表現プレビュー IPC 応答 (UI から渡したサンプル文字列。未指定時は `REGEX_PREVIEW_SAMPLE`) |
 | `geometry` | 設定ウィンドウのサイズ・位置 (`settings-window.json` の読み書き) |
-| `window/` | WebView の組み立てと表示制御。`assets` (HTML/JS 埋め込み) / `events` (`AppEvent` 処理・更新 UI 通知) |
+| `window/` | WebView の組み立てと表示制御。`assets` (HTML/JS 埋め込み) / `events` (`SettingsEvent` 処理・更新 UI 通知) |
 
 ### アプリ更新 (`platform/update/`)
 
@@ -776,7 +776,7 @@ clip-refiner/
 
 | モジュール | 責務 |
 | :--------- | :--- |
-| `check` | gh-release-bridge version API の取得と SemVer / アセット選択 (アーキテクチャ不一致はエラー) |
+| `check/` | gh-release-bridge version API の取得 (`mod.rs`) と判定 (`evaluate`) / アセット選択 (`asset`) / SemVer (`version`)。アーキテクチャ不一致はエラー |
 | `verify` | ダウンロードと `digest` (`sha256:<hex>`) / サイズ検証。宣言サイズ超過・絶対上限 (512 MiB) で途中打ち切り |
 | `apply` | MSI なら `msiexec`、ポータブル ZIP なら展開後に差し替えヘルパーを起動 |
 | `replace` | `--apply-portable-update` ヘルパー (旧 PID 待機 → 実行フォルダへコピー → 新版起動。`data\` は保持) |
@@ -836,7 +836,7 @@ flowchart TB
     State[("AppState (Arc)")]
     CLI["ワンショット CLI (--mode / --pipeline)"]
 
-    GHK -->|"AppEvent::Hotkey"| App
+    GHK -->|"HotkeyEvent::Received"| App
     App -->|"ClipboardCommand (mpsc)"| WL
     CFL -->|"ClipboardChanged (mpsc)"| WL
     Pipe -->|"ProcessOneshotPipeline"| WL
@@ -851,8 +851,8 @@ flowchart TB
 
 | コンポーネント | スレッド | 責務 |
 | :------------- | :------- | :--- |
-| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け。連続記録貼り付けでは `AppEvent::SendContinuousRecordPaste` を受けて `SendInput` で `Ctrl+V` を送る |
-| **Hotkey Listener** (`tray/hotkey/`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
+| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け。連続記録貼り付けでは `RecordEvent::SendPaste` を受けて `SendInput` で `Ctrl+V` を送る |
+| **Hotkey Listener** (`tray/hotkey/`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `HotkeyEvent::Received` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
 | **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
 | **Clipboard Listener** (`tray/worker/clipboard_listener.rs`) | 専用 | メッセージ専用ウィンドウで `AddClipboardFormatListener` を登録し、`WM_CLIPBOARDUPDATE` を `ClipboardCommand::ClipboardChanged` としてワーカーへ送る。連打は未処理フラグで束ねる。初期化失敗時はワーカーがシーケンストークンの短周期 peek にフォールバックする |
 | **Oneshot IPC Server** (`ipc/`) | 専用 | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。現在ユーザー専用 DACL + リモート拒否。常駐未検出時は CLI 側がローカル実行する |
@@ -861,21 +861,21 @@ flowchart TB
 
 ### UI の遅延生成
 
-クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成し、非表示になった時点で破棄する (アイドル時の RSS 削減)。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `AppEvent::DisposeOcrOverlay` を経由する。ライフサイクルは `selector/{quick,clip}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
+クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成する。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。セレクターの非表示後の保持は `selector_webview_retention` で選べる (`Keep` 既定で保持、`DisposeOnHide` で非表示時破棄、`DisposeAfterIdle` で N 分アイドル後に破棄)。非表示は `hide_with_retention`、方針変更後の同期と期限到来破棄は毎ループの `sync_selector_retention`、アイドル起床は `apply_idle_control_flow` (`ControlFlow::WaitUntil`) が担う。設定ウィンドウと画面 OCR オーバーレイは非表示時に破棄する (アイドル時の RSS 削減)。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `OcrEvent::DisposeOverlay` を経由する。ライフサイクルは `selector/{quick,clip,retention}.rs`、`settings/window/`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
 
 ### 通信の要点
 
 - **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピー、連続記録貼り付けの書き込みなど)
 - **リスナ → ワーカー**: `ClipboardCommand::ClipboardChanged` で Event / 連続記録の監視を起床する
 - **ワンショット CLI → 常駐**: 名前付きパイプで加工要求を送り、サーバーが `ProcessOneshotPipeline` をワーカーへ渡す (監視エコー回避)
-- **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`SendContinuousRecordPaste`)
-- **ホットキー → UI**: 専用スレッドが `AppEvent::Hotkey` を送り、メインスレッドの `HotkeyHandler` が処理
+- **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`RecordEvent::SendPaste`)
+- **ホットキー → UI**: 専用スレッドが `HotkeyEvent::Received` を送り、メインスレッドの `HotkeyHandler` が処理
 - **クリップボード**: 本文の読み書きはワーカースレッド内の `OwnedClipboard` 1 インスタンスに集約する (常駐なしワンショットのみ短命に別インスタンスを開く)。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する。変更検知は役割を分ける
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
   - `OwnedClipboard` (`arboard`): テキスト / 通常画像の `OpenClipboard` I/O
   - `platform/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
 
-加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
+加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 
 ### デスクトップ通知
 
@@ -894,7 +894,7 @@ flowchart TB
 - エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)
 - 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
 - アプリ更新の失敗・案内は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
-- 起動時は `bootstrap.rs` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
+- 起動時は `bootstrap/` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
 
 `NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [CONFIG.md の通知節](CONFIG.md#通知-notification_settings) を参照。
 

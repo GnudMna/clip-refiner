@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify;
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::state::{AppState, SettingsEvent, UpdateEvent, WorkerEvent};
 
 use tao::event_loop::ControlFlow;
 
@@ -35,20 +35,16 @@ pub(crate) fn handle_app_control(
         notify::show_pause_notification(state, paused, "設定変更");
         state.save_config();
         bump_monitor_generation(state);
-        let _ = state.proxy.send_event(AppEvent::RefreshSettingsWindow);
+        let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
         true
     } else if id == menu.check_update_item.id() {
-        let _ = state.proxy.send_event(AppEvent::TrayCheckUpdate);
+        let _ = state.proxy.send_event(UpdateEvent::TrayCheck.into());
         true
     } else if id == menu.open_settings_window_item.id() {
-        let _ = state
-            .proxy
-            .send_event(crate::tray::state::AppEvent::ShowSettingsWindow);
+        let _ = state.proxy.send_event(SettingsEvent::Show.into());
         true
     } else if id == menu.retry_clipboard_worker_item.id() {
-        let _ = state
-            .proxy
-            .send_event(crate::tray::state::AppEvent::RestartClipboardWorker);
+        let _ = state.proxy.send_event(WorkerEvent::Restart.into());
         true
     } else {
         false

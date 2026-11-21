@@ -1,7 +1,7 @@
 use std::sync::{RwLock, atomic::AtomicU64};
 
 use super::super::dispatch;
-use super::app_event::AppEvent;
+use super::app_event::{AppEvent, MenuRefreshEvent};
 use super::clipboard_session::ClipboardSessionState;
 use super::config_sync::ConfigSyncState;
 use super::lock_ext::RwLockExt;
@@ -177,7 +177,7 @@ impl AppState {
     pub fn add_to_history(&self, text: impl AsRef<str>) {
         let limit = self.with_config(|c| c.history_limit);
         if self.clipboard_session.add_to_history(text.as_ref(), limit) {
-            dispatch::send_app_event(&self.proxy, AppEvent::RefreshHistory);
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::History.into());
         }
     }
 
@@ -193,7 +193,7 @@ impl AppState {
             .clipboard_session
             .enqueue_continuous_record(text.as_ref(), limit)
         {
-            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
         }
     }
 
@@ -204,7 +204,7 @@ impl AppState {
     pub fn discharge_continuous_record_front(&self) -> Option<SecretString> {
         let discharged = self.clipboard_session.discharge_continuous_record_front();
         if discharged.is_some() {
-            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
         }
         discharged
     }
@@ -219,7 +219,7 @@ impl AppState {
     pub fn discharge_continuous_record_at(&self, index: usize) -> Option<SecretString> {
         let discharged = self.clipboard_session.discharge_continuous_record_at(index);
         if discharged.is_some() {
-            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
         }
         discharged
     }
@@ -233,7 +233,7 @@ impl AppState {
     pub fn undo_last_continuous_record(&self) -> bool {
         let undone = self.clipboard_session.undo_last_continuous_record();
         if undone.is_some() {
-            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+            dispatch::send_app_event(&self.proxy, MenuRefreshEvent::ContinuousRecord.into());
             return true;
         }
         false

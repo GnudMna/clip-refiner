@@ -9,7 +9,7 @@ use super::command::ClipboardCommand;
 use super::run_worker_loop;
 
 use super::super::dispatch;
-use super::super::state::{AppEvent, AppState, LockExt};
+use super::super::state::{AppState, LockExt, WorkerEvent};
 use crate::ipc::OneshotProcessResult;
 use crate::refiner::{RefineContext, RefineMode};
 use crate::tray::clipboard_monitor::bump_monitor_generation;
@@ -171,7 +171,7 @@ fn mark_worker_stopped(state: &AppState) {
     if state.worker().is_alive() {
         state.worker().set_alive(false);
         state.worker().set_recovery_pending(true);
-        dispatch::send_app_event(&state.proxy, AppEvent::ClipboardWorkerStopped);
+        dispatch::send_app_event(&state.proxy, WorkerEvent::Stopped.into());
     }
 }
 

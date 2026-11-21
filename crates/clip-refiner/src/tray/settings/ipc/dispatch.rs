@@ -4,7 +4,9 @@ use super::message::SettingsIpcAction;
 use super::queue::enqueue_settings_patch;
 
 use crate::tray::dispatch;
-use crate::tray::state::{AppEvent, AppState, RegexPreviewRequest};
+use crate::tray::state::{
+    AppEvent, AppState, ClipsEvent, FavoritesEvent, RegexPreviewRequest, SettingsEvent,
+};
 use crate::user_error;
 
 use tao::event_loop::EventLoopProxy;
@@ -15,7 +17,7 @@ use tao::event_loop::EventLoopProxy;
 /// IPC アクションを `AppEvent` へ変換して送信する
 ///
 /// 設定ウィンドウ内で完結する操作 (`Apply` / データ削除 / 設定ファイル起動) は
-/// 専用の `AppEvent` としてイベントループへ送り、`user_event` 側の共通ハンドラへ委譲する
+/// 専用の `SettingsEvent` としてイベントループへ送り、`user_event` 側の共通ハンドラへ委譲する
 pub(crate) fn dispatch_settings_ipc(
     proxy: &EventLoopProxy<AppEvent>,
     state: &Arc<AppState>,
@@ -23,38 +25,38 @@ pub(crate) fn dispatch_settings_ipc(
 ) {
     match action {
         SettingsIpcAction::Close => {
-            dispatch::send_app_event(proxy, AppEvent::HideSettingsWindow);
+            dispatch::send_app_event(proxy, SettingsEvent::Hide.into());
         }
         SettingsIpcAction::OpenConfigFile => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsOpenConfigFile);
+            dispatch::send_app_event(proxy, SettingsEvent::OpenConfigFile.into());
         }
         SettingsIpcAction::Apply(patch) => {
             if enqueue_settings_patch(state, &patch) {
-                dispatch::send_app_event(proxy, AppEvent::SettingsApplyPatch);
+                dispatch::send_app_event(proxy, SettingsEvent::ApplyPatch.into());
             } else {
                 user_error::settings_patch_enqueue_failure().notify();
             }
         }
         SettingsIpcAction::ClearHistory => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsClearHistory);
+            dispatch::send_app_event(proxy, SettingsEvent::ClearHistory.into());
         }
         SettingsIpcAction::ClearContinuousRecord => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsClearContinuousRecord);
+            dispatch::send_app_event(proxy, SettingsEvent::ClearContinuousRecord.into());
         }
         SettingsIpcAction::ClipCopy(index) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipCopy(index));
+            dispatch::send_app_event(proxy, ClipsEvent::RequestCopy(index).into());
         }
         SettingsIpcAction::ClipDelete(index) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipDelete(index));
+            dispatch::send_app_event(proxy, ClipsEvent::RequestDelete(index).into());
         }
         SettingsIpcAction::ClipRegister => {
-            dispatch::send_app_event(proxy, AppEvent::RequestClipRegister);
+            dispatch::send_app_event(proxy, ClipsEvent::RequestRegister.into());
         }
         SettingsIpcAction::FavoriteToggle(mode) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestFavoriteToggle(mode));
+            dispatch::send_app_event(proxy, FavoritesEvent::RequestToggle(mode).into());
         }
         SettingsIpcAction::FavoriteMove(mode, direction) => {
-            dispatch::send_app_event(proxy, AppEvent::RequestFavoriteMove(mode, direction));
+            dispatch::send_app_event(proxy, FavoritesEvent::RequestMove(mode, direction).into());
         }
         SettingsIpcAction::RegexPreview(request_id, settings, sample) => {
             state
@@ -64,13 +66,13 @@ pub(crate) fn dispatch_settings_ipc(
                     settings,
                     sample,
                 });
-            dispatch::send_app_event(proxy, AppEvent::SettingsRegexPreview);
+            dispatch::send_app_event(proxy, SettingsEvent::RegexPreview.into());
         }
         SettingsIpcAction::CheckUpdate => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsCheckUpdate);
+            dispatch::send_app_event(proxy, SettingsEvent::CheckUpdate.into());
         }
         SettingsIpcAction::ApplyUpdate => {
-            dispatch::send_app_event(proxy, AppEvent::SettingsApplyUpdate);
+            dispatch::send_app_event(proxy, SettingsEvent::ApplyUpdate.into());
         }
     }
 }

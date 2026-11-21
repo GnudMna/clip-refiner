@@ -7,6 +7,7 @@ mod monitor;
 mod notification;
 mod regex;
 mod registered_clip;
+mod selector_webview;
 
 pub use app_config::AppConfig;
 pub use favorites::{FavoriteMoveDirection, FavoriteToggleResult};
@@ -15,3 +16,4 @@ pub use monitor::MonitorMode;
 pub use notification::NotificationSettings;
 pub use regex::RegexSettings;
 pub use registered_clip::{AddRegisteredClipError, RegisteredClip, ResolvedClip};
+pub use selector_webview::SelectorWebviewRetention;

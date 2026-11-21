@@ -58,7 +58,7 @@ pub(crate) fn handle_monitor_event(
         // カスタム間隔は設定ウィンドウで数値入力する
         let _ = state
             .proxy
-            .send_event(crate::tray::state::AppEvent::ShowSettingsWindow);
+            .send_event(crate::tray::state::SettingsEvent::Show.into());
         // クリックでチェックが反転しないよう、現在値へ再同期する
         menu.sync_interval_menu(state.with_config(|c| c.interval_ms));
         return true;

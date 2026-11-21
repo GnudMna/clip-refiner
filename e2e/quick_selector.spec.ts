@@ -49,7 +49,7 @@ test.describe('クイックセレクター WebView', () => {
   test('Escape でセレクターが閉じる', async ({ page }) => {
     await expect(page.locator('#container')).toBeVisible();
     const closed = page.waitForEvent('close', { timeout: 15_000 });
-    // WebView 破棄で CDP が切れると press が失敗することがある
+    // E2E では閉じた後にプロセス終了するため CDP が切れる
     await Promise.all([
       closed,
       page.keyboard.press('Escape').catch(() => undefined),

@@ -1,6 +1,6 @@
 //! 設定編集用 `WebView` ウィンドウ
 //!
-//! HTML/JS 組み立ては `assets`、`AppEvent` 処理は `events` に分離する
+//! HTML/JS 組み立ては `assets`、`SettingsEvent` 処理は `events` に分離する
 
 mod assets;
 mod events;

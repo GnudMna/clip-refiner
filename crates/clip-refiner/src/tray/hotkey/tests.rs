@@ -410,3 +410,9 @@ fn hotkey_ui_overlay_mutual_exclusion() {
     handler.handle_event(press_event(clip_id), &mut ctx.ctx());
     assert!(!ctx.clip_selector.as_ref().unwrap().is_visible());
 }
+
+/// ホットキー受信タイムアウトが短い応答性向けの値であること
+#[test]
+fn hotkey_recv_timeout_is_responsive() {
+    assert_eq!(HOTKEY_RECV_TIMEOUT.as_millis(), 10);
+}

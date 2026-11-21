@@ -10,7 +10,10 @@ mod monitor_snapshot;
 mod settings_pending;
 mod worker_state;
 
-pub use app_event::AppEvent;
+pub use app_event::{
+    AppEvent, ClipsEvent, ConfigEvent, FavoritesEvent, HotkeyEvent, MenuRefreshEvent, OcrEvent,
+    RecordEvent, SelectorEvent, SettingsEvent, UpdateEvent, WorkerEvent,
+};
 pub use app_state::AppState;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) use app_state::{test_app_state, test_app_state_with_persistence};

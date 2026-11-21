@@ -168,6 +168,15 @@ pub const MAX_FAVORITE_MODES: usize = 20;
 /// 加工パイプラインの最大段数
 pub const MAX_PIPELINE_LENGTH: usize = 10;
 
+/// セレクター `WebView` をアイドル破棄するまでの既定分数
+pub const DEFAULT_SELECTOR_WEBVIEW_IDLE_MINUTES: u64 = 5;
+
+/// セレクター `WebView` アイドル破棄分数の下限
+pub const MIN_SELECTOR_WEBVIEW_IDLE_MINUTES: u64 = 1;
+
+/// セレクター `WebView` アイドル破棄分数の上限 (24 時間)
+pub const MAX_SELECTOR_WEBVIEW_IDLE_MINUTES: u64 = 1_440;
+
 // ======================================================================
 // ヘルパー関数
 // ======================================================================
