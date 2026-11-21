@@ -10,3 +10,9 @@ pub fn show_error_notification(summary: &str, body: &str) {
         .timeout(Duration::from_secs(5))
         .show();
 }
+
+/// anyhow::Error からエラー通知を表示する
+pub fn show_anyhow_error(summary: &str, err: &anyhow::Error) {
+    let body = format!("{:#}", err); // {:#} で原因のチェーンを含めて表示
+    show_error_notification(summary, &body);
+}

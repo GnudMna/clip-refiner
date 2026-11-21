@@ -1,6 +1,6 @@
-use std::error::Error;
-
 use percent_encoding::percent_decode_str;
+
+use anyhow::Result;
 
 /// 文字列をパーセントデコードする
 ///
@@ -10,8 +10,8 @@ use percent_encoding::percent_decode_str;
 ///
 /// # Returns
 ///
-/// * `Result<String, Box<dyn Error>>` - デコードされた文字列
-pub fn percent_decode_text(input: &str) -> Result<String, Box<dyn Error>> {
+/// * `Result<String>` - デコードされた文字列
+pub fn percent_decode_text(input: &str) -> Result<String> {
     let decoded = percent_decode_str(input).decode_utf8()?;
     Ok(decoded.into_owned())
 }
