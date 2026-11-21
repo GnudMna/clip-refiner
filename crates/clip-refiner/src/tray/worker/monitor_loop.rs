@@ -157,6 +157,7 @@ impl MonitorLoopState {
         }
 
         if !snap.auto_processing_enabled() {
+            Self::discard_unconsumed_last_written(state, &snap);
             return;
         }
 
@@ -164,6 +165,22 @@ impl MonitorLoopState {
             MonitorMode::Event => self.tick_event_processing(clipboard, state, &snap),
             MonitorMode::Polling => self.tick_polling_processing(clipboard, state, &snap),
         }
+    }
+
+    /// 自動加工も連続記録も無効な間に残った `last_written` を破棄する
+    ///
+    /// 判定側が消費しないため、手動加工や履歴復元で記録された指紋が残り続ける。
+    /// 残すと後から自動変換を有効にして同じ文字列をコピーしたとき、書き戻しのエコーと誤認して加工されない
+    fn discard_unconsumed_last_written(
+        state: &Arc<AppState>,
+        snap: &super::super::state::MonitorSnapshot,
+    ) {
+        if snap.continuous_record_enabled {
+            return;
+        }
+        state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.last_written = None);
     }
 
     /// 連続記録向けにクリップボード変更を検知する
@@ -391,6 +408,46 @@ mod tests {
         );
 
         assert_eq!(monitor.last_token, 5);
+        let remains = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_written("out"));
+        assert!(remains);
+    }
+
+    /// 自動変換が無効な間は `last_written` を破棄すること
+    ///
+    /// 手動加工や履歴復元の指紋が残ると、後から自動変換を有効にした直後の同じ文字列のコピーが加工されない
+    #[test]
+    fn discards_last_written_while_auto_processing_disabled() {
+        let (state, _) = state_with_last_written();
+        state.with_config_mut(|c| {
+            c.auto_refine_enabled = false;
+            c.continuous_record_enabled = false;
+        });
+        let snap = state.monitor_snapshot();
+
+        MonitorLoopState::discard_unconsumed_last_written(&state, &snap);
+
+        let remains = state
+            .clipboard_session()
+            .with_processed_state(|ps| ps.matches_last_written("out"));
+        assert!(!remains);
+    }
+
+    /// 連続記録中は `last_written` を破棄しないこと
+    ///
+    /// 連続記録の判定側がエコーの読み飛ばしに使うため
+    #[test]
+    fn keeps_last_written_while_continuous_record_enabled() {
+        let (state, _) = state_with_last_written();
+        state.with_config_mut(|c| {
+            c.auto_refine_enabled = false;
+            c.continuous_record_enabled = true;
+        });
+        let snap = state.monitor_snapshot();
+
+        MonitorLoopState::discard_unconsumed_last_written(&state, &snap);
+
         let remains = state
             .clipboard_session()
             .with_processed_state(|ps| ps.matches_last_written("out"));

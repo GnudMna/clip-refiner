@@ -244,6 +244,20 @@ pub fn config_save_failure() -> UserNotification {
     )
 }
 
+/// 登録クリップの鍵を復号できないときの通知を返す
+///
+/// 設定の保存は継続し、登録クリップの読み込み・保存だけが行われない
+///
+/// # Returns
+/// * `UserNotification` - 登録クリップが使えない理由と、設定は保存される旨の案内
+#[must_use]
+pub fn registered_clips_key_unavailable() -> UserNotification {
+    UserNotification::static_message(
+        titles::REGISTERED_CLIP,
+        "登録クリップの鍵を復号できないため、登録クリップの読み込み・保存ができません。設定は通常どおり保存されます。別のユーザーや PC からフォルダを移した場合は、元の環境で使ってください",
+    )
+}
+
 /// 設定パッチのキュー投入失敗をユーザー通知へ変換する
 ///
 /// # Returns
@@ -419,6 +433,16 @@ mod tests {
         assert!(notification.body().contains("2 MiB"));
     }
 
+    /// パース失敗は、変更なしと区別できるよう理由を本文にしてスキップとして通知すること
+    #[test]
+    fn clipboard_process_parse_failure_notifies_reason() {
+        let notification = UserNotification::from(ClipboardProcessError::ParseFailed(
+            crate::refiner::ParseFailure::DuplicateKey,
+        ));
+        assert_eq!(notification.title(), titles::PROCESS_SKIP);
+        assert!(notification.body().contains("キーが重複"));
+    }
+
     /// 連続記録の上限超過通知が固定文言を返すようにすること
     #[test]
     fn continuous_record_text_too_large_message() {
@@ -441,6 +465,14 @@ mod tests {
         let notification = config_save_failure();
         assert_eq!(notification.title(), titles::SETTINGS);
         assert!(notification.body().contains("保存に失敗"));
+    }
+
+    /// 登録クリップの鍵の通知が登録クリップ向けのタイトルと案内文を返すようにすること
+    #[test]
+    fn registered_clips_key_unavailable_has_registered_clip_title() {
+        let notification = registered_clips_key_unavailable();
+        assert_eq!(notification.title(), titles::REGISTERED_CLIP);
+        assert!(notification.body().contains("鍵を復号できない"));
     }
 
     /// 設定パッチキュー失敗通知が固定の案内文を返すようにすること

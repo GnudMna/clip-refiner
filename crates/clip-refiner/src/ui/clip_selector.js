@@ -40,6 +40,8 @@ const {
     counterBadgeText,
     canReorder,
     moveTargetIndex,
+    resolveDeleteRequest,
+    resolveDeleteKey,
     buildRegisterRowInnerHtml,
 } = ClipSelectorLogic;
 
@@ -51,6 +53,12 @@ let items = [];
 /** @type {typeof items} */
 let filtered = [];
 const selection = createSelection(results, () => totalRows(filtered.length));
+/**
+ * 削除の確認待ちのクリップ ID (なければ `null`)
+ *
+ * @type {string|null}
+ */
+let pendingDeleteId = null;
 
 const imageHoverPreview = requiredById('image-hover-preview');
 const imageHoverPreviewImg = /** @type {HTMLImageElement} */ (
@@ -296,21 +304,26 @@ function createItem(item, index, query) {
 
     div.appendChild(content);
 
-    if (canReorder(query)) {
-        div.appendChild(createReorderButtons(index));
-    }
+    if (item.id === pendingDeleteId) {
+        div.classList.add('item--confirming-delete');
+        div.appendChild(createDeleteConfirmButtons(item.id));
+    } else {
+        if (canReorder(query)) {
+            div.appendChild(createReorderButtons(index));
+        }
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'item-delete';
-    deleteBtn.title = '削除';
-    deleteBtn.setAttribute('aria-label', '削除');
-    deleteBtn.textContent = '×';
-    deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        deleteItem(item.id);
-    };
-    div.appendChild(deleteBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'item-delete';
+        deleteBtn.title = '削除';
+        deleteBtn.setAttribute('aria-label', '削除');
+        deleteBtn.textContent = '×';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteItem(item.id);
+        };
+        div.appendChild(deleteBtn);
+    }
 
     // mouseenter は再描画後に止まったカーソル下でも発火し、キー操作の選択を奪うため mousemove で追う
     div.onmousemove = () => {
@@ -321,6 +334,38 @@ function createItem(item, index, query) {
     div.onclick = () => select(item.id);
 
     return div;
+}
+
+/**
+ * 削除の確認ボタン (削除する / キャンセル) を生成する
+ *
+ * @param {string} id
+ * @returns {HTMLDivElement}
+ */
+function createDeleteConfirmButtons(id) {
+    const container = document.createElement('div');
+    container.className = 'delete-confirm';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'delete-confirm-ok';
+    confirmBtn.textContent = '削除する';
+    confirmBtn.onclick = (event) => {
+        event.stopPropagation();
+        deleteItem(id);
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'delete-confirm-cancel';
+    cancelBtn.textContent = 'キャンセル';
+    cancelBtn.onclick = (event) => {
+        event.stopPropagation();
+        cancelPendingDelete();
+    };
+
+    container.append(confirmBtn, cancelBtn);
+    return container;
 }
 
 /**
@@ -407,6 +452,8 @@ function renderList(scrollToSelection) {
 
 /** 検索フィルタを適用して一覧を再描画する */
 function filter() {
+    // 一覧が変わると確認待ちの ID が別のクリップを指す恐れがあるため解除する
+    pendingDeleteId = null;
     const query = normalizeQuery(input.value);
     const previousIndex = selection.index;
     const oldFilteredLength = filtered.length;
@@ -431,12 +478,34 @@ function register() {
 }
 
 /**
- * 登録クリップを削除する
+ * 登録クリップの削除を要求する
+ *
+ * 1 回目は行内の確認表示に切り替え、確認待ちの行への 2 回目で削除を IPC 送信する
  *
  * @param {string} id
  */
 function deleteItem(id) {
+    if (resolveDeleteRequest(pendingDeleteId, id) === 'confirm') {
+        pendingDeleteId = id;
+        renderList(false);
+        return;
+    }
+    pendingDeleteId = null;
     postIpc(deleteMessage(id));
+}
+
+/**
+ * 削除の確認待ちを解除する
+ *
+ * @returns {boolean} 確認待ちだった場合は `true`
+ */
+function cancelPendingDelete() {
+    if (pendingDeleteId === null) {
+        return false;
+    }
+    pendingDeleteId = null;
+    renderList(false);
+    return true;
 }
 
 /**
@@ -525,6 +594,11 @@ input.oninput = filter;
  * @param {KeyboardEvent} e
  */
 window.onkeydown = (e) => {
+    // 確認待ちの間の Escape は、セレクターを閉じずに確認だけを解除する
+    if (e.key === 'Escape' && cancelPendingDelete()) {
+        e.preventDefault();
+        return;
+    }
     // 並べ替えの Ctrl+Shift+↑↓ は選択移動より先に判定する
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         if (moveAt(selection.index, e.key === 'ArrowUp' ? 'up' : 'down')) {
@@ -563,7 +637,14 @@ window.onkeydown = (e) => {
         !isRegisterIndex(selection.index, filtered.length) &&
         filtered[selection.index]
     ) {
-        deleteSelected();
+        const action = resolveDeleteKey(input.value, e.repeat);
+        // 検索欄に文字があるときは既定の文字削除に任せる
+        if (action === 'text') {
+            return;
+        }
+        if (action === 'delete') {
+            deleteSelected();
+        }
         e.preventDefault();
         return;
     }

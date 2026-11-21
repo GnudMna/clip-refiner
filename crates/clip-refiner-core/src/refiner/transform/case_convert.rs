@@ -24,8 +24,10 @@ fn split_camel_case(input: &str) -> Vec<String> {
     for (index, &c) in chars.iter().enumerate() {
         if c.is_uppercase() {
             let prev_lower = index > 0 && chars[index - 1].is_lowercase();
+            // `.` などの記号の直後は語頭であり、境界を追加しない (`foo.Bar` → `foo.bar`)
+            let prev_alphanumeric = index > 0 && chars[index - 1].is_alphanumeric();
             let next_lower = chars.get(index + 1).is_some_and(|next| next.is_lowercase());
-            if !current.is_empty() && (prev_lower || next_lower) {
+            if !current.is_empty() && (prev_lower || (next_lower && prev_alphanumeric)) {
                 words.push(current.to_lowercase());
                 current.clear();
             }
@@ -217,6 +219,18 @@ mod tests {
             to_kebab_case("getHTTPResponse_code"),
             "get-http-response-code"
         );
+    }
+
+    /// `.` などの記号の直後の大文字で余計な区切りを入れないこと
+    #[test]
+    fn test_symbol_followed_by_uppercase_has_no_extra_separator() {
+        assert_eq!(to_snake_case("foo.bar.Baz"), "foo.bar.baz");
+        assert_eq!(to_snake_case("foo.barBaz"), "foo.bar_baz");
+        assert_eq!(to_snake_case("foo.HTTPResponse"), "foo.http_response");
+        assert_eq!(to_kebab_case("foo.bar.Baz"), "foo.bar.baz");
+        assert_eq!(to_screaming_snake_case("foo.bar.Baz"), "FOO.BAR.BAZ");
+        assert_eq!(to_camel_case("foo.bar.Baz"), "foo.bar.baz");
+        assert_eq!(to_pascal_case("foo.bar.Baz"), "Foo.bar.baz");
     }
 
     /// `to_camel_case` の基本変換できるようにすること

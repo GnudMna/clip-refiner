@@ -11,7 +11,7 @@ use serde_json::Number;
 
 use super::exact_number::loses_digits_as_f64;
 use super::utils::strip_bom;
-use crate::refiner::OrderedValue;
+use crate::refiner::{OrderedValue, ParseFailure};
 use crate::security::is_within_parser_limit;
 
 // ======================================================================
@@ -25,6 +25,11 @@ const MIN_LOSSY_DIGITS: usize = 16;
 /// YAML 1.1 のマージキー
 const MERGE_KEY: &str = "<<";
 
+/// `.inf` / `.nan` を読み取ったときのエラーメッセージ
+///
+/// `serde_norway` のエラーは種類を判別できないため、メッセージで `NonFiniteNumber` と見分ける
+const NON_FINITE_MESSAGE: &str = "JSON で表現できない数値 (.inf / .nan)";
+
 // ======================================================================
 // YAML → JSON 変換
 // ======================================================================
@@ -33,14 +38,15 @@ const MERGE_KEY: &str = "<<";
 /// 入力されたYAMLを解析し、対応するJSON形式の文字列に変換する
 /// キーの順序は保証されない
 /// `---` で区切った複数のドキュメントは配列にする。マージキー (`<<`) は展開し、タグは捨てて値だけを出力する
+/// マッピングも配列も含まない入力 (ただの文章や数値など) は、引用符を付けるだけになるため変換しない
 ///
 /// # Arguments
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のJSON文字列。パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) や
-///   入力がパーサの上限を超える場合は元の文字列を返す
-pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) はその理由を返す
+pub fn yaml_to_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     convert_to_json(text, "yaml_to_json")
 }
 
@@ -49,14 +55,15 @@ pub fn yaml_to_json(text: &str) -> Cow<'_, str> {
 /// 入力されたYAMLを解析し、対応するJSON形式の文字列に変換する
 /// 可能な限り、元のYAMLにおけるマップのキー順序を維持して変換を試みる
 /// `---` で区切った複数のドキュメントは配列にする。マージキー (`<<`) は展開し、タグは捨てて値だけを出力する
+/// マッピングも配列も含まない入力 (ただの文章や数値など) は、引用符を付けるだけになるため変換しない
 ///
 /// # Arguments
 /// * `text` - 変換対象のYAML文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のJSON文字列。パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) や
-///   入力がパーサの上限を超える場合は元の文字列を返す
-pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パース・変換に失敗した場合 (`.inf` / `.nan` やキーの重複を含む場合など) はその理由を返す
+pub fn yaml_to_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     convert_to_json(text, "yaml_to_json_preserve_order")
 }
 
@@ -67,26 +74,31 @@ pub fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
 /// * `name` - ログに出す変換名
 ///
 /// # Returns
-/// * `Cow<'a, str>` - 変換後のJSON文字列。失敗した場合や入力がパーサの上限を超える場合は元の文字列
-fn convert_to_json<'a>(text: &'a str, name: &str) -> Cow<'a, str> {
+/// * `Result<Cow<'a, str>, ParseFailure>` - 変換後のJSON文字列。マッピングも配列も含まない場合や
+///   入力がパーサの上限を超える場合は元の文字列。失敗した場合はその理由
+fn convert_to_json<'a>(text: &'a str, name: &str) -> Result<Cow<'a, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
         tracing::debug!("YAML 入力が上限を超えているためスキップ ({name})");
-        return Cow::Borrowed(text);
+        return Ok(Cow::Borrowed(text));
     }
 
     let value = match read_yaml(strip_bom(text)) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!("YAML パースに失敗 ({name}): {e}");
-            return Cow::Borrowed(text);
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            tracing::debug!("YAML がマッピングも配列も含まないためスキップ ({name})");
+            return Ok(Cow::Borrowed(text));
+        }
+        Err(failure) => {
+            tracing::debug!("YAML パースに失敗 ({name}): {failure:?}");
+            return Err(failure);
         }
     };
 
     match serde_json::to_string_pretty(&value) {
-        Ok(json) => Cow::Owned(json),
+        Ok(json) => Ok(Cow::Owned(json)),
         Err(e) => {
             tracing::debug!("JSON 変換に失敗 ({name}): {e}");
-            Cow::Borrowed(text)
+            Err(ParseFailure::UnrepresentableValue)
         }
     }
 }
@@ -96,19 +108,36 @@ fn convert_to_json<'a>(text: &'a str, name: &str) -> Cow<'a, str> {
 // ======================================================================
 /// YAML を JSON で表現できる値へ読み取る
 ///
-/// 複数のドキュメントは配列にまとめ、ドキュメントが無い場合は null とする
+/// 複数のドキュメントは配列にまとめる
 /// `f64` に丸めると桁が変わる数値は元の桁を保つ
+///
+/// ただの文章は 1 つの文字列として読めてしまい、変換しても引用符が付くだけになる
+/// そのため、どのドキュメントもマッピング・配列でない場合 (ドキュメントが無い場合を含む) は値を返さない
 ///
 /// # Arguments
 /// * `text` - YAML 文字列
 ///
 /// # Returns
-/// * `Result<OrderedValue, serde_norway::Error>` - 読み取った値。YAML として不正な場合や、
-///   JSON で表現できない値 (`.inf` / `.nan`)・重複キーを含む場合はエラー
-fn read_yaml(text: &str) -> Result<OrderedValue, serde_norway::Error> {
+/// * `Result<Option<OrderedValue>, ParseFailure>` - 読み取った値。マッピングも配列も含まない場合は `None`。
+///   YAML として不正な場合は `InvalidYaml`、JSON で表現できない値 (`.inf` / `.nan`) を含む場合は `NonFiniteNumber`、
+///   重複キーを含む場合は `DuplicateKey`
+fn read_yaml(text: &str) -> Result<Option<OrderedValue>, ParseFailure> {
     let mut documents = Vec::new();
     for document in serde_norway::Deserializer::from_str(text) {
-        documents.push(YamlNode::deserialize(document)?);
+        let node = YamlNode::deserialize(document).map_err(|e| {
+            if e.to_string().contains(NON_FINITE_MESSAGE) {
+                ParseFailure::NonFiniteNumber
+            } else {
+                ParseFailure::InvalidYaml
+            }
+        })?;
+        documents.push(node);
+    }
+    if !documents
+        .iter()
+        .any(|node| matches!(node, YamlNode::Array(_) | YamlNode::Map(_)))
+    {
+        return Ok(None);
     }
     if has_long_digit_run(text) {
         // 読み直せない形の場合は、`f64` に丸めた値のまま変換する
@@ -119,11 +148,11 @@ fn read_yaml(text: &str) -> Result<OrderedValue, serde_norway::Error> {
         .into_iter()
         .map(YamlNode::into_value)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(match values.len() {
-        0 => OrderedValue::Null,
-        1 => values.remove(0),
-        _ => OrderedValue::Array(values),
-    })
+    Ok(Some(if values.len() == 1 {
+        values.remove(0)
+    } else {
+        OrderedValue::Array(values)
+    }))
 }
 
 /// YAML の 1 ドキュメントを、重複キーとマージキーを解決する前の形で読み取った値
@@ -182,7 +211,7 @@ impl<'de> Visitor<'de> for YamlNodeVisitor {
         // `.inf` / `.nan` は JSON で表現できず、null にすると値が変わるため変換しない
         Number::from_f64(v)
             .map(YamlNode::Number)
-            .ok_or_else(|| E::custom("JSON で表現できない数値 (.inf / .nan)"))
+            .ok_or_else(|| E::custom(NON_FINITE_MESSAGE))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
@@ -236,8 +265,8 @@ impl YamlNode {
     /// 配列では先頭に近いマッピングを優先する
     ///
     /// # Returns
-    /// * `Result<OrderedValue, serde_norway::Error>` - 変換した値。同じオブジェクトにキーが重複している場合はエラー
-    fn into_value(self) -> Result<OrderedValue, serde_norway::Error> {
+    /// * `Result<OrderedValue, ParseFailure>` - 変換した値。同じオブジェクトにキーが重複している場合は `DuplicateKey`
+    fn into_value(self) -> Result<OrderedValue, ParseFailure> {
         match self {
             Self::Null => Ok(OrderedValue::Null),
             Self::Bool(b) => Ok(OrderedValue::Bool(b)),
@@ -255,12 +284,12 @@ impl YamlNode {
                     let value = node.into_value()?;
                     if key == MERGE_KEY && is_merge_source(&value) {
                         if merge.replace(value).is_some() {
-                            return Err(duplicate_key_error(&key));
+                            return Err(ParseFailure::DuplicateKey);
                         }
                         continue;
                     }
                     match object.entry(key) {
-                        Entry::Occupied(entry) => return Err(duplicate_key_error(entry.key())),
+                        Entry::Occupied(_) => return Err(ParseFailure::DuplicateKey),
                         Entry::Vacant(entry) => {
                             entry.insert(value);
                         }
@@ -307,11 +336,6 @@ fn merge_missing(
     for (key, value) in source {
         object.entry(key).or_insert(value);
     }
-}
-
-/// 重複キーのエラーを作る
-fn duplicate_key_error(key: &str) -> serde_norway::Error {
-    serde_norway::Error::custom(format!("キーが重複している: {key}"))
 }
 
 /// 10 進の整数表記を桁を保った JSON の数値にする
@@ -470,6 +494,40 @@ impl<'de> Visitor<'de> for DigitsMapVisitor<'_> {
 mod tests {
     use super::*;
 
+    // 失敗時は元の文字列を返す形で検証できるよう、変換関数を包む
+    // 失敗の理由は `rejects_with_failure_reason` で検証する
+    fn yaml_to_json(text: &str) -> Cow<'_, str> {
+        super::yaml_to_json(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    fn yaml_to_json_preserve_order(text: &str) -> Cow<'_, str> {
+        super::yaml_to_json_preserve_order(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    /// パースに失敗した入力は、失敗の理由を返すこと
+    #[test]
+    fn rejects_with_failure_reason() {
+        for (input, expected) in [
+            ("a: 1\n  b: 2", ParseFailure::InvalidYaml),
+            ("a: [1, 2\n", ParseFailure::InvalidYaml),
+            ("a: 1\na: 2\n", ParseFailure::DuplicateKey),
+            ("- {a: 1, a: 2}\n", ParseFailure::DuplicateKey),
+            ("<<: {a: 1}\n<<: {b: 2}\n", ParseFailure::DuplicateKey),
+            ("a: .inf\n", ParseFailure::NonFiniteNumber),
+            ("- 1\n- [.NaN]\n", ParseFailure::NonFiniteNumber),
+            ("a: !Tag -.INF\n", ParseFailure::NonFiniteNumber),
+        ] {
+            assert_eq!(super::yaml_to_json(input), Err(expected), "{input:?}");
+            assert_eq!(
+                super::yaml_to_json_preserve_order(input),
+                Err(expected),
+                "{input:?}"
+            );
+        }
+        // 変換の対象外 (マッピングも配列も含まない) は失敗ではない
+        assert!(super::yaml_to_json("plain text").is_ok());
+    }
+
     /// 有効な YAML を JSON に変換できるようにすること
     #[test]
     fn test_yaml_to_json_valid() {
@@ -572,7 +630,7 @@ mod tests {
             assert_eq!(yaml_to_json(input), expected);
             assert_eq!(yaml_to_json_preserve_order(input), expected);
         }
-        assert_eq!(yaml_to_json("!custom 1\n"), "1");
+        assert_eq!(yaml_to_json("- !custom 1\n"), "[\n  1\n]");
         assert_eq!(
             yaml_to_json("a: !Seq [1, !Inner 2]\nb: !Map {c: !Str d}\n"),
             "{\n  \"a\": [\n    1,\n    2\n  ],\n  \"b\": {\n    \"c\": \"d\"\n  }\n}"
@@ -588,8 +646,8 @@ mod tests {
         assert_eq!(yaml_to_json_preserve_order(input), expected);
         // 桁を保つ数値も、ドキュメントをまたいで元の表記になる
         assert_eq!(
-            yaml_to_json("1.5\n---\n3.141592653589793238462643\n"),
-            "[\n  1.5,\n  3.141592653589793238462643\n]"
+            yaml_to_json("- 1.5\n---\n3.141592653589793238462643\n"),
+            "[\n  [\n    1.5\n  ],\n  3.141592653589793238462643\n]"
         );
     }
 
@@ -600,11 +658,44 @@ mod tests {
         assert_eq!(yaml_to_json("---\na: 1\n...\n"), "{\n  \"a\": 1\n}");
     }
 
-    /// 空の入力やコメントだけの入力は null として変換すること
+    /// マッピングも配列も含まない入力は、引用符を付けたりせず元の文字列を返すこと
     #[test]
-    fn test_yaml_to_json_empty_input_is_null() {
-        assert_eq!(yaml_to_json(""), "null");
-        assert_eq!(yaml_to_json("# comment\n"), "null");
+    fn test_yaml_to_json_keeps_scalar_only_input() {
+        for input in [
+            // ただの文章・数値・真偽値・null
+            "plain text here",
+            "これはただの文章です。\n2 行目です。\n",
+            "\"quoted\"",
+            "123",
+            "true",
+            "null",
+            "~",
+            "!custom 1\n",
+            "---\nplain text\n",
+            // ドキュメントが無い入力
+            "",
+            "# comment\n",
+            // `---` で区切っただけの文章
+            "first\n---\nsecond\n",
+            "1.5\n---\n3.141592653589793238462643\n",
+        ] {
+            assert!(matches!(yaml_to_json(input), Cow::Borrowed(_)), "{input:?}");
+            assert!(
+                matches!(yaml_to_json_preserve_order(input), Cow::Borrowed(_)),
+                "{input:?}"
+            );
+        }
+    }
+
+    /// 空のマッピング・配列や、マッピング・配列を 1 つでも含む複数ドキュメントは変換すること
+    #[test]
+    fn test_yaml_to_json_converts_collections_with_scalars() {
+        assert_eq!(yaml_to_json("{}"), "{}");
+        assert_eq!(yaml_to_json("[]"), "[]");
+        assert_eq!(
+            yaml_to_json("text\n---\na: 1\n"),
+            "[\n  \"text\",\n  {\n    \"a\": 1\n  }\n]"
+        );
     }
 
     /// 同じマッピング内の重複キーは変換せず元の文字列を返すこと

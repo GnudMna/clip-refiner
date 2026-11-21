@@ -3,6 +3,7 @@ use std::time::Duration;
 use super::base64_clipboard::{write_base64_image, write_image_as_base64};
 use super::context::{RefineContext, RefineSkipReason};
 use super::mode::RefineMode;
+use super::parse_failure::ParseFailure;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
 use super::text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 use super::transform::markdown::markdown_to_rich_text_html;
@@ -52,6 +53,9 @@ pub enum ClipboardProcessError {
     /// HTML の要素の入れ子が上限を超えている
     #[error("HTML の入れ子が上限を超えています")]
     HtmlNestingTooDeep,
+    /// JSON / YAML を読み取れない、または変換できず、変更がなかった
+    #[error("JSON / YAML を変換できませんでした")]
+    ParseFailed(ParseFailure),
     /// クリップボードの読み取りに失敗
     #[error("クリップボードの読み取りに失敗しました")]
     ReadFailed(String),
@@ -88,6 +92,7 @@ impl ClipboardProcessError {
             Self::HtmlNestingTooDeep => {
                 "HTML の入れ子が上限 (256 階層) を超えているため加工しませんでした"
             }
+            Self::ParseFailed(failure) => failure.user_message(),
             Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
             Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
             Self::NoImage => "クリップボードに Excel の描画画像がありません",
@@ -97,7 +102,7 @@ impl ClipboardProcessError {
         }
     }
 
-    /// 上限超過・タイムアウトなど、加工を意図的に打ち切ったスキップか判定する
+    /// 上限超過・タイムアウト・パース失敗など、加工を打ち切ったスキップか判定する
     ///
     /// # Arguments
     /// * `self` - この `ClipboardProcessError`
@@ -112,6 +117,7 @@ impl ClipboardProcessError {
                 | Self::RegexTimedOut
                 | Self::ParserInputTooLarge
                 | Self::HtmlNestingTooDeep
+                | Self::ParseFailed(_)
                 | Self::ImageTooLarge
         )
     }
@@ -143,7 +149,7 @@ impl From<ClipboardIoError> for ClipboardProcessError {
 /// * `Err(ClipboardProcessError::NoText)` - テキストが空
 ///
 /// # Errors
-/// テキストが空、サイズ上限を超えている場合、または変更がなく正規表現のタイムアウト・パーサー入力上限超過・HTML の入れ子上限超過で打ち切られた場合
+/// テキストが空、サイズ上限を超えている場合、または変更がなく正規表現のタイムアウト・パーサー入力上限超過・HTML の入れ子上限超過・JSON / YAML のパース失敗で打ち切られた場合
 pub fn apply_pipeline_to_text(
     text: &str,
     pipeline: &[RefineMode],
@@ -175,6 +181,9 @@ pub fn apply_pipeline_to_text(
             }
             Some(RefineSkipReason::HtmlNestingTooDeep) => {
                 Err(ClipboardProcessError::HtmlNestingTooDeep)
+            }
+            Some(RefineSkipReason::ParseFailed(failure)) => {
+                Err(ClipboardProcessError::ParseFailed(failure))
             }
             None => Ok(ClipboardProcessOutcome::Unchanged),
         },
@@ -524,6 +533,64 @@ mod tests {
         assert_eq!(
             apply_pipeline_to_text(&oversized, &[RefineMode::JsonFormat], &empty_ctx()),
             Err(ClipboardProcessError::ParserInputTooLarge)
+        );
+    }
+
+    /// 変更がなくパースに失敗した場合は、理由付きの `ParseFailed` になるようにすること
+    #[test]
+    fn apply_pipeline_to_text_reports_parse_failure() {
+        for (input, mode, failure) in [
+            ("{\"a\":", RefineMode::JsonFormat, ParseFailure::InvalidJson),
+            (
+                "{\"a\":1,\"a\":2}",
+                RefineMode::JsonToYaml,
+                ParseFailure::DuplicateKey,
+            ),
+            (
+                "a: .inf\n",
+                RefineMode::YamlToJson,
+                ParseFailure::NonFiniteNumber,
+            ),
+        ] {
+            assert_eq!(
+                apply_pipeline_to_text(input, &[mode], &empty_ctx()),
+                Err(ClipboardProcessError::ParseFailed(failure)),
+                "{input:?}"
+            );
+        }
+        // 整形済みの JSON は失敗ではなく変更なしとして扱う
+        assert_eq!(
+            apply_pipeline_to_text("{}", &[RefineMode::JsonFormat], &empty_ctx()),
+            Ok(ClipboardProcessOutcome::Unchanged)
+        );
+    }
+
+    /// 前段で変更があれば、後段のパース失敗は部分成功として扱うこと
+    #[test]
+    fn apply_pipeline_to_text_ignores_parse_failure_after_change() {
+        assert_eq!(
+            apply_pipeline_to_text(
+                "  {\"a\":  ",
+                &[RefineMode::Trim, RefineMode::JsonFormat],
+                &empty_ctx(),
+            ),
+            Ok(ClipboardProcessOutcome::Processed("{\"a\":".to_string()))
+        );
+    }
+
+    /// パース失敗はスキップとして通知し、メッセージに理由を含めること
+    #[test]
+    fn parse_failed_is_skip_with_reason_message() {
+        let err = ClipboardProcessError::ParseFailed(ParseFailure::DuplicateKey);
+        assert!(err.is_skip());
+        assert_eq!(
+            err.user_message(),
+            ParseFailure::DuplicateKey.user_message()
+        );
+        assert!(
+            ClipboardProcessError::ParseFailed(ParseFailure::NonFiniteNumber)
+                .user_message()
+                .contains(".inf")
         );
     }
 

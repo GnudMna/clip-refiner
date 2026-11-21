@@ -16,6 +16,20 @@ use crate::error::ConfigError;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 
+/// 保存時に除去する別名キー (camelCase と旧キー名。`notify_auto_refine` は v4 以前の `notify_pause` を引き継ぐ)
+const ALIAS_KEYS: &[&str] = &[
+    "notifyProcess",
+    "notifyAutoRefine",
+    "notify_pause",
+    "notifyPause",
+    "notifyHistoryRestore",
+    "notifyOcr",
+    "notifyRegisteredClip",
+    "notifyFavorites",
+    "notifyContinuousRecord",
+    "notifyResult",
+];
+
 // ======================================================================
 // ドキュメント更新
 // ======================================================================
@@ -50,8 +64,6 @@ fn write_notification_table(notification: &mut toml_edit::Table, config: &AppCon
         TABLE_INDENT,
         &config.notification_settings.notify_auto_refine,
     )?;
-    // 旧キー名を除去 (notify_auto_refine へ移行済み)
-    notification.remove("notify_pause");
     set_table_value(
         notification,
         "notify_history_restore",
@@ -94,6 +106,10 @@ fn write_notification_table(notification: &mut toml_edit::Table, config: &AppCon
         TABLE_INDENT,
         &config.notification_settings.notify_result,
     )?;
+    // 別名キーを残すと現行キーと重複し、次回の読み込みが duplicate field で失敗する
+    for key in ALIAS_KEYS {
+        notification.remove(key);
+    }
     Ok(())
 }
 

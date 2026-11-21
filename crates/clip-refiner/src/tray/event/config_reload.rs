@@ -7,8 +7,8 @@ use super::super::hotkey::{HotkeyHandler, format_registration_failures};
 use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 use crate::config::{
-    AppConfig, ConfigReloadError, format_unknown_config_keys_message,
-    format_unsupported_config_version_message,
+    AppConfig, ConfigReloadError, disk_config_content_fingerprint,
+    format_unknown_config_keys_message, format_unsupported_config_version_message,
 };
 use crate::platform;
 use crate::tray::selector::{ClipSelectorWindow, clip_selector_json};
@@ -64,7 +64,15 @@ pub fn apply_config_reload(
     hotkey_handler: &mut HotkeyHandler,
     clip_selector: &ClipSelectorWindow,
 ) -> Result<ConfigReloadOutcome, ApplyConfigReloadError> {
-    let loaded = AppConfig::reload_from_disk()?;
+    // 読み込み中に本文が変わっても新しい本文を取りこぼさないよう、指紋は読み込みより前に取る
+    let attempted = disk_config_content_fingerprint().ok().flatten();
+    let loaded = AppConfig::reload_from_disk().inspect_err(|err| {
+        // 構文エラーは本文を直すまで同じ結果になるため、同じ本文では再通知しない
+        // 読み取り失敗は一時的なロックの可能性があるため、記録せず再試行を許す
+        if matches!(err, ConfigReloadError::Parse(_)) {
+            state.config_sync().record_reload_failure(attempted);
+        }
+    })?;
     let unknown_keys = loaded.unknown_keys.clone();
     let migrated = loaded.migrated;
     let newer_version_clamped = loaded.newer_version_clamped;
@@ -88,8 +96,12 @@ pub fn apply_config_reload(
     state.with_config_mut(|config| *config = loaded);
     state.config_sync().record_disk_sync();
 
-    menu.sync_from_config(state)
-        .map_err(|e| ApplyConfigReloadError::MenuSync(e.to_string()))?;
+    // 状態へ反映済みのため、メニュー更新の失敗では中断せず、ホットキーと監視世代の更新まで進める
+    // 中断すると設定とホットキー・監視の実体がずれる。失敗は最後にまとめて返す
+    let mut menu_errors = Vec::new();
+    if let Err(e) = menu.sync_from_config(state) {
+        menu_errors.push(ApplyConfigReloadError::MenuSync(e.to_string()));
+    }
 
     let mut change_labels = Vec::new();
     let mut hotkey_registration_message = None;
@@ -109,14 +121,16 @@ pub fn apply_config_reload(
 
     if history_disabled {
         state.clipboard_session().clear_history();
-        menu.refresh_history(state)
-            .map_err(|e| ApplyConfigReloadError::HistoryMenu(e.to_string()))?;
+        if let Err(e) = menu.refresh_history(state) {
+            menu_errors.push(ApplyConfigReloadError::HistoryMenu(e.to_string()));
+        }
     }
 
     if continuous_record_disabled {
         state.clipboard_session().clear_continuous_record();
-        menu.refresh_continuous_record(state)
-            .map_err(|e| ApplyConfigReloadError::ContinuousRecordMenu(e.to_string()))?;
+        if let Err(e) = menu.refresh_continuous_record(state) {
+            menu_errors.push(ApplyConfigReloadError::ContinuousRecordMenu(e.to_string()));
+        }
     }
 
     if monitor_changed {
@@ -126,6 +140,15 @@ pub fn apply_config_reload(
     if clip_selector.is_visible() {
         let clips_json = state.with_config(clip_selector_json);
         clip_selector.refresh_items(&clips_json);
+    }
+
+    // 通知は 1 件に絞り、残りはログへ記録する
+    let mut menu_errors = menu_errors.into_iter();
+    if let Some(first) = menu_errors.next() {
+        for err in menu_errors {
+            crate::log_warn!("設定の再読み込み中に追加の失敗: {err}");
+        }
+        return Err(first);
     }
 
     if monitor_changed {

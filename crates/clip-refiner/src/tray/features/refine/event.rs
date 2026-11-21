@@ -35,6 +35,26 @@ pub fn update_refine(
     mode: RefineMode,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
+    set_refine_mode(state, menu, mode, quick_selector);
+    dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::ProcessMode(mode));
+}
+
+/// 自動変換の変換モードを更新し、メニューの状態や設定ファイルへ反映させる
+///
+/// パイプラインは解除し、複数段だった場合は通知で知らせる
+/// 現在のクリップボードは加工しない。設定の変更だけを反映したいときに使う
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `mode` - 設定する新しい変換モード
+/// * `quick_selector` - 一覧を再描画するクイックセレクター
+pub(crate) fn set_refine_mode(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    mode: RefineMode,
+    quick_selector: Option<&QuickSelectorWindow>,
+) {
     let cleared_pipeline = state.with_config_mut(|c| {
         c.mode = mode;
         std::mem::take(&mut c.pipeline)
@@ -68,7 +88,6 @@ pub fn update_refine(
             ),
         );
     }
-    dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::ProcessMode(mode));
     refresh_quick_selector_modes(state, quick_selector);
 }
 

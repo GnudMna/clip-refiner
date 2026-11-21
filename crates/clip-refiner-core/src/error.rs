@@ -70,9 +70,9 @@ pub enum ConfigError {
     /// TOML シリアライズに失敗
     #[error("設定のシリアライズに失敗しました: {0}")]
     Serialize(String),
-    /// 登録クリップファイルの保存に失敗
-    #[error("登録クリップの保存に失敗しました: {0}")]
-    RegisteredClipsSave(String),
+    /// 登録クリップ・登録画像の読み書きに失敗
+    #[error("登録クリップの処理に失敗しました: {0}")]
+    RegisteredClips(String),
     /// 設定ファイルのパスを文字列化できない
     #[error("設定ファイルのパスを文字列に変換できませんでした")]
     InvalidPath,

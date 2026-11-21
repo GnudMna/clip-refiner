@@ -103,14 +103,15 @@ enum OutputStyle {
 ///
 /// ミリ秒を持つ日時は `Local`・`Utc`・`Iso8601Local`・`Iso8601Utc` で小数点以下 3 桁として出力し、
 /// 小数点以下を表せない `Rfc2822`・`Japanese` では切り捨てる
+/// `Rfc2822` はローカルタイムゾーンの年が 0〜9999 の範囲外だと表せない
 ///
 /// # Arguments
 /// * `moment` - 変換する日時
 /// * `style` - 出力形式
 ///
 /// # Returns
-/// * `String` - フォーマット済み文字列
-fn format_moment(moment: Moment, style: OutputStyle) -> String {
+/// * `Option<String>` - フォーマット済み文字列。表せない日時の場合は `None`
+fn format_moment(moment: Moment, style: OutputStyle) -> Option<String> {
     let utc_dt = moment.utc;
     let plain_format = if moment.has_millis {
         DATETIME_MILLIS_FORMAT
@@ -123,14 +124,17 @@ fn format_moment(moment: Moment, style: OutputStyle) -> String {
         SecondsFormat::Secs
     };
     let local_dt = utc_dt.with_timezone(&Local);
-    match style {
+    Some(match style {
         OutputStyle::Local => local_dt.format(plain_format).to_string(),
         OutputStyle::Utc => utc_dt.format(plain_format).to_string(),
         OutputStyle::Iso8601Local => local_dt.to_rfc3339_opts(iso_precision, true),
         OutputStyle::Iso8601Utc => utc_dt.to_rfc3339_opts(iso_precision, true),
-        OutputStyle::Rfc2822 => local_dt.to_rfc2822(),
+        // `to_rfc2822` は年が範囲外だとパニックする
+        OutputStyle::Rfc2822 => (0..=9999)
+            .contains(&local_dt.year())
+            .then(|| local_dt.to_rfc2822())?,
         OutputStyle::Japanese => local_dt.format(JAPANESE_FORMAT).to_string(),
-    }
+    })
 }
 
 /// 複数行の日時を行ごとに指定の出力形式へ変換する
@@ -142,10 +146,10 @@ fn format_moment(moment: Moment, style: OutputStyle) -> String {
 /// * `style` - 出力形式
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後の文字列。変換できない行は元のまま残す
+/// * `Cow<'_, str>` - 変換後の文字列。変換できない行・出力形式で表せない日時の行は元のまま残す
 fn convert_timestamps(input: &str, style: OutputStyle) -> Cow<'_, str> {
     super::utils::process_lines(input, |line| {
-        parse_moment(line).map(|moment| Cow::Owned(format_moment(moment, style)))
+        parse_moment(line).and_then(|moment| format_moment(moment, style).map(Cow::Owned))
     })
 }
 
@@ -596,6 +600,7 @@ pub fn to_iso8601_utc(input: &str) -> Cow<'_, str> {
 /// 日時をローカルタイムゾーンの RFC 2822 形式に変換する
 ///
 /// RFC 2822 は小数点以下の秒を表せないため、ミリ秒は切り捨てる
+/// 年が 0〜9999 の範囲外になる日時も表せないため、その行は変換しない
 ///
 /// # Arguments
 /// * `input` - 日時を表す文字列 (形式は行ごとに自動で判定する)
@@ -654,7 +659,7 @@ mod tests {
 
     /// Unixタイムスタンプをローカル日時文字列へ変換する
     fn format_timestamp(timestamp: i64) -> Option<String> {
-        moment_from_unix(timestamp).map(|moment| format_moment(moment, OutputStyle::Local))
+        moment_from_unix(timestamp).and_then(|moment| format_moment(moment, OutputStyle::Local))
     }
 
     /// 日時文字列を Unixタイムスタンプ (秒またはミリ秒) へ変換する
@@ -879,6 +884,23 @@ mod tests {
         assert_eq!(
             to_unix_timestamp("Tue, 14 Nov 2023 22:13:20 GMT"),
             "1700000000"
+        );
+    }
+
+    /// 年が 0〜9999 の範囲外になる日時は RFC 2822 に変換せず、元の文字列を返すこと
+    ///
+    /// 実在するローカルタイムゾーン (UTC-11〜UTC+14) のどれでも範囲外になる入力だけを使う
+    #[test]
+    fn test_to_rfc2822_out_of_range_year() {
+        for input in ["-62167300000", "-99999999999", "9999-12-31 23:59:59-12:00"] {
+            let output = to_rfc2822(input);
+            assert_eq!(output, input);
+            assert!(matches!(output, Cow::Borrowed(_)), "input={input}");
+        }
+        // 範囲外の行だけを残し、他の行は変換する
+        assert_eq!(
+            to_rfc2822("-62167300000\n1700000000"),
+            format!("-62167300000\n{}", to_rfc2822("1700000000"))
         );
     }
 

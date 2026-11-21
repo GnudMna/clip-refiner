@@ -21,7 +21,7 @@ use crate::security::{
 type Result<T> = std::result::Result<T, ConfigError>;
 
 fn clips_err(msg: impl Into<String>) -> ConfigError {
-    ConfigError::RegisteredClipsSave(msg.into())
+    ConfigError::RegisteredClips(msg.into())
 }
 
 // ======================================================================
@@ -34,6 +34,18 @@ const REGISTERED_CLIPS_BACKUP_FILE: &str = "registered-clips.dat.bak";
 ///
 /// 該当パスへの保存は、退避コピーを作るまで削除・上書きしない
 static UNLOADED_CLIPS_FILES: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
+
+// ======================================================================
+// 保存結果
+// ======================================================================
+/// 登録クリップ保存の結果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisteredClipsSaveOutcome {
+    /// 保存または削除した (空の一覧で鍵が不要だった場合を含む)
+    Saved,
+    /// 鍵を取得できないため、登録クリップの保存を省略した
+    SkippedKeyUnavailable,
+}
 
 // ======================================================================
 // ファイルペイロード
@@ -151,18 +163,19 @@ fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool, bool)> {
 /// 平文本文はシリアライズしない (暗号文フィールドのみ)
 /// 直前の読み込みに失敗したファイルは、空の一覧では削除せず、
 /// 一覧がある場合も退避コピーを作ってから上書きする
+/// 空の一覧では鍵を使わない
+/// 鍵を取得できない場合 (別ユーザーや別 PC へ移した DPAPI 鍵など) は、
+/// 登録クリップの保存だけを警告付きで飛ばし、呼び出し元の設定保存を止めない
 ///
 /// # Arguments
 /// * `clips` - 保存する登録クリップ一覧
 ///
 /// # Returns
-/// * `Result<()>` - 保存または削除に成功した場合は `Ok(())`
+/// * `Result<RegisteredClipsSaveOutcome>` - 保存・削除した場合は `Saved`、鍵取得失敗で省略した場合は `SkippedKeyUnavailable`
 ///
 /// # Errors
-/// 鍵取得、シリアライズ、サイズ上限超過、暗号化、ディレクトリ作成、退避コピー、ファイル書き込みのいずれかに失敗した場合
-pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
-    ensure_clip_store_key()?;
-
+/// シリアライズ、サイズ上限超過、暗号化、ディレクトリ作成、退避コピー、ファイル書き込みのいずれかに失敗した場合
+pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<RegisteredClipsSaveOutcome> {
     let path = registered_clips_path()?;
     let unloaded = is_clips_file_unloaded(&path);
     if clips.is_empty() {
@@ -171,8 +184,18 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
         } else if path.is_file() {
             let _ = fs::remove_file(path);
         }
-        return Ok(());
+        return Ok(RegisteredClipsSaveOutcome::Saved);
     }
+
+    let key = match clip_store_key() {
+        Ok(key) => key,
+        Err(e) => {
+            tracing::warn!(
+                "登録クリップの鍵を取得できないため、登録クリップの保存を省略する: {e:?}"
+            );
+            return Ok(RegisteredClipsSaveOutcome::SkippedKeyUnavailable);
+        }
+    };
 
     let json = serde_json::to_vec(&RegisteredClipsPayload {
         clips: clips.to_vec(),
@@ -184,7 +207,6 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
         ));
     }
 
-    let key = clip_store_key()?;
     let encrypted = encrypt_bytes(&key, &json)?;
     if encrypted.len() > consts::MAX_REGISTERED_CLIPS_FILE_BYTES {
         return Err(clips_err(
@@ -208,7 +230,17 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     if let Err(e) = restrict_private_file_permissions(&path) {
         tracing::warn!("登録クリップファイルのパーミッション設定に失敗: {:?}", e);
     }
-    Ok(())
+    Ok(RegisteredClipsSaveOutcome::Saved)
+}
+
+/// 登録クリップの鍵を取得できるかどうかを返す
+///
+/// 鍵ファイルが無い場合は新規生成を試みる
+///
+/// # Returns
+/// * `bool` - 鍵を取得できた場合は `true`
+pub(crate) fn is_clip_store_key_available() -> bool {
+    ensure_clip_store_key().is_ok()
 }
 
 /// レガシー `.png` 登録画像を暗号化 `.enc` へ移行する
@@ -633,6 +665,23 @@ mod tests {
             let (reloaded, migrated) = load_registered_clips().expect("reload");
             assert!(!migrated);
             assert_eq!(reloaded.len(), 1);
+        });
+    }
+
+    /// 鍵を復号できない場合は、空でない一覧でもエラーにせず保存を省略すること
+    #[test]
+    fn save_skips_when_key_is_undecryptable() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let clip = registered_clip_from_plain_text("l".into(), "body").expect("enc");
+            let path = registered_clips_path().expect("path");
+            let key_path = path.with_file_name("registered-clips.key");
+            fs::write(&key_path, b"broken-key").expect("write");
+            crate::config::clip_store_key::clear_clip_store_key_cache();
+
+            let outcome =
+                save_registered_clips(&[clip]).expect("鍵を読めなくてもエラーにならないこと");
+            assert_eq!(outcome, RegisteredClipsSaveOutcome::SkippedKeyUnavailable);
+            assert!(!path.exists(), "登録クリップファイルが作られないこと");
         });
     }
 

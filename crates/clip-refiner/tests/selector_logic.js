@@ -105,6 +105,55 @@ function test_handle_arrow_keys() {
     );
 }
 
+/** Ctrl+Home / Ctrl+End だけが先頭・末尾移動になり、素の Home / End は検索欄に残ること */
+function test_handle_home_end_keys() {
+    const jumps = [];
+    const setSelectedIndex = (index) => jumps.push(index);
+    const keyEvent = (key, mods = {}) => ({
+        key,
+        ...mods,
+        preventDefault() {
+            this.prevented = true;
+        },
+    });
+
+    const plainHome = keyEvent('Home');
+    assert.equal(
+        SelectorCommon.handleHomeEndKeys(plainHome, () => 5, setSelectedIndex),
+        false
+    );
+    assert.equal(plainHome.prevented, undefined);
+    assert.equal(
+        SelectorCommon.handleHomeEndKeys(keyEvent('End'), () => 5, setSelectedIndex),
+        false
+    );
+    assert.equal(
+        SelectorCommon.handleHomeEndKeys(
+            keyEvent('Home', { ctrlKey: true, shiftKey: true }),
+            () => 5,
+            setSelectedIndex
+        ),
+        false
+    );
+    assert.deepEqual(jumps, []);
+
+    const ctrlHome = keyEvent('Home', { ctrlKey: true });
+    assert.equal(
+        SelectorCommon.handleHomeEndKeys(ctrlHome, () => 5, setSelectedIndex),
+        true
+    );
+    assert.equal(ctrlHome.prevented, true);
+    assert.equal(
+        SelectorCommon.handleHomeEndKeys(
+            keyEvent('End', { ctrlKey: true }),
+            () => 5,
+            setSelectedIndex
+        ),
+        true
+    );
+    assert.deepEqual(jumps, [0, 4]);
+}
+
 /** Escape でフィルタクリアまたは閉じるを処理できること */
 function test_handle_escape_key() {
     let cleared = false;
@@ -442,6 +491,23 @@ function test_clip_move_target_index() {
     assert.equal(ClipSelectorLogic.moveTargetIndex('a', 1, 3, 'up'), null);
 }
 
+/** 削除要求は確認待ちの行への 2 回目だけが削除になること */
+function test_clip_resolve_delete_request() {
+    assert.equal(ClipSelectorLogic.resolveDeleteRequest(null, '1'), 'confirm');
+    assert.equal(ClipSelectorLogic.resolveDeleteRequest('2', '1'), 'confirm');
+    assert.equal(ClipSelectorLogic.resolveDeleteRequest('1', '1'), 'delete');
+}
+
+/** Del キーは検索欄に文字があれば文字削除に回し、リピートは無視すること */
+function test_clip_resolve_delete_key() {
+    assert.equal(ClipSelectorLogic.resolveDeleteKey('', false), 'delete');
+    assert.equal(ClipSelectorLogic.resolveDeleteKey('', true), 'ignore');
+    assert.equal(ClipSelectorLogic.resolveDeleteKey('abc', false), 'text');
+    assert.equal(ClipSelectorLogic.resolveDeleteKey('abc', true), 'text');
+    // 空白だけでも検索欄の文字として扱う
+    assert.equal(ClipSelectorLogic.resolveDeleteKey(' ', false), 'text');
+}
+
 /** カテゴリ見出し HTML を組み立てられること */
 function test_build_category_header_inner_html() {
     assert.equal(
@@ -465,6 +531,7 @@ const tests = [
     test_highlight_text_length_changing_lowercase,
     test_clamp_index,
     test_handle_arrow_keys,
+    test_handle_home_end_keys,
     test_handle_escape_key,
     test_favorite_ids_sorted,
     test_build_display_list_without_query,
@@ -489,6 +556,8 @@ const tests = [
     test_clip_counter_reset_and_badge,
     test_clip_full_text_hover,
     test_clip_move_target_index,
+    test_clip_resolve_delete_request,
+    test_clip_resolve_delete_key,
     test_build_category_header_inner_html,
     test_build_register_row_inner_html,
 ];

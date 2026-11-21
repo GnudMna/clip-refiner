@@ -55,6 +55,8 @@ pub use persistence::{
     ConfigReloadError, disk_config_content_fingerprint, disk_config_modified_time,
 };
 #[cfg(feature = "config")]
+pub use registered_clips::RegisteredClipsSaveOutcome;
+#[cfg(feature = "config")]
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeyFix,
     HotkeyFixKind, HotkeySettings, MonitorMode, NotificationSettings, RegisteredClip, ResolvedClip,

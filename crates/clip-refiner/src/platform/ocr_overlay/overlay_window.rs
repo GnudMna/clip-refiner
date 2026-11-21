@@ -177,12 +177,13 @@ impl Drop for OverlayWindow {
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard};
 
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
     use windows::Win32::UI::WindowsAndMessaging::{
-        SendMessageW, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+        SendMessageW, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+        WM_RBUTTONUP,
     };
 
     use super::*;
@@ -218,9 +219,22 @@ mod tests {
         }
     }
 
+    /// 実ウィンドウを表示するテストを直列化するロック
+    ///
+    /// 別スレッドのオーバーレイが前面になると、フォーカス喪失でキャンセルされてしまうため
+    static OVERLAY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    /// 実ウィンドウを表示するテストの排他ロックを取得する
+    fn lock_overlay_test() -> MutexGuard<'static, ()> {
+        OVERLAY_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// オーバーレイを生成・表示・非表示・破棄できるようにすること
     #[test]
     fn overlay_lifecycle_create_show_hide() {
+        let _guard = lock_overlay_test();
         let mut overlay =
             OverlayWindow::create(Box::new(|_| {})).expect("オーバーレイを生成できる");
         overlay.show();
@@ -258,6 +272,7 @@ mod tests {
     /// マウスメッセージ注入で範囲選択が確定し枠色が描画されるようにすること
     #[test]
     fn overlay_drag_completes_with_screen_rect_and_border() {
+        let _guard = lock_overlay_test();
         let (mut overlay, completed) = create_recording_overlay();
 
         let hwnd = overlay.hwnd_for_test();
@@ -289,6 +304,7 @@ mod tests {
     /// Escape で選択をキャンセルできるようにすること
     #[test]
     fn overlay_escape_cancels_selection() {
+        let _guard = lock_overlay_test();
         let (overlay, completed) = create_recording_overlay();
 
         let hwnd = overlay.hwnd_for_test();
@@ -296,6 +312,57 @@ mod tests {
         send_message(hwnd, WM_KEYDOWN, usize::from(VK_ESCAPE.0), LPARAM(0));
 
         assert!(!overlay.is_visible(), "キャンセル後は非表示であること");
+        let result = *completed.lock().expect("lock");
+        assert!(
+            result.expect("on_complete が呼ばれる").is_none(),
+            "キャンセルは None"
+        );
+    }
+
+    /// フォーカスを失ったらドラッグ中でも選択をキャンセルして閉じること
+    #[test]
+    fn overlay_kill_focus_cancels_selection() {
+        let _guard = lock_overlay_test();
+        let (overlay, completed) = create_recording_overlay();
+
+        let hwnd = overlay.hwnd_for_test();
+        send_message(hwnd, WM_LBUTTONDOWN, 0, make_lparam(10, 10));
+        send_message(hwnd, WM_KILLFOCUS, 0, LPARAM(0));
+
+        assert!(!overlay.is_visible(), "フォーカス喪失後は非表示であること");
+        let result = *completed.lock().expect("lock");
+        assert!(
+            result.expect("on_complete が呼ばれる").is_none(),
+            "キャンセルは None"
+        );
+    }
+
+    /// 非表示後のフォーカス喪失では完了コールバックを呼ばないこと
+    #[test]
+    fn overlay_kill_focus_after_hide_is_ignored() {
+        let _guard = lock_overlay_test();
+        let (mut overlay, completed) = create_recording_overlay();
+
+        let hwnd = overlay.hwnd_for_test();
+        overlay.hide();
+        send_message(hwnd, WM_KILLFOCUS, 0, LPARAM(0));
+
+        assert!(
+            completed.lock().expect("lock").is_none(),
+            "非表示後は on_complete を呼ばない"
+        );
+    }
+
+    /// 右クリックの解放で選択をキャンセルして閉じること
+    #[test]
+    fn overlay_right_click_cancels_selection() {
+        let _guard = lock_overlay_test();
+        let (overlay, completed) = create_recording_overlay();
+
+        let hwnd = overlay.hwnd_for_test();
+        send_message(hwnd, WM_RBUTTONUP, 0, make_lparam(10, 10));
+
+        assert!(!overlay.is_visible(), "右クリック後は非表示であること");
         let result = *completed.lock().expect("lock");
         assert!(
             result.expect("on_complete が呼ばれる").is_none(),

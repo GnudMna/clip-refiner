@@ -10,6 +10,5 @@
 pub(super) struct PatchApplyOutcome {
     pub(super) monitor_mode_changed: bool,
     pub(super) bump_monitor: bool,
-    pub(super) mode_changed: bool,
     pub(super) pipeline_changed: bool,
 }

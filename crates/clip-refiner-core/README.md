@@ -31,6 +31,8 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | :--- | :--- | :--- |
 | モジュール | `refiner` | 変換モードとテキスト / クリップボード加工 |
 | モジュール | `config` | 正規表現型。`config.toml` 永続化は feature `config` |
+| モジュール | `consts` | 設定スキーマ番号・処理上限・既定ホットキーなどの定数 |
+| モジュール | `security` | 入力サイズ上限・表示マスキング (`looks_sensitive` / `format_public_snippet`)。AEAD 暗号・鍵付き指紋・ゼロ化する文字列は feature `config` |
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
@@ -39,16 +41,18 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | クリップボード | `OwnedClipboard` (feature `clipboard`), `process_clipboard`, `process_clipboard_pipeline` | OS クリップボード本文 I/O の所有者と、トレイト経由の加工 API |
 | クリップボード | `refiner::{TextClipboard, ImageClipboard, HtmlClipboard}` | 加工 API が使うクリップボード I/O のトレイト (テキスト / 画像 / HTML 形式)。テスト用の差し替えにも使う |
 | クリップボード | `refiner::remove_stale_image_files` (feature `clipboard`) | 画像のファイル貼り付け用に書き出した PNG のうち、保持時間 (1 時間) を過ぎたものを削除する。常駐の起動時に呼ぶ |
-| 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
+| 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError`, `ParseFailure` | 加工結果と失敗理由。JSON / YAML のパース失敗は `ClipboardProcessError::ParseFailed(ParseFailure)` で変更なしと区別する |
 | 設定 | `RegexSettings`, `RegexPreset`, `RegexStep` | 正規表現加工用 (feature 不要) |
 | 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `MonitorMode`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |
 | 設定 | `AppConfig::load` (`ConfigLoadOutcome` / `ConfigLoadFallback`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告。移行手順が無い `version` は `unsupported_version_kept` / `format_unsupported_config_version_message` で既存項目を維持して警告する。feature `config` |
 | 設定 | `get_config_dir`, `is_portable_mode`, `open_config_file`, `disk_config_modified_time`, `disk_config_content_fingerprint` (`ConfigFileFingerprint`) | 設定ディレクトリ・ファイル操作。内容指紋は外部編集検知用。feature `config` |
-| 設定 | `format_hotkey_fixes_message` | ホットキーの不正・重複補正を UI 向け文言にする。feature `config` |
+| 設定 | `format_hotkey_fixes_message`, `HotkeyFix`, `HotkeyFixKind` | ホットキーの不正・重複補正の内容と、それを UI 向け文言にする関数。feature `config` |
+| 設定 | `FavoriteToggleResult`, `FavoriteMoveDirection` | お気に入り変換モードの切り替え結果 (追加・削除・上限) と、お気に入り・登録クリップの並べ替えの方向。feature `config` |
+| 設定 | `ResolvedClip` | コピー用に復号した登録クリップ (テキストまたは RGBA 画像。`AppConfig::resolve_registered_clip`)。feature `config` |
 | 設定 | `RefineContext::from_config` (feature `config`), `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | テンプレート | `expand_clip_template`, `ClipTemplateContext`, `ClipTemplateError`, `clip_template_uses_clipboard`, `clip_template_uses_counter` | 登録クリップのテンプレート展開 (`{date}` / `{clipboard}` / `{counter}` など) と、使うプレースホルダの判定。feature 不要 |
 | ホットキー | `parse_hotkey_binding`, `parse_hotkey_or_default`, `parse_hotkey_or_default_labeled`, `ParsedHotkey`, `HotkeyModifiers`, `HotkeyKey` | `Alt+Shift+S` 形式の文字列の解釈。feature 不要 |
-| エラー | `Error`, `ClipboardProcessError`, `ClipboardIoError`, `HotkeyParseError` | 加工・ホットキーの失敗理由 |
+| エラー | `Error`, `ClipboardProcessError`, `ParseFailure`, `ClipboardIoError`, `HotkeyParseError` | 加工・ホットキーの失敗理由 |
 | エラー | `ConfigError`, `CipherError`, `ConfigReloadError`, `AddRegisteredClipError`, `UpdateRegisteredClipError` | 設定 I/O・AEAD の失敗理由。feature `config` |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン。feature `config` |
 | 上限 | `is_within_clipboard_limit`, `is_within_parser_limit` | 入力サイズ検証 |

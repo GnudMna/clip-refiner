@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 
+use super::parse_failure::ParseFailure;
 use super::transform::regex::RegexPatternCache;
 #[cfg(feature = "config")]
 use crate::config::AppConfig;
@@ -19,6 +20,8 @@ pub enum RefineSkipReason {
     ParserInputTooLarge,
     /// HTML の要素の入れ子が上限を超えた
     HtmlNestingTooDeep,
+    /// JSON / YAML を読み取れない、または変換できなかった
+    ParseFailed(ParseFailure),
 }
 
 // ======================================================================

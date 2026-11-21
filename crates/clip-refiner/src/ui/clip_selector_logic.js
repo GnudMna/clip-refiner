@@ -300,6 +300,36 @@ const ClipSelectorLogic = (function () {
     }
 
     /**
+     * 削除要求を確認待ちにするか、実際に削除するかを決める
+     *
+     * 確認待ちの行に対する 2 回目の要求だけを削除として扱う
+     *
+     * @param {string|null} pendingId - 確認待ちのクリップ ID
+     * @param {string} id - 削除を要求されたクリップ ID
+     * @returns {'confirm'|'delete'}
+     */
+    function resolveDeleteRequest(pendingId, id) {
+        return pendingId === id ? 'delete' : 'confirm';
+    }
+
+    /**
+     * Del キーの扱いを決める
+     *
+     * 検索欄に文字があるときは検索欄の文字削除に任せる。
+     * キーリピートは、確認待ちの行をそのまま削除してしまうため無視する
+     *
+     * @param {string} inputValue - 検索欄の現在値 (正規化前)
+     * @param {boolean} repeat - キーリピートによるイベントか
+     * @returns {'text'|'ignore'|'delete'}
+     */
+    function resolveDeleteKey(inputValue, repeat) {
+        if (inputValue !== '') {
+            return 'text';
+        }
+        return repeat ? 'ignore' : 'delete';
+    }
+
+    /**
      * 「クリップボードを登録」行の内部 HTML を組み立てる
      *
      * @param {string} query
@@ -344,6 +374,8 @@ const ClipSelectorLogic = (function () {
         counterBadgeText,
         canReorder,
         moveTargetIndex,
+        resolveDeleteRequest,
+        resolveDeleteKey,
         buildRegisterRowInnerHtml,
     };
 })();

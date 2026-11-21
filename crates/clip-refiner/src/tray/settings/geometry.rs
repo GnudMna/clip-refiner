@@ -19,6 +19,11 @@ const MIN_HEIGHT: f64 = 480.0;
 const MAX_WIDTH: f64 = 3840.0;
 const MAX_HEIGHT: f64 = 2160.0;
 
+/// 復元時にモニターと重なっているべき最小の幅 (物理ピクセル)
+const MIN_VISIBLE_WIDTH: i64 = 100;
+/// 復元時にモニターと重なっているべき最小の高さ (物理ピクセル、タイトルバーを掴める高さ)
+const MIN_VISIBLE_HEIGHT: i64 = 40;
+
 // ======================================================================
 // ウィンドウ幾何
 // ======================================================================
@@ -74,7 +79,12 @@ pub(crate) fn load_settings_window_geometry() -> SettingsWindowGeometry {
 }
 
 /// 現在の設定ウィンドウ幾何を保存する
+///
+/// 最小化中は位置が (-32000, -32000)、サイズが 0 になるため、保存済みの幾何を維持する
 pub(crate) fn save_settings_window_geometry(window: &Window) {
+    if window.is_minimized() {
+        return;
+    }
     let Ok(path) = geometry_file_path() else {
         return;
     };
@@ -117,23 +127,61 @@ pub(crate) fn apply_geometry_to_builder(
 
 /// 生成済みウィンドウへ保存済み位置を適用する
 ///
-/// 位置が未保存の場合はモニター中央へ配置する
+/// 位置が未保存の場合や、保存位置がどのモニターにも十分に重ならない場合
+/// (モニター構成の変更など) はモニター中央へ配置する
 pub(crate) fn apply_saved_position(window: &Window, geometry: SettingsWindowGeometry) {
-    let Some(x) = geometry.x else {
-        crate::tray::selector::position_window_on_monitor(
-            window,
-            crate::tray::selector::WindowVerticalAlign::Center,
-        );
-        return;
-    };
-    let Some(y) = geometry.y else {
-        crate::tray::selector::position_window_on_monitor(
-            window,
-            crate::tray::selector::WindowVerticalAlign::Center,
-        );
-        return;
-    };
-    window.set_outer_position(LogicalPosition::new(x, y));
+    if let (Some(x), Some(y)) = (geometry.x, geometry.y) {
+        let scale_factor = window.scale_factor();
+        let position = LogicalPosition::new(x, y).to_physical::<i32>(scale_factor);
+        let size = window.outer_size();
+        let window_rect = Rect {
+            x: i64::from(position.x),
+            y: i64::from(position.y),
+            width: i64::from(size.width),
+            height: i64::from(size.height),
+        };
+        let monitor_rects: Vec<Rect> = window
+            .available_monitors()
+            .map(|monitor| {
+                let origin = monitor.position();
+                let extent = monitor.size();
+                Rect {
+                    x: i64::from(origin.x),
+                    y: i64::from(origin.y),
+                    width: i64::from(extent.width),
+                    height: i64::from(extent.height),
+                }
+            })
+            .collect();
+        if is_visible_on_any_monitor(window_rect, &monitor_rects) {
+            window.set_outer_position(position);
+            return;
+        }
+    }
+    crate::tray::selector::position_window_on_monitor(
+        window,
+        crate::tray::selector::WindowVerticalAlign::Center,
+    );
+}
+
+/// 物理ピクセル単位の矩形
+#[derive(Debug, Clone, Copy)]
+struct Rect {
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+}
+
+/// ウィンドウがいずれかのモニターと操作可能な広さで重なっているかを返す
+fn is_visible_on_any_monitor(window: Rect, monitors: &[Rect]) -> bool {
+    monitors.iter().any(|monitor| {
+        let overlap_width =
+            (window.x + window.width).min(monitor.x + monitor.width) - window.x.max(monitor.x);
+        let overlap_height =
+            (window.y + window.height).min(monitor.y + monitor.height) - window.y.max(monitor.y);
+        overlap_width >= MIN_VISIBLE_WIDTH && overlap_height >= MIN_VISIBLE_HEIGHT
+    })
 }
 
 /// 設定ウィンドウ幾何ファイルのパスを返す
@@ -263,5 +311,90 @@ mod tests {
             assert_eq!(loaded.x, Some(1.0));
             assert_eq!(loaded.y, Some(2.0));
         });
+    }
+
+    const MONITOR: Rect = Rect {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+
+    /// モニター内に収まる位置は表示可能と判定すること
+    #[test]
+    fn window_inside_monitor_is_visible() {
+        let window = Rect {
+            x: 100,
+            y: 100,
+            width: 960,
+            height: 600,
+        };
+        assert!(is_visible_on_any_monitor(window, &[MONITOR]));
+    }
+
+    /// 最小化中の座標 (-32000, -32000) は表示不可と判定すること
+    #[test]
+    fn minimized_position_is_not_visible() {
+        let window = Rect {
+            x: -32000,
+            y: -32000,
+            width: 960,
+            height: 600,
+        };
+        assert!(!is_visible_on_any_monitor(window, &[MONITOR]));
+    }
+
+    /// 外したモニター上の位置は残りのモニターと重ならなければ表示不可と判定すること
+    #[test]
+    fn window_on_removed_monitor_is_not_visible() {
+        let window = Rect {
+            x: 2000,
+            y: 100,
+            width: 960,
+            height: 600,
+        };
+        assert!(!is_visible_on_any_monitor(window, &[MONITOR]));
+    }
+
+    /// 一部がはみ出していても十分に重なっていれば表示可能と判定すること
+    #[test]
+    fn partially_offscreen_window_is_visible_when_overlap_is_large() {
+        let window = Rect {
+            x: 1500,
+            y: -50,
+            width: 960,
+            height: 600,
+        };
+        assert!(is_visible_on_any_monitor(window, &[MONITOR]));
+    }
+
+    /// 重なりが掴めない程度に小さい場合は表示不可と判定すること
+    #[test]
+    fn tiny_overlap_is_not_visible() {
+        let window = Rect {
+            x: 1900,
+            y: 100,
+            width: 960,
+            height: 600,
+        };
+        assert!(!is_visible_on_any_monitor(window, &[MONITOR]));
+    }
+
+    /// 複数モニターのいずれかに収まっていれば表示可能と判定すること
+    #[test]
+    fn window_on_secondary_monitor_is_visible() {
+        let secondary = Rect {
+            x: 1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let window = Rect {
+            x: 2100,
+            y: 100,
+            width: 960,
+            height: 600,
+        };
+        assert!(is_visible_on_any_monitor(window, &[MONITOR, secondary]));
     }
 }

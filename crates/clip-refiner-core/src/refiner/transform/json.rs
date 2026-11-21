@@ -5,11 +5,12 @@ use std::fmt;
 
 use serde::de::{DeserializeOwned, Deserializer, Error as _, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Error as _, Serialize, Serializer};
+use serde_json::error::Category;
 use serde_json::{Number, Value};
 
 use super::exact_number::loses_digits_as_f64;
 use super::utils::strip_bom;
-use crate::refiner::OrderedValue;
+use crate::refiner::{OrderedValue, ParseFailure};
 use crate::security::is_within_parser_limit;
 
 // ======================================================================
@@ -24,32 +25,29 @@ use crate::security::is_within_parser_limit;
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合 (キーが重複している場合を含む) や入力がパーサの上限を超える場合は元の文字列を返す
-pub fn format_json(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
+pub fn format_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json)");
-        return Cow::Borrowed(text);
+        return Ok(Cow::Borrowed(text));
     }
 
-    let v: Value = match parse_json(text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!("JSON パースに失敗 (format_json): {}", e);
-            return Cow::Borrowed(text);
-        }
-    };
+    let v: Value = parse_json(text).inspect_err(|f| {
+        tracing::debug!("JSON パースに失敗 (format_json): {f:?}");
+    })?;
 
     match serde_json::to_string_pretty(&v) {
         Ok(pretty) => {
             if pretty == text {
-                Cow::Borrowed(text)
+                Ok(Cow::Borrowed(text))
             } else {
-                Cow::Owned(pretty)
+                Ok(Cow::Owned(pretty))
             }
         }
         Err(e) => {
             tracing::debug!("JSON シリアライズに失敗 (format_json): {}", e);
-            Cow::Borrowed(text)
+            Err(ParseFailure::UnrepresentableValue)
         }
     }
 }
@@ -63,27 +61,24 @@ pub fn format_json(text: &str) -> Cow<'_, str> {
 /// * `text` - 整形対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 整形済みのJSON文字列。パースに失敗した場合 (キーが重複している場合を含む) や入力がパーサの上限を超える場合は元の文字列を返す
-pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
+pub fn format_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json_preserve_order)");
-        return Cow::Borrowed(text);
+        return Ok(Cow::Borrowed(text));
     }
 
-    let v: OrderedValue = match parse_json(text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!("JSON パースに失敗 (format_json_preserve_order): {}", e);
-            return Cow::Borrowed(text);
-        }
-    };
+    let v: OrderedValue = parse_json(text).inspect_err(|f| {
+        tracing::debug!("JSON パースに失敗 (format_json_preserve_order): {f:?}");
+    })?;
 
     match serde_json::to_string_pretty(&v) {
         Ok(pretty) => {
             if pretty == text {
-                Cow::Borrowed(text)
+                Ok(Cow::Borrowed(text))
             } else {
-                Cow::Owned(pretty)
+                Ok(Cow::Owned(pretty))
             }
         }
         Err(e) => {
@@ -91,7 +86,7 @@ pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
                 "JSON シリアライズに失敗 (format_json_preserve_order): {}",
                 e
             );
-            Cow::Borrowed(text)
+            Err(ParseFailure::UnrepresentableValue)
         }
     }
 }
@@ -103,32 +98,33 @@ pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
 ///
 /// 入力されたJSONを解析し、対応するYAML形式の文字列に変換する
 /// オブジェクトのキーは辞書順に並べ替える
+/// オブジェクトでも配列でもない入力 (文字列や数値だけの JSON) は、引用符を外したり改行を足したりするだけになるため変換しない
 ///
 /// # Arguments
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のYAML文字列。パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) や
-///   入力がパーサの上限を超える場合は元の文字列を返す
-pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) はその理由を返す
+pub fn json_to_yaml(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml)");
-        return Cow::Borrowed(text);
+        return Ok(Cow::Borrowed(text));
     }
 
-    let v: Value = match parse_json(text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!("JSON パースに失敗 (json_to_yaml): {}", e);
-            return Cow::Borrowed(text);
-        }
-    };
+    let v: Value = parse_json(text).inspect_err(|f| {
+        tracing::debug!("JSON パースに失敗 (json_to_yaml): {f:?}");
+    })?;
+    if !(v.is_object() || v.is_array()) {
+        tracing::debug!("JSON がオブジェクトでも配列でもないためスキップ (json_to_yaml)");
+        return Ok(Cow::Borrowed(text));
+    }
 
     match to_yaml_string(|guard| serde_norway::to_string(&YamlValue { value: &v, guard })) {
-        Ok(yaml_text) => Cow::Owned(yaml_text),
+        Ok(yaml_text) => Ok(Cow::Owned(yaml_text)),
         Err(e) => {
             tracing::debug!("YAML 変換に失敗 (json_to_yaml): {}", e);
-            Cow::Borrowed(text)
+            Err(ParseFailure::UnrepresentableValue)
         }
     }
 }
@@ -137,32 +133,35 @@ pub fn json_to_yaml(text: &str) -> Cow<'_, str> {
 ///
 /// 入力されたJSONを解析し、対応するYAML形式の文字列に変換する
 /// 元のJSONに含まれるオブジェクトのキーの順序を可能な限り維持する
+/// オブジェクトでも配列でもない入力 (文字列や数値だけの JSON) は、引用符を外したり改行を足したりするだけになるため変換しない
 ///
 /// # Arguments
 /// * `text` - 変換対象のJSON文字列
 ///
 /// # Returns
-/// * `Cow<'_, str>` - 変換後のYAML文字列。パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) や
-///   入力がパーサの上限を超える場合は元の文字列を返す
-pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
+/// * `Result<Cow<'_, str>, ParseFailure>` - 変換後のYAML文字列。オブジェクトでも配列でもない場合や入力がパーサの上限を超える場合は元の文字列を返す。
+///   パース・変換に失敗した場合 (キーが重複している場合や YAML で表現できない数値を含む場合など) はその理由を返す
+pub fn json_to_yaml_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
         tracing::debug!("JSON 入力が上限を超えているためスキップ (json_to_yaml_preserve_order)");
-        return Cow::Borrowed(text);
+        return Ok(Cow::Borrowed(text));
     }
 
-    let v: OrderedValue = match parse_json(text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!("JSON パースに失敗 (json_to_yaml_preserve_order): {}", e);
-            return Cow::Borrowed(text);
-        }
-    };
+    let v: OrderedValue = parse_json(text).inspect_err(|f| {
+        tracing::debug!("JSON パースに失敗 (json_to_yaml_preserve_order): {f:?}");
+    })?;
+    if !matches!(v, OrderedValue::Object(_) | OrderedValue::Array(_)) {
+        tracing::debug!(
+            "JSON がオブジェクトでも配列でもないためスキップ (json_to_yaml_preserve_order)"
+        );
+        return Ok(Cow::Borrowed(text));
+    }
 
     match to_yaml_string(|guard| serde_norway::to_string(&YamlOrderedValue { value: &v, guard })) {
-        Ok(yaml_text) => Cow::Owned(yaml_text),
+        Ok(yaml_text) => Ok(Cow::Owned(yaml_text)),
         Err(e) => {
             tracing::debug!("YAML 変換に失敗 (json_to_yaml_preserve_order): {}", e);
-            Cow::Borrowed(text)
+            Err(ParseFailure::UnrepresentableValue)
         }
     }
 }
@@ -178,11 +177,15 @@ pub fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
 /// * `text` - 読み取る JSON 文字列
 ///
 /// # Returns
-/// * `Result<T, serde_json::Error>` - 読み取った値。不正な JSON・重複キーを含む場合はエラー
-fn parse_json<T: DeserializeOwned>(text: &str) -> Result<T, serde_json::Error> {
+/// * `Result<T, ParseFailure>` - 読み取った値。不正な JSON なら `InvalidJson`、重複キーを含むなら `DuplicateKey`
+fn parse_json<T: DeserializeOwned>(text: &str) -> Result<T, ParseFailure> {
     let text = strip_bom(text);
-    serde_json::from_str::<NoDuplicateKeys>(text)?;
-    serde_json::from_str(text)
+    // 検査用の読み取りで構文以外のエラーになるのは、重複キーを検出した場合だけ
+    serde_json::from_str::<NoDuplicateKeys>(text).map_err(|e| match e.classify() {
+        Category::Data => ParseFailure::DuplicateKey,
+        _ => ParseFailure::InvalidJson,
+    })?;
+    serde_json::from_str(text).map_err(|_| ParseFailure::InvalidJson)
 }
 
 /// 値を読み捨てながら、同じオブジェクト内の重複キーを検出する検査用の型
@@ -622,6 +625,24 @@ fn yaml_number_text(text: &str) -> String {
 mod tests {
     use super::*;
 
+    // 失敗時は元の文字列を返す形で検証できるよう、変換関数を包む
+    // 失敗の理由は `rejects_with_failure_reason` で検証する
+    fn format_json(text: &str) -> Cow<'_, str> {
+        super::format_json(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
+        super::format_json_preserve_order(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    fn json_to_yaml(text: &str) -> Cow<'_, str> {
+        super::json_to_yaml(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
+        super::json_to_yaml_preserve_order(text).unwrap_or(Cow::Borrowed(text))
+    }
+
     /// 有効な JSON を整形できるようにすること
     #[test]
     fn test_format_json_valid() {
@@ -697,6 +718,44 @@ mod tests {
             assert_eq!(json_to_yaml(input), input);
             assert_eq!(json_to_yaml_preserve_order(input), input);
         }
+    }
+
+    /// パースに失敗した入力は、失敗の理由を返すこと
+    #[test]
+    fn rejects_with_failure_reason() {
+        for (input, expected) in [
+            (r#"{"a":1,"b":}"#, ParseFailure::InvalidJson),
+            (r#"{"a":1,}"#, ParseFailure::InvalidJson),
+            ("", ParseFailure::InvalidJson),
+            (r#"{"a":1,"a":2}"#, ParseFailure::DuplicateKey),
+            (r#"[{"x":{"b":1,"b":2}}]"#, ParseFailure::DuplicateKey),
+        ] {
+            assert_eq!(super::format_json(input), Err(expected), "{input:?}");
+            assert_eq!(
+                super::format_json_preserve_order(input),
+                Err(expected),
+                "{input:?}"
+            );
+            assert_eq!(super::json_to_yaml(input), Err(expected), "{input:?}");
+            assert_eq!(
+                super::json_to_yaml_preserve_order(input),
+                Err(expected),
+                "{input:?}"
+            );
+        }
+        // YAML で表現できない数値は、パースではなく変換の失敗として扱う
+        let out_of_range = r#"{"a":1e400}"#;
+        assert_eq!(
+            super::json_to_yaml(out_of_range),
+            Err(ParseFailure::UnrepresentableValue)
+        );
+        assert_eq!(
+            super::json_to_yaml_preserve_order(out_of_range),
+            Err(ParseFailure::UnrepresentableValue)
+        );
+        // 整形済み・対象外の入力は失敗ではない
+        assert!(super::format_json("{}").is_ok());
+        assert!(super::json_to_yaml("123").is_ok());
     }
 
     /// 別々のオブジェクトに同じキーがあっても重複として扱わないこと
@@ -867,6 +926,29 @@ f:
         assert_eq!(json_to_yaml_preserve_order(input), expected);
     }
 
+    /// オブジェクトでも配列でもない JSON は YAML へ変換せず元の文字列を返すこと
+    #[test]
+    fn test_json_to_yaml_keeps_scalar_only_input() {
+        for input in [
+            "\"plain text\"",
+            "123",
+            "1.5",
+            "true",
+            "null",
+            " 123 ",
+            "\u{FEFF}\"text\"",
+        ] {
+            assert!(matches!(json_to_yaml(input), Cow::Borrowed(_)), "{input:?}");
+            assert!(
+                matches!(json_to_yaml_preserve_order(input), Cow::Borrowed(_)),
+                "{input:?}"
+            );
+        }
+        // 空のオブジェクト・配列は変換する
+        assert_eq!(json_to_yaml("{}"), "{}\n");
+        assert_eq!(json_to_yaml_preserve_order("[]"), "[]\n");
+    }
+
     /// 桁を保った数値を YAML から JSON へ戻すと元の JSON と同じ数値になること
     #[test]
     fn test_json_yaml_round_trip_keeps_digits_beyond_f64() {
@@ -875,7 +957,7 @@ f:
         let input =
             r#"{"a":123456789012345678901234567890123456789012,"b":3.141592653589793238462643}"#;
         let yaml = json_to_yaml(input);
-        let json = yaml_to_json(&yaml);
+        let json = yaml_to_json(&yaml).expect("YAML として読める");
         assert!(
             json.contains("\"a\": 123456789012345678901234567890123456789012"),
             "{json}"

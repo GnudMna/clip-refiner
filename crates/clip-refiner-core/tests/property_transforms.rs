@@ -365,6 +365,12 @@ proptest! {
     /// 大きな整数・浮動小数点・任意のキーを含む JSON で、JSON→YAML→JSON の往復後も値が一致すること
     #[test]
     fn json_yaml_json_roundtrip(value in json_value()) {
+        // JSON→YAML・YAML→JSON は最上位がオブジェクト・配列でない入力を変換しないため、配列で包む
+        let value = if value.is_array() || value.is_object() {
+            value
+        } else {
+            Value::Array(vec![value])
+        };
         let json = serde_json::to_string(&value).expect("JSON 値は直列化できる");
         for (to_yaml, to_json) in [
             (RefineMode::JsonToYaml, RefineMode::YamlToJson),

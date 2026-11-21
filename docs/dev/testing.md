@@ -180,9 +180,9 @@ npm run test:e2e
 
 | ファイル | カバー範囲 |
 | :--- | :--- |
-| `settings.spec.ts` | タブの表示と矢印キー移動、監視周期の debounce 保存と外部変更の `config.toml` バナー、自動変換と連続記録の排他、お気に入り並べ替えの保存、登録クリップ編集ダイアログ (検証・保存失敗の表示・Esc・一覧変更で閉じる)、情報タブのボタンとライセンス表示 |
+| `settings.spec.ts` | タブの表示と矢印キー移動、監視周期の debounce 保存と外部変更の `config.toml` バナー、履歴クリアの確認ダイアログ、自動変換と連続記録の排他、お気に入り並べ替えの保存、登録クリップ編集ダイアログ (検証・保存失敗の表示・Esc・一覧変更で閉じる) と最小幅での操作ボタンの表示、情報タブのボタンとライセンス表示、閉じるボタン |
 | `quick_selector.spec.ts` | 検索・矢印 / Enter・Escape、カテゴリ見出しの開閉と再表示時の復元、`Ctrl+Enter` による自動変換への切替 (連続記録中を含む)、お気に入り順と `Ctrl+Shift+↑/↓` 並べ替えの保存 |
-| `clip_selector.spec.ts` | 空表示・検索・矢印 / Enter・Escape、並べ替えボタン、テンプレートバッジ、画像のサムネイルとホバープレビュー |
+| `clip_selector.spec.ts` | 空表示・検索・矢印 / Enter・Escape、`×` による行内の削除確認と Esc での取り消し、並べ替えボタン、テンプレートバッジ、画像のサムネイルとホバープレビュー |
 
 ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。
 

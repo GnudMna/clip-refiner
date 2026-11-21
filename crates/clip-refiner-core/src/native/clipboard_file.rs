@@ -18,9 +18,12 @@ use crate::consts;
 /// 一時フォルダ直下に作る、書き出し先フォルダ名の階層
 const IMAGE_DIR: [&str; 2] = ["ClipRefiner", "clipboard-images"];
 
-/// 書き出すファイル名の接頭辞と拡張子 (削除対象の判定にも使う)
-const FILE_PREFIX: &str = "ClipRefiner-";
+/// 書き出すファイル名の日時の書式と拡張子 (削除対象の判定にも使う)
+const FILE_STAMP_FORMAT: &str = "%Y%m%d-%H%M%S";
 const FILE_EXTENSION: &str = "png";
+
+/// 以前の版が付けていたファイル名の接頭辞 (残ったファイルを削除対象に含めるために使う)
+const LEGACY_FILE_PREFIX: &str = "ClipRefiner-";
 
 /// クリップボードを開く最大試行回数
 const OPEN_CLIPBOARD_ATTEMPTS: usize = 10;
@@ -95,18 +98,18 @@ fn image_dir() -> PathBuf {
         .fold(std::env::temp_dir(), |dir, name| dir.join(name))
 }
 
-/// フォルダを作り、時刻入りの名前で PNG を書き出す
+/// フォルダを作り、日時の名前で PNG を書き出す
 ///
 /// 同名のファイルがある場合は上書きせず、連番を付けた名前にする
 fn write_png_file(dir: &Path, png: &[u8]) -> io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
 
-    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let stamp = chrono::Local::now().format(FILE_STAMP_FORMAT);
     for serial in 0..100 {
         let name = if serial == 0 {
-            format!("{FILE_PREFIX}{stamp}.{FILE_EXTENSION}")
+            format!("{stamp}.{FILE_EXTENSION}")
         } else {
-            format!("{FILE_PREFIX}{stamp}-{serial}.{FILE_EXTENSION}")
+            format!("{stamp}-{serial}.{FILE_EXTENSION}")
         };
         let path = dir.join(name);
 
@@ -136,9 +139,9 @@ fn remove_stale_files(dir: &Path, retention: Duration, now: SystemTime) {
         let path = entry.path();
         let is_ours = path.extension().is_some_and(|ext| ext == FILE_EXTENSION)
             && path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with(FILE_PREFIX));
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .is_some_and(is_own_file_stem);
         if !is_ours {
             continue;
         }
@@ -152,6 +155,22 @@ fn remove_stale_files(dir: &Path, retention: Duration, now: SystemTime) {
             let _ = fs::remove_file(&path);
         }
     }
+}
+
+/// このアプリが書き出した画像ファイルの名前 (拡張子を除く) か
+///
+/// `<日時>` または `<日時>-<連番>` の形を対象とし、以前の版の接頭辞付きの名前も含める
+fn is_own_file_stem(stem: &str) -> bool {
+    let stem = stem.strip_prefix(LEGACY_FILE_PREFIX).unwrap_or(stem);
+    // 日時部分は `YYYYMMDD-HHMMSS` の 15 文字
+    let Some((stamp, serial)) = stem.split_at_checked(15) else {
+        return false;
+    };
+    let serial_ok = serial.is_empty()
+        || serial
+            .strip_prefix('-')
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+    serial_ok && chrono::NaiveDateTime::parse_from_str(stamp, FILE_STAMP_FORMAT).is_ok()
 }
 
 // ======================================================================
@@ -181,7 +200,7 @@ mod tests {
         assert!(encode_png(2, 2, &[0; 4]).is_err());
     }
 
-    /// PNG を接頭辞付きの名前で書き出し、同名があれば連番にして上書きしないこと
+    /// PNG をアプリ名を含まない日時の名前で書き出し、同名があれば連番にして上書きしないこと
     #[test]
     fn write_png_file_never_overwrites() {
         let dir = unique_dir("clipboard-file-write");
@@ -192,7 +211,10 @@ mod tests {
         assert_eq!(fs::read(&first).expect("read"), b"first");
         assert_eq!(fs::read(&second).expect("read"), b"second");
         let name = first.file_name().and_then(|n| n.to_str()).expect("name");
-        assert!(name.starts_with(FILE_PREFIX));
+        assert!(!name.contains("ClipRefiner"));
+        assert!(is_own_file_stem(
+            first.file_stem().and_then(|n| n.to_str()).expect("stem")
+        ));
         assert_eq!(first.extension().and_then(|e| e.to_str()), Some("png"));
 
         let _ = fs::remove_dir_all(&dir);
@@ -205,9 +227,11 @@ mod tests {
         let fresh = write_png_file(&dir, b"fresh").expect("fresh");
         let stale = write_png_file(&dir, b"stale").expect("stale");
         let foreign_png = dir.join("photo.png");
-        let foreign_text = dir.join(format!("{FILE_PREFIX}note.txt"));
+        let foreign_text = dir.join("20260101-000000.txt");
+        let legacy = dir.join(format!("{LEGACY_FILE_PREFIX}20260101-000000-1.png"));
         fs::write(&foreign_png, b"x").expect("foreign png");
         fs::write(&foreign_text, b"x").expect("foreign text");
+        fs::write(&legacy, b"x").expect("legacy");
 
         let retention = Duration::from_mins(1);
         // `stale` は保持時間を過ぎた時点、`fresh` は保持時間内として扱う
@@ -226,11 +250,20 @@ mod tests {
             .open(&stale)
             .and_then(|f| f.set_modified(modified(&stale) - Duration::from_mins(2)))
             .expect("age stale");
+        for path in [&foreign_png, &foreign_text, &legacy] {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .and_then(|f| f.set_modified(modified(path) - Duration::from_mins(2)))
+                .expect("age other");
+        }
 
         remove_stale_files(&dir, retention, SystemTime::now());
 
         assert!(fresh.exists());
         assert!(!stale.exists());
+        // 以前の版の接頭辞付きの名前も削除し、形の違う名前は残す
+        assert!(!legacy.exists());
         assert!(foreign_png.exists());
         assert!(foreign_text.exists());
 
@@ -259,6 +292,20 @@ mod tests {
         let png = fs::read(&files[0]).expect("read file");
         assert_eq!(&png[..4], b"\x89PNG");
         eprintln!("貼り付け用ファイル: {}", files[0].display());
+    }
+
+    /// 日時 (と連番) の名前と以前の版の名前だけを自アプリのファイルと判定すること
+    #[test]
+    fn is_own_file_stem_matches_stamp_names_only() {
+        assert!(is_own_file_stem("20261113-120000"));
+        assert!(is_own_file_stem("20261113-120000-12"));
+        assert!(is_own_file_stem("ClipRefiner-20261113-120000"));
+
+        assert!(!is_own_file_stem("photo"));
+        assert!(!is_own_file_stem("20261113-120000-"));
+        assert!(!is_own_file_stem("20261113-120000-a"));
+        assert!(!is_own_file_stem("20261399-120000"));
+        assert!(!is_own_file_stem("Other-20261113-120000"));
     }
 
     /// フォルダが存在しなくても削除処理が失敗しないこと

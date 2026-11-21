@@ -55,6 +55,40 @@
     background: rgba(220, 80, 80, 0.35);
 }
 
+.delete-confirm {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+}
+
+.delete-confirm button {
+    height: 28px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.delete-confirm-ok {
+    background: rgba(220, 80, 80, 0.35);
+    color: #f08080;
+}
+
+.delete-confirm-ok:hover {
+    background: rgba(220, 80, 80, 0.5);
+}
+
+.delete-confirm-cancel {
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.delete-confirm-cancel:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+
 .item.item--image .item-content {
     align-items: center;
 }

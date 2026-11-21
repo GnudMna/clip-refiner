@@ -32,7 +32,7 @@ test.describe('クイックセレクター WebView', () => {
         await expect(items.first()).toBeVisible();
         await page.locator('#input').click();
         // 起動時は現在モード行が選択されていることがある
-        await page.keyboard.press('Home');
+        await page.keyboard.press('Control+Home');
         await expect(items.nth(0)).toHaveClass(/selected/);
 
         await page.keyboard.press('ArrowDown');
@@ -133,7 +133,7 @@ test.describe('クイックセレクター 連続記録中', () => {
     test('Ctrl+Enter で自動変換に設定すると連続記録が無効になる', async ({ page, configDir }) => {
         await expect(page.locator('#results .item').first()).toBeVisible();
         await page.locator('#input').click();
-        await page.keyboard.press('Home');
+        await page.keyboard.press('Control+Home');
         const closed = page.waitForEvent('close', { timeout: 15_000 });
         await Promise.all([closed, page.keyboard.press('Control+Enter').catch(() => undefined)]);
         expect(page.isClosed()).toBe(true);
@@ -166,7 +166,7 @@ test.describe('クイックセレクター お気に入り並び', () => {
         const first = page.locator('#results .item').first();
         await expect(first).toContainText('URLデコード');
         await page.locator('#input').click();
-        await page.keyboard.press('Home');
+        await page.keyboard.press('Control+Home');
         await page.keyboard.press('Control+Shift+ArrowDown');
 
         await expect

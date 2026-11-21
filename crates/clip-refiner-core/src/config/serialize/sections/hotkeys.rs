@@ -16,6 +16,21 @@ use crate::error::ConfigError;
 
 type Result<T> = std::result::Result<T, ConfigError>;
 
+/// 保存時に除去する別名キー (camelCase と旧キー名)
+const ALIAS_KEYS: &[&str] = &[
+    "quickSelector",
+    "selector",
+    "autoRefine",
+    "pause",
+    "clipSelector",
+    "text_selector",
+    "continuousRecord",
+    "continuousRecordUndo",
+    "continuousRecordPaste",
+    "paste_queue",
+    "favoriteModeSlots",
+];
+
 // ======================================================================
 // ドキュメント更新
 // ======================================================================
@@ -36,7 +51,6 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.quick_selector,
     )?;
-    hotkeys.remove("selector");
     set_table_value(
         hotkeys,
         "notification",
@@ -51,8 +65,6 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.auto_refine,
     )?;
-    // 旧キー名を除去 (auto_refine へ移行済み)
-    hotkeys.remove("pause");
     set_table_value(
         hotkeys,
         "undo",
@@ -67,7 +79,6 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.clip_selector,
     )?;
-    hotkeys.remove("text_selector");
     set_table_value(
         hotkeys,
         "ocr",
@@ -96,8 +107,6 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.continuous_record_paste,
     )?;
-    // 旧キー名を除去 (continuous_record_paste へ移行済み)
-    hotkeys.remove("paste_queue");
     set_table_value(
         hotkeys,
         "quit",
@@ -115,6 +124,10 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
             TABLE_INDENT,
             &config.hotkeys.favorite_mode_slots,
         )?;
+    }
+    // 別名キーを残すと現行キーと重複し、次回の読み込みが duplicate field で失敗する
+    for key in ALIAS_KEYS {
+        hotkeys.remove(key);
     }
     Ok(())
 }

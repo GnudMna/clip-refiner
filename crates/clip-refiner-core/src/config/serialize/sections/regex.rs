@@ -21,8 +21,9 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
         .as_table_mut()
         .ok_or_else(|| ConfigError::serialize("regex テーブルが存在しない"))?;
 
-    // 旧フラットキーを除去する
+    // 旧フラットキーと別名キーを除去する
     for key in [
+        "activePresetId",
         "pattern",
         "replacement",
         "case_insensitive",

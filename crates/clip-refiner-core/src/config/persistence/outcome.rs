@@ -69,6 +69,8 @@ pub struct ConfigLoadOutcome {
     pub unknown_keys: Vec<String>,
     /// 移行手順が無い `version` を検出し、既存項目を維持した
     pub unsupported_version_kept: bool,
+    /// 登録クリップの鍵を取得できず、登録クリップを読み込めなかった
+    pub registered_clips_key_unavailable: bool,
 }
 
 /// ディスクからの設定再読み込み結果

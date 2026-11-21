@@ -181,6 +181,10 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
             // Excel 描画ビットマップの到着待ち。次回のクリップボード更新で再試行する
             crate::log_debug!("Excel 描画画像を待機中");
         }
+        // 自動変換ではコピーのたびに JSON / YAML 以外の文字列が通るため、通知せずログだけ残す
+        Err(e @ ClipboardProcessError::ParseFailed(_)) => {
+            crate::log_debug!("加工をスキップ: {}", e.user_message());
+        }
         Err(e) if e.is_skip() => {
             UserNotification::from(e).notify_skip();
         }
@@ -289,11 +293,13 @@ pub(crate) fn record_clipboard_outcome(
                 .record_image_processing_success(observed_text);
             true
         }
+        // パース失敗は加工されなかった入力として、変更なしと同じく履歴に残す
         Ok(ClipboardProcessOutcome::Unchanged)
         | Err(
             ClipboardProcessError::ReadFailed(_)
             | ClipboardProcessError::WriteFailed(_)
-            | ClipboardProcessError::NoImage,
+            | ClipboardProcessError::NoImage
+            | ClipboardProcessError::ParseFailed(_),
         ) => {
             state
                 .clipboard_session()
@@ -462,6 +468,23 @@ mod tests {
         assert_eq!(
             state.clipboard_session().history_texts(),
             vec!["source".to_string()]
+        );
+    }
+
+    /// パース失敗時は変更なしと同じく観測を記録し履歴に追加すること
+    #[test]
+    fn record_outcome_parse_failure_observes_and_adds_history() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::JsonFormat], true, false);
+        let outcome = Err(ClipboardProcessError::ParseFailed(
+            crate::refiner::ParseFailure::InvalidJson,
+        ));
+
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "{bad"));
+
+        assert_eq!(
+            state.clipboard_session().history_texts(),
+            vec!["{bad".to_string()]
         );
     }
 

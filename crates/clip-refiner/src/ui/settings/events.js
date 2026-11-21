@@ -205,6 +205,7 @@ export function bindMonitorEvents() {
     const defaultMode = selectById('default-mode');
     if (defaultMode) {
         defaultMode.addEventListener('change', () => {
+            loadedState().mode = defaultMode.value;
             scheduleApply({ mode: defaultMode.value });
         });
     }
@@ -259,6 +260,7 @@ export function bindNotificationEvents() {
 /** クリップボードタブの履歴・連続記録フォームイベントをバインドする */
 export function bindHistoryEvents() {
     document.getElementById('history-enabled')?.addEventListener('change', (event) => {
+        loadedState().historyEnabled = eventInput(event).checked;
         scheduleApply({ historyEnabled: eventInput(event).checked });
     });
     document.getElementById('record-enabled')?.addEventListener('change', (event) => {
@@ -551,6 +553,7 @@ export function bindGeneralEvents() {
     });
 
     document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
+        loadedState().launchAtLogin = eventInput(event).checked;
         scheduleApply({ launchAtLogin: eventInput(event).checked });
     });
 

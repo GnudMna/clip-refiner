@@ -134,6 +134,83 @@ interval_ms = 1000
         assert_eq!(decoded.regex, config.regex);
     }
 
+    /// camelCase の別名キーを保存時に除去し、再読み込みで duplicate field にならないこと
+    #[test]
+    fn test_config_to_toml_removes_camel_case_alias_keys() {
+        let existing = r#"
+mode = "Trim"
+interval_ms = 1000
+
+[notification_settings]
+notifyProcess = false
+notifyPause = false
+notifyResult = true
+
+[hotkeys]
+quickSelector = "Alt+Shift+1"
+autoRefine = "Alt+Shift+2"
+clipSelector = "Alt+Shift+3"
+continuousRecord = "Alt+Shift+4"
+continuousRecordUndo = "Alt+Shift+5"
+continuousRecordPaste = "Alt+Shift+6"
+favoriteModeSlots = ["Alt+Shift+7"]
+
+[regex]
+activePresetId = "default"
+"#;
+        let config: AppConfig = toml::from_str(existing).expect("別名キーの解析に失敗");
+        assert!(!config.notification_settings.notify_process);
+        assert!(!config.notification_settings.notify_auto_refine);
+        assert_eq!(config.hotkeys.quick_selector, "Alt+Shift+1");
+
+        let content = config_to_toml(&config, Some(existing)).expect("TOML の生成に失敗");
+
+        // 別名キーが残らず、現行キーへ置き換わる
+        for alias in [
+            "notifyProcess",
+            "notifyPause",
+            "notifyResult",
+            "quickSelector",
+            "autoRefine",
+            "clipSelector",
+            "continuousRecord",
+            "favoriteModeSlots",
+            "activePresetId",
+        ] {
+            assert!(
+                !content.contains(alias),
+                "別名キー {alias} が残っている: {content}"
+            );
+        }
+
+        // 保存結果を再読み込みでき、値が維持される
+        let decoded: AppConfig = toml::from_str(&content)
+            .unwrap_or_else(|e| panic!("保存後 TOML の解析に失敗: {e}\n{content}"));
+        assert!(!decoded.notification_settings.notify_process);
+        assert!(!decoded.notification_settings.notify_auto_refine);
+        assert!(decoded.notification_settings.notify_result);
+        assert_eq!(decoded.hotkeys, config.hotkeys);
+    }
+
+    /// お気に入りスロットを空にして保存したとき、別名キーの旧値が復活しないこと
+    #[test]
+    fn test_config_to_toml_clearing_slots_removes_camel_case_alias() {
+        let existing = r#"
+mode = "Trim"
+interval_ms = 1000
+
+[hotkeys]
+favoriteModeSlots = ["Alt+Shift+7"]
+"#;
+        let mut config: AppConfig = toml::from_str(existing).expect("別名キーの解析に失敗");
+        config.hotkeys.favorite_mode_slots.clear();
+
+        let content = config_to_toml(&config, Some(existing)).expect("TOML の生成に失敗");
+        let decoded: AppConfig = toml::from_str(&content).expect("保存後 TOML の解析に失敗");
+
+        assert!(decoded.hotkeys.favorite_mode_slots.is_empty());
+    }
+
     /// コメント付き TOML に各項目の説明が含まれるようにすること
     #[test]
     fn test_commented_toml_contains_field_descriptions() {

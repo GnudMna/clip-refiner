@@ -27,7 +27,7 @@ pub(crate) use record::{
 };
 pub(crate) use refine::{
     apply_refine_once, handle_favorites_event, handle_refine_mode_event, move_favorite_mode,
-    select_auto_refine_mode, set_auto_refine_enabled, toggle_favorite_mode,
+    select_auto_refine_mode, set_auto_refine_enabled, set_refine_mode, toggle_favorite_mode,
 };
 pub(crate) use regex::handle_regex_preset_event;
 pub(crate) use update::{
@@ -36,4 +36,5 @@ pub(crate) use update::{
 };
 
 pub use monitor::update_monitor_mode;
+#[cfg(test)]
 pub use refine::update_refine;

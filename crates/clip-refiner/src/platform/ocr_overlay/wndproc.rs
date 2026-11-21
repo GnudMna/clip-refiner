@@ -7,9 +7,10 @@ use windows::Win32::Graphics::Gdi::{HBRUSH, ValidateRect};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, VK_ESCAPE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GWLP_USERDATA, GetClientRect, GetWindowLongPtrW, HICON, IDC_ARROW, LoadCursorW,
-    RegisterClassW, SW_HIDE, SetWindowLongPtrW, ShowWindow, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WNDCLASS_STYLES, WNDCLASSW,
+    DefWindowProcW, GWLP_USERDATA, GetClientRect, GetWindowLongPtrW, HICON, IDC_ARROW,
+    IsWindowVisible, LoadCursorW, RegisterClassW, SW_HIDE, SetWindowLongPtrW, ShowWindow,
+    WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONUP, WNDCLASS_STYLES, WNDCLASSW,
 };
 use windows::core::PCWSTR;
 
@@ -137,8 +138,20 @@ unsafe extern "system" fn overlay_wnd_proc(
             }
             WM_KEYDOWN => {
                 if wparam.0 == usize::from(VK_ESCAPE.0) {
-                    hide_overlay(hwnd, state);
-                    ((*state).on_complete)(None);
+                    cancel_selection(hwnd, state);
+                }
+                return LRESULT(0);
+            }
+            // 右ボタンは押下ではなく解放でキャンセルし、解放が下のウィンドウへ渡らないようにする
+            WM_RBUTTONUP => {
+                cancel_selection(hwnd, state);
+                return LRESULT(0);
+            }
+            // Alt+Tab などでフォーカスが外れると Esc が届かないため、キャンセル扱いで閉じる
+            // 非表示化に伴う `WM_KILLFOCUS` では二重に通知しないよう、表示中のときだけ処理する
+            WM_KILLFOCUS => {
+                if IsWindowVisible(hwnd).as_bool() {
+                    cancel_selection(hwnd, state);
                 }
                 return LRESULT(0);
             }
@@ -171,6 +184,19 @@ unsafe fn redraw_overlay(state: *mut OverlayState) {
         if let Err(err) = (*state).layered.update_selection(rect) {
             crate::log_warn!("オーバーレイの再描画に失敗: {err:#}");
         }
+    }
+}
+
+/// 選択をキャンセルしてオーバーレイを閉じる
+///
+/// # Safety
+/// `state` は生存中の `OverlayState` を指し、呼び出し中に他から参照されないこと
+/// `on_complete` はオーバーレイを破棄しないこと
+unsafe fn cancel_selection(hwnd: HWND, state: *mut OverlayState) {
+    // SAFETY: 呼び出し元が `state` の有効性と排他性を保証する
+    unsafe {
+        hide_overlay(hwnd, state);
+        ((*state).on_complete)(None);
     }
 }
 

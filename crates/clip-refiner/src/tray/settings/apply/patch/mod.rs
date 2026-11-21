@@ -64,7 +64,6 @@ pub(crate) fn apply_settings_patch_without_ui(
     let mut outcome = PatchApplyOutcome {
         monitor_mode_changed: false,
         bump_monitor: false,
-        mode_changed: false,
         pipeline_changed: false,
     };
     let mut config_dirty = false;
@@ -88,7 +87,6 @@ pub(crate) fn apply_settings_patch_without_ui(
         state,
         menu,
         quick_selector,
-        clipboard_worker,
         &mut outcome,
         &mut config_dirty,
     );
@@ -98,7 +96,7 @@ pub(crate) fn apply_settings_patch_without_ui(
         state.save_config();
     }
 
-    if outcome.bump_monitor && !outcome.mode_changed {
+    if outcome.bump_monitor {
         bump_monitor_generation(state);
     }
 

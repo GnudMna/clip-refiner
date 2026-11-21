@@ -68,7 +68,7 @@ pub use error::{AddRegisteredClipError, CipherError, ConfigError};
 #[cfg(feature = "clipboard")]
 pub use refiner::OwnedClipboard;
 pub use refiner::{
-    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue,
+    ClipboardIoError, ClipboardProcessError, ClipboardProcessOutcome, OrderedValue, ParseFailure,
     REGEX_PREVIEW_SAMPLE, RefineCategory, RefineContext, RefineMode, Refiner, RegexPreviewResult,
     apply_pipeline_to_text, apply_text_pipeline, preview_regex_replace, process_clipboard,
     process_clipboard_pipeline, split_pipeline,

@@ -23,13 +23,15 @@ mod loop_event;
 mod ocr;
 mod user_event;
 
+#[cfg(test)]
+pub(crate) use super::features::update_refine;
 pub(crate) use super::features::{
     STALE_CLIP_MESSAGE, StaleClip, apply_refine_once, copy_registered_clip, delete_registered_clip,
     move_favorite_mode, move_registered_clip, refresh_clips_views, registered_clip_for_edit,
     reset_registered_clip_counter, select_auto_refine_mode, set_auto_refine_enabled,
-    set_continuous_record_enabled, set_registered_clip_template, show_registered_clip_full_text,
-    toggle_continuous_record, toggle_favorite_mode, undo_last_continuous_record,
-    update_monitor_mode, update_refine, update_registered_clip,
+    set_continuous_record_enabled, set_refine_mode, set_registered_clip_template,
+    show_registered_clip_full_text, toggle_continuous_record, toggle_favorite_mode,
+    undo_last_continuous_record, update_monitor_mode, update_registered_clip,
 };
 pub(crate) use config_reload::reload_config_with_notification;
 pub(crate) use context::AppEventContext;

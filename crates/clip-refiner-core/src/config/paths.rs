@@ -1,7 +1,9 @@
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::SystemTime;
 
 use windows::Win32::UI::Shell::ShellExecuteW;
@@ -17,6 +19,9 @@ use crate::error::ConfigError;
 // ======================================================================
 /// `ShellExecuteW` が成功時に返す値の下限 (これ以下はエラーコード)
 const SHELL_EXECUTE_SUCCESS_MIN: isize = 32;
+
+/// パーミッション設定を試みた設定ディレクトリ (成否は問わない)
+static RESTRICTED_CONFIG_DIRS: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
 
 // ======================================================================
 // テスト用設定ディレクトリ
@@ -179,6 +184,9 @@ fn test_config_dir_override() -> Option<PathBuf> {
 ///
 /// 設定ディレクトリが存在しない場合は作成する
 ///
+/// 所有者専用のパーミッションは、プロセス内で設定ディレクトリごとに初回 (作成時を含む) のみ設定する
+/// 外部変更の確認などで繰り返し呼ばれるため、失敗時の警告ログと継承の再伝播を避ける
+///
 /// # Returns
 /// * `Result<PathBuf>` - `config.toml` の完全なパス
 ///
@@ -186,12 +194,36 @@ fn test_config_dir_override() -> Option<PathBuf> {
 /// 設定ディレクトリの取得または作成に失敗した場合
 pub fn get_config_file_path() -> Result<PathBuf, ConfigError> {
     let config_dir = get_config_dir()?;
+    let newly_created = !config_dir.is_dir();
     fs::create_dir_all(&config_dir).map_err(ConfigError::CreateDir)?;
-    // FAT / exFAT など ACL 非対応ボリュームでは失敗しうる (ポータブル USB 向けに継続)
-    if let Err(e) = restrict_private_dir_permissions(&config_dir) {
-        tracing::warn!("設定ディレクトリのパーミッション設定に失敗: {:?}", e);
+    if should_restrict_config_dir(&config_dir, newly_created) {
+        // FAT / exFAT など ACL 非対応ボリュームでは失敗しうる (ポータブル USB 向けに継続)
+        if let Err(e) = restrict_private_dir_permissions(&config_dir) {
+            tracing::warn!("設定ディレクトリのパーミッション設定に失敗: {:?}", e);
+        }
     }
     Ok(config_dir.join("config.toml"))
+}
+
+/// 設定ディレクトリへパーミッションを設定すべきかを返す
+///
+/// プロセス内で初めて扱うディレクトリ、またはこの呼び出しで作成したディレクトリのとき `true`
+/// 設定の成否にかかわらず記録するため、ACL 非対応ボリュームでも再試行しない
+///
+/// # Arguments
+/// * `dir` - 設定ディレクトリのパス
+/// * `newly_created` - 呼び出し直前まで存在せず、今回作成したかどうか
+///
+/// # Returns
+/// * `bool` - パーミッションを設定すべきとき `true`
+fn should_restrict_config_dir(dir: &Path, newly_created: bool) -> bool {
+    let mut guard = RESTRICTED_CONFIG_DIRS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let first_time = guard
+        .get_or_insert_with(HashSet::new)
+        .insert(dir.to_path_buf());
+    first_time || newly_created
 }
 
 /// 設定ファイルの最終更新時刻を取得する
@@ -334,6 +366,23 @@ mod tests {
             );
             assert!(path.parent().is_some_and(std::path::Path::exists));
         });
+    }
+
+    /// パーミッション設定は同一ディレクトリで初回のみ行い、作成し直したときは再度行うこと
+    #[test]
+    fn should_restrict_config_dir_only_once_unless_recreated() {
+        let dir = PathBuf::from(format!("clip-refiner-restrict-once-{}", std::process::id()));
+
+        // 初回は設定対象、2 回目以降は対象外
+        assert!(should_restrict_config_dir(&dir, false));
+        assert!(!should_restrict_config_dir(&dir, false));
+
+        // 削除後に作成し直した場合は再設定する
+        assert!(should_restrict_config_dir(&dir, true));
+        assert!(!should_restrict_config_dir(&dir, false));
+
+        // 別ディレクトリは独立して初回扱いとする
+        assert!(should_restrict_config_dir(&dir.join("other"), false));
     }
 
     /// 未作成の設定ファイルは更新時刻 `None` を返すようにすること

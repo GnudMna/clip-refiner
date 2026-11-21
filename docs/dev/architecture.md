@@ -12,6 +12,8 @@ clip-refiner/
 ├── tsconfig.base.json   # `tsc` の共通設定 (UI の checkJs と E2E が継承する)
 ├── e2e/                 # Playwright + WebView2 CDP による設定 / セレクター E2E
 │   ├── fixtures.ts
+│   ├── global-setup.ts  # 開始前に前回の実行で残った一時ディレクトリを削除 (temp-cleanup.ts)
+│   ├── temp-cleanup.ts
 │   ├── playwright.config.ts
 │   ├── tsconfig.json
 │   └── *.spec.ts
@@ -45,6 +47,9 @@ clip-refiner/
 │       └── src/
 │           ├── clip_template.rs # 登録クリップのテンプレート展開 (`{date}` など。feature 非依存)
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize ・ spec (ドキュメント同期テスト) など
+│           ├── consts.rs    # `CONFIG_VERSION`・処理上限・既定ホットキーなどの定数
+│           ├── error.rs     # 加工・設定 I/O のエラー型
+│           ├── hotkey_binding.rs # `Alt+Shift+S` 形式のホットキー文字列の解釈 (feature 非依存)
 │           ├── native/      # DPAPI (`config`)・クリップボード画像・画像のファイル貼り付け (`CF_HDROP`)・監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   ├── mode/        # `RefineMode` / `RefineCategory` の定義・表示名・CLI 名・メニュー順
@@ -59,7 +64,7 @@ clip-refiner/
 ├── scripts/
 │   ├── common/          # 実装ヘルパー (cargo / npm / build-ui.mjs / wix / MSI 検証など)
 │   ├── git/hooks/       # Git フック (pre-commit / pre-push)
-│   ├── templates/       # THIRD_PARTY_NOTICES のテンプレート
+│   ├── templates/       # THIRD_PARTY_NOTICES のテンプレートと、末尾に追記する同梱ドキュメント素材の表示
 │   └── windows/         # 開発者向けエントリポイント (check.ps1, format.ps1 など)
 ├── wix/                 # MSI 定義 (main.wxs)
 ├── about.toml           # cargo-about 設定
@@ -112,7 +117,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `features/` | トレイメニュー項目ごとのドメイン実装。各サブモジュールが `menu.rs` (構築・更新) と `event.rs` (クリック処理) を担う (`regex` 含む) |
 | `menu/` | `TrayMenu` 型定義、メニュー全体の組み立て・設定同期・履歴 / 連続記録メニュー再構築の共通化・アイコン |
 | `event/` | tao イベントループへの委譲 (`loop_event`, `user_event/` ルーター + ドメインハンドラ)、ホットキー・OCR・設定再読み込み、`handle_menu_event` ルーティング。`loop_event` 末尾でセレクター保持同期とアイドル起床 (`ControlFlow::WaitUntil`) |
-| `selector/` | クイック / 登録クリップセレクターの WebView 束 (`SelectorUi`)。`lazy.rs` が両セレクター共通の遅延生成 `WebView` と保持状態 (`LazySelector`)、`retention.rs` が保持方針、`webview_policy.rs` が CSP と遷移許可を担う |
+| `selector/` | クイック / 登録クリップセレクターの WebView 束 (`SelectorUi`)。`lazy.rs` が両セレクター共通の遅延生成 `WebView` と保持状態 (`LazySelector`)、`retention.rs` が保持方針、`webview_policy.rs` が CSP と遷移許可、`view_model.rs` が一覧 JSON の組み立て (画像サムネイルのキャッシュを含む) を担う |
 | `settings/` | 設定ウィンドウ (下表参照) |
 | `worker/` | クリップボード I/O 集約・監視ループ・コマンド処理。クリップボード変更 (OS 通知とシーケンストークン) と設定ディレクトリ変更の検知もここに置く |
 | `state/` | `AppState` (設定・横断操作) とサブ状態アクセサ (`worker` / `clipboard_session` / `config_sync` / `settings_pending`)、メニュー構築用の `MenuSnapshot` (必要フィールドのみ)、`AppEvent` (ドメイン別サブイベントのハブ) |
@@ -259,7 +264,7 @@ flowchart TB
 
 - **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピー、連続記録貼り付けの書き込みなど)
 - **リスナ → ワーカー**: `ClipboardCommand::ClipboardChanged` で Event / 連続記録の監視を起床する
-- **設定監視 → ワーカー**: `ClipboardCommand::ConfigFileChanged` で外部編集の再読み込み判定を起床する。本文指紋が最終同期と異なるときだけ `ConfigEvent::Reload` を送る
+- **設定監視 → ワーカー**: `ClipboardCommand::ConfigFileChanged` で外部編集の再読み込み判定を起床する。本文指紋が最終同期とも、解析に失敗した再読み込みの本文とも異なるときだけ `ConfigEvent::Reload` を送る
 - **ワンショット CLI → 常駐**: 名前付きパイプで加工要求を送り、サーバーが `ProcessOneshotPipeline` をワーカーへ渡す (監視エコー回避)
 - **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`RecordEvent::SendPaste`)
 - **ホットキー → UI**: 専用スレッドが `HotkeyEvent::Received` を送り、メインスレッドの `HotkeyHandler` が処理

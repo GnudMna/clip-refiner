@@ -45,6 +45,8 @@ const MAX_ACTIVE_CONNECTIONS: u32 = 4;
 const MAX_PIPE_INSTANCES: u32 = MAX_ACTIVE_CONNECTIONS + 1;
 /// 処理枠の空きを確認する間隔
 const SLOT_WAIT_INTERVAL: Duration = Duration::from_millis(20);
+/// パイプの作成・接続待ちに失敗してから再試行するまでの間隔
+const PIPE_RETRY_INTERVAL: Duration = Duration::from_millis(200);
 
 // ======================================================================
 // サーバーハンドル
@@ -104,7 +106,7 @@ impl OneshotIpcServer {
     /// * `worker` - クリップボードワーカーへのハンドル
     /// * `pipe_name` - `\\.\pipe\...` 形式のパイプ名
     /// * `read_timeout` - 接続から要求 1 行を受け取り終えるまでの上限
-    /// * `first_instance_only` - 名前を最初に確保するインスタンスにだけ `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか
+    /// * `first_instance_only` - 手持ちインスタンスが無いときの作成に `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか
     ///
     /// # Returns
     /// * `Result<Self>` - 停止時に待受を終了するガード
@@ -165,12 +167,12 @@ impl Drop for OneshotIpcServer {
 // ======================================================================
 /// 処理スレッドへ渡した接続
 ///
-/// 破棄時に処理中の接続数を減らし、待受ループの処理枠を空ける
+/// 破棄時にパイプを閉じてから処理中の接続数を減らし、待受ループの処理枠を空ける
 struct ActiveConnection {
     /// 接続済みのパイプ
     pipe: File,
-    /// 処理中の接続数
-    active: Arc<AtomicU32>,
+    /// 処理枠の占有。フィールドは宣言順に破棄されるため `pipe` より後ろに置く
+    _slot: ActiveSlot,
 }
 
 impl ActiveConnection {
@@ -186,14 +188,19 @@ impl ActiveConnection {
         active.fetch_add(1, Ordering::SeqCst);
         Self {
             pipe,
-            active: Arc::clone(active),
+            _slot: ActiveSlot(Arc::clone(active)),
         }
     }
 }
 
-impl Drop for ActiveConnection {
+/// 処理中の接続数を 1 つ分占有するガード
+///
+/// 接続数が 0 になった時点でパイプのインスタンスが残っていないよう、`pipe` より後に破棄する
+struct ActiveSlot(Arc<AtomicU32>);
+
+impl Drop for ActiveSlot {
     fn drop(&mut self) {
-        self.active.fetch_sub(1, Ordering::SeqCst);
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -293,21 +300,20 @@ fn run_server_loop(
 ) {
     let active = Arc::new(AtomicU32::new(0));
     let mut listening: Option<File> = None;
-    // FIRST_PIPE_INSTANCE を付けるのは名前の最初の確保だけ
-    // 以降は処理中の接続がインスタンスを保持しており、付けると作成が失敗し続ける
-    let mut claim_name = first_instance_only;
 
     while !stop.load(Ordering::SeqCst) {
         let pipe = match listening.take() {
             Some(pipe) => pipe,
-            None => match create_pipe_instance_named(pipe_name, claim_name) {
-                Ok(pipe) => {
-                    claim_name = false;
-                    pipe
-                }
+            // 待受も処理中の接続も無いときだけ名前を確保し直す
+            // 手持ちがある状態で FIRST_PIPE_INSTANCE を付けると作成が失敗し続ける
+            None => match create_pipe_instance_named(
+                pipe_name,
+                should_claim_name(first_instance_only, &active),
+            ) {
+                Ok(pipe) => pipe,
                 Err(err) => {
                     crate::log_warn!("ワンショット IPC パイプの作成に失敗: {err}");
-                    thread::sleep(Duration::from_millis(200));
+                    thread::sleep(PIPE_RETRY_INTERVAL);
                     continue;
                 }
             },
@@ -320,6 +326,8 @@ fn run_server_loop(
 
         if let Err(err) = connect_pipe(&pipe) {
             crate::log_debug!("ワンショット IPC 接続待ち失敗: {err}");
+            // 失敗が続いてもビジーループにならないよう、インスタンスを作り直す前に待つ
+            thread::sleep(PIPE_RETRY_INTERVAL);
             continue;
         }
 
@@ -338,6 +346,20 @@ fn run_server_loop(
         };
         spawn_connection_handler(connection, worker, read_timeout);
     }
+}
+
+/// 新しいパイプインスタンスの作成に `FILE_FLAG_FIRST_PIPE_INSTANCE` を付けるか判定する
+///
+/// 待受インスタンスを持たない呼び出し側から使うため、手持ちは処理中の接続だけになる
+///
+/// # Arguments
+/// * `first_instance_only` - 名前の先取り防止が有効か
+/// * `active` - 処理中の接続数
+///
+/// # Returns
+/// * `bool` - 手持ちインスタンスが無く、先取り防止が有効な場合は `true`
+fn should_claim_name(first_instance_only: bool, active: &AtomicU32) -> bool {
+    first_instance_only && active.load(Ordering::SeqCst) == 0
 }
 
 /// 処理中の接続数が上限未満になるまで待つ
@@ -526,7 +548,7 @@ mod tests {
     use super::super::protocol::{BoundedLine, read_bounded_line};
     use super::{
         DeadlineReader, MAX_ACTIVE_CONNECTIONS, OneshotIpcServer, REQUEST_READ_TIMEOUT,
-        connect_pipe, create_pipe_instance_named, wait_for_free_slot,
+        connect_pipe, create_pipe_instance_named, should_claim_name, wait_for_free_slot,
     };
     use crate::test_helpers::{stub_worker, test_app_state_arc, wait_for_oneshot_pipe};
 
@@ -622,6 +644,16 @@ mod tests {
         let active = AtomicU32::new(MAX_ACTIVE_CONNECTIONS - 1);
         let stop = AtomicBool::new(false);
         assert!(wait_for_free_slot(&active, &stop));
+    }
+
+    /// 手持ちインスタンスが無く先取り防止が有効なときだけ名前を確保すること
+    #[test]
+    fn should_claim_name_only_without_held_instances() {
+        let idle = AtomicU32::new(0);
+        let busy = AtomicU32::new(1);
+        assert!(should_claim_name(true, &idle));
+        assert!(!should_claim_name(true, &busy));
+        assert!(!should_claim_name(false, &idle));
     }
 
     /// 処理枠が埋まったまま停止要求を受けたら `false` を返すこと

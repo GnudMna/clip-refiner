@@ -412,6 +412,16 @@ mod tests {
     use super::*;
     use crate::config::{RegexPreset, RegexSettings, RegexStep};
 
+    /// パース失敗は変更なしではなく、理由を本文にしたエラー応答になること
+    #[test]
+    fn parse_failure_becomes_error_response_with_reason() {
+        let error = ClipboardProcessError::ParseFailed(crate::refiner::ParseFailure::InvalidJson);
+        let response = OneshotProcessResult::from_process_error(&error).into_response("r".into());
+
+        assert_eq!(response.status, OneshotIpcStatus::Error);
+        assert!(response.message.contains("JSON として解釈できない"));
+    }
+
     fn multi_step_regex_settings() -> RegexSettings {
         RegexSettings {
             active_preset_id: "date".into(),

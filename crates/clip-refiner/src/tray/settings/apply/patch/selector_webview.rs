@@ -61,7 +61,6 @@ mod tests {
         let mut outcome = PatchApplyOutcome {
             monitor_mode_changed: false,
             bump_monitor: false,
-            mode_changed: false,
             pipeline_changed: false,
         };
         let mut config_dirty = false;
@@ -92,7 +91,6 @@ mod tests {
         let mut outcome = PatchApplyOutcome {
             monitor_mode_changed: false,
             bump_monitor: false,
-            mode_changed: false,
             pipeline_changed: false,
         };
         let mut config_dirty = false;

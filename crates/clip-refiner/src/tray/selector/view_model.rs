@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use image::{DynamicImage, ImageBuffer, ImageFormat};
@@ -59,7 +61,8 @@ pub(crate) fn clip_selector_json(config: &AppConfig) -> String {
 
 /// 登録クリップセレクター向けの一覧を JSON 値として生成する
 ///
-/// テキスト件はキャッシュ済み `preview` のみを使い、本文は復号しない
+/// テキスト件はキャッシュ済み `preview` のみを使い、本文は復号しない。
+/// 画像件のサムネイルはファイル名 (内容ハッシュ) をキーにキャッシュし、同じ画像は再度復号・縮小しない
 ///
 /// # Arguments
 /// * `config` - 変換元の設定
@@ -67,6 +70,16 @@ pub(crate) fn clip_selector_json(config: &AppConfig) -> String {
 /// # Returns
 /// * `serde_json::Value` - 登録クリップの JSON 配列
 pub(crate) fn clip_selector_value(config: &AppConfig) -> serde_json::Value {
+    let live_files: HashSet<&str> = config
+        .clips
+        .iter()
+        .filter_map(|clip| clip.image_file.as_deref())
+        .collect();
+    PREVIEW_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .retain_files(&live_files);
+
     serde_json::Value::Array(
         config
             .clips
@@ -100,6 +113,45 @@ pub(crate) fn clip_hover_text(text: &str) -> Option<String> {
 }
 
 // ======================================================================
+// 画像プレビューのキャッシュ
+// ======================================================================
+
+/// 登録画像 1 枚分のセレクター表示用プレビュー
+///
+/// サイズ上限を超えて作れなかったものは `None` のまま保持する
+#[derive(Clone)]
+struct ImagePreviews {
+    thumbnail: Option<String>,
+    hover_preview: Option<String>,
+}
+
+/// 登録画像ファイル名をキーとするプレビューのキャッシュ
+///
+/// ファイル名は暗号化済み内容のハッシュなので、同名なら画像内容も同一になる。
+/// 設定から外れた画像のエントリは `retain_files` で破棄する
+#[derive(Default)]
+struct PreviewCache {
+    entries: HashMap<String, ImagePreviews>,
+}
+
+impl PreviewCache {
+    fn get(&self, file: &str) -> Option<ImagePreviews> {
+        self.entries.get(file).cloned()
+    }
+
+    fn insert(&mut self, file: String, previews: ImagePreviews) {
+        self.entries.insert(file, previews);
+    }
+
+    fn retain_files(&mut self, live_files: &HashSet<&str>) {
+        self.entries
+            .retain(|file, _| live_files.contains(file.as_str()));
+    }
+}
+
+static PREVIEW_CACHE: LazyLock<Mutex<PreviewCache>> = LazyLock::new(Mutex::default);
+
+// ======================================================================
 // プライベート関数
 // ======================================================================
 
@@ -124,26 +176,51 @@ fn clip_selector_item(
         "token": ClipRef::format_token(clip.identity_token()),
     });
 
-    if clip.is_image()
-        && let Some(image) = registered_image(config, index)
+    if let Some(file) = clip.image_file.as_deref()
+        && let Some(previews) = image_previews(config, index, file)
     {
-        if let Some(thumbnail) = encode_image_preview_data_url(
-            &image,
-            consts::SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION,
-            consts::MAX_SELECTOR_IMAGE_PREVIEW_BYTES,
-        ) {
+        if let Some(thumbnail) = previews.thumbnail {
             value["thumbnail"] = serde_json::Value::String(thumbnail);
         }
-        if let Some(hover_preview) = encode_image_preview_data_url(
-            &image,
-            consts::SELECTOR_IMAGE_HOVER_PREVIEW_MAX_DIMENSION,
-            consts::MAX_SELECTOR_IMAGE_HOVER_PREVIEW_BYTES,
-        ) {
+        if let Some(hover_preview) = previews.hover_preview {
             value["hover_preview"] = serde_json::Value::String(hover_preview);
         }
     }
 
     value
+}
+
+/// 登録画像のプレビューをキャッシュから取得し、無ければ復号・縮小して登録する
+///
+/// 復号や PNG デコードに失敗した場合はキャッシュせず `None` を返す
+fn image_previews(config: &AppConfig, index: usize, file: &str) -> Option<ImagePreviews> {
+    if let Some(cached) = PREVIEW_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(file)
+    {
+        return Some(cached);
+    }
+
+    // 復号と縮小は重いため、ロックを手放してから行う
+    let image = registered_image(config, index)?;
+    let previews = ImagePreviews {
+        thumbnail: encode_image_preview_data_url(
+            &image,
+            consts::SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION,
+            consts::MAX_SELECTOR_IMAGE_PREVIEW_BYTES,
+        ),
+        hover_preview: encode_image_preview_data_url(
+            &image,
+            consts::SELECTOR_IMAGE_HOVER_PREVIEW_MAX_DIMENSION,
+            consts::MAX_SELECTOR_IMAGE_HOVER_PREVIEW_BYTES,
+        ),
+    };
+    PREVIEW_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(file.to_string(), previews.clone());
+    Some(previews)
 }
 
 /// 指定インデックスの登録画像を表示用画像へ変換する
@@ -280,6 +357,23 @@ mod tests {
         let over = "あ".repeat(max + 1);
         let truncated = clip_hover_text(&over).expect("truncated");
         assert_eq!(truncated, format!("{}...", "あ".repeat(max)));
+    }
+
+    /// 設定から外れた画像のキャッシュだけを破棄すること
+    #[test]
+    fn preview_cache_retains_only_live_files() {
+        let previews = ImagePreviews {
+            thumbnail: Some("t".to_string()),
+            hover_preview: None,
+        };
+        let mut cache = PreviewCache::default();
+        cache.insert("a.enc".to_string(), previews.clone());
+        cache.insert("b.enc".to_string(), previews);
+
+        cache.retain_files(&HashSet::from(["a.enc"]));
+
+        assert!(cache.get("a.enc").is_some());
+        assert!(cache.get("b.enc").is_none());
     }
 
     /// 画像プレビューを JPEG Data URL へ変換すること

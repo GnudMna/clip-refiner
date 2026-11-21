@@ -14,7 +14,7 @@ use crate::security::{decrypt_bytes, encrypt_bytes};
 type Result<T> = std::result::Result<T, ConfigError>;
 
 fn clips_err(msg: impl Into<String>) -> ConfigError {
-    ConfigError::RegisteredClipsSave(msg.into())
+    ConfigError::RegisteredClips(msg.into())
 }
 
 // ======================================================================

@@ -23,6 +23,7 @@ mod mode;
 mod ordered_value;
 #[cfg(feature = "clipboard")]
 mod owned_clipboard;
+mod parse_failure;
 mod pipeline;
 pub mod text_clipboard;
 mod transform;
@@ -38,6 +39,7 @@ pub use mode::{RefineCategory, RefineMode};
 pub use ordered_value::OrderedValue;
 #[cfg(feature = "clipboard")]
 pub use owned_clipboard::{OwnedClipboard, remove_stale_image_files};
+pub use parse_failure::ParseFailure;
 pub use pipeline::{apply_text_pipeline, split_pipeline};
 pub use text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 pub use transform::regex::{

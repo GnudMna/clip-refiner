@@ -2,23 +2,23 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-use crate::tray::event::{set_auto_refine_enabled, update_refine};
+use crate::tray::event::{set_auto_refine_enabled, set_refine_mode};
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;
-use crate::tray::worker::ClipboardWorkerHandle;
 
 // ======================================================================
 // 加工パッチ
 // ======================================================================
 /// 変換モードとパイプラインのパッチを適用する
+///
+/// 設定の変更だけを反映し、現在のクリップボードは加工しない
 pub(super) fn apply_refine_patch(
     patch: &SettingsPatch,
     state: &Arc<AppState>,
     menu: &TrayMenu,
     quick_selector: Option<&QuickSelectorWindow>,
-    clipboard_worker: &ClipboardWorkerHandle,
     outcome: &mut PatchApplyOutcome,
     config_dirty: &mut bool,
 ) {
@@ -48,8 +48,9 @@ pub(super) fn apply_refine_patch(
         && state.with_config(|c| c.mode) != mode
     {
         if state.with_config(|c| c.pipeline.is_empty()) {
-            update_refine(state, menu, clipboard_worker, mode, quick_selector);
-            outcome.mode_changed = true;
+            set_refine_mode(state, menu, mode, quick_selector);
+            // 切り替え時点のクリップボードは加工せず、次のコピーから対象にする
+            outcome.bump_monitor = true;
         } else {
             state.with_config_mut(|c| c.mode = mode);
             menu.refresh_category_labels(mode);
@@ -82,7 +83,7 @@ fn sync_refine_menu_checks(state: &Arc<AppState>, menu: &TrayMenu) {
 mod tests {
     use super::*;
     use crate::refiner::RefineMode;
-    use crate::test_helpers::{ClipboardCommand, TrayTestContext};
+    use crate::test_helpers::TrayTestContext;
 
     /// パッチを適用し、結果と設定変更の有無を返す
     fn apply_patch(ctx: &TrayTestContext, patch: &SettingsPatch) -> (PatchApplyOutcome, bool) {
@@ -93,7 +94,6 @@ mod tests {
             ctx.state(),
             ctx.menu(),
             None,
-            ctx.worker(),
             &mut outcome,
             &mut config_dirty,
         );
@@ -124,14 +124,16 @@ mod tests {
             vec![RefineMode::Trim, RefineMode::TrimLines]
         );
         assert!(config_dirty);
-        assert!(!outcome.mode_changed);
+        assert!(!outcome.bump_monitor);
         assert!(!outcome.pipeline_changed);
         ctx.assert_no_command();
     }
 
-    /// パイプライン空時のデフォルトモード変更が `update_refine` 経由で反映されるようにすること
+    /// パイプライン空時のデフォルトモード変更が設定へ反映され、クリップボードは加工しないこと
+    ///
+    /// 切り替え時点の内容を加工しないよう、監視状態のリセットだけを要求する
     #[test]
-    fn default_mode_patch_uses_update_refine_when_pipeline_empty() {
+    fn default_mode_patch_does_not_process_clipboard_when_pipeline_empty() {
         let ctx = TrayTestContext::new();
         let patch = SettingsPatch {
             mode: Some(RefineMode::UrlDecode),
@@ -141,11 +143,8 @@ mod tests {
 
         assert!(ctx.state().with_config(|c| c.pipeline.is_empty()));
         assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::UrlDecode);
-        assert!(outcome.mode_changed);
-        match ctx.recv_command() {
-            ClipboardCommand::ProcessMode(mode) => assert_eq!(mode, RefineMode::UrlDecode),
-            other => panic!("ProcessMode コマンドが送信されること: {other:?}"),
-        }
+        assert!(outcome.bump_monitor);
+        ctx.assert_no_command();
     }
 
     /// パイプライン変更が設定とメニューへ反映されるようにすること

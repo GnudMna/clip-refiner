@@ -233,7 +233,9 @@ const SelectorCommon = (function () {
     }
 
     /**
-     * Home/End キーの先頭/末尾移動を処理する
+     * Ctrl+Home / Ctrl+End の先頭/末尾移動を処理する
+     *
+     * 修飾キーなしの Home / End は検索欄のカーソル移動に使うため扱わない
      *
      * @param {KeyboardEvent} event
      * @param {() => number} getRowCount
@@ -241,6 +243,9 @@ const SelectorCommon = (function () {
      * @returns {boolean} 処理した場合は `true`
      */
     function handleHomeEndKeys(event, getRowCount, setSelectedIndex) {
+        if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) {
+            return false;
+        }
         if (event.key === 'Home') {
             if (getRowCount() > 0) {
                 setSelectedIndex(0, true);

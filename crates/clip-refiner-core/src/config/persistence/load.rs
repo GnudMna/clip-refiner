@@ -8,12 +8,12 @@ use serde::Deserialize;
 use super::super::paths::get_config_file_path;
 use super::super::permissions::restrict_private_file_permissions;
 use super::super::registered_clips::{
-    load_registered_clips, migrate_legacy_clip_images, registered_clip_from_plain_text,
+    is_clip_store_key_available, load_registered_clips, migrate_legacy_clip_images,
+    registered_clip_from_plain_text,
 };
 use super::super::types::{AppConfig, RegisteredClip};
 use super::super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 use super::outcome::{ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError};
-use crate::error::ConfigError;
 
 impl AppConfig {
     /// 設定ファイルを読み込む
@@ -40,6 +40,7 @@ impl AppConfig {
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
                     unsupported_version_kept: false,
+                    registered_clips_key_unavailable: false,
                 };
             }
         };
@@ -50,6 +51,7 @@ impl AppConfig {
                 fallback: None,
                 unknown_keys: Vec::new(),
                 unsupported_version_kept: false,
+                registered_clips_key_unavailable: false,
             };
         }
 
@@ -66,6 +68,7 @@ impl AppConfig {
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
                     unsupported_version_kept: false,
+                    registered_clips_key_unavailable: false,
                 };
             }
         };
@@ -86,6 +89,7 @@ impl AppConfig {
                     fallback: None,
                     unknown_keys: parsed.unknown_keys,
                     unsupported_version_kept: finished.unsupported_version_kept,
+                    registered_clips_key_unavailable: finished.registered_clips_key_unavailable,
                 }
             }
             Err(e) => {
@@ -100,6 +104,7 @@ impl AppConfig {
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
                     unsupported_version_kept: false,
+                    registered_clips_key_unavailable: false,
                 }
             }
         }
@@ -179,25 +184,22 @@ struct LegacyTomlRegisteredClip {
 }
 
 /// `config.toml` の解析結果
-struct ParsedConfigToml {
+pub(super) struct ParsedConfigToml {
     config: AppConfig,
     legacy_clips: Vec<LegacyTomlRegisteredClip>,
     unknown_keys: Vec<String>,
 }
 
 /// `config.toml` を解析し、レガシー `[[clips]]` と未知キーを分離して返す
-fn parse_config_toml(content: &str) -> Result<ParsedConfigToml, ConfigError> {
-    let mut value: toml::Value =
-        toml::from_str(content).map_err(|e| ConfigError::serialize(e.to_string()))?;
+pub(super) fn parse_config_toml(content: &str) -> Result<ParsedConfigToml, toml::de::Error> {
+    let mut value: toml::Value = toml::from_str(content)?;
     let unknown_keys = collect_unknown_config_keys(&value);
     drop_shadowed_legacy_keys(&mut value);
     let legacy_clips = value
         .get("clips")
         .and_then(|clips| clips.clone().try_into().ok())
         .unwrap_or_default();
-    let config: AppConfig = value
-        .try_into()
-        .map_err(|e: toml::de::Error| ConfigError::serialize(e.to_string()))?;
+    let config: AppConfig = value.try_into()?;
     Ok(ParsedConfigToml {
         config,
         legacy_clips,
@@ -260,11 +262,16 @@ fn encrypt_legacy_toml_clips(legacy_clips: Vec<LegacyTomlRegisteredClip>) -> Vec
 }
 
 /// スキーマ移行と読み込み後フラグ
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "`bool` 項目は読み込み後の独立した通知フラグを写す"
+)]
 struct FinishedLoad {
     config: AppConfig,
     migrated: bool,
     newer_version_clamped: bool,
     unsupported_version_kept: bool,
+    registered_clips_key_unavailable: bool,
 }
 
 /// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
@@ -275,8 +282,10 @@ fn finish_loading(config: AppConfig, legacy_clips: Vec<LegacyTomlRegisteredClip>
     let newer_version_clamped = migration.newer_version_clamped;
     let unsupported_version_kept = migration.unsupported_version_kept;
 
+    let mut registered_clips_key_unavailable = false;
     let (file_clips, file_format_migrated) = load_registered_clips().unwrap_or_else(|err| {
         tracing::warn!("登録クリップファイルの読み込みに失敗: {:?}", err);
+        registered_clips_key_unavailable = !is_clip_store_key_available();
         (Vec::new(), false)
     });
 
@@ -303,6 +312,7 @@ fn finish_loading(config: AppConfig, legacy_clips: Vec<LegacyTomlRegisteredClip>
         migrated: schema_migrated || clips_migrated,
         newer_version_clamped,
         unsupported_version_kept,
+        registered_clips_key_unavailable,
     }
 }
 
@@ -325,7 +335,7 @@ fn apply_version_notices(finished: &FinishedLoad) {
 ///
 /// # Returns
 /// * `bool` - バックアップファイルの作成に成功した場合は `true`
-fn backup_corrupted_config(config_path: &Path) -> bool {
+pub(super) fn backup_corrupted_config(config_path: &Path) -> bool {
     let backup_path = config_path.with_file_name("config.toml.bak");
     match fs::copy(config_path, &backup_path) {
         Ok(_) => {
@@ -372,6 +382,17 @@ mod tests {
             assert_eq!(outcome.config.mode, AppConfig::default().mode);
             assert!(outcome.unknown_keys.is_empty());
         });
+    }
+
+    /// 解析失敗の通知文言に「シリアライズ」を含めないこと
+    #[test]
+    fn parse_failure_message_does_not_mention_serialize() {
+        let err = parse_config_toml("mode = [[invalid")
+            .err()
+            .expect("parse error");
+        let message = ConfigReloadError::Parse(err.to_string()).notification_message();
+        assert!(message.starts_with("設定ファイルの形式が不正です"));
+        assert!(!message.contains("シリアライズ"));
     }
 
     /// 旧キー名と現行キー名が同居していても解析に失敗せず、現行キー名の値を使うこと
@@ -524,6 +545,28 @@ text = "secret-body"
             )
             .expect("decrypt file");
             assert_eq!(plain.as_str(), "secret-body");
+        });
+    }
+
+    /// 登録クリップの鍵を復号できない場合は読み込み結果で知らせ、鍵が正常な場合は知らせないこと
+    #[test]
+    fn load_reports_registered_clips_key_unavailable() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let outcome = AppConfig::load();
+            assert!(!outcome.registered_clips_key_unavailable);
+
+            let dir = get_config_file_path()
+                .expect("path")
+                .parent()
+                .expect("親ディレクトリ")
+                .to_path_buf();
+            fs::write(dir.join("registered-clips.key"), b"broken-key").expect("不正な鍵");
+            fs::write(dir.join("registered-clips.dat"), b"existing").expect("既存のデータ");
+            crate::config::clip_store_key::clear_clip_store_key_cache();
+
+            let outcome = AppConfig::load();
+            assert!(outcome.registered_clips_key_unavailable);
+            assert!(outcome.fallback.is_none(), "設定自体は読み込めていること");
         });
     }
 }

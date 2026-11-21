@@ -11,7 +11,7 @@ use super::menu_snapshot::MenuSnapshot;
 use super::monitor_snapshot::MonitorSnapshot;
 use super::settings_pending::SettingsPendingState;
 use super::worker_state::WorkerState;
-use crate::config::{AppConfig, ConfigLoadFallback, RegexSettings};
+use crate::config::{AppConfig, ConfigLoadFallback, RegexSettings, RegisteredClipsSaveOutcome};
 use crate::security::SecretString;
 
 // ======================================================================
@@ -54,16 +54,22 @@ impl AppState {
     ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>, Vec<String>, bool)> {
         let load_outcome = AppConfig::load();
         let config = load_outcome.config;
+        let state = Self {
+            worker: WorkerState::new(),
+            config: RwLock::new(config),
+            monitor_generation: AtomicU64::new(0),
+            clipboard_session: ClipboardSessionState::new()?,
+            config_sync: ConfigSyncState::new(),
+            settings_pending: SettingsPendingState::new(),
+            proxy,
+        };
+        if load_outcome.registered_clips_key_unavailable
+            && state.config_sync.claim_key_unavailable_notice()
+        {
+            crate::user_error::registered_clips_key_unavailable().notify_skip();
+        }
         Ok((
-            Self {
-                worker: WorkerState::new(),
-                config: RwLock::new(config),
-                monitor_generation: AtomicU64::new(0),
-                clipboard_session: ClipboardSessionState::new()?,
-                config_sync: ConfigSyncState::new(),
-                settings_pending: SettingsPendingState::new(),
-                proxy,
-            },
+            state,
             load_outcome.fallback,
             load_outcome.unknown_keys,
             load_outcome.unsupported_version_kept,
@@ -94,16 +100,29 @@ impl AppState {
     ///
     /// テスト用 `AppState` ではディスクへ書き込まない
     ///
+    /// 設定を複製してから読み取りロックを離して書き込む。既存ファイルの読み取りリトライで
+    /// 書き込みが長引いても、設定の参照・変更を待たせない
+    ///
     /// # Arguments
     /// * `self` - 自身
     pub fn save_config(&self) {
         if !self.config_sync.should_persist() {
             return;
         }
+        // 複製から書き込み完了までを直列化し、古い複製が新しい内容を上書きするのを防ぐ
+        let _save_guard = self.config_sync.lock_save();
         self.config_sync.begin_own_write();
-        let save_result = self.with_config(crate::config::AppConfig::save);
+        let snapshot = self.with_config(AppConfig::clone);
+        let save_result = snapshot.save_with_outcome();
         match save_result {
-            Ok(()) => self.config_sync.record_disk_sync(),
+            Ok(outcome) => {
+                self.config_sync.record_disk_sync();
+                if outcome == RegisteredClipsSaveOutcome::SkippedKeyUnavailable
+                    && self.config_sync.claim_key_unavailable_notice()
+                {
+                    crate::user_error::registered_clips_key_unavailable().notify_skip();
+                }
+            }
             Err(e) => crate::user_error::config_save_failure().notify_with_debug(&e),
         }
         self.config_sync.end_own_write();

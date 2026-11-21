@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use super::context::{RefineContext, RefineSkipReason};
 use super::mode::RefineMode;
+use super::parse_failure::ParseFailure;
 use super::transform::html::{self, HtmlToMarkdownResult};
 use super::transform::{
     base64, case_convert, datetime, escape, json, line_actions, markdown, number, path, regex,
@@ -71,17 +72,17 @@ fn refine_by_mode<'a>(mode: RefineMode, text: &'a str, ctx: &RefineContext) -> C
         RefineMode::RegexExtract => regex::regex_extract(text, ctx),
         RefineMode::RegexDelete => regex::regex_delete(text, ctx),
         RefineMode::RegexSplit => regex::regex_split(text, ctx),
-        RefineMode::JsonFormat => with_parser_limit(text, ctx, json::format_json),
+        RefineMode::JsonFormat => with_parse_failure(text, ctx, json::format_json),
         RefineMode::JsonFormatPreserveOrder => {
-            with_parser_limit(text, ctx, json::format_json_preserve_order)
+            with_parse_failure(text, ctx, json::format_json_preserve_order)
         }
-        RefineMode::YamlToJson => with_parser_limit(text, ctx, yaml::yaml_to_json),
+        RefineMode::YamlToJson => with_parse_failure(text, ctx, yaml::yaml_to_json),
         RefineMode::YamlToJsonPreserveOrder => {
-            with_parser_limit(text, ctx, yaml::yaml_to_json_preserve_order)
+            with_parse_failure(text, ctx, yaml::yaml_to_json_preserve_order)
         }
-        RefineMode::JsonToYaml => with_parser_limit(text, ctx, json::json_to_yaml),
+        RefineMode::JsonToYaml => with_parse_failure(text, ctx, json::json_to_yaml),
         RefineMode::JsonToYamlPreserveOrder => {
-            with_parser_limit(text, ctx, json::json_to_yaml_preserve_order)
+            with_parse_failure(text, ctx, json::json_to_yaml_preserve_order)
         }
         // リッチテキストの `CF_HTML` 書き込みは `process_clipboard_pipeline_io` で行う
         RefineMode::MarkdownToHtml | RefineMode::MarkdownToRichText => {
@@ -124,6 +125,22 @@ fn with_parser_limit<'a>(
         return Cow::Borrowed(text);
     }
     convert(text)
+}
+
+/// パーサ入力の上限内であれば `convert` を適用し、パース失敗はスキップとして記録して素通しする
+///
+/// 上限超過は `with_parser_limit` と同じく `ParserInputTooLarge` として記録する
+fn with_parse_failure<'a>(
+    text: &'a str,
+    ctx: &RefineContext,
+    convert: impl FnOnce(&'a str) -> Result<Cow<'a, str>, ParseFailure>,
+) -> Cow<'a, str> {
+    with_parser_limit(text, ctx, |text| {
+        convert(text).unwrap_or_else(|failure| {
+            ctx.record_skip(RefineSkipReason::ParseFailed(failure));
+            Cow::Borrowed(text)
+        })
+    })
 }
 
 /// HTML を Markdown に変換する

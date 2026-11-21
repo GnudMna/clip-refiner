@@ -98,16 +98,7 @@ pub fn add_path_quotes(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - スラッシュ区切りに変換されたテキスト
 pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
-    super::utils::process_lines(text, |line| {
-        let trimmed = line.trim();
-        if !trimmed.is_empty() && is_path_like_raw(trimmed) {
-            let converted = trimmed.replace('\\', "/");
-            if converted != trimmed {
-                return Some(Cow::Owned(converted));
-            }
-        }
-        None
-    })
+    convert_separators(text, '\\', "/")
 }
 
 /// パス内のスラッシュをバックスラッシュに変換する
@@ -121,15 +112,38 @@ pub fn convert_to_forward_slash(text: &str) -> Cow<'_, str> {
 /// # Returns
 /// * `Cow<'_, str>` - バックスラッシュ区切りに変換されたテキスト
 pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
+    convert_separators(text, '/', "\\")
+}
+
+/// パスらしい行の区切り文字を置き換える
+///
+/// 行頭のインデントと行末の空白は変換せず維持する
+///
+/// # Arguments
+/// * `text` - パスを含む文字列(複数行可)
+/// * `from` - 置き換える区切り文字
+/// * `to` - 置き換え後の区切り文字
+///
+/// # Returns
+/// * `Cow<'_, str>` - 区切り文字が置き換えられたテキスト。変更がない場合は元のテキスト
+fn convert_separators<'a>(text: &'a str, from: char, to: &str) -> Cow<'a, str> {
     super::utils::process_lines(text, |line| {
-        let trimmed = line.trim();
-        if !trimmed.is_empty() && is_path_like_raw(trimmed) {
-            let converted = trimmed.replace('/', "\\");
-            if converted != trimmed {
-                return Some(Cow::Owned(converted));
-            }
+        let body = line.trim();
+        if body.is_empty() || !is_path_like_raw(body) {
+            return None;
         }
-        None
+        let converted = body.replace(from, to);
+        if converted == body {
+            return None;
+        }
+        // 前後の空白は body の位置から切り出して維持する
+        let start = line.len() - line.trim_start().len();
+        let end = line.trim_end().len();
+        Some(Cow::Owned(format!(
+            "{}{converted}{}",
+            &line[..start],
+            &line[end..]
+        )))
     })
 }
 
@@ -144,6 +158,9 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 /// * `/` または `\` (ルート・UNC `\\server\share` を含む)
 /// * `./` `../` `.\` `..\` (相対パス)
 ///
+/// ただし `// comment` のように、区切り文字を 2 つ重ねた直後が空白または行末の場合は
+/// UNC ではなくコメントとみなし、パスとみなさない
+///
 /// # Arguments
 /// * `text` - 判定対象の文字列
 ///
@@ -153,9 +170,11 @@ fn is_path_like_raw(text: &str) -> bool {
     let b = text.as_bytes();
     let is_sep = |c: u8| c == b'/' || c == b'\\';
 
-    // ルート・UNC
+    // ルート・UNC。`//` `\\` の直後が空白または行末ならコメントとして除外する
     if b.first().is_some_and(|&c| is_sep(c)) {
-        return true;
+        let is_comment =
+            b.len() >= 2 && b[1] == b[0] && b.get(2).is_none_or(u8::is_ascii_whitespace);
+        return !is_comment;
     }
     // Windowsドライブレター: 先頭が ASCII アルファベット1文字 + ':' + パス区切り文字
     // 例: C:\ や D:/ はパスだが、12:00:00 や key: value などは除外する
@@ -341,6 +360,45 @@ mod tests {
                 "{input}"
             );
         }
+    }
+
+    /// 行頭のインデントと行末の空白を維持して変換すること
+    #[test]
+    fn test_convert_preserves_surrounding_whitespace() {
+        assert_eq!(
+            convert_to_backslash("  /usr/bin\n\t/tmp/x  \r\n"),
+            "  \\usr\\bin\n\t\\tmp\\x  \r\n"
+        );
+        assert_eq!(
+            convert_to_forward_slash("    C:\\a\\b\n  \\\\server\\share"),
+            "    C:/a/b\n  //server/share"
+        );
+        // 変更がない場合はインデントがあっても Borrowed を返す
+        assert!(matches!(
+            convert_to_backslash("  C:\\a\\b"),
+            Cow::Borrowed(_)
+        ));
+    }
+
+    /// `//` や `\\` の直後が空白のコメント風の行は変換しないこと
+    #[test]
+    fn test_comment_like_line_is_not_converted() {
+        for input in ["// comment here", "  // comment", "//", "\\\\ comment"] {
+            assert!(
+                matches!(convert_to_backslash(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+            assert!(
+                matches!(convert_to_forward_slash(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+            assert!(
+                matches!(add_path_quotes(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+        }
+        // 直後が空白でない `//server/share` は UNC として変換する
+        assert_eq!(convert_to_backslash("//server/share"), "\\\\server\\share");
     }
 
     /// ルート・UNC・相対パスをパスとして変換すること
