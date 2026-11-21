@@ -6,13 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url("selector.css");
-
-        .selector-heading {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--accent-color);
-            margin-bottom: 8px;
-        }
     </style>
 </head>
 
@@ -29,9 +22,23 @@
         </div>
     </div>
 
+    <script src="selector-common.js"></script>
     <script type="application/json" id="modes-data">[]</script>
 
     <script>
+        const {
+            normalizeQuery,
+            highlightText,
+            escapeHtml,
+            postIpc,
+            close,
+            createSelection,
+            handleArrowKeys,
+            handleHomeEndKeys,
+            handleEscapeKey,
+            focusSearchInput,
+        } = window.SelectorCommon;
+
         let modes = JSON.parse(document.getElementById('modes-data').textContent);
         const input = document.getElementById('input');
         const results = document.getElementById('results');
@@ -39,7 +46,7 @@
 
         let currentModeId = null;
         let filtered = buildDisplayList('');
-        let selectedIndex = 0;
+        const selection = createSelection(results, () => filtered.length);
 
         function loadModes(nextModes) {
             modes = nextModes;
@@ -79,38 +86,6 @@
             return display;
         }
 
-        function normalizeQuery(query) {
-            return query.toLowerCase().trim();
-        }
-
-        function escapeHtml(text) {
-            return text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-
-        function highlightText(text, query) {
-            const safe = escapeHtml(text);
-            if (!query) {
-                return safe;
-            }
-
-            const lowerText = text.toLowerCase();
-            const index = lowerText.indexOf(query);
-            if (index === -1) {
-                return safe;
-            }
-
-            const end = index + query.length;
-            return (
-                escapeHtml(text.slice(0, index)) +
-                '<mark>' + escapeHtml(text.slice(index, end)) + '</mark>' +
-                escapeHtml(text.slice(end))
-            );
-        }
-
         function modeMatches(mode, query) {
             if (!query) {
                 return true;
@@ -118,19 +93,6 @@
 
             const fields = [mode.label, mode.category, mode.value, mode.id];
             return fields.some((field) => field && field.toLowerCase().includes(query));
-        }
-
-        function clampSelectedIndex() {
-            if (filtered.length === 0) {
-                selectedIndex = 0;
-                return;
-            }
-            if (selectedIndex >= filtered.length) {
-                selectedIndex = filtered.length - 1;
-            }
-            if (selectedIndex < 0) {
-                selectedIndex = 0;
-            }
         }
 
         function createReorderButtons(mode, query) {
@@ -192,7 +154,7 @@
             const isCurrent = mode.id === currentModeId;
             const div = document.createElement('div');
             div.className = 'item' +
-                (index === selectedIndex ? ' selected' : '') +
+                (index === selection.index ? ' selected' : '') +
                 (isCurrent ? ' current' : '');
 
             div.innerHTML = `
@@ -209,40 +171,9 @@
             }
             div.appendChild(createFavoriteButton(mode));
 
-            div.onmouseenter = () => setSelectedIndex(index, false);
+            div.onmouseenter = () => selection.setSelectedIndex(index, false);
             div.onclick = () => select(mode.id);
             return div;
-        }
-
-        function updateSelectionHighlight() {
-            results.querySelectorAll('.item').forEach((element, index) => {
-                element.classList.toggle('selected', index === selectedIndex);
-            });
-        }
-
-        function scrollSelectedIntoView() {
-            const items = results.querySelectorAll('.item');
-            items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
-        }
-
-        function setSelectedIndex(index, scroll) {
-            if (filtered.length === 0) {
-                return;
-            }
-
-            const next = Math.max(0, Math.min(index, filtered.length - 1));
-            if (next === selectedIndex) {
-                if (scroll) {
-                    scrollSelectedIntoView();
-                }
-                return;
-            }
-
-            selectedIndex = next;
-            updateSelectionHighlight();
-            if (scroll) {
-                scrollSelectedIntoView();
-            }
         }
 
         function sectionCategory(mode, query) {
@@ -258,7 +189,7 @@
         function renderList(scrollToSelection) {
             results.innerHTML = '';
             const query = normalizeQuery(input.value);
-            clampSelectedIndex();
+            selection.clampSelectedIndex();
 
             if (filtered.length === 0) {
                 const empty = document.createElement('div');
@@ -311,33 +242,33 @@
             });
 
             if (scrollToSelection) {
-                scrollSelectedIntoView();
+                selection.scrollSelectedIntoView();
             }
         }
 
         function filter() {
             const query = normalizeQuery(input.value);
-            const previousId = filtered[selectedIndex]?.id;
+            const previousId = filtered[selection.index]?.id;
 
             filtered = buildDisplayList(query);
 
             const nextIndex = previousId
                 ? filtered.findIndex((mode) => mode.id === previousId)
                 : -1;
-            selectedIndex = nextIndex !== -1 ? nextIndex : 0;
+            selection.index = nextIndex !== -1 ? nextIndex : 0;
             renderList(true);
         }
 
         function select(id) {
-            window.ipc.postMessage('select:' + id);
+            postIpc('select:' + id);
         }
 
         function toggleFavorite(id) {
-            window.ipc.postMessage('toggle-favorite:' + id);
+            postIpc('toggle-favorite:' + id);
         }
 
         function moveFavorite(id, direction) {
-            window.ipc.postMessage('move-favorite:' + id + ':' + direction);
+            postIpc('move-favorite:' + id + ':' + direction);
         }
 
         function moveSelectedFavorite(delta) {
@@ -345,24 +276,13 @@
                 return false;
             }
 
-            const mode = filtered[selectedIndex];
+            const mode = filtered[selection.index];
             if (!mode || mode.listSection !== 'favorites' || !mode.favorite) {
                 return false;
             }
 
             moveFavorite(mode.id, delta < 0 ? 'up' : 'down');
             return true;
-        }
-
-        function close() {
-            window.ipc.postMessage('close');
-        }
-
-        function moveSelection(delta) {
-            if (filtered.length === 0) {
-                return;
-            }
-            setSelectedIndex(selectedIndex + delta, true);
         }
 
         function applyFocus(modeId) {
@@ -372,49 +292,35 @@
 
             const index = filtered.findIndex((mode) => mode.id === currentModeId);
             if (index !== -1) {
-                selectedIndex = index;
+                selection.index = index;
             }
 
             renderList(true);
-            input.focus();
-            input.select();
+            focusSearchInput(input);
         }
 
         input.oninput = filter;
 
         window.onkeydown = (e) => {
-            if (e.key === 'ArrowDown') {
-                moveSelection(1);
-                e.preventDefault();
-            } else if (e.key === 'ArrowUp') {
-                moveSelection(-1);
-                e.preventDefault();
-            } else if (e.key === 'Home') {
-                if (filtered.length > 0) {
-                    setSelectedIndex(0, true);
+            if (handleArrowKeys(e, selection.moveSelection)) {
+                return;
+            }
+            if (handleHomeEndKeys(e, () => filtered.length, selection.setSelectedIndex)) {
+                return;
+            }
+            if (e.key === 'Enter') {
+                if (filtered[selection.index]) {
+                    select(filtered[selection.index].id);
                     e.preventDefault();
                 }
-            } else if (e.key === 'End') {
-                if (filtered.length > 0) {
-                    setSelectedIndex(filtered.length - 1, true);
-                    e.preventDefault();
-                }
-            } else if (e.key === 'Enter') {
-                if (filtered[selectedIndex]) {
-                    select(filtered[selectedIndex].id);
-                    e.preventDefault();
-                }
-            } else if (e.key === 'Escape') {
-                if (input.value) {
-                    input.value = '';
-                    filter();
-                    e.preventDefault();
-                } else {
-                    close();
-                }
-            } else if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
-                if (filtered[selectedIndex]) {
-                    toggleFavorite(filtered[selectedIndex].id);
+                return;
+            }
+            if (handleEscapeKey(e, input, filter, close)) {
+                return;
+            }
+            if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
+                if (filtered[selection.index]) {
+                    toggleFavorite(filtered[selection.index].id);
                     e.preventDefault();
                 }
             } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
@@ -438,7 +344,7 @@
 
         // お気に入り更新後に一覧を再描画する
         window.refreshModes = (modeId, modesJson) => {
-            const previousId = filtered[selectedIndex]?.id;
+            const previousId = filtered[selection.index]?.id;
             if (modesJson) {
                 loadModes(modesJson);
             }
@@ -447,7 +353,7 @@
             const nextIndex = previousId
                 ? filtered.findIndex((mode) => mode.id === previousId)
                 : -1;
-            selectedIndex = nextIndex !== -1 ? nextIndex : 0;
+            selection.index = nextIndex !== -1 ? nextIndex : 0;
             renderList(true);
         };
 

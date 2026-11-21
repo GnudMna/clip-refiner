@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use super::{TextsMenu, TrayMenu};
+use super::{ClipsMenu, TrayMenu};
 
 use crate::tray::state::{AppState, LockExt};
 
@@ -8,42 +8,42 @@ use anyhow::Result;
 use tray_icon::menu::{MenuItem, PredefinedMenuItem, Submenu};
 
 // ======================================================================
-// 登録文字列メニュー
+// 登録クリップメニュー
 // ======================================================================
 impl TrayMenu {
-    /// 登録文字列メニューの基本構造を構築する
-    pub(super) fn build_texts_menu(state: &AppState) -> Result<TextsMenu> {
-        let main_submenu = Submenu::new("登録文字列", true);
+    /// 登録クリップメニューの基本構造を構築する
+    pub(super) fn build_clips_menu(state: &AppState) -> Result<ClipsMenu> {
+        let main_submenu = Submenu::new("登録クリップ", true);
         let records = Mutex::new(Vec::new());
         let empty_hint_item = MenuItem::new("(未登録)", false, None);
         let register_item = MenuItem::new("クリップボードを登録", true, None);
 
-        let texts_menu = TextsMenu {
+        let clips_menu = ClipsMenu {
             main_submenu,
             records,
             empty_hint_item,
             register_item,
         };
 
-        texts_menu.rebuild(state)?;
-        Ok(texts_menu)
+        clips_menu.rebuild(state)?;
+        Ok(clips_menu)
     }
 
-    /// 登録文字列メニューを設定内容に合わせて更新する
-    pub fn refresh_texts(&self, state: &AppState) -> Result<()> {
-        self.texts.rebuild(state)
+    /// 登録クリップメニューを設定内容に合わせて更新する
+    pub fn refresh_clips(&self, state: &AppState) -> Result<()> {
+        self.clips.rebuild(state)
     }
 }
 
 // ======================================================================
-// 登録文字列メニュー更新
+// 登録クリップメニュー更新
 // ======================================================================
-impl TextsMenu {
-    /// 登録文字列リストの内容を現在の設定に合わせて再構築する
+impl ClipsMenu {
+    /// 登録クリップリストの内容を現在の設定に合わせて再構築する
     pub fn rebuild(&self, state: &AppState) -> Result<()> {
         let entries: Vec<(String, usize)> = state.with_config(|config| {
             config
-                .texts
+                .clips
                 .iter()
                 .enumerate()
                 .map(|(index, entry)| (entry.label.clone(), index))

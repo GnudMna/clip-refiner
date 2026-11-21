@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
+use super::clip_selector::ClipSelectorWindow;
 use super::menu::TrayMenu;
 use super::quick_selector::QuickSelectorWindow;
 use super::state::AppState;
-use super::text_selector::TextSelectorWindow;
 use super::worker::ClipboardCommand;
 
 use tao::event::WindowEvent;
@@ -13,6 +13,7 @@ use tao::event_loop::ControlFlow;
 use tray_icon::menu::MenuEvent;
 
 mod app_control;
+mod clips;
 mod config_reload;
 mod favorites;
 mod history;
@@ -20,7 +21,6 @@ mod monitor;
 mod notification;
 mod ocr;
 mod refine;
-mod texts;
 
 // ======================================================================
 // テスト
@@ -58,13 +58,13 @@ impl FocusDismissibleSelector for QuickSelectorWindow {
     }
 }
 
-impl FocusDismissibleSelector for TextSelectorWindow {
+impl FocusDismissibleSelector for ClipSelectorWindow {
     fn hide(&self) {
-        TextSelectorWindow::hide(self);
+        ClipSelectorWindow::hide(self);
     }
 
     fn is_visible(&self) -> bool {
-        TextSelectorWindow::is_visible(self)
+        ClipSelectorWindow::is_visible(self)
     }
 }
 
@@ -97,7 +97,7 @@ pub fn handle_menu_event(
     if history::handle_history_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
-    if texts::handle_texts_event(&event.id, menu, state, clipboard_tx) {
+    if clips::handle_clips_event(&event.id, menu, state, clipboard_tx) {
         return;
     }
     if notification::handle_notification_event(&event.id, menu, state) {
@@ -112,35 +112,35 @@ pub fn handle_menu_event(
     monitor::handle_monitor_event(&event.id, menu, state);
 }
 
-/// 登録文字列をクリップボードへコピーする
-pub(crate) fn copy_registered_text(
+/// 登録クリップをクリップボードへコピーする
+pub(crate) fn copy_registered_clip(
     state: &Arc<AppState>,
     clipboard_tx: &Sender<ClipboardCommand>,
     index: usize,
 ) {
-    texts::copy_registered_text(state, clipboard_tx, index);
+    clips::copy_registered_clip(state, clipboard_tx, index);
 }
 
-/// 登録文字列を削除し、メニューとセレクターを更新する
-pub(crate) fn delete_registered_text(
+/// 登録クリップを削除し、メニューとセレクターを更新する
+pub(crate) fn delete_registered_clip(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    text_selector: &TextSelectorWindow,
+    clip_selector: &ClipSelectorWindow,
     index: usize,
 ) {
-    texts::delete_registered_text(state, menu, text_selector, index);
+    clips::delete_registered_clip(state, menu, clip_selector, index);
 }
 
-/// 登録文字列メニューとセレクター表示を設定内容に合わせて更新する
-pub(crate) fn refresh_texts_views(
+/// 登録クリップメニューとセレクター表示を設定内容に合わせて更新する
+pub(crate) fn refresh_clips_views(
     state: &Arc<AppState>,
     menu: &TrayMenu,
-    text_selector: &TextSelectorWindow,
+    clip_selector: &ClipSelectorWindow,
 ) {
-    texts::refresh_texts_views(state, menu, text_selector);
+    clips::refresh_clips_views(state, menu, clip_selector);
 }
 
-/// UIウィンドウ (クイックセレクター / テキストセレクター) に関連するイベントを処理する
+/// UIウィンドウ (クイックセレクター / 登録クリップセレクター) に関連するイベントを処理する
 ///
 /// 主にフォーカス喪失時の自動非表示処理などを行う
 ///

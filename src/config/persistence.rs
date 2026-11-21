@@ -4,8 +4,11 @@ use std::time::SystemTime;
 
 use super::paths::{config_file_modified_time, get_config_file_path};
 use super::permissions::restrict_private_file_permissions;
+use super::registered_clips::{
+    load_registered_clips, migrate_legacy_clip_images, save_registered_clips,
+};
 use super::serialize::config_to_toml;
-use super::types::AppConfig;
+use super::types::{AppConfig, RegisteredClip};
 
 use anyhow::Result;
 
@@ -83,9 +86,9 @@ impl AppConfig {
             }
         };
 
-        match toml::from_str::<AppConfig>(&content) {
-            Ok(config) => {
-                let (config, migrated) = config.prepare_loaded();
+        match parse_config_toml(&content) {
+            Ok((config, legacy_clips)) => {
+                let (config, migrated) = finish_loading(config, legacy_clips);
                 if migrated && let Err(e) = config.save() {
                     crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
                 }
@@ -116,10 +119,10 @@ impl AppConfig {
         let content =
             fs::read_to_string(&config_path).map_err(|e| ConfigReloadError::Read(e.to_string()))?;
 
-        let config = toml::from_str::<AppConfig>(&content)
-            .map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
+        let (config, legacy_clips) =
+            parse_config_toml(&content).map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
 
-        let (config, migrated) = config.prepare_loaded();
+        let (config, migrated) = finish_loading(config, legacy_clips);
         if migrated && let Err(e) = config.save() {
             crate::log_warn!("移行後の設定保存に失敗: {:?}", e);
         }
@@ -139,6 +142,11 @@ impl AppConfig {
 
         let mut to_save = self.clone();
         to_save.normalize();
+
+        save_registered_clips(&to_save.clips).map_err(|e| {
+            crate::log_error!("登録クリップの保存に失敗: {:?}", e);
+            e
+        })?;
 
         let existing = if config_path.exists() {
             fs::read_to_string(&config_path).ok()
@@ -183,6 +191,44 @@ impl AppConfig {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// `config.toml` を解析し、レガシー `[[clips]]` を分離して返す
+fn parse_config_toml(content: &str) -> Result<(AppConfig, Vec<RegisteredClip>)> {
+    let value: toml::Value = toml::from_str(content)?;
+    let legacy_clips = value
+        .get("clips")
+        .and_then(|clips| clips.clone().try_into().ok())
+        .unwrap_or_default();
+    let config: AppConfig = value.try_into()?;
+    Ok((config, legacy_clips))
+}
+
+/// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
+fn finish_loading(config: AppConfig, legacy_clips: Vec<RegisteredClip>) -> (AppConfig, bool) {
+    let (mut config, schema_migrated) = config.prepare_loaded();
+
+    let file_clips = load_registered_clips().unwrap_or_else(|err| {
+        crate::log_warn!("登録クリップファイルの読み込みに失敗: {:?}", err);
+        Vec::new()
+    });
+
+    let mut clips_migrated = false;
+    if !file_clips.is_empty() {
+        config.clips = file_clips;
+    } else if !legacy_clips.is_empty() {
+        config.clips = legacy_clips;
+        clips_migrated = true;
+        crate::log_info!("config.toml の [[clips]] を registered-clips.dat へ移行する");
+    }
+
+    if migrate_legacy_clip_images(&mut config.clips) {
+        clips_migrated = true;
+    }
+
+    config.normalize_clips();
+
+    (config, schema_migrated || clips_migrated)
+}
+
 /// 破損した設定ファイルをバックアップする
 fn backup_corrupted_config(config_path: &Path) {
     let backup_path = config_path.with_file_name("config.toml.bak");
@@ -199,5 +245,46 @@ fn backup_corrupted_config(config_path: &Path) {
         Err(e) => {
             crate::log_warn!("設定ファイルのバックアップに失敗: {:?}", e);
         }
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `config.toml` の `[[clips]]` は別ファイルへ移行され、TOML から除去されること
+    #[test]
+    fn legacy_clips_in_config_toml_are_migrated_to_separate_file() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let toml_str = r#"
+version = 2
+mode = "Trim"
+interval_ms = 1000
+
+[[clips]]
+label = "secret-label"
+text = "secret-body"
+"#;
+            let (config, legacy_clips) = parse_config_toml(toml_str).expect("parse");
+            assert_eq!(legacy_clips.len(), 1);
+            assert!(config.clips.is_empty());
+
+            let (config, migrated) = finish_loading(config, legacy_clips);
+            assert!(migrated);
+            assert_eq!(config.clips[0].text, "secret-body");
+
+            config.save().expect("save");
+            let content =
+                fs::read_to_string(AppConfig::config_path().expect("path")).expect("read");
+            assert!(!content.contains("[[clips]]"));
+            assert!(!content.contains("secret-body"));
+
+            let file_clips = load_registered_clips().expect("load clips file");
+            assert_eq!(file_clips.len(), 1);
+            assert_eq!(file_clips[0].text, "secret-body");
+        });
     }
 }

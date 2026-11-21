@@ -1,5 +1,7 @@
 use super::dispatch;
-use super::selector_window::{WebSelectorWindow, build_hidden_selector_window, embed_selector_css};
+use super::selector_window::{
+    WebSelectorWindow, build_hidden_selector_window, embed_selector_assets,
+};
 use super::state::AppEvent;
 
 use crate::config::FavoriteMoveDirection;
@@ -53,7 +55,7 @@ pub(crate) fn parse_quick_selector_ipc_message(msg: &str) -> Option<QuickSelecto
 
 /// クイックセレクター用 HTML を組み立てる
 pub(crate) fn assemble_quick_selector_html(modes_json: &str) -> String {
-    embed_selector_css(include_str!("../ui/quick_selector.html")).replace(
+    embed_selector_assets(include_str!("../ui/quick_selector.html")).replace(
         r#"<script type="application/json" id="modes-data">[]</script>"#,
         &format!(r#"<script type="application/json" id="modes-data">{modes_json}</script>"#),
     )
@@ -263,6 +265,8 @@ mod tests {
         let html = assemble_quick_selector_html(r#"[{"id":"trim"}]"#);
         assert!(html.contains(r#"[{"id":"trim"}]"#));
         assert!(!html.contains(r#"@import url("selector.css");"#));
+        assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("focusInput"));
         assert!(html.contains("クイックセレクター"));
     }

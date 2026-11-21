@@ -3,6 +3,7 @@
 //! アプリケーションの常駐実行に関連する UI と背後のイベントループ制御を担当する
 
 pub mod app;
+pub mod clip_selector;
 mod clipboard_change;
 pub(crate) mod clipboard_monitor;
 mod dispatch;
@@ -17,7 +18,6 @@ pub mod quick_selector;
 mod runner;
 mod selector_window;
 pub mod state;
-pub mod text_selector;
 pub mod worker;
 
 pub use runner::run_loop;

@@ -2,9 +2,8 @@ use std::fmt::Write;
 
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
-    DOC_HOTKEY_FAVORITE_SLOTS, DOC_HOTKEY_NOTIFICATION, DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE,
-    DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_TEXT_SELECTOR, DOC_HOTKEY_UNDO,
-    SECTION_HOTKEYS,
+    DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_FAVORITE_SLOTS, DOC_HOTKEY_NOTIFICATION, DOC_HOTKEY_OCR,
+    DOC_HOTKEY_PAUSE, DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO, SECTION_HOTKEYS,
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
@@ -58,11 +57,12 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
     )?;
     set_table_value(
         hotkeys,
-        "text_selector",
-        DOC_HOTKEY_TEXT_SELECTOR,
+        "clip_selector",
+        DOC_HOTKEY_CLIP_SELECTOR,
         TABLE_INDENT,
-        &config.hotkeys.text_selector,
+        &config.hotkeys.clip_selector,
     )?;
+    hotkeys.remove("text_selector");
     set_table_value(
         hotkeys,
         "ocr",
@@ -128,9 +128,9 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
     write_field(
         out,
         TABLE_INDENT,
-        DOC_HOTKEY_TEXT_SELECTOR,
-        "text_selector",
-        &config.hotkeys.text_selector,
+        DOC_HOTKEY_CLIP_SELECTOR,
+        "clip_selector",
+        &config.hotkeys.clip_selector,
     )?;
     write_field(
         out,

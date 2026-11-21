@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        @import url("selector.css");
+        @import url("clip_selector.css");
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="search-box">
+            <div class="selector-heading">登録クリップセレクター</div>
+            <input type="text" id="input" placeholder="ラベル・プレビューで検索..." autocomplete="off" spellcheck="false">
+        </div>
+        <div id="results"></div>
+        <div id="footer">
+            <span>操作: <kbd>↑↓</kbd> 移動, <kbd>Enter</kbd> コピー, <kbd>Del</kbd> 削除, <kbd>Ctrl+Enter</kbd> 登録</span>
+            <span>閉じる: <kbd>Esc</kbd></span>
+        </div>
+    </div>
+    <div id="image-hover-preview" aria-hidden="true">
+        <img alt="">
+        <span class="image-hover-preview-caption"></span>
+    </div>
+
+    <script src="selector-common.js"></script>
+
+    <script>
+        const {
+            normalizeQuery,
+            highlightText,
+            postIpc,
+            close,
+            createSelection,
+            handleArrowKeys,
+            handleHomeEndKeys,
+            handleEscapeKey,
+            focusSearchInput,
+        } = window.SelectorCommon;
+
+        const input = document.getElementById('input');
+        const results = document.getElementById('results');
+
+        let items = [];
+        let filtered = [];
+        const selection = createSelection(results, totalRows);
+
+        const imageHoverPreview = document.getElementById('image-hover-preview');
+        const imageHoverPreviewImg = imageHoverPreview.querySelector('img');
+        const imageHoverPreviewCaption = imageHoverPreview.querySelector('.image-hover-preview-caption');
+
+        function imagePreviewSource(item) {
+            return item.hover_preview || item.thumbnail || null;
+        }
+
+        function hideImageHoverPreview() {
+            imageHoverPreview.classList.remove('is-visible');
+            imageHoverPreview.setAttribute('aria-hidden', 'true');
+            imageHoverPreviewImg.removeAttribute('src');
+            imageHoverPreviewCaption.textContent = '';
+        }
+
+        function positionImageHoverPreview() {
+            const margin = 10;
+
+            imageHoverPreview.style.left = '0px';
+            imageHoverPreview.style.top = '0px';
+            imageHoverPreview.classList.add('is-visible');
+
+            const previewRect = imageHoverPreview.getBoundingClientRect();
+            let left = (window.innerWidth - previewRect.width) / 2;
+            let top = (window.innerHeight - previewRect.height) / 2;
+
+            left = Math.max(margin, Math.min(left, window.innerWidth - previewRect.width - margin));
+            top = Math.max(margin, Math.min(top, window.innerHeight - previewRect.height - margin));
+
+            imageHoverPreview.style.left = `${left}px`;
+            imageHoverPreview.style.top = `${top}px`;
+        }
+
+        function showImageHoverPreview(item, anchorEl) {
+            const src = imagePreviewSource(item);
+            if (!src || item.kind !== 'image' || !anchorEl) {
+                hideImageHoverPreview();
+                return;
+            }
+
+            imageHoverPreviewImg.src = src;
+            imageHoverPreviewCaption.textContent = item.preview || item.label;
+            imageHoverPreview.setAttribute('aria-hidden', 'false');
+            positionImageHoverPreview();
+        }
+
+        function bindImageHoverPreview(item, previewTarget) {
+            previewTarget.onmouseenter = () => {
+                showImageHoverPreview(item, previewTarget);
+            };
+            previewTarget.onmouseleave = () => {
+                hideImageHoverPreview();
+            };
+        }
+
+        results.addEventListener('mouseleave', hideImageHoverPreview);
+        results.addEventListener('scroll', hideImageHoverPreview, { passive: true });
+        input.addEventListener('mouseenter', hideImageHoverPreview);
+
+        function itemMatches(item, query) {
+            if (!query) {
+                return true;
+            }
+
+            const fields = [item.label, item.preview, item.kind === 'image' ? '画像' : ''];
+            return fields.some((field) => field && field.toLowerCase().includes(query));
+        }
+
+        function isRegisterIndex(index) {
+            return index === filtered.length;
+        }
+
+        function totalRows() {
+            return filtered.length + 1;
+        }
+
+        function createItem(item, index, query) {
+            const div = document.createElement('div');
+            const isImage = item.kind === 'image';
+            div.className = 'item' + (isImage ? ' item--image' : '') + (index === selection.index ? ' selected' : '');
+
+            const content = document.createElement('div');
+            content.className = 'item-content';
+
+            if (isImage) {
+                let previewTarget = null;
+                if (item.thumbnail) {
+                    const img = document.createElement('img');
+                    img.className = 'item-thumbnail';
+                    img.src = item.thumbnail;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    content.appendChild(img);
+                    previewTarget = img;
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'item-thumbnail item-thumbnail--placeholder';
+                    placeholder.textContent = '🖼';
+                    placeholder.setAttribute('aria-hidden', 'true');
+                    content.appendChild(placeholder);
+                    if (imagePreviewSource(item)) {
+                        previewTarget = placeholder;
+                    }
+                }
+                if (previewTarget) {
+                    bindImageHoverPreview(item, previewTarget);
+                }
+            }
+
+            const modeInfo = document.createElement('div');
+            modeInfo.className = 'mode-info';
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.innerHTML = highlightText(item.label, query);
+            modeInfo.appendChild(label);
+            content.appendChild(modeInfo);
+
+            if (item.preview && !isImage) {
+                const hint = document.createElement('span');
+                hint.className = 'value-hint';
+                hint.innerHTML = highlightText(item.preview, query);
+                content.appendChild(hint);
+            }
+
+            div.appendChild(content);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'item-delete';
+            deleteBtn.title = '削除';
+            deleteBtn.setAttribute('aria-label', '削除');
+            deleteBtn.textContent = '×';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteItem(item.id);
+            };
+            div.appendChild(deleteBtn);
+
+            div.onmouseenter = () => selection.setSelectedIndex(index, false);
+            div.onclick = () => select(item.id);
+
+            return div;
+        }
+
+        function createRegisterRow(index, query) {
+            const label = 'クリップボードを登録';
+            const preview = '現在のクリップボードを登録クリップに追加';
+            const div = document.createElement('div');
+            div.className = 'item action' + (index === selection.index ? ' selected' : '');
+
+            div.innerHTML = `
+                <div class="mode-info">
+                    <span class="label">${highlightText(label, query)}</span>
+                </div>
+                <span class="value-hint">${highlightText(preview, query)}</span>
+            `;
+
+            div.onmouseenter = () => selection.setSelectedIndex(index, false);
+            div.onclick = () => register();
+            return div;
+        }
+
+        function renderList(scrollToSelection) {
+            hideImageHoverPreview();
+            results.innerHTML = '';
+            const query = normalizeQuery(input.value);
+            selection.clampSelectedIndex();
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty';
+                empty.textContent = items.length === 0
+                    ? '登録クリップがありません'
+                    : '該当する登録クリップがありません';
+                results.appendChild(empty);
+            } else {
+                filtered.forEach((item, index) => {
+                    results.appendChild(createItem(item, index, query));
+                });
+            }
+
+            results.appendChild(createRegisterRow(filtered.length, query));
+
+            if (scrollToSelection) {
+                selection.scrollSelectedIntoView();
+            }
+        }
+
+        function filter() {
+            const query = normalizeQuery(input.value);
+            const previousIndex = selection.index;
+
+            filtered = items.filter((item) => itemMatches(item, query));
+
+            if (isRegisterIndex(previousIndex)) {
+                selection.index = filtered.length;
+            } else if (previousIndex < filtered.length) {
+                selection.index = previousIndex;
+            } else {
+                selection.index = 0;
+            }
+
+            renderList(true);
+        }
+
+        function select(id) {
+            postIpc('select:' + id);
+        }
+
+        function register() {
+            postIpc('register');
+        }
+
+        function deleteItem(id) {
+            postIpc('delete:' + id);
+        }
+
+        function deleteSelected() {
+            const item = filtered[selection.index];
+            if (!item) {
+                return;
+            }
+            deleteItem(item.id);
+        }
+
+        function closeSelector() {
+            hideImageHoverPreview();
+            close();
+        }
+
+        function activateSelection() {
+            if (isRegisterIndex(selection.index)) {
+                register();
+            } else if (filtered[selection.index]) {
+                select(filtered[selection.index].id);
+            }
+        }
+
+        input.oninput = filter;
+
+        window.onkeydown = (e) => {
+            if (handleArrowKeys(e, selection.moveSelection)) {
+                return;
+            }
+            if (handleHomeEndKeys(e, totalRows, selection.setSelectedIndex)) {
+                return;
+            }
+            if (e.key === 'Enter' && e.ctrlKey) {
+                register();
+                e.preventDefault();
+                return;
+            }
+            if (e.key === 'Enter') {
+                activateSelection();
+                e.preventDefault();
+                return;
+            }
+            if (e.key === 'Delete' && !isRegisterIndex(selection.index) && filtered[selection.index]) {
+                deleteSelected();
+                e.preventDefault();
+                return;
+            }
+            handleEscapeKey(e, input, filter, closeSelector);
+        };
+
+        // UI 表示時にフォーカスを当てる
+        window.focusInput = (nextItems) => {
+            items = Array.isArray(nextItems) ? nextItems : [];
+            input.value = '';
+            selection.index = 0;
+            filter();
+            focusSearchInput(input);
+        };
+
+        // 登録後などに一覧だけ更新する
+        window.refreshItems = (nextItems) => {
+            items = Array.isArray(nextItems) ? nextItems : [];
+            filter();
+        };
+    </script>
+</body>
+
+</html>
