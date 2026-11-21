@@ -6,6 +6,29 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-13
+
+### Fixed
+
+- トレイメニューイベントをメインループの毎回で全件処理するようにした。設定ウィンドウ表示中など WindowEvent が続く間にメニュー操作が遅延・滞留する問題を解消
+- クリップボードワーカー再起動時に固定 `sleep(50ms)` ではなく `JoinHandle` で旧スレッド終了を待つようにした。ワーカーはハンドルへの `Arc` を保持せず、`Drop` / `restart` で確実に join して二重監視とテスト時のヒープ破壊を防ぐ
+- 設定パッチのマージ失敗時に既存キューを破棄せず保持するようにした。不正 JSON 投入で先行変更が消える問題を解消
+- 設定 UI (JS) のパッチマージで `null` を未指定としてスキップし、Rust 側 (`deep_merge_json_values`) と仕様を揃えた
+- トレイ常駐中でも `--mode` / `--pipeline` のワンショットを実行できるようにした。常駐中は名前付きパイプ IPC で委譲し、監視の書き戻しエコー再加工を避ける。常駐が無い場合のみローカルで直接加工する。多重起動防止はトレイ常駐起動のみに適用する
+
+### Changed
+
+- 連続記録の貼り付けを `Ctrl+V` 捕捉から専用ショートカット `Alt+Shift+X` (`hotkeys.continuous_record_paste`) へ変更。通常の `Ctrl+V` は OS / AutoHotkey 等に任せ、キュー先頭の取り出し後に `SendInput` で `Ctrl+V` を送る
+- 連続記録貼り付けのクリップボード書き込みをワーカーへ集約。メインスレッドは書き込み完了後の `SendInput` (`Ctrl+V`) のみ担当し、監視ループとの二重接続を解消
+- 画面 OCR のキャプチャ・認識を同時 1 本に直列化し、新しい範囲選択で旧ジョブの結果書き込み・通知を破棄するようにした。ホットキー連打時の並列 OCR とクリップボード競合を抑制する
+- `config.toml` / 登録クリップの保存を一時ファイル経由の原子的置き換えに変更し、書き込み途中のクラッシュによる破損を防ぐ
+
+### Added
+
+- 連続記録の直近 1 件取り消し: トレイ「連続記録 → 直近の記録を取り消す」および `Alt+Shift+Backspace` (`hotkeys.continuous_record_undo`)。キュー末尾のみ削除し、クリップボードは変更しない
+- `config.toml` の認識できないキーを検出して警告する。読み込みは継続し、起動時・再読み込み時にログとデスクトップ通知 (ワンショットは stderr) でキー名を案内する。旧キーや別名は警告しない
+- 設定ファイルの保存失敗・設定パッチのキュー投入失敗をデスクトップ通知で案内する
+
 ## [0.12.6] - 2026-07-12
 
 ### Fixed
@@ -413,7 +436,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.13.0...develop
+[0.13.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.6...v0.13.0
 [0.12.6]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.5...v0.12.6
 [0.12.5]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...v0.12.5
 [0.12.4]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...v0.12.4

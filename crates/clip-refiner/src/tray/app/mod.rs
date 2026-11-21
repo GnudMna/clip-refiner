@@ -8,11 +8,11 @@ use std::time::Instant;
 use super::event;
 use super::hotkey::{HotkeyHandler, HotkeyListenerStop};
 use super::menu::TrayMenu;
-use super::paste_watcher::PasteWatcher;
 use super::selector::SelectorUi;
 use super::settings::SettingsWindow;
 use super::state::{AppEvent, AppState};
 use super::worker::ClipboardWorkerHandle;
+use crate::ipc::OneshotIpcServer;
 
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopWindowTarget};
@@ -31,7 +31,8 @@ pub struct App {
     hotkey_handler: HotkeyHandler,
     _hotkey_listener: HotkeyListenerStop,
     clipboard_worker: Arc<ClipboardWorkerHandle>,
-    _paste_watcher: PasteWatcher,
+    /// ワンショット CLI 向け IPC サーバー (E2E 時は `None`)
+    _oneshot_ipc: Option<OneshotIpcServer>,
     last_quick_selector_show: Instant,
     last_clip_selector_show: Instant,
 }

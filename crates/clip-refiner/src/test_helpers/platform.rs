@@ -39,6 +39,8 @@ fn test_hotkey_settings() -> HotkeySettings {
         clip_selector: "Alt+Shift+F6".to_string(),
         ocr: "Alt+Shift+F7".to_string(),
         continuous_record: "Alt+Shift+F8".to_string(),
+        continuous_record_undo: "Alt+Shift+F9".to_string(),
+        continuous_record_paste: "Alt+Shift+F10".to_string(),
         favorite_mode_slots: Vec::new(),
     }
 }

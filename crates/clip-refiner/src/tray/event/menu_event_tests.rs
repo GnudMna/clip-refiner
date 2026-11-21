@@ -421,6 +421,39 @@ fn handle_menu_event_continuous_record_enabled() {
     assert!(rx.try_recv().is_err());
 }
 
+/// 連続記録メニューから直近 1 件を取り消せること
+#[test]
+fn handle_menu_event_continuous_record_undo_last() {
+    let state = Arc::new(test_app_state());
+    state.enqueue_continuous_record("first");
+    state.enqueue_continuous_record("second");
+    let menu = TrayMenu::build(&state).expect("テスト用トレイメニューの構築に失敗");
+    menu.refresh_continuous_record(&state)
+        .expect("連続記録メニューの更新に失敗");
+    let (worker, rx) = with_test_worker(&state);
+    let mut control_flow = ControlFlow::Wait;
+
+    handle_menu_event(
+        &menu_event(menu.continuous_record.undo_item.id()),
+        &menu,
+        &state,
+        &worker,
+        None,
+        &mut control_flow,
+    );
+
+    assert_eq!(state.clipboard_session().continuous_record_len(), 1);
+    assert_eq!(
+        state
+            .clipboard_session()
+            .get_continuous_record_entry(0)
+            .as_ref()
+            .map(|s| s.as_str()),
+        Some("first")
+    );
+    assert!(rx.try_recv().is_err());
+}
+
 /// お気に入り登録メニューで現在モードが登録されるようにすること
 #[test]
 fn handle_menu_event_add_favorite_registers_current_mode() {

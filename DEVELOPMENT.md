@@ -5,6 +5,7 @@
 ## 目次
 
 - [前提条件](#前提条件)
+- [初回セットアップ](#初回セットアップ)
 - [ソースからのビルド](#ソースからのビルド)
 - [Windows パッケージ作成](#windows-パッケージ作成)
 - [開発・テスト](#開発テスト)
@@ -21,11 +22,42 @@
 
 ## 前提条件
 
-- [Rust / Cargo](https://www.rust-lang.org/tools/install) (edition 2024、Rust 1.96 以上。`rust-toolchain.toml` でピン留め)
-- [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) (サプライチェーン監査。`cargo install cargo-deny --locked`)
-- [Node.js](https://nodejs.org/) (設定 / セレクター UI の JavaScript ロジックテスト・ESLint / Prettier・Playwright E2E。`check.ps1` 実行時は必須。通常の `cargo test` では未インストール時に JS テストをスキップする)
+開発・実行の対象 OS は **Windows** のみ。必要なツールは作業内容によって異なる。
 
-対応 OS は **Windows** のみ。
+| 用途 | 必要なもの |
+| :--- | :--- |
+| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy を使用)、Visual Studio 2022 Build Tools の **Desktop development with C++** ワークロード |
+| `scripts/windows/*.ps1` | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
+| UI の静的解析・JS ロジックテスト | [Node.js](https://nodejs.org/) と npm |
+| WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| サプライチェーン監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) |
+| MSI 作成 | `cargo-wix`、`cargo-about`、WiX Toolset v3.14.1 以上 |
+
+`cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する。通常の `cargo test` は Node.js が無い場合に JS ロジックテストを `note:` 付きでスキップする。
+
+---
+
+## 初回セットアップ
+
+```powershell
+git clone <repository_url>
+Set-Location clip-refiner
+
+# Rust ツールチェーンは rust-toolchain.toml から自動選択
+rustup show active-toolchain
+
+# UI の lint・整形・E2E 用依存
+npm ci
+
+# check.ps1 のサプライチェーン監査用
+cargo install cargo-deny --locked
+```
+
+任意で Git フックを有効化すると、コミット時に整形、プッシュ時に品質チェック一式を実行できる。
+
+```powershell
+./scripts/windows/install-hooks.ps1
+```
 
 ---
 
@@ -34,13 +66,13 @@
 ```bash
 git clone <repository_url>
 cd clip-refiner
-cargo build --release
+cargo build -p clip-refiner --release
 ```
 
-品質チェックをコミット・プッシュ時に自動実行する場合は [Git フック](#git-フック) を有効化する:
+PowerShell スクリプトを使う場合:
 
 ```powershell
-./scripts/windows/install-hooks.ps1
+./scripts/windows/build.ps1 -Release
 ```
 
 バイナリは `target/release/ClipRefiner.exe` に生成される。ビルドスクリプト `scripts/windows/build.ps1` も利用できる。
@@ -51,11 +83,13 @@ cargo build --release
 
 ### Windows MSI
 
-`cargo-wix` と WiX Toolset v3 を使って MSI を作成できる。
+`cargo-wix` と WiX Toolset v3 を使って MSI を作成できる。第三者ライセンス文書の生成に `cargo-about` も必要。
 
 ```powershell
-# 前提: cargo install cargo-wix --locked
-#       winget install WiXToolset.WiXToolset
+cargo install cargo-wix --locked
+cargo install cargo-about --locked --features cli
+winget install WiXToolset.WiXToolset
+
 ./scripts/windows/build-msi.ps1
 ```
 
@@ -65,7 +99,7 @@ cargo build --release
 
 ```powershell
 ./scripts/windows/verify-msi.ps1
-./scripts/windows/verify-msi.ps1 -MsiPath target\wix\clip-refiner-0.12.5-x86_64-pc-windows-msvc.msi
+./scripts/windows/verify-msi.ps1 -MsiPath target\wix\clip-refiner-{version}-{arch}.msi
 ```
 
 **検証内容:**
@@ -82,6 +116,22 @@ cargo build --release
 ---
 
 ## 開発・テスト
+
+変更中は対象テストを絞り、完了前に品質チェック一式を実行する。
+
+```powershell
+# 短いフィードバックループ
+cargo fmt
+cargo test --test monitor_flow
+
+# GUI セッションを使えない場合のチェック
+$env:CLIP_REFINER_SKIP_E2E = '1'
+./scripts/windows/check.ps1
+Remove-Item Env:CLIP_REFINER_SKIP_E2E
+
+# リリース前の全チェック (WebView E2E を含む)
+./scripts/windows/check.ps1
+```
 
 ```bash
 # 単体テスト・統合テストを実行 (デフォルト feature `app` で統合テストも含む)
@@ -134,7 +184,7 @@ assert_eq!(output, "hello world");
 | `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
 | `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
 | `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
-| `oneshot_flow.rs` | ワンショット相当のパイプライン加工と正規表現 CLI オプション |
+| `oneshot_flow.rs` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `library_api.rs` | クレートルート re-export と core 連携 |
 
 OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
@@ -145,7 +195,13 @@ OCR / 画面キャプチャの直接テストは統合テストではなく、�
 | `platform/ocr/recognize.rs` | 空画像拒否、RGBA→BGRA 変換、`SoftwareBitmap` 生成、単色画像でのパイプライン完走 (エンジン未導入時は初期化失敗を許容) |
 | `platform/ocr/prepare.rs` / `normalize.rs` | 小画像拡大・最近傍補間・日本語スペース除去 |
 
-`clip-refiner-core/tests/property_transforms.rs` では `proptest` による URL・エスケープ・正規表現置換のプロパティテストを実行する。
+core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で検証する。
+
+| ファイル | 検証内容 |
+| :------- | :------- |
+| `refine_modes.rs` | 全 `RefineMode` の代表入力・出力とモード追加時のカバレッジ |
+| `pipeline_api.rs` | テキスト / クリップボードのパイプライン API |
+| `property_transforms.rs` | `proptest` による URL・エスケープ・正規表現置換 |
 
 UI ロジックテストは Node.js 未インストール時にスキップする (`note:` を出力)。`check.ps1` は Node.js を検証し `CLIP_REFINER_REQUIRE_NODE=1` で必須化する。意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する。
 
@@ -158,7 +214,7 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、登録クリップの空表示・検索 (設定 / クイック / 登録クリップ)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
 | 手動スモーク | 下記チェックリスト | トレイ / ホットキー / OCR 範囲ドラッグ / 外部エディタなど OS 連携 |
 
-OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクルは Rust テスト (`overlay_lifecycle_create_show_hide`) で固定し、範囲ドラッグの見た目だけ手動で確認する。
+OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクルは `platform/ocr_overlay/overlay_window.rs` の Rust テスト (`overlay_lifecycle_create_show_hide`) で固定し、範囲ドラッグの見た目だけ手動で確認する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
 
 ### WebView E2E (Playwright)
 
@@ -245,7 +301,7 @@ assert_eq!(harness.clipboard_text(), "  hello  ");
 | `undo` | `Undo` |
 | `register_clip_from_clipboard` | `RegisterClipFromClipboard` |
 | `copy_registered_clip` | `CopyRegisteredClip` |
-| `discharge_continuous_record_on_paste` | `paste_watcher::try_paste_continuous_record_front` (`Ctrl+V` 検知経路と同じ) |
+| `discharge_continuous_record_on_paste` | `PasteContinuousRecordFront` (`Alt+Shift+X` 経路と同じ。書き込み後に `AppEvent::SendContinuousRecordPaste` も送る) |
 | `discharge_continuous_record_at` | `DischargeContinuousRecordAt` |
 
 **検証用アクセサ**
@@ -437,7 +493,7 @@ npm run format        # Prettier 整形適用
 
 `ClipRefiner` はデスクトップ常駐アプリが主用途だが、加工ロジックは GUI 非依存の **`clip-refiner-core`** クレート (`clip_refiner_core`) として他プロジェクトから呼び出せる。`clip-refiner` パッケージは core を re-export しており、feature `app` (デフォルト有効) でトレイ常駐 UI と `run()` を追加する。
 
-ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従い、破壊的変更は [CHANGELOG.md](CHANGELOG.md) の **Breaking changes** 節に記載する。
+ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](CHANGELOG.md) の該当バージョンにある **Changed** または **Removed** 節へ明記し、設定スキーマ変更は **設定** 節にも移行方法を記載する。
 
 ### 依存の追加
 
@@ -468,11 +524,11 @@ Rust コード上のクレート名はいずれも `clip_refiner` (re-export) �
 | 加工 | `RefineMode`, `RefineCategory`, `Refiner` | 単一モードの適用 |
 | 加工 | `apply_text_pipeline`, `apply_pipeline_to_text` | 複数モードの連鎖適用 |
 | 加工 | `split_pipeline` | テキスト用モード列と末尾画像モードの分割 |
-| 加工 | `REGEX_PREVIEW_SAMPLE`, `RegexPreviewResult`, `preview_regex_replace` | 正規表現置換のプレビュー (設定 UI と同一エンジン) |
+| 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace}` | 正規表現置換のプレビュー (設定 UI と同一エンジン。クレートルートからは re-export しない) |
 | クリップボード | `process_clipboard`, `process_clipboard_pipeline` | `arboard::Clipboard` への読み書き |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError` | 加工結果と失敗理由 |
 | 設定 | `AppConfig`, `NotificationSettings`, `RegexSettings`, `HotkeySettings` など | `config.toml` 対応型 |
-| 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` | 設定ファイル I/O |
+| 設定 | `AppConfig::load` (`ConfigLoadOutcome`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告 |
 | 設定 | `get_config_dir`, `open_config_file`, `disk_config_modified_time` | 設定ディレクトリ・ファイル操作 |
 | 設定 | `RefineContext::from_config`, `RefineContext::with_regex` | 加工時コンテキスト構築 |
 | 定数 | `CONFIG_VERSION` | 設定スキーマの現行バージョン |
@@ -594,8 +650,8 @@ clip-refiner/
 | `clipboard_monitor/` | 監視ループの判断・世代管理 |
 | `notify/` | デスクトップ通知本文の組み立て (`NotificationSettings` 連動) |
 | `history_store/` | 暗号化クリップボード履歴・連続記録のメモリストア (`EncryptedHistoryStore`) |
-| `paste_watcher/` | 連続記録キューがあるときだけ `Ctrl+V` を `RegisterHotKey` で捕捉し貼り付け |
-| `ocr/` | 画面 OCR キャプチャ連携 |
+| `paste_watcher/` | 連続記録の貼り付け補助: キュー先頭書き込みロジックと `SendInput` による `Ctrl+V`。書き込み自体はワーカーの `PasteContinuousRecordFront` が担当 |
+| `ocr/` | 画面 OCR キャプチャ連携 (`OcrJobGate` で同時 1 本・旧結果破棄) |
 | `app/` | `App` 構造体と起動時初期化 |
 | `dispatch.rs` | ワーカー・イベントループへの送信ヘルパー |
 
@@ -655,20 +711,16 @@ flowchart TB
         QS["QuickSelector (WebView)"]
         CS["ClipSelector (WebView)"]
         SW["SettingsWindow (WebView)"]
+        Paste["連続記録貼り付け (SendInput Ctrl+V)"]
         App --> Tray
         App --> QS
         App --> CS
         App --> SW
+        App --> Paste
     end
 
     subgraph hotkey_thread ["ホットキーリスナースレッド"]
         GHK["GlobalHotKeyEvent::receiver()"]
-    end
-
-    subgraph paste_thread ["貼り付け監視スレッド"]
-        PHK["RegisterHotKey(Ctrl+V) 動的登録"]
-        Paste["キュー先頭 discharge + SendInput"]
-        PHK --> Paste
     end
 
     subgraph worker ["クリップボードワーカースレッド"]
@@ -687,34 +739,32 @@ flowchart TB
     WL -->|"AppEvent (EventLoopProxy)"| App
     Cmd <--> CB
     Mon <--> CB
-    Paste --> CB
     App <--> State
     WL <--> State
-    PHK <--> State
 ```
 
 ### 各コンポーネント
 
 | コンポーネント | スレッド | 責務 |
 | :------------- | :------- | :--- |
-| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け |
-| **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る |
-| **Paste Watcher** (`tray/paste_watcher/`) | 専用 | 連続記録キューがあるときだけ `Ctrl+V` を `RegisterHotKey` で捕捉し、クリップボード差し替え後に `SendInput` で貼り付けを通す。全キーの低レベルフックは使わない |
-| **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理 |
+| **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け。連続記録貼り付けでは `AppEvent::SendContinuousRecordPaste` を受けて `SendInput` で `Ctrl+V` を送る |
+| **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る。連続記録貼り付け (`Alt+Shift+X`) もここで受信し、メインスレッドの `HotkeyHandler` が `PasteContinuousRecordFront` をワーカーへ送る |
+| **Paste helper** (`tray/paste_watcher/`) | (ヘルパー) | キュー先頭のクリップボード書き込みロジックと `Ctrl+V` の `SendInput`。専用スレッドは持たない |
+| **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理。再起動・破棄時は `Shutdown` 後に `JoinHandle` で旧スレッド終了を確認してから戻る |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、監視世代、イベントプロキシ。履歴・Undo・二重加工防止は `clipboard_session()`、ワーカー稼働は `worker()`、設定ディスク同期は `config_sync()`、設定 UI 適用待ちは `settings_pending()` 経由 |
 
 ### UI の遅延生成
 
-クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成し、非表示になった時点で破棄する (アイドル時の RSS 削減)。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `AppEvent::DisposeOcrOverlay` を経由する。ライフサイクルは `selector/{quick,clip}.rs`・`settings/window.rs`・`ocr/capture.rs` のユニットテストで検証する。
+クイックセレクター・登録クリップセレクター・設定ウィンドウの各 `WebView` と画面 OCR オーバーレイは起動時には生成せず、初回表示時に作成し、非表示になった時点で破棄する (アイドル時の RSS 削減)。起動時は空シェル (`SettingsWindow::new_shell`・`init_quick_selector` など) のみ保持する。遅延生成のため `App::handle_event` と `SettingsWindow::show` は `EventLoopWindowTarget` を受け取り、OCR オーバーレイの破棄は `AppEvent::DisposeOcrOverlay` を経由する。ライフサイクルは `selector/{quick,clip}.rs`、`settings/window.rs`、`tray/ocr/capture.rs`、`platform/ocr_overlay/overlay_window.rs` のユニットテストで検証する。
 
 ### 通信の要点
 
-- **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピーなど)
-- **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了)
+- **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピー、連続記録貼り付けの書き込みなど)
+- **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`SendContinuousRecordPaste`)
 - **ホットキー → UI**: 専用スレッドが `AppEvent::Hotkey` を送り、メインスレッドの `HotkeyHandler` が処理
-- **クリップボード**: 通常の読み書きはワーカースレッド内の 1 インスタンス。連続記録の `Ctrl+V` 経路のみ貼り付け監視スレッドが独立した `arboard::Clipboard` で同期書き込みする
+- **クリップボード**: 読み書きはワーカースレッド内の 1 インスタンスに集約する。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する
 
-加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。
+加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 
 ### デスクトップ通知
 
@@ -772,16 +822,16 @@ flowchart TB
 
 ```powershell
 # リリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
-git checkout -b release/v0.12.6
+git checkout -b release/v0.12.7
 
 # 明示的なバージョン指定
-./scripts/windows/release.ps1 -Version 0.12.6
+./scripts/windows/release.ps1 -Version 0.12.7
 
-# パッチリリース (0.12.5 -> 0.12.6)。事前に release/v0.12.6 ブランチへ checkout すること
+# パッチリリース (0.12.6 -> 0.12.7)。事前に release/v0.12.7 ブランチへ checkout すること
 ./scripts/windows/release.ps1 -Bump Patch
 
 # 変更内容の確認のみ (ファイル・Git・MSI は触らない)
-./scripts/windows/release.ps1 -Version 0.12.6 -DryRun
+./scripts/windows/release.ps1 -Version 0.12.7 -DryRun
 ```
 
 **自動で行うこと:**
@@ -810,10 +860,10 @@ git checkout -b release/v0.12.6
 
 **前提:**
 
-- `release/v{version}` ブランチ上で実行すること (例: `release/v0.12.6` で `-Version 0.12.6`)
+- `release/v{version}` ブランチ上で実行すること (例: `release/v0.12.7` で `-Version 0.12.7`)
 - リリース前に [CHANGELOG.md](CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
 - 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
-- MSI 作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (cargo-wix, WiX Toolset v3)
+- MSI 作成には [Windows パッケージ作成](#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、WiX Toolset v3)
 
 **手動で残る作業:**
 

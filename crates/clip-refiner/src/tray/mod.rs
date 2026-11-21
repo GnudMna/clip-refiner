@@ -20,7 +20,7 @@ pub mod settings;
 pub mod state;
 pub mod worker;
 
-#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use paste_watcher::send_continuous_record_ctrl_v;
 pub(crate) use paste_watcher::try_paste_continuous_record_front;
 
 pub use e2e::E2eWindow;

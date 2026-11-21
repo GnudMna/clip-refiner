@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::tray::clipboard_monitor::bump_monitor_generation_unchecked;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
+use crate::tray::notify::{NotificationCategory, show_category_notification};
 use crate::tray::state::{AppState, LockExt};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
@@ -30,7 +31,40 @@ pub(crate) fn toggle_continuous_record(
     menu.sync_auto_processing_state(state);
 }
 
-/// 連続記録に関連するメニューイベント(有効化切替、消去、過去項目の選択)を処理する
+/// 連続記録キュー末尾 (直近の記録) を 1 件取り消す
+///
+/// クリップボード本体は変更しない
+///
+/// # Arguments
+/// * `menu` - トレイメニュー構造体
+/// * `state` - アプリケーションの共有状態
+/// * `source_label` - 通知タイトルに使う操作元ラベル
+pub(crate) fn undo_last_continuous_record(
+    menu: &TrayMenu,
+    state: &Arc<AppState>,
+    source_label: &str,
+) {
+    if state.undo_last_continuous_record() {
+        if let Err(err) = menu.refresh_continuous_record(state) {
+            dispatch::log_menu_operation_error("連続記録メニューの更新", err);
+        }
+        show_category_notification(
+            state,
+            NotificationCategory::ContinuousRecord,
+            source_label,
+            "直近の記録を取り消しました",
+        );
+    } else {
+        show_category_notification(
+            state,
+            NotificationCategory::ContinuousRecord,
+            source_label,
+            "取り消せる記録がありません",
+        );
+    }
+}
+
+/// 連続記録に関連するメニューイベント(有効化切替、取り消し、消去、過去項目の選択)を処理する
 ///
 /// # Arguments
 /// * `id` - クリックされたメニュー項目の ID
@@ -48,6 +82,10 @@ pub(crate) fn handle_continuous_record_event(
 ) -> bool {
     if id == menu.continuous_record.enabled_item.id() {
         toggle_continuous_record(menu, state, clipboard_worker);
+        return true;
+    }
+    if id == menu.continuous_record.undo_item.id() {
+        undo_last_continuous_record(menu, state, "連続記録");
         return true;
     }
     if id == menu.continuous_record.clear_item.id() {

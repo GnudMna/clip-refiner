@@ -1,6 +1,7 @@
 //! クリップボードワーカー復旧フローの統合テスト用ヘルパー
 
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -8,9 +9,28 @@ use crate::tray::menu::TrayMenu;
 use crate::tray::state::{AppState, test_app_state};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
+/// OS クリップボードを開くワーカー起動テストの直列化ロック
+///
+/// Windows では複数 `arboard::Clipboard` の同時生成・破棄がヒープ破壊を起こしうる
+static CLIPBOARD_WORKER_SPAWN_LOCK: Mutex<()> = Mutex::new(());
+
 // ======================================================================
 // テスト用ヘルパー
 // ======================================================================
+/// 実ワーカー起動を伴うテストを直列実行する
+///
+/// # Arguments
+/// * `f` - ロック保持中に実行する処理
+///
+/// # Returns
+/// * `T` - `f` の戻り値
+pub fn with_clipboard_worker_spawn_lock<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = CLIPBOARD_WORKER_SPAWN_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f()
+}
+
 /// ユニットテスト用 `AppState` を `Arc` で返す
 ///
 /// # Returns

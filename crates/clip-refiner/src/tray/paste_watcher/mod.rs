@@ -1,37 +1,10 @@
-//! 貼り付け操作を検知し、連続記録キュー先頭を貼り付ける
+//! 連続記録キュー先頭の貼り付け補助
 //!
-//! 連続記録キューがあるときだけ `Ctrl+V` を `RegisterHotKey` で捕捉し、
-//! クリップボード差し替え後に `SendInput` で貼り付けを通す。
-//! 全キーを見る低レベルキーボードフックは使わない。
+//! `hotkeys.continuous_record_paste` (`Alt+Shift+X`) ではワーカーがキュー先頭を
+//! クリップボードへ載せたあと、メインスレッドが `SendInput` で `Ctrl+V` を送る。
+//! `Ctrl+V` 自体は捕捉せず、通常の貼り付けは OS / 他ツールに任せる。
 
-mod hotkey;
 mod paste;
 
-use std::sync::Arc;
-
-use super::state::AppState;
-
-#[cfg(any(test, feature = "test-helpers", debug_assertions))]
+pub(crate) use paste::send_continuous_record_ctrl_v;
 pub(crate) use paste::try_paste_continuous_record_front;
-
-// ======================================================================
-// 貼り付け監視
-// ======================================================================
-/// 貼り付けキー入力を監視し、連続記録キュー先頭の貼り付けを行う
-pub struct PasteWatcher {
-    _stop: hotkey::PasteWatcherStop,
-}
-
-impl PasteWatcher {
-    /// 貼り付け監視を開始する
-    ///
-    /// # Arguments
-    /// * `state` - アプリケーションの共有状態
-    ///
-    /// # Returns
-    /// * `Self` - 貼り付け監視インスタンス
-    pub fn start(state: Arc<AppState>) -> Self {
-        let stop = hotkey::start(state);
-        Self { _stop: stop }
-    }
-}

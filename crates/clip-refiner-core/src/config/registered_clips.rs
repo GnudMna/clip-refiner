@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::atomic_io::write_bytes_atomically;
 use super::clip_store_key::{clip_store_key, ensure_clip_store_key};
 use super::paths::get_config_dir;
 use super::permissions::restrict_private_file_permissions;
@@ -99,7 +100,7 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).context("設定ディレクトリの作成に失敗")?;
     }
-    fs::write(&path, encrypted)
+    write_bytes_atomically(&path, &encrypted)
         .with_context(|| format!("登録クリップファイルの書き込みに失敗: {}", path.display()))?;
     restrict_private_file_permissions(&path)?;
     Ok(())

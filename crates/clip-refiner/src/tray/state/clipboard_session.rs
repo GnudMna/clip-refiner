@@ -220,6 +220,14 @@ impl ClipboardSessionState {
             .lock_ignore_poison()
             .discharge_at(index)
     }
+
+    /// 連続記録キュー末尾 (直近の記録) を取り消す
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 取り消した本文。空の場合は `None`
+    pub fn undo_last_continuous_record(&self) -> Option<SecretString> {
+        self.continuous_record_store.lock_ignore_poison().pop_back()
+    }
 }
 
 // ======================================================================

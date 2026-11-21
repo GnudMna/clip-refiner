@@ -18,6 +18,8 @@ pub(super) struct ResolvedHotkeys {
     pub undo: HotKey,
     pub clip_selector: HotKey,
     pub continuous_record: HotKey,
+    pub continuous_record_undo: HotKey,
+    pub continuous_record_paste: HotKey,
     pub ocr: HotKey,
 }
 
@@ -53,6 +55,16 @@ impl ResolvedHotkeys {
                 &hotkeys.continuous_record,
                 consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
                 "continuous_record",
+            ),
+            continuous_record_undo: resolve_hotkey(
+                &hotkeys.continuous_record_undo,
+                consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,
+                "continuous_record_undo",
+            ),
+            continuous_record_paste: resolve_hotkey(
+                &hotkeys.continuous_record_paste,
+                consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE,
+                "continuous_record_paste",
             ),
             ocr: resolve_hotkey(&hotkeys.ocr, consts::DEFAULT_HOTKEY_OCR, "ocr"),
         }

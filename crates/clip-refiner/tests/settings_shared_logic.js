@@ -70,6 +70,7 @@ function test_build_notification_settings_patch() {
 function test_validate_hotkey_binding() {
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift+S').valid, true);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('Ctrl+F12').valid, true);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift+Backspace').valid, true);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('').valid, false);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('', { allowEmpty: true }).valid, true);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift').valid, false);
@@ -102,6 +103,8 @@ function test_snapshot_has_hotkey_fields() {
                 notification: 'Alt+Shift+N',
                 pause: 'Alt+Shift+P',
                 continuousRecord: 'Alt+Shift+C',
+                continuousRecordUndo: 'Alt+Shift+Backspace',
+                continuousRecordPaste: 'Alt+Shift+X',
                 undo: 'Alt+Shift+Z',
                 quit: 'Alt+Shift+Q',
                 favoriteModeSlots: [],

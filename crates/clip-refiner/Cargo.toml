@@ -138,7 +138,7 @@ path = "tests/platform_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.6" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.13.0" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }
@@ -170,8 +170,11 @@ windows = { version = "0.62.2", optional = true, features = [
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
     "Win32_System_Console",
+    "Win32_System_IO",
     "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
     "Win32_System_Threading",
     "Win32_System_WinRT",
     "Win32_UI_Input_KeyboardAndMouse",

@@ -3,6 +3,7 @@
 //! [`AppConfig`] は `config.toml` の内容に対応する。正規表現設定 ([`RegexSettings`]) は
 //! [`RefineContext::from_config`](crate::RefineContext::from_config) 経由で加工 API に渡せる
 
+mod atomic_io;
 mod clip_store_key;
 mod migrate;
 mod paths;
@@ -12,6 +13,7 @@ mod registered_clips;
 mod registered_images;
 mod serialize;
 mod types;
+mod unknown_keys;
 
 pub use crate::consts::CONFIG_VERSION;
 pub use crate::error::ConfigError;
@@ -19,12 +21,14 @@ pub use crate::error::ConfigError;
 pub use paths::{clear_test_config_dir, set_test_config_dir};
 pub use paths::{get_config_dir, open_config_file};
 pub use persistence::{
-    ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError, disk_config_modified_time,
+    ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
+    disk_config_modified_time,
 };
 pub use types::{
     AddRegisteredClipError, AppConfig, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings,
     MonitorMode, NotificationSettings, RegexSettings, ResolvedClip,
 };
+pub use unknown_keys::format_unknown_config_keys_message;
 
 // ======================================================================
 // テスト

@@ -12,7 +12,6 @@ use crate::tray::clipboard_monitor::{
     ClipboardObserveResult, handle_clipboard_update, observe_continuous_record,
 };
 use crate::tray::state::test_app_state;
-use crate::tray::try_paste_continuous_record_front;
 use crate::tray::worker::{ClipboardCommand, handle_command};
 
 // ======================================================================
@@ -330,6 +329,33 @@ impl ClipboardHarness {
         );
     }
 
+    /// ワーカーへ送られる `ProcessOneshotPipeline` コマンドを処理する
+    ///
+    /// # Arguments
+    /// * `pipeline` - 適用する加工モード列
+    /// * `ctx` - 加工コンテキスト
+    ///
+    /// # Returns
+    /// * `OneshotProcessResult` - 加工結果
+    pub fn process_oneshot_pipeline(
+        &mut self,
+        pipeline: Vec<RefineMode>,
+        ctx: RefineContext,
+    ) -> crate::ipc::OneshotProcessResult {
+        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::ProcessOneshotPipeline {
+                pipeline,
+                refine_ctx: ctx,
+                reply: reply_tx,
+            },
+        );
+        reply_rx.recv().expect("oneshot reply")
+    }
+
     /// ワーカーへ送られる `SetText` コマンドを処理する
     ///
     /// # Arguments
@@ -369,12 +395,17 @@ impl ClipboardHarness {
         );
     }
 
-    /// 貼り付け (`Ctrl+V`) 相当でキュー先頭をクリップボードへ載せる
+    /// ワーカーへ送られる `PasteContinuousRecordFront` コマンドを処理する
     ///
     /// # Arguments
     /// * `self` - この `ClipboardHarness`
     pub fn discharge_continuous_record_on_paste(&mut self) {
-        let _ = try_paste_continuous_record_front(&self.state, &mut self.clipboard);
+        handle_command(
+            &mut self.clipboard,
+            &self.state,
+            &mut self.refine_ctx,
+            ClipboardCommand::PasteContinuousRecordFront,
+        );
     }
 
     /// 連続記録キューから指定位置を取り出してクリップボードへセットする
@@ -388,6 +419,14 @@ impl ClipboardHarness {
             &mut self.refine_ctx,
             ClipboardCommand::DischargeContinuousRecordAt(index),
         );
+    }
+
+    /// 連続記録キュー末尾 (直近の記録) を取り消す
+    ///
+    /// # Returns
+    /// * `bool` - 取り消した場合は `true`
+    pub fn undo_last_continuous_record(&self) -> bool {
+        self.state.undo_last_continuous_record()
     }
 
     /// ワーカーへ送られる `RegisterClipFromClipboard` コマンドを処理する

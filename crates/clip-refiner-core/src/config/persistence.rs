@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use super::atomic_io::write_text_atomically;
 use super::paths::{config_file_modified_time, get_config_file_path};
 use super::permissions::restrict_private_file_permissions;
 use super::registered_clips::{
@@ -9,6 +10,7 @@ use super::registered_clips::{
 };
 use super::serialize::config_to_toml;
 use super::types::{AppConfig, RegisteredClip};
+use super::unknown_keys::{collect_unknown_config_keys, warn_unknown_config_keys};
 
 use crate::error::ConfigError;
 
@@ -58,6 +60,21 @@ pub struct ConfigLoadOutcome {
     pub config: AppConfig,
     /// デフォルトへフォールバックした場合の理由
     pub fallback: Option<ConfigLoadFallback>,
+    /// 認識できない設定キー (解析成功時のみ。読み込み自体は継続)
+    pub unknown_keys: Vec<String>,
+}
+
+/// ディスクからの設定再読み込み結果
+#[derive(Debug, Clone)]
+pub struct ConfigDiskReload {
+    /// 読み込んだ設定
+    pub config: AppConfig,
+    /// スキーマ移行またはレガシー移行を実行したか
+    pub migrated: bool,
+    /// 将来の `version` を現行へ揃えたか
+    pub newer_version_clamped: bool,
+    /// 認識できない設定キー (読み込み自体は継続)
+    pub unknown_keys: Vec<String>,
 }
 
 /// 設定読み込み失敗時にデフォルトへフォールバックした理由
@@ -123,9 +140,10 @@ impl AppConfig {
     /// 存在しない場合はデフォルト設定を生成し、説明コメント付きの `config.toml` を保存する
     /// 読み込みや解析に失敗した場合はデフォルト設定を返し、[`ConfigLoadOutcome::fallback`] に理由を格納する
     /// 解析に失敗した場合は元ファイルを `config.toml.bak` へ退避する
+    /// 認識できないキーは [`ConfigLoadOutcome::unknown_keys`] に格納し、読み込み自体は継続する
     ///
     /// # Returns
-    /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由
+    /// * `ConfigLoadOutcome` - 読み込んだ設定と、フォールバック時の理由・未知キー
     pub fn load() -> ConfigLoadOutcome {
         let config_path = match Self::config_path() {
             Ok(path) => path,
@@ -138,6 +156,7 @@ impl AppConfig {
                 return ConfigLoadOutcome {
                     config: Self::default(),
                     fallback: Some(fallback),
+                    unknown_keys: Vec::new(),
                 };
             }
         };
@@ -146,6 +165,7 @@ impl AppConfig {
             return ConfigLoadOutcome {
                 config: Self::create_initial_config(&config_path),
                 fallback: None,
+                unknown_keys: Vec::new(),
             };
         }
 
@@ -160,14 +180,16 @@ impl AppConfig {
                 return ConfigLoadOutcome {
                     config: Self::default(),
                     fallback: Some(fallback),
+                    unknown_keys: Vec::new(),
                 };
             }
         };
 
         match parse_config_toml(&content) {
-            Ok((config, legacy_clips)) => {
+            Ok(parsed) => {
+                warn_unknown_config_keys(&parsed.unknown_keys);
                 let (config, migrated, newer_version_clamped) =
-                    finish_loading(config, legacy_clips);
+                    finish_loading(parsed.config, parsed.legacy_clips);
                 if newer_version_clamped {
                     notify_newer_config_version_clamped();
                 }
@@ -177,6 +199,7 @@ impl AppConfig {
                 ConfigLoadOutcome {
                     config,
                     fallback: None,
+                    unknown_keys: parsed.unknown_keys,
                 }
             }
             Err(e) => {
@@ -189,6 +212,7 @@ impl AppConfig {
                 ConfigLoadOutcome {
                     config: Self::default(),
                     fallback: Some(fallback),
+                    unknown_keys: Vec::new(),
                 }
             }
         }
@@ -199,11 +223,11 @@ impl AppConfig {
     /// スキーマ移行が必要な場合は移行後の内容を保存する
     ///
     /// # Returns
-    /// * `Result<(Self, bool, bool), ConfigReloadError>` - 読み込んだ設定、移行実行有無、将来 version のクランプ有無
+    /// * `Result<ConfigDiskReload, ConfigReloadError>` - 読み込んだ設定と移行・警告メタデータ
     ///
     /// # Errors
     /// 設定ファイルが存在しない、読み取り失敗、TOML 解析失敗のいずれか
-    pub fn reload_from_disk() -> Result<(Self, bool, bool), ConfigReloadError> {
+    pub fn reload_from_disk() -> Result<ConfigDiskReload, ConfigReloadError> {
         let config_path =
             Self::config_path().map_err(|e| ConfigReloadError::Path(e.to_string()))?;
 
@@ -214,10 +238,12 @@ impl AppConfig {
         let content =
             fs::read_to_string(&config_path).map_err(|e| ConfigReloadError::Read(e.to_string()))?;
 
-        let (config, legacy_clips) =
+        let parsed =
             parse_config_toml(&content).map_err(|e| ConfigReloadError::Parse(e.to_string()))?;
+        warn_unknown_config_keys(&parsed.unknown_keys);
 
-        let (config, migrated, newer_version_clamped) = finish_loading(config, legacy_clips);
+        let (config, migrated, newer_version_clamped) =
+            finish_loading(parsed.config, parsed.legacy_clips);
         if newer_version_clamped {
             notify_newer_config_version_clamped();
         }
@@ -225,7 +251,12 @@ impl AppConfig {
             tracing::warn!("移行後の設定保存に失敗: {:?}", e);
         }
 
-        Ok((config, migrated, newer_version_clamped))
+        Ok(ConfigDiskReload {
+            config,
+            migrated,
+            newer_version_clamped,
+            unknown_keys: parsed.unknown_keys,
+        })
     }
 
     /// 現在の設定をファイルへ保存する
@@ -263,7 +294,8 @@ impl AppConfig {
             ConfigError::Serialize(e.to_string())
         })?;
 
-        fs::write(&config_path, content).map_err(|e| {
+        // 一時ファイル経由で置き換え、途中書き込みによる破損を防ぐ
+        write_text_atomically(&config_path, &content).map_err(|e| {
             tracing::error!("設定ファイルの書き込みに失敗: {:?}", e);
             ConfigError::Write(e)
         })?;
@@ -295,15 +327,27 @@ impl AppConfig {
 // ======================================================================
 // プライベート関数
 // ======================================================================
-/// `config.toml` を解析し、レガシー `[[clips]]` を分離して返す
-fn parse_config_toml(content: &str) -> anyhow::Result<(AppConfig, Vec<RegisteredClip>)> {
+/// `config.toml` の解析結果
+struct ParsedConfigToml {
+    config: AppConfig,
+    legacy_clips: Vec<RegisteredClip>,
+    unknown_keys: Vec<String>,
+}
+
+/// `config.toml` を解析し、レガシー `[[clips]]` と未知キーを分離して返す
+fn parse_config_toml(content: &str) -> anyhow::Result<ParsedConfigToml> {
     let value: toml::Value = toml::from_str(content)?;
+    let unknown_keys = collect_unknown_config_keys(&value);
     let legacy_clips = value
         .get("clips")
         .and_then(|clips| clips.clone().try_into().ok())
         .unwrap_or_default();
     let config: AppConfig = value.try_into()?;
-    Ok((config, legacy_clips))
+    Ok(ParsedConfigToml {
+        config,
+        legacy_clips,
+        unknown_keys,
+    })
 }
 
 /// スキーマ移行・登録クリップ読み込み・レガシー移行を行う
@@ -397,6 +441,69 @@ mod tests {
             assert!(fallback.backup_created);
             assert!(path.with_file_name("config.toml.bak").exists());
             assert_eq!(outcome.config.mode, AppConfig::default().mode);
+            assert!(outcome.unknown_keys.is_empty());
+        });
+    }
+
+    /// 未知キーがあっても既知キーは読み込み、警告一覧に含めること
+    #[test]
+    fn load_keeps_known_values_and_reports_unknown_keys() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("path");
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("dir");
+            }
+            fs::write(
+                &path,
+                r#"
+version = 2
+mode = "Trim"
+interval_ms = 1000
+typo_root = true
+
+[hotkeys]
+quick_selector = "Alt+Shift+S"
+typo_hotkey = "Alt+Shift+Z"
+"#,
+            )
+            .expect("write");
+
+            let outcome = AppConfig::load();
+            assert!(outcome.fallback.is_none());
+            assert_eq!(outcome.config.mode, crate::refiner::RefineMode::Trim);
+            assert_eq!(
+                outcome.unknown_keys,
+                vec!["hotkeys.typo_hotkey".to_string(), "typo_root".to_string(),]
+            );
+
+            let reloaded = AppConfig::reload_from_disk().expect("reload");
+            assert_eq!(reloaded.config.mode, crate::refiner::RefineMode::Trim);
+            assert_eq!(reloaded.unknown_keys, outcome.unknown_keys);
+        });
+    }
+
+    /// `save` が既存設定を原子的に置き換え、一時ファイルを残さないこと
+    #[test]
+    fn save_replaces_config_atomically_without_temp_files() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = get_config_file_path().expect("path");
+            let mut config = AppConfig {
+                interval_ms: 1500,
+                ..AppConfig::default()
+            };
+            config.save().expect("初回保存");
+            assert!(path.is_file());
+
+            config.interval_ms = 2500;
+            config.save().expect("2 回目の保存");
+
+            let content = fs::read_to_string(&path).expect("保存後の読み取り");
+            assert!(
+                content.contains("2500"),
+                "更新後の interval_ms が書き込まれていること: {content}"
+            );
+            assert!(!path.with_file_name("config.toml.tmp").exists());
+            assert!(!path.with_file_name("config.toml.prev").exists());
         });
     }
 
@@ -440,11 +547,13 @@ interval_ms = 1000
 label = "secret-label"
 text = "secret-body"
 "#;
-            let (config, legacy_clips) = parse_config_toml(toml_str).expect("parse");
-            assert_eq!(legacy_clips.len(), 1);
-            assert!(config.clips.is_empty());
+            let parsed = parse_config_toml(toml_str).expect("parse");
+            assert_eq!(parsed.legacy_clips.len(), 1);
+            assert!(parsed.config.clips.is_empty());
+            assert!(parsed.unknown_keys.is_empty());
 
-            let (config, migrated, newer_version_clamped) = finish_loading(config, legacy_clips);
+            let (config, migrated, newer_version_clamped) =
+                finish_loading(parsed.config, parsed.legacy_clips);
             assert!(migrated);
             assert!(!newer_version_clamped);
             assert_eq!(config.clips[0].text, "secret-body");

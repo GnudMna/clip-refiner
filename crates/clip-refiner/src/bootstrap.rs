@@ -45,12 +45,17 @@ pub fn run() -> Result<()> {
 
     platform::init_notifications();
 
-    let _instance = match ensure_single_instance(args.e2e_window.is_some()) {
-        Ok(instance) => instance,
-        Err(err) => {
-            report_fatal_startup_error("多重起動防止", &err);
-            return Err(err);
-        }
+    // 常駐起動のみ多重起動を防止する。ワンショットは常駐中でも実行できる
+    let _instance = if is_oneshot(&args) {
+        None
+    } else {
+        Some(match ensure_single_instance(args.e2e_window.is_some()) {
+            Ok(instance) => instance,
+            Err(err) => {
+                report_fatal_startup_error("多重起動防止", &err);
+                return Err(err);
+            }
+        })
     };
 
     if let Err(err) = run_application(&args) {
@@ -64,11 +69,16 @@ pub fn run() -> Result<()> {
 
 /// 引数に応じて常駐またはワンショット実行を行う
 fn run_application(args: &Args) -> Result<()> {
-    if args.mode.is_some() || !args.pipeline.is_empty() {
+    if is_oneshot(args) {
         run_once(args)
     } else {
         tray::run_loop(args.e2e_window)
     }
+}
+
+/// ワンショット実行 (`--mode` / `--pipeline`) かどうかを判定する
+fn is_oneshot(args: &Args) -> bool {
+    args.mode.is_some() || !args.pipeline.is_empty()
 }
 
 // ======================================================================
@@ -86,7 +96,7 @@ fn run_application(args: &Args) -> Result<()> {
 {about-with-newline}
 使用方法:
     引数なし: システムトレイに常駐し、クリップボードを監視して自動加工
-    --mode指定: クリップボードの内容を一度だけ加工
+    --mode / --pipeline: クリップボードの内容を一度だけ加工 (常駐中は IPC 委譲)
 
 {all-args}
 "
@@ -187,16 +197,17 @@ fn setup_logging() -> Result<tracing_appender::non_blocking::WorkerGuard> {
 // ======================================================================
 // 多重起動防止
 // ======================================================================
-/// アプリケーションの多重起動を防止し、インスタンスを保持する
+/// トレイ常駐の多重起動を防止し、インスタンスを保持する
 ///
-/// 通常起動では `APP_ID` を使う。E2E 起動ではプロセス固有 ID にし、常駐インスタンスと衝突しない
+/// ワンショット実行では呼ばない。通常の常駐起動では `APP_ID` を使う。
+/// E2E 起動ではプロセス固有 ID にし、常駐インスタンスと衝突しない
 ///
 /// # Arguments
 /// * `e2e` - E2E モードなら `true`
 ///
 /// # Returns
 /// * `Result<SingleInstance>` - シングルインスタンスであることが確認できた場合、そのインスタンスを返す
-///   既に他のインスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了する
+///   既に他の常駐インスタンスが実行中の場合は、通知を表示してプロセスを直ちに終了する
 fn ensure_single_instance(e2e: bool) -> Result<SingleInstance> {
     let instance_id = if e2e {
         format!("{}-e2e-{}", consts::APP_ID, std::process::id())
@@ -222,11 +233,11 @@ fn ensure_single_instance(e2e: bool) -> Result<SingleInstance> {
 // ======================================================================
 /// クリップボードの内容を一度だけ加工して終了する
 ///
-/// 常駐せずに、現在のクリップボードのテキストを指定されたモードで加工し、
-/// 結果をクリップボードに書き戻す
+/// 常駐プロセスがある場合は IPC で委譲し、監視のエコー再加工を避ける。
+/// 常駐が無い場合はローカルでクリップボードを直接加工する
 ///
 /// # Arguments
-/// * `mode` - 適用する加工モード (`RefineMode`)
+/// * `args` - CLI 引数
 ///
 /// # Returns
 /// * `Result<()>` - 加工成功または変更なしの場合は `Ok(())`、失敗時は `Err` を返す
@@ -238,11 +249,60 @@ fn run_once(args: &Args) -> Result<()> {
         log_warn!("{}", fallback.user_message());
         eprintln!("警告: {}", fallback.user_message());
     }
+    if !load_outcome.unknown_keys.is_empty() {
+        let message = config::format_unknown_config_keys_message(&load_outcome.unknown_keys);
+        log_warn!("{message}");
+        eprintln!("警告: {message}");
+    }
     let config = load_outcome.config;
     let ctx = build_refinement_context(&config, args);
+
+    if crate::ipc::is_resident_running() {
+        match crate::ipc::process_via_resident(&pipeline, &ctx) {
+            Ok(response) => return report_oneshot_ipc_response(&response),
+            Err(err) => {
+                // 常駐ありで IPC に失敗した場合はローカル実行しない (二重操作を避ける)
+                log_error!("常駐プロセスへのワンショット委譲に失敗: {err}");
+                eprintln!("エラー: {err}");
+                return Err(anyhow::anyhow!(err.to_string()));
+            }
+        }
+    }
+
+    run_once_local(&pipeline, &ctx)
+}
+
+/// 常駐 IPC の応答を CLI 出力へ反映する
+fn report_oneshot_ipc_response(response: &crate::ipc::OneshotIpcResponse) -> Result<()> {
+    use crate::ipc::OneshotIpcStatus;
+
+    match response.status {
+        OneshotIpcStatus::Processed | OneshotIpcStatus::ImageProcessed => {
+            log_info!("ワンショット処理が完了しました (常駐委譲)");
+            eprintln!("{}", response.message);
+            Ok(())
+        }
+        OneshotIpcStatus::Unchanged => {
+            log_info!("テキストに変更はありませんでした (常駐委譲)");
+            eprintln!("{}", response.message);
+            Ok(())
+        }
+        OneshotIpcStatus::Error => {
+            log_error!("ワンショット処理に失敗 (常駐委譲): {}", response.message);
+            eprintln!("エラー: {}", response.message);
+            if let Some(detail) = &response.detail {
+                eprintln!("詳細: {detail}");
+            }
+            Err(anyhow::anyhow!(response.message.clone()))
+        }
+    }
+}
+
+/// 常駐が無い場合にローカルでワンショット加工する
+fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
     let mut clipboard = Clipboard::new().context("クリップボードの初期化に失敗しました")?;
 
-    match refiner::process_clipboard_pipeline(&mut clipboard, &pipeline, &ctx) {
+    match refiner::process_clipboard_pipeline(&mut clipboard, pipeline, ctx) {
         Ok(
             ClipboardProcessOutcome::Processed(_) | ClipboardProcessOutcome::ImageProcessed { .. },
         ) => {
@@ -336,6 +396,34 @@ mod tests {
             regex_multiline: false,
             e2e_window: None,
         }
+    }
+
+    /// `--mode` 指定時はワンショットと判定すること
+    #[test]
+    fn is_oneshot_when_mode_is_set() {
+        assert!(is_oneshot(&sample_args()));
+    }
+
+    /// `--pipeline` 指定時はワンショットと判定すること
+    #[test]
+    fn is_oneshot_when_pipeline_is_set() {
+        let args = Args {
+            mode: None,
+            pipeline: vec![RefineMode::Trim],
+            ..sample_args()
+        };
+        assert!(is_oneshot(&args));
+    }
+
+    /// モード未指定時は常駐起動と判定すること
+    #[test]
+    fn is_oneshot_false_for_tray_launch() {
+        let args = Args {
+            mode: None,
+            pipeline: Vec::new(),
+            ..sample_args()
+        };
+        assert!(!is_oneshot(&args));
     }
 
     /// `--mode` 指定時は単一モードのパイプラインになるようにすること

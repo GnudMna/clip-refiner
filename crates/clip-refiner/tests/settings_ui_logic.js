@@ -62,11 +62,44 @@ function test_merge_replaces_arrays() {
     });
 }
 
+/** `null` は未指定としてスキップし既存値を維持すること */
+function test_merge_skips_null_values() {
+    const merged = SettingsPatch.mergePatch(
+        {
+            historyEnabled: true,
+            notificationSettings: {
+                enabled: false,
+                notifyProcess: true,
+            },
+        },
+        {
+            historyEnabled: null,
+            notificationSettings: {
+                enabled: true,
+                notifyPause: null,
+                notifyResult: true,
+            },
+            intervalMs: 2000,
+        }
+    );
+
+    assert.deepEqual(merged, {
+        historyEnabled: true,
+        intervalMs: 2000,
+        notificationSettings: {
+            enabled: true,
+            notifyProcess: true,
+            notifyResult: true,
+        },
+    });
+}
+
 const tests = [
     test_merge_top_level_keys,
     test_merge_nested_objects,
     test_merge_overwrites_primitive_values,
     test_merge_replaces_arrays,
+    test_merge_skips_null_values,
 ];
 
 for (const test of tests) {

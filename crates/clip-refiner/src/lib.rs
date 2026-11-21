@@ -10,14 +10,14 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner = { version = "0.12.6", default-features = false }
+//! clip-refiner = { version = "0.13.0", default-features = false }
 //! ```
 //!
 //! または [`clip-refiner-core`] を直接依存に追加する
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "0.12.6" }
+//! clip-refiner-core = { version = "0.13.0" }
 //! ```
 //!
 //! # 単一モードの加工
@@ -43,6 +43,8 @@ compile_error!("ClipRefiner は Windows 専用です");
 #[cfg(feature = "app")]
 mod bootstrap;
 #[cfg(feature = "app")]
+mod ipc;
+#[cfg(feature = "app")]
 mod logger;
 #[cfg(feature = "app")]
 mod platform;
@@ -62,12 +64,13 @@ pub use clip_refiner_core::refiner;
 pub use clip_refiner_core::security;
 pub use clip_refiner_core::{
     AddRegisteredClipError, AppConfig, CONFIG_VERSION, ClipboardIoError, ClipboardProcessError,
-    ClipboardProcessOutcome, ConfigError, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
-    Error, FavoriteMoveDirection, FavoriteToggleResult, HotkeyParseError, HotkeySettings,
-    MonitorMode, NotificationSettings, OrderedValue, RefineCategory, RefineContext, RefineMode,
-    Refiner, RegexSettings, ResolvedClip, apply_pipeline_to_text, apply_text_pipeline,
-    disk_config_modified_time, get_config_dir, is_within_clipboard_limit, is_within_parser_limit,
-    open_config_file, process_clipboard, process_clipboard_pipeline, split_pipeline,
+    ClipboardProcessOutcome, ConfigDiskReload, ConfigError, ConfigLoadFallback, ConfigLoadOutcome,
+    ConfigReloadError, Error, FavoriteMoveDirection, FavoriteToggleResult, HotkeyParseError,
+    HotkeySettings, MonitorMode, NotificationSettings, OrderedValue, RefineCategory, RefineContext,
+    RefineMode, Refiner, RegexSettings, ResolvedClip, apply_pipeline_to_text, apply_text_pipeline,
+    disk_config_modified_time, format_unknown_config_keys_message, get_config_dir,
+    is_within_clipboard_limit, is_within_parser_limit, open_config_file, process_clipboard,
+    process_clipboard_pipeline, split_pipeline,
 };
 
 // ======================================================================

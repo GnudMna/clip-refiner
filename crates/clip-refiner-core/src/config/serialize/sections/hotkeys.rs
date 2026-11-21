@@ -2,9 +2,10 @@ use std::fmt::Write;
 
 use super::super::docs::TABLE_INDENT;
 use super::super::docs::{
-    DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_CONTINUOUS_RECORD, DOC_HOTKEY_FAVORITE_SLOTS,
-    DOC_HOTKEY_NOTIFICATION, DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE, DOC_HOTKEY_QUIT,
-    DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO, SECTION_HOTKEYS,
+    DOC_HOTKEY_CLIP_SELECTOR, DOC_HOTKEY_CONTINUOUS_RECORD, DOC_HOTKEY_CONTINUOUS_RECORD_PASTE,
+    DOC_HOTKEY_CONTINUOUS_RECORD_UNDO, DOC_HOTKEY_FAVORITE_SLOTS, DOC_HOTKEY_NOTIFICATION,
+    DOC_HOTKEY_OCR, DOC_HOTKEY_PAUSE, DOC_HOTKEY_QUIT, DOC_HOTKEY_SELECTOR, DOC_HOTKEY_UNDO,
+    SECTION_HOTKEYS,
 };
 use super::super::document::{ensure_table, set_table_value};
 use super::super::format::{write_field, write_table_section};
@@ -71,7 +72,6 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.ocr,
     )?;
-    hotkeys.remove("paste_queue");
     set_table_value(
         hotkeys,
         "continuous_record",
@@ -79,6 +79,22 @@ fn write_hotkeys_table(hotkeys: &mut toml_edit::Table, config: &AppConfig) -> Re
         TABLE_INDENT,
         &config.hotkeys.continuous_record,
     )?;
+    set_table_value(
+        hotkeys,
+        "continuous_record_undo",
+        DOC_HOTKEY_CONTINUOUS_RECORD_UNDO,
+        TABLE_INDENT,
+        &config.hotkeys.continuous_record_undo,
+    )?;
+    set_table_value(
+        hotkeys,
+        "continuous_record_paste",
+        DOC_HOTKEY_CONTINUOUS_RECORD_PASTE,
+        TABLE_INDENT,
+        &config.hotkeys.continuous_record_paste,
+    )?;
+    // 旧キー名を除去 (continuous_record_paste へ移行済み)
+    hotkeys.remove("paste_queue");
     set_table_value(
         hotkeys,
         "quit",
@@ -154,6 +170,20 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         DOC_HOTKEY_CONTINUOUS_RECORD,
         "continuous_record",
         &config.hotkeys.continuous_record,
+    )?;
+    write_field(
+        out,
+        TABLE_INDENT,
+        DOC_HOTKEY_CONTINUOUS_RECORD_UNDO,
+        "continuous_record_undo",
+        &config.hotkeys.continuous_record_undo,
+    )?;
+    write_field(
+        out,
+        TABLE_INDENT,
+        DOC_HOTKEY_CONTINUOUS_RECORD_PASTE,
+        "continuous_record_paste",
+        &config.hotkeys.continuous_record_paste,
     )?;
     write_field(
         out,

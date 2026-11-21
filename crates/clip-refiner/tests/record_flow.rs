@@ -59,9 +59,9 @@ fn continuous_record_skips_immediate_restore_echo() {
     assert_eq!(harness.continuous_record_len(), 0);
 }
 
-/// `Ctrl+V` 相当でキュー先頭をクリップボードへ載せ、FIFO 順に取り出ようにすること
+/// `Alt+Shift+X` 相当でキュー先頭をクリップボードへ載せ、FIFO 順に取り出すようにすること
 #[test]
-fn continuous_record_paste_discharges_front_on_ctrl_v() {
+fn continuous_record_paste_discharges_front_on_shortcut() {
     let mut harness = ClipboardHarness::with_text("first")
         .with_mode(RefineMode::Trim)
         .with_continuous_record(true);
@@ -76,7 +76,7 @@ fn continuous_record_paste_discharges_front_on_ctrl_v() {
     assert_eq!(harness.continuous_record_entries(), vec!["second"]);
 }
 
-/// `Ctrl+V` 相当はキュー先頭を取り出し、一致検索ではないようにすること
+/// `Alt+Shift+X` 相当はキュー先頭を取り出し、一致検索ではないようにすること
 #[test]
 fn continuous_record_paste_discharges_front_not_matching_clipboard() {
     let mut harness = ClipboardHarness::with_text("alpha")
@@ -98,7 +98,7 @@ fn continuous_record_paste_discharges_front_not_matching_clipboard() {
     assert_eq!(harness.continuous_record_entries(), vec!["beta", "gamma"]);
 }
 
-/// キューが空のときは `Ctrl+V` 相当でクリップボードを変更しないようにすること
+/// キューが空のときは `Alt+Shift+X` 相当でクリップボードを変更しないようにすること
 #[test]
 fn continuous_record_paste_skips_when_queue_empty() {
     let mut harness = ClipboardHarness::with_text("keep-me")
@@ -124,6 +124,24 @@ fn continuous_record_menu_discharge_removes_entry() {
     harness.discharge_continuous_record_at(1);
     assert_eq!(harness.clipboard_text(), "second");
     assert_eq!(harness.continuous_record_entries(), vec!["first"]);
+}
+
+/// 連続記録の直近 1 件取り消しが末尾から除去すること
+#[test]
+fn continuous_record_undo_removes_last_entry() {
+    let mut harness = ClipboardHarness::with_text("first")
+        .with_mode(RefineMode::Trim)
+        .with_continuous_record(true);
+
+    assert!(!harness.run_monitor_update(false));
+    harness.replace_clipboard("second");
+    assert!(!harness.run_monitor_update(false));
+    harness.replace_clipboard("third");
+    assert!(!harness.run_monitor_update(false));
+
+    assert!(harness.undo_last_continuous_record());
+    assert_eq!(harness.continuous_record_entries(), vec!["first", "second"]);
+    assert_eq!(harness.clipboard_text(), "third");
 }
 
 /// 連続記録無効時は監視でもキューへ積まないようにすること

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 
 use super::super::dispatch;
 use super::super::notify::{
@@ -9,6 +10,7 @@ use super::super::state::{AppEvent, AppState};
 use super::command::ClipboardCommand;
 
 use crate::config::{AddRegisteredClipError, ResolvedClip};
+use crate::ipc::OneshotProcessResult;
 use crate::refiner::{
     ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode, TextClipboard,
     process_clipboard_pipeline_io,
@@ -75,8 +77,20 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
                 state.discharge_continuous_record_at(index)
             });
         }
+        ClipboardCommand::PasteContinuousRecordFront => {
+            // 書き込み成否に関わらず Ctrl+V を送る (空キュー時は現在のクリップボードを貼付)
+            let _ = crate::tray::try_paste_continuous_record_front(state, clipboard);
+            dispatch::send_app_event(&state.proxy, AppEvent::SendContinuousRecordPaste);
+        }
         ClipboardCommand::ProcessMode(mode) => {
             handle_process_mode_command(clipboard, state, refine_ctx, mode);
+        }
+        ClipboardCommand::ProcessOneshotPipeline {
+            pipeline,
+            refine_ctx: oneshot_ctx,
+            reply,
+        } => {
+            handle_process_oneshot_command(clipboard, state, &pipeline, &oneshot_ctx, &reply);
         }
         ClipboardCommand::Undo => {
             handle_undo_command(clipboard, state);
@@ -128,6 +142,43 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
         Err(e) => {
             UserNotification::from(&e).notify_with_debug(&e);
         }
+    }
+}
+
+/// CLI ワンショット要求を処理する (トレイ通知なし・監視エコー回避あり)
+fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard>(
+    clipboard: &mut C,
+    state: &Arc<AppState>,
+    pipeline: &[RefineMode],
+    refine_ctx: &RefineContext,
+    reply: &Sender<OneshotProcessResult>,
+) {
+    let pre_text = clipboard.get_text().ok();
+    let result = match process_clipboard_pipeline_io(clipboard, pipeline, refine_ctx) {
+        Ok(ClipboardProcessOutcome::Processed(processed)) => {
+            if let Some(ref pre) = pre_text {
+                state.clipboard_session().record_undo_source(pre);
+            }
+            state
+                .clipboard_session()
+                .record_processing_success(&processed);
+            OneshotProcessResult::Processed
+        }
+        Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
+            if let Some(ref pre) = pre_text {
+                state.clipboard_session().record_undo_source(pre);
+                state
+                    .clipboard_session()
+                    .record_image_processing_success(pre);
+            }
+            OneshotProcessResult::ImageProcessed { width, height }
+        }
+        Ok(ClipboardProcessOutcome::Unchanged) => OneshotProcessResult::Unchanged,
+        Err(e) => OneshotProcessResult::from_process_error(&e),
+    };
+
+    if reply.send(result).is_err() {
+        crate::log_warn!("ワンショット IPC の応答チャネルが切断されています");
     }
 }
 

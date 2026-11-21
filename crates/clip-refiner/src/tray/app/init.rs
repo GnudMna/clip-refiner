@@ -4,11 +4,11 @@ use std::time::Instant;
 use super::super::clipboard_monitor::{bump_monitor_generation, bump_monitor_generation_unchecked};
 use super::super::hotkey::{HotkeyHandler, notify_registration_failures};
 use super::super::menu::TrayMenu;
-use super::super::paste_watcher::PasteWatcher;
 use super::super::settings::init_settings_window;
 use super::super::state::{AppEvent, AppState};
 use super::super::worker::ClipboardWorkerHandle;
 use super::App;
+use crate::ipc::OneshotIpcServer;
 use crate::tray::selector::SelectorUi;
 
 use anyhow::Result;
@@ -29,11 +29,16 @@ impl App {
     /// # Errors
     /// 状態・メニュー・ホットキーのいずれかの初期化に失敗した場合
     pub fn new(proxy: &EventLoopProxy<AppEvent>) -> Result<Self> {
-        let (state, config_fallback) = AppState::new(proxy.clone())?;
+        let (state, config_fallback, unknown_keys) = AppState::new(proxy.clone())?;
         let state = Arc::new(state);
         if let Some(ref fallback) = config_fallback {
             crate::log_warn!("{}", fallback.user_message());
             crate::platform::show_notification("設定の読み込み", &fallback.user_message());
+        }
+        if !unknown_keys.is_empty() {
+            let message = crate::config::format_unknown_config_keys_message(&unknown_keys);
+            crate::log_warn!("{message}");
+            crate::platform::show_notification("設定の読み込み", &message);
         }
         let menu = TrayMenu::build(&state)?;
         let (hotkeys, favorite_modes) =
@@ -41,9 +46,13 @@ impl App {
         let (hotkey_handler, hotkey_failures) = HotkeyHandler::new(&hotkeys, &favorite_modes)?;
         notify_registration_failures(&hotkey_failures);
         let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
+        let oneshot_ipc = if crate::tray::e2e::is_active() {
+            None
+        } else {
+            Some(OneshotIpcServer::start(Arc::clone(&clipboard_worker)))
+        };
         let selectors = SelectorUi::new(proxy, Arc::clone(&clipboard_worker));
         let settings = init_settings_window(proxy, &state);
-        let paste_watcher = PasteWatcher::start(Arc::clone(&state));
         let hotkey_listener = HotkeyHandler::start_event_listener(proxy.clone());
         menu.refresh_history(&state)?;
         menu.refresh_continuous_record(&state)?;
@@ -63,7 +72,7 @@ impl App {
             hotkey_handler,
             _hotkey_listener: hotkey_listener,
             clipboard_worker,
-            _paste_watcher: paste_watcher,
+            _oneshot_ipc: oneshot_ipc,
             last_quick_selector_show: Instant::now(),
             last_clip_selector_show: Instant::now(),
         })

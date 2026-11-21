@@ -21,6 +21,8 @@ fn default_hotkey_bindings_parse() {
         ("登録クリップ", &config.hotkeys.clip_selector),
         ("OCR", &config.hotkeys.ocr),
         ("連続記録", &config.hotkeys.continuous_record),
+        ("連続記録取り消し", &config.hotkeys.continuous_record_undo),
+        ("連続記録貼り付け", &config.hotkeys.continuous_record_paste),
     ];
 
     for (label, binding) in bindings {

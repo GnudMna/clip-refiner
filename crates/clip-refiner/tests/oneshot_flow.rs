@@ -1,7 +1,7 @@
 //! ワンショット加工経路の統合テスト
 
 use clip_refiner::refiner::TextClipboard;
-use clip_refiner::test_helpers::InMemoryTextClipboard;
+use clip_refiner::test_helpers::{ClipboardHarness, InMemoryTextClipboard};
 use clip_refiner::{
     AppConfig, ClipboardProcessOutcome, RefineContext, RefineMode, apply_pipeline_to_text,
 };
@@ -76,4 +76,17 @@ fn oneshot_context_uses_config_regex_settings() {
 
     assert!(matches!(outcome, ClipboardProcessOutcome::Processed(_)));
     assert_eq!(clipboard.text(), "hello ClipRefiner");
+}
+
+/// 常駐委譲相当のワンショット加工後、監視がエコー再加工しないこと
+#[test]
+fn oneshot_via_worker_skips_monitor_write_back_echo() {
+    let mut harness = ClipboardHarness::with_text("  hello  ").with_mode(RefineMode::UrlEncode);
+    harness.process_oneshot_pipeline(vec![RefineMode::Trim], RefineContext::default());
+
+    assert_eq!(harness.clipboard_text(), "hello");
+
+    // ワンショット書き戻しのエコーを1回スキップし、常駐モードでは再加工しない
+    assert!(!harness.run_monitor_update(true));
+    assert_eq!(harness.clipboard_text(), "hello");
 }

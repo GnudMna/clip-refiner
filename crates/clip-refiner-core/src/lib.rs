@@ -43,9 +43,10 @@ pub mod refiner;
 pub mod security;
 
 pub use config::{
-    AppConfig, CONFIG_VERSION, ConfigLoadFallback, ConfigLoadOutcome, ConfigReloadError,
-    FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings, MonitorMode, NotificationSettings,
-    RegexSettings, ResolvedClip, disk_config_modified_time, get_config_dir, open_config_file,
+    AppConfig, CONFIG_VERSION, ConfigDiskReload, ConfigLoadFallback, ConfigLoadOutcome,
+    ConfigReloadError, FavoriteMoveDirection, FavoriteToggleResult, HotkeySettings, MonitorMode,
+    NotificationSettings, RegexSettings, ResolvedClip, disk_config_modified_time,
+    format_unknown_config_keys_message, get_config_dir, open_config_file,
 };
 pub use error::{AddRegisteredClipError, ConfigError, Error};
 pub use refiner::{

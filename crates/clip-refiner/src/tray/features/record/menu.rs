@@ -40,6 +40,7 @@ impl TrayMenu {
             continuous_record_enabled,
             None,
         );
+        let undo_item = MenuItem::new("直近の記録を取り消す", true, None);
         let clear_item = MenuItem::new("記録をクリア", true, None);
         let main_submenu = Submenu::new("連続記録", true);
         let records = Mutex::new(Vec::new());
@@ -47,12 +48,14 @@ impl TrayMenu {
         main_submenu.append_items(&[
             &enabled_item as &dyn tray_icon::menu::IsMenuItem,
             &PredefinedMenuItem::separator() as &dyn tray_icon::menu::IsMenuItem,
+            &undo_item as &dyn tray_icon::menu::IsMenuItem,
             &clear_item as &dyn tray_icon::menu::IsMenuItem,
         ])?;
 
         Ok(ContinuousRecordMenu {
             main_submenu,
             enabled_item,
+            undo_item,
             clear_item,
             records,
         })
@@ -103,7 +106,8 @@ impl TrayMenu {
         }
 
         self.continuous_record.main_submenu.append_items(&[
-            &self.continuous_record.clear_item as &dyn tray_icon::menu::IsMenuItem
+            &self.continuous_record.undo_item as &dyn tray_icon::menu::IsMenuItem,
+            &self.continuous_record.clear_item as &dyn tray_icon::menu::IsMenuItem,
         ])?;
 
         Ok(())

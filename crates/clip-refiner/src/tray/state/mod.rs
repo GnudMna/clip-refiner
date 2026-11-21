@@ -233,6 +233,26 @@ mod tests {
         assert_eq!(state.clipboard_session().continuous_record_len(), 0);
     }
 
+    /// 連続記録の直近 1 件取り消しが末尾から動作すること
+    #[test]
+    fn test_continuous_record_undo_last() {
+        let state = test_app_state();
+        assert!(!state.undo_last_continuous_record());
+
+        state.enqueue_continuous_record("first");
+        state.enqueue_continuous_record("second");
+        assert!(state.undo_last_continuous_record());
+        assert_eq!(state.clipboard_session().continuous_record_len(), 1);
+        assert_eq!(
+            state
+                .clipboard_session()
+                .get_continuous_record_entry(0)
+                .as_ref()
+                .map(|s| s.as_str()),
+            Some("first")
+        );
+    }
+
     /// テスト用 `AppState` は実行中アプリの `config.toml` を上書きしないこと
     #[test]
     fn test_app_state_disables_config_persistence() {

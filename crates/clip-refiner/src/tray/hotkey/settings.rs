@@ -50,6 +50,14 @@ pub(crate) fn shortcut_list_entries(
             label: "連続記録の切替".to_string(),
         },
         ShortcutEntry {
+            binding: hotkeys.continuous_record_undo.clone(),
+            label: "連続記録の取り消し".to_string(),
+        },
+        ShortcutEntry {
+            binding: hotkeys.continuous_record_paste.clone(),
+            label: "連続記録の貼り付け".to_string(),
+        },
+        ShortcutEntry {
             binding: hotkeys.undo.clone(),
             label: "加工の取り消し".to_string(),
         },

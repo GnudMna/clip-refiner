@@ -69,6 +69,9 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         AppEvent::ReloadHotkeys => reload_hotkeys(ctx),
         AppEvent::RefreshSettingsWindow => refresh_settings_window(ctx.state, ctx.settings),
         AppEvent::DisposeOcrOverlay => ctx.selectors.ocr.hide(),
+        AppEvent::SendContinuousRecordPaste => {
+            crate::tray::send_continuous_record_ctrl_v();
+        }
         AppEvent::ShowSettingsWindow
         | AppEvent::HideSettingsWindow
         | AppEvent::SettingsApplyPatch
@@ -303,6 +306,8 @@ mod tests {
             clip_selector: "Ctrl+Alt+Shift+6".to_string(),
             ocr: "Ctrl+Alt+Shift+7".to_string(),
             continuous_record: "Ctrl+Alt+Shift+8".to_string(),
+            continuous_record_undo: "Ctrl+Alt+Shift+9".to_string(),
+            continuous_record_paste: "Ctrl+Alt+Shift+0".to_string(),
             favorite_mode_slots: Vec::new(),
         };
         let mut hotkey_handler = HotkeyHandler::new(&hotkeys, &[])

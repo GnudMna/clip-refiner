@@ -63,6 +63,8 @@ pub enum AppEvent {
     RefreshSettingsWindow,
     /// OCR オーバーレイを破棄してアイドル RSS を回収する
     DisposeOcrOverlay,
+    /// 連続記録貼り付け用に `Ctrl+V` を送る (ワーカー書き込み完了後)
+    SendContinuousRecordPaste,
     /// システム全体から受信したグローバルホットキーイベント
     Hotkey(global_hotkey::GlobalHotKeyEvent),
 }

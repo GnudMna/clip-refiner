@@ -13,7 +13,8 @@ var SettingsPatch = (function () {
     /**
      * 部分更新オブジェクトを深くマージする
      *
-     * ネストしたプレーンオブジェクトは再帰的にマージし、配列とプリミティブは上書きする
+     * ネストしたプレーンオブジェクトは再帰的にマージし、配列とプリミティブは上書きする。
+     * `null` / `undefined` は未指定として扱い、既存値を維持する (Rust 側 `deep_merge_json_values` と同仕様)
      *
      * @param {Record<string, unknown>} target - マージ先
      * @param {Record<string, unknown>} patch - 適用する差分
@@ -21,7 +22,10 @@ var SettingsPatch = (function () {
      */
     function mergePatch(target, patch) {
         for (const [key, value] of Object.entries(patch)) {
-            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            if (value === null || value === undefined) {
+                continue;
+            }
+            if (typeof value === 'object' && !Array.isArray(value)) {
                 const nested =
                     target[key] && typeof target[key] === 'object' && !Array.isArray(target[key])
                         ? target[key]

@@ -1,6 +1,5 @@
 //! クリップボードワーカー復旧フローの統合テスト
 
-use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -8,15 +7,8 @@ use clip_refiner::RefineMode;
 use clip_refiner::test_helpers::{
     ClipboardCommand, ClipboardWorkerHandle, is_worker_alive, set_worker_alive,
     set_worker_recovery_pending, stub_worker, test_app_state_arc, test_tray_menu,
-    wait_until_worker_alive,
+    wait_until_worker_alive, with_clipboard_worker_spawn_lock,
 };
-
-static SPAWN_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-fn with_spawn_test_lock<T>(f: impl FnOnce() -> T) -> T {
-    let _guard = SPAWN_TEST_LOCK.lock().expect("spawn test lock");
-    f()
-}
 
 // ======================================================================
 // テスト
@@ -24,7 +16,7 @@ fn with_spawn_test_lock<T>(f: impl FnOnce() -> T) -> T {
 /// ワーカー起動後に `worker_alive` が立つようにすること
 #[test]
 fn worker_spawn_becomes_alive() {
-    with_spawn_test_lock(|| {
+    with_clipboard_worker_spawn_lock(|| {
         let state = test_app_state_arc();
         let _worker = ClipboardWorkerHandle::spawn(&state);
 
@@ -35,7 +27,7 @@ fn worker_spawn_becomes_alive() {
 /// 停止状態を模倣したあと `restart` でワーカーが復旧すること
 #[test]
 fn worker_restart_restores_alive_after_simulated_stop() {
-    with_spawn_test_lock(|| {
+    with_clipboard_worker_spawn_lock(|| {
         let state = test_app_state_arc();
         let worker = ClipboardWorkerHandle::spawn(&state);
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));
@@ -53,7 +45,7 @@ fn worker_restart_restores_alive_after_simulated_stop() {
 /// 復旧待ちフラグが立っている状態で再起動すると監視世代が進むようにすること
 #[test]
 fn worker_restart_bumps_monitor_generation_when_recovery_pending() {
-    with_spawn_test_lock(|| {
+    with_clipboard_worker_spawn_lock(|| {
         let state = test_app_state_arc();
         let worker = ClipboardWorkerHandle::spawn(&state);
         assert!(wait_until_worker_alive(&state, Duration::from_secs(3)));

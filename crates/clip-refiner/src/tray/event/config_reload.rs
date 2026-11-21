@@ -6,7 +6,7 @@ use super::super::menu::TrayMenu;
 use super::super::state::AppState;
 use crate::tray::selector::ClipSelectorWindow;
 
-use crate::config::{AppConfig, ConfigReloadError};
+use crate::config::{AppConfig, ConfigReloadError, format_unknown_config_keys_message};
 use crate::platform;
 
 // ======================================================================
@@ -34,8 +34,11 @@ pub fn apply_config_reload(
     hotkey_handler: &mut HotkeyHandler,
     clip_selector: &ClipSelectorWindow,
 ) -> Result<ConfigReloadOutcome, String> {
-    let (loaded, migrated, newer_version_clamped) =
-        AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
+    let loaded = AppConfig::reload_from_disk().map_err(|e| reload_error_message(&e))?;
+    let unknown_keys = loaded.unknown_keys.clone();
+    let migrated = loaded.migrated;
+    let newer_version_clamped = loaded.newer_version_clamped;
+    let loaded = loaded.config;
 
     let previous = state.with_config(std::clone::Clone::clone);
     let hotkeys_changed = previous.hotkeys != loaded.hotkeys;
@@ -105,8 +108,15 @@ pub fn apply_config_reload(
     if newer_version_clamped {
         change_labels.push("将来 version を現行へ揃え");
     }
+    if !unknown_keys.is_empty() {
+        change_labels.push("未知の設定キーを検出");
+    }
 
     let mut message = build_reload_message(&change_labels);
+    if !unknown_keys.is_empty() {
+        message.push('\n');
+        message.push_str(&format_unknown_config_keys_message(&unknown_keys));
+    }
     if let Some(registration_message) = hotkey_registration_message {
         message.push('\n');
         message.push_str(&registration_message);
@@ -172,12 +182,14 @@ mod tests {
             "監視設定を更新",
             "設定スキーマを移行",
             "将来 version を現行へ揃え",
+            "未知の設定キーを検出",
         ]);
         assert!(message.contains("設定を反映しました"));
         assert!(message.contains("ホットキーを更新"));
         assert!(message.contains("監視設定を更新"));
         assert!(message.contains("設定スキーマを移行"));
         assert!(message.contains("将来 version を現行へ揃え"));
+        assert!(message.contains("未知の設定キーを検出"));
     }
 
     /// 変更がない場合は基本メッセージのみであるようにすること

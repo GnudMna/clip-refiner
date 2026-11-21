@@ -19,7 +19,9 @@ pub(crate) use clips::{
 pub(crate) use history::handle_history_event;
 pub(crate) use monitor::handle_monitor_event;
 pub(crate) use notification::handle_notification_event;
-pub(crate) use record::{handle_continuous_record_event, toggle_continuous_record};
+pub(crate) use record::{
+    handle_continuous_record_event, toggle_continuous_record, undo_last_continuous_record,
+};
 pub(crate) use refine::{
     handle_favorites_event, handle_refine_mode_event, move_favorite_mode, toggle_favorite_mode,
 };

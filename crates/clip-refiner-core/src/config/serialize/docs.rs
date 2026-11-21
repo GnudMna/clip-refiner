@@ -30,6 +30,9 @@ pub(crate) const DOC_HOTKEY_UNDO: &str = "直近の加工を取り消し";
 pub(crate) const DOC_HOTKEY_CLIP_SELECTOR: &str = "登録クリップセレクター表示";
 pub(crate) const DOC_HOTKEY_OCR: &str = "画面範囲選択 OCR";
 pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD: &str = "連続記録の有効・無効切替";
+pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_UNDO: &str = "連続記録の直近 1 件取り消し";
+pub(crate) const DOC_HOTKEY_CONTINUOUS_RECORD_PASTE: &str =
+    "連続記録キュー先頭をクリップボードへ載せて貼り付け";
 pub(crate) const DOC_HOTKEY_QUIT: &str = "アプリケーション終了";
 pub(crate) const DOC_HOTKEY_FAVORITE_SLOTS: &str = "お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / Alt+Shift+F1〜F11。空文字で無効)";
 pub(crate) const DOC_REGEX_PATTERN: &str = "正規表現パターン";

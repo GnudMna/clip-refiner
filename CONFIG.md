@@ -1,71 +1,97 @@
 # ClipRefiner 設定リファレンス
 
-ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイックスタートは [README.md](README.md) を参照してください。ビルドや開発手順は [DEVELOPMENT.md](DEVELOPMENT.md) を参照してください。
+ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイックスタートは [README.md](README.md)、ビルドや開発手順は [DEVELOPMENT.md](DEVELOPMENT.md)、設定スキーマの変更履歴は [CHANGELOG.md](CHANGELOG.md) の各バージョンにある **設定** 節を参照してください。
 
-## 目次
+文書中の「加工モード」と、トレイ UI の「変換モード」は同じ機能を指します。
 
-- [設定ファイルの場所](#設定ファイルの場所)
-- [処理の制限](#処理の制限)
-- [設定項目](#設定項目)
-- [加工モード一覧](#加工モード一覧)
-- [加工モードの使用例](#加工モードの使用例)
-- [ホットキー形式](#ホットキー形式)
-- [通知 (`notification_settings`)](#通知-notification_settings)
-- [UI 操作](#ui-操作)
-- [設定ウィンドウ](#設定ウィンドウ)
-- [画面 OCR](#画面-ocr)
-- [加工パイプライン (`pipeline`)](#加工パイプライン-pipeline)
-- [監視方式 (`monitor_mode`)](#監視方式-monitor_mode)
-- [連続記録](#連続記録)
-- [クリップボード履歴のセキュリティ](#クリップボード履歴のセキュリティ)
-- [ログイン時の自動起動](#ログイン時の自動起動)
-- [ログ](#ログ)
+## 目的別ガイド
+
+| 目的 | 参照先 |
+| :--- | :--- |
+| 設定ファイルを直接編集する | [設定ファイルの場所](#設定ファイルの場所) / [最小構成例](#最小構成例) / [設定項目](#設定項目) |
+| 加工方法を選ぶ | [加工モード一覧](#加工モード一覧) / [加工モードの使用例](#加工モードの使用例) / [加工パイプライン](#加工パイプライン-pipeline) |
+| キー操作を変更する | [ホットキー形式](#ホットキー形式) / [UI 操作](#ui-操作) |
+| 通知・履歴・連続記録を調整する | [通知](#通知-notification_settings) / [連続記録](#連続記録) / [セキュリティ](#クリップボード履歴のセキュリティ) |
+| 動作しない原因を調べる | [処理の制限](#処理の制限) / [ログ](#ログ) / [トラブルシューティング](#トラブルシューティング) |
 
 ---
 
 ## 設定ファイルの場所
 
-設定ファイル (`config.toml`) は設定変更のたびに自動保存され、以下の場所に配置されます。
+設定ファイル (`config.toml`) は設定変更のたびに自動保存され、以下の場所に配置されます。MSI のインストール先 (`%LOCALAPPDATA%\ClipRefiner`) とは異なります。通常の保存は同じディレクトリの一時ファイルへ書き込んでから置き換えるため、書き込み途中の終了による破損を抑制します。保存に失敗した場合はデスクトップ通知で案内します。
 
-| プラットフォーム | パス |
-| :--------------- | :--- |
-| **Windows** | `%APPDATA%\ClipRefiner\config.toml` |
+| プラットフォーム | パス                                |
+| :--------------- | :---------------------------------- |
+| **Windows**      | `%APPDATA%\ClipRefiner\config.toml` |
 
 **設定ディレクトリ名:** `ClipRefiner`
 
 設定ディレクトリ内の主なファイル / フォルダ:
 
-| パス | 内容 |
-| :--- | :--- |
-| `config.toml` | メイン設定 (加工モード・ホットキー・通知など) |
-| `config.toml.bak` | 解析失敗時に退避された前回の設定 |
-| `registered-clips.dat` | 登録クリップ本文 (ChaCha20-Poly1305 暗号化) |
-| `registered-clips.key` | 登録クリップ用鍵 (Windows DPAPI で保護) |
-| `registered-images/` | 登録クリップ画像 (暗号化) |
-| `settings-window.json` | 設定ウィンドウのサイズ・位置 |
-| `logs/` | 日次ログ (`clip-refiner.log.YYYY-MM-DD`) |
+| パス                   | 内容                                          |
+| :--------------------- | :-------------------------------------------- |
+| `config.toml`          | メイン設定 (加工モード・ホットキー・通知など) |
+| `config.toml.bak`      | 解析に失敗した `config.toml` の退避コピー      |
+| `registered-clips.dat` | 登録クリップ本文 (ChaCha20-Poly1305 暗号化)   |
+| `registered-clips.key` | 登録クリップ用鍵 (Windows DPAPI で保護)       |
+| `registered-images/`   | 登録クリップ画像 (暗号化)                     |
+| `settings-window.json` | 設定ウィンドウのサイズ・位置                  |
+| `logs/`                | 日次ログ (`clip-refiner.log.YYYY-MM-DD`)      |
 
-設定ファイルの解析に失敗した場合、元ファイルは `config.toml.bak` として退避され、デフォルト設定で起動します。起動時にデスクトップ通知 (常駐モード) または標準エラー出力 (ワンショット) で案内されます。TOML 形式のため `#` でコメントを書けます。初回保存時は各項目の説明コメントが付与され、以降の保存ではユーザーが追記したコメントを維持したまま値のみ更新されます。設定ディレクトリとログファイルは、現在ユーザー専用 DACL で保護されます。
+設定ファイルの解析に失敗した場合、壊れた元ファイルは `config.toml.bak` として退避され、デフォルト設定で起動します。`.bak` は正常だった前世代のバックアップではないため、そのまま復元せず構文を修正してください。起動時にデスクトップ通知 (常駐モード) または標準エラー出力 (ワンショット) で案内されます。
+
+認識できないキー (タイプミスや廃止名・未サポート項目) がある場合も読み込み自体は継続し、既知の項目だけ適用します。起動時・再読み込み時にログへ記録し、デスクトップ通知 (常駐) または標準エラー出力 (ワンショット) でキー名を案内します。旧キー (`notify_mode` / `hotkeys.paste_queue` など) や serde の別名は警告対象外です。
+
+TOML 形式のため `#` でコメントを書けます。初回保存時は各項目の説明コメントが付与され、以降の保存ではユーザーが追記したコメントを維持したまま値のみ更新されます。設定ディレクトリとログファイルは、現在ユーザー専用 DACL で保護されます。
 
 ### 外部編集の自動再読み込み
 
-常駐中は監視ループが約 2 秒ごとに `config.toml` の更新時刻を確認し、外部エディタでの変更を自動再読み込みします (アプリ自身の保存直後は誤検知を避けるため約 2 秒間は抑制)。手動編集した場合は、通常 2 秒以内にホットキー・監視設定などへ反映されます。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。設定ウィンドウを開いているときは、外部更新をバナーで知らせます。
+常駐中は監視ループが約 2 秒ごとに `config.toml` の更新時刻を確認し、外部エディタでの変更を自動再読み込みします (アプリ自身の保存直後は誤検知を避けるため約 2 秒間は抑制)。手動編集した場合は、通常 2 秒以内にホットキー・監視設定などへ反映されます。再読み込み時に TOML の解析に失敗した場合、起動時と異なりデフォルト設定へのフォールバックは行わず、通知でエラーを表示します。未知キーを含む場合は反映を継続しつつ、再読み込み通知に検出したキーを含めます。設定ウィンドウを開いているときは、外部更新をバナーで知らせます。
+
+---
+
+## 最小構成例
+
+初回起動でコメント付きの完全な `config.toml` が生成されるため、通常はそれを設定ウィンドウまたはエディタで変更します。手動で新規作成する場合の最小構成は次のとおりです。
+
+```toml
+version = 2
+mode = "UrlDecode"
+interval_ms = 1000
+```
+
+`version` は設定スキーマ用であり、アプリのバージョン番号ではありません。手動で増減せず、現行値を維持してください。加工モードは PascalCase で指定します。たとえば URL デコード後に前後の空白を除去する場合:
+
+```toml
+version = 2
+mode = "UrlDecode"
+pipeline = ["UrlDecode", "Trim"]
+interval_ms = 1000
+monitor_mode = "Polling"
+
+[notification_settings]
+enabled = true
+notify_result = false
+```
+
+利用できるキーと既定値は次の [設定項目](#設定項目) を参照してください。
 
 ---
 
 ## 処理の制限
 
-| 対象 | 上限 |
-| :--- | :--- |
-| クリップボード本文 | 2 MiB |
-| JSON / YAML / Markdown パーサー入力 | 1 MiB |
-| 正規表現パターン | 8 KiB |
-| 正規表現マッチ実行時間 | 2 秒 |
-| 正規表現マッチ同時実行 | 2 本 |
-| 登録クリップ | 100 件 (ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 8192 px) |
-| お気に入り変換モード | 20 件 |
-| 加工パイプライン | 10 段 |
-| ポーリング間隔 (`interval_ms`) | 100〜60000 ms |
+| 対象                                | 上限                                                               |
+| :---------------------------------- | :----------------------------------------------------------------- |
+| クリップボード本文                  | 2 MiB                                                              |
+| JSON / YAML / Markdown パーサー入力 | 1 MiB                                                              |
+| 正規表現パターン                    | 8 KiB                                                              |
+| 正規表現マッチ実行時間              | 2 秒                                                               |
+| 正規表現マッチ同時実行              | 2 本                                                               |
+| 登録クリップ                        | 100 件 (ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 8192 px) |
+| 登録クリップ暗号化ファイル          | 256 MiB                                                            |
+| お気に入り変換モード                | 20 件                                                              |
+| 加工パイプライン                    | 10 段                                                              |
+| ポーリング間隔 (`interval_ms`)      | 100〜60000 ms                                                      |
 
 上限を超える入力は処理されず、登録クリップの追加は拒否されます。正規表現マッチが 2 秒を超えた場合は加工を中断し、クリップボードの元テキストを維持します (設定 UI のプレビューでは無効パターンとして表示)。同時に走れる正規表現マッチは最大 2 本で、タイムアウト後は協調キャンセルによりスロットを解放します (単一の `find` 実行中はエンジン制約で打ち切れない場合があります)。通知・履歴メニュー・登録クリッププレビューでは、API キー・JWT・PEM 秘密鍵・資格情報行など機密らしい内容を `[機密情報のため非表示]` に自動置換します (クリップボード本体は加工対象のまま保持)。
 
@@ -75,82 +101,84 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 
 `mode` などの加工モード名は CLI の kebab-case (`url-decode` など) ではなく、設定ファイルでは PascalCase (`UrlDecode` など) を指定します。CLI 名との対応は [加工モード一覧](#加工モード一覧) を参照してください。
 
-| キー | 型 | デフォルト | 説明 |
-| :--- | :--- | :--------- | :--- |
-| `version` | number | `2` | 設定スキーマのバージョン |
-| `mode` | string | `"UrlDecode"` | 使用する加工モード (`pipeline` が空の場合に監視で適用) |
-| `pipeline` | array | (空) | 監視時に順に適用する加工モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は `mode` のみ。例: `["UrlDecode", "Trim"]`) |
-| `favorite_modes` | array | (空) | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`) |
-| `interval_ms` | number | `1000` | クリップボードのポーリング間隔 (ミリ秒、100〜60000)。設定ウィンドウでは数値入力。トレイメニューは 0.5 / 1 / 2 / 5 秒のプリセットと「カスタム…」(設定ウィンドウを開く) |
-| `monitor_mode` | string | `"Polling"` | 監視方式。`"Polling"` または `"Event"` |
-| `is_paused` | bool | `false` | 監視を一時停止するかどうか |
-| `history_enabled` | bool | `false` | 加工履歴の有効・無効 |
-| `continuous_record_enabled` | bool | `false` | 連続記録モード (監視時は加工せず元テキストを記録) |
-| `continuous_record_limit` | number | `10` | 連続記録の最大保持件数 (1〜100) |
-| `history_limit` | number | `10` | 履歴の最大保持件数 (1〜100) |
-| `notification_settings.enabled` | bool | `false` | デスクトップ通知の有効・無効 (エラー通知は常に表示) |
-| `notification_settings.notify_process` | bool | `true` | 加工完了時の通知 |
-| `notification_settings.notify_pause` | bool | `true` | 一時停止切替時の通知 |
-| `notification_settings.notify_history_restore` | bool | `true` | 履歴復元時の通知 |
-| `notification_settings.notify_ocr` | bool | `true` | OCR 完了時の通知 |
-| `notification_settings.notify_registered_clip` | bool | `true` | 登録クリップ操作時の通知 |
-| `notification_settings.notify_favorites` | bool | `true` | お気に入り操作時の通知 |
-| `notification_settings.notify_continuous_record` | bool | `true` | 連続記録操作時の通知 |
-| `notification_settings.notify_result` | bool | `false` | 通知にクリップボードの内容を表示するかどうか |
-| `hotkeys.quick_selector` | string | `"Alt+Shift+S"` | クイックセレクター表示 |
-| `hotkeys.clip_selector` | string | `"Alt+Shift+T"` | 登録クリップセレクター表示 |
-| `hotkeys.ocr` | string | `"Alt+Shift+O"` | 画面範囲選択 OCR の開始 |
-| `hotkeys.notification` | string | `"Alt+Shift+N"` | デスクトップ通知のマスター ON/OFF (エラー通知は常に表示) |
-| `hotkeys.pause` | string | `"Alt+Shift+P"` | 監視の一時停止・再開 |
-| `hotkeys.continuous_record` | string | `"Alt+Shift+C"` | 連続記録の有効・無効切替 |
-| `hotkeys.undo` | string | `"Alt+Shift+Z"` | 直近の加工を取り消し |
-| `hotkeys.quit` | string | `"Alt+Shift+Q"` | アプリケーション終了 |
-| `hotkeys.favorite_mode_slots` | array | (空) | お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜9 / F1〜F11。空文字で無効) |
-| `regex.pattern` | string | `""` | 正規表現パターン (最大 8 KiB) |
-| `regex.replacement` | string | `""` | 置換文字列 (`regex-replace` で使用。`$1` 形式のキャプチャ参照可) |
-| `regex.case_insensitive` | bool | `false` | 大文字小文字を無視 (`(?i)` 相当) |
-| `regex.multiline` | bool | `false` | 複数行モード (`(?m)` 相当) |
-| (登録クリップ) | — | — | `config.toml` には含まれない。設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存。最大 100 件 |
+| キー                                             | 型     | デフォルト              | 説明                                                                                                                                                                  |
+| :----------------------------------------------- | :----- | :---------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                                        | number | `2`                     | 設定スキーマのバージョン                                                                                                                                              |
+| `mode`                                           | string | `"UrlDecode"`           | 使用する加工モード (`pipeline` が空の場合に監視で適用)                                                                                                                |
+| `pipeline`                                       | array  | (空)                    | 監視時に順に適用する加工モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は `mode` のみ。例: `["UrlDecode", "Trim"]`)                                             |
+| `favorite_modes`                                 | array  | (空)                    | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`)                                                                                     |
+| `interval_ms`                                    | number | `1000`                  | クリップボードのポーリング間隔 (ミリ秒、100〜60000)。設定ウィンドウでは数値入力。トレイメニューは 0.5 / 1 / 2 / 5 秒のプリセットと「カスタム…」(設定ウィンドウを開く) |
+| `monitor_mode`                                   | string | `"Polling"`             | 監視方式。`"Polling"` または `"Event"`                                                                                                                                |
+| `is_paused`                                      | bool   | `false`                 | 監視を一時停止するかどうか                                                                                                                                            |
+| `history_enabled`                                | bool   | `false`                 | 加工履歴の有効・無効                                                                                                                                                  |
+| `continuous_record_enabled`                      | bool   | `false`                 | 連続記録モード (監視時は加工せず元テキストを記録)                                                                                                                     |
+| `continuous_record_limit`                        | number | `10`                    | 連続記録の最大保持件数 (1〜100)                                                                                                                                       |
+| `history_limit`                                  | number | `10`                    | 履歴の最大保持件数 (1〜100)                                                                                                                                           |
+| `notification_settings.enabled`                  | bool   | `false`                 | デスクトップ通知の有効・無効 (エラー通知は常に表示)                                                                                                                   |
+| `notification_settings.notify_process`           | bool   | `true`                  | 加工完了時の通知                                                                                                                                                      |
+| `notification_settings.notify_pause`             | bool   | `true`                  | 一時停止切替時の通知                                                                                                                                                  |
+| `notification_settings.notify_history_restore`   | bool   | `true`                  | 履歴復元時の通知                                                                                                                                                      |
+| `notification_settings.notify_ocr`               | bool   | `true`                  | OCR 完了時の通知                                                                                                                                                      |
+| `notification_settings.notify_registered_clip`   | bool   | `true`                  | 登録クリップ操作時の通知                                                                                                                                              |
+| `notification_settings.notify_favorites`         | bool   | `true`                  | お気に入り操作時の通知                                                                                                                                                |
+| `notification_settings.notify_continuous_record` | bool   | `true`                  | 連続記録操作時の通知                                                                                                                                                  |
+| `notification_settings.notify_result`            | bool   | `false`                 | 通知にクリップボードの内容を表示するかどうか                                                                                                                          |
+| `hotkeys.quick_selector`                         | string | `"Alt+Shift+S"`         | クイックセレクター表示                                                                                                                                                |
+| `hotkeys.clip_selector`                          | string | `"Alt+Shift+T"`         | 登録クリップセレクター表示                                                                                                                                            |
+| `hotkeys.ocr`                                    | string | `"Alt+Shift+O"`         | 画面範囲選択 OCR の開始                                                                                                                                               |
+| `hotkeys.notification`                           | string | `"Alt+Shift+N"`         | デスクトップ通知のマスター ON/OFF (エラー通知は常に表示)                                                                                                              |
+| `hotkeys.pause`                                  | string | `"Alt+Shift+P"`         | 監視の一時停止・再開                                                                                                                                                  |
+| `hotkeys.continuous_record`                      | string | `"Alt+Shift+C"`         | 連続記録の有効・無効切替                                                                                                                                              |
+| `hotkeys.continuous_record_undo`                 | string | `"Alt+Shift+Backspace"` | 連続記録の直近 1 件取り消し                                                                                                                                           |
+| `hotkeys.continuous_record_paste`                | string | `"Alt+Shift+X"`         | 連続記録キュー先頭をクリップボードへ載せて貼り付け                                                                                                                    |
+| `hotkeys.undo`                                   | string | `"Alt+Shift+Z"`         | 直近の加工を取り消し                                                                                                                                                  |
+| `hotkeys.quit`                                   | string | `"Alt+Shift+Q"`         | アプリケーション終了                                                                                                                                                  |
+| `hotkeys.favorite_mode_slots`                    | array  | (空)                    | お気に入り変換モード用ホットキー (登録順インデックスに対応。未指定スロットは Alt+Shift+1〜Alt+Shift+9 / Alt+Shift+F1〜Alt+Shift+F11。空文字で無効)                      |
+| `regex.pattern`                                  | string | `""`                    | 正規表現パターン (最大 8 KiB)                                                                                                                                         |
+| `regex.replacement`                              | string | `""`                    | 置換文字列 (`regex-replace` で使用。`$1` 形式のキャプチャ参照可)                                                                                                      |
+| `regex.case_insensitive`                         | bool   | `false`                 | 大文字小文字を無視 (`(?i)` 相当)                                                                                                                                      |
+| `regex.multiline`                                | bool   | `false`                 | 複数行モード (`(?m)` 相当)                                                                                                                                            |
+| (登録クリップ)                                   | —      | —                       | `config.toml` には含まれない。設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存。最大 100 件                                        |
 
 ---
 
 ## 加工モード一覧
 
-`--mode` に渡す値 (CLI 名) と、トレイメニュー・クイックセレクタでの表示。**全 42 モード**に対応。
+`--mode` に渡す値 (CLI 名) と、トレイメニュー・クイックセレクターでの表示。**全 42 モード**に対応。
 
 > **設定ファイル:** CLI は kebab-case (`url-decode` など) だが、`config.toml` では PascalCase (`UrlDecode` など) を指定する。初回保存時に生成される `config.toml` を参照するとよい。
 
-| カテゴリ | モード名 (`--mode`) | 説明 |
-| :------- | :------------------ | :--- |
-| **URL 操作** | `url-encode` / `url-decode` | URL のエンコード・デコード |
-| | `remove-utm` | URL から `utm_*` 計測パラメータを削除 |
-| **パス操作** | `extract-basename` / `extract-basename-quoted` | パスからファイル名のみを抽出 (引用符付きオプションあり) |
-| | `add-path-quotes` / `remove-path-quotes` | パスへの引用符 (`"`) の付与・削除 |
-| | `path-to-slash` / `path-to-backslash` | パス区切り文字をスラッシュ / バックスラッシュに変換 |
-| **行操作** | `sort-lines-asc` / `sort-lines-desc` | 行単位での昇順・降順ソート (CSV 対応) |
-| | `remove-empty-lines` | 空行を削除 |
-| | `remove-duplicate-lines` | 重複行を削除 |
-| **トリム** | `trim` | テキスト全体の前後の空白・改行を削除 |
-| | `trim-lines` | 行ごとに前後の空白を削除 |
-| **エスケープ** | `escape` / `unescape` | バックスラッシュエスケープの付与・解除 |
-| | `regex-escape` / `regex-unescape` | 正規表現メタ文字のエスケープ・解除 |
-| **正規表現** | `regex-replace` | パターンに一致する部分を置換 (`[regex]` 設定を使用) |
-| | `regex-extract` | パターンに一致する部分を行単位で抽出 |
-| | `regex-delete` | パターンに一致する部分を削除 |
-| | `regex-split` | パターンで分割し改行で結合 |
-| **JSON 整形** | `json-format` | JSON をインデント整形 (キー順序不定) |
-| | `json-format-preserve-order` | JSON をインデント整形 (キー順序保持) |
-| **JSON へ変換** | `yaml-to-json` | YAML を JSON へ変換 (キー順序不定) |
-| | `yaml-to-json-preserve-order` | YAML を JSON へ変換 (キー順序保持) |
-| **YAML へ変換** | `json-to-yaml` | JSON を YAML へ変換 (キー順序不定) |
-| | `json-to-yaml-preserve-order` | JSON を YAML へ変換 (キー順序保持) |
-| **Markdown** | `markdown-to-html` | Markdown を HTML へ変換 |
-| **Excel** | `excel-to-markdown` | Excel コピーデータを Markdown テーブルへ変換 |
-| | `markdown-to-excel` | Markdown 表を Excel (TSV) 形式へ変換 |
-| | `excel-to-image` | Excel コピーデータの見た目を画像としてクリップボードへ保存 |
-| **日時変換** | `timestamp-to-datetime` / `datetime-to-timestamp` | Unix タイムスタンプ ↔ 日時文字列の変換 (ローカルタイムゾーン) |
-| **数値変換** | `add-comma` / `remove-comma` | 数値への 3 桁カンマ区切り付与・削除 |
-| **ケース変換** | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | 識別子のケース変換 |
+| カテゴリ        | モード名 (`--mode`)                                                                                | 説明                                                          |
+| :-------------- | :------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ |
+| **URL 操作**    | `url-encode` / `url-decode`                                                                        | URL のエンコード・デコード                                    |
+|                 | `remove-utm`                                                                                       | URL から `utm_*` 計測パラメータを削除                         |
+| **パス操作**    | `extract-basename` / `extract-basename-quoted`                                                     | パスからファイル名のみを抽出 (引用符付きオプションあり)       |
+|                 | `add-path-quotes` / `remove-path-quotes`                                                           | パスへの引用符 (`"`) の付与・削除                             |
+|                 | `path-to-slash` / `path-to-backslash`                                                              | パス区切り文字をスラッシュ / バックスラッシュに変換           |
+| **行操作**      | `sort-lines-asc` / `sort-lines-desc`                                                               | 行単位での昇順・降順ソート (CSV 対応)                         |
+|                 | `remove-empty-lines`                                                                               | 空行を削除                                                    |
+|                 | `remove-duplicate-lines`                                                                           | 重複行を削除                                                  |
+| **トリム**      | `trim`                                                                                             | テキスト全体の前後の空白・改行を削除                          |
+|                 | `trim-lines`                                                                                       | 行ごとに前後の空白を削除                                      |
+| **エスケープ**  | `escape` / `unescape`                                                                              | バックスラッシュエスケープの付与・解除                        |
+|                 | `regex-escape` / `regex-unescape`                                                                  | 正規表現メタ文字のエスケープ・解除                            |
+| **正規表現**    | `regex-replace`                                                                                    | パターンに一致する部分を置換 (`[regex]` 設定を使用)           |
+|                 | `regex-extract`                                                                                    | パターンに一致する部分を行単位で抽出                          |
+|                 | `regex-delete`                                                                                     | パターンに一致する部分を削除                                  |
+|                 | `regex-split`                                                                                      | パターンで分割し改行で結合                                    |
+| **JSON 整形**   | `json-format`                                                                                      | JSON をインデント整形 (キー順序不定)                          |
+|                 | `json-format-preserve-order`                                                                       | JSON をインデント整形 (キー順序保持)                          |
+| **JSON へ変換** | `yaml-to-json`                                                                                     | YAML を JSON へ変換 (キー順序不定)                            |
+|                 | `yaml-to-json-preserve-order`                                                                      | YAML を JSON へ変換 (キー順序保持)                            |
+| **YAML へ変換** | `json-to-yaml`                                                                                     | JSON を YAML へ変換 (キー順序不定)                            |
+|                 | `json-to-yaml-preserve-order`                                                                      | JSON を YAML へ変換 (キー順序保持)                            |
+| **Markdown**    | `markdown-to-html`                                                                                 | Markdown を HTML へ変換                                       |
+| **Excel**       | `excel-to-markdown`                                                                                | Excel コピーデータを Markdown テーブルへ変換                  |
+|                 | `markdown-to-excel`                                                                                | Markdown 表を Excel (TSV) 形式へ変換                          |
+|                 | `excel-to-image`                                                                                   | Excel コピーデータの見た目を画像としてクリップボードへ保存    |
+| **日時変換**    | `timestamp-to-datetime` / `datetime-to-timestamp`                                                  | Unix タイムスタンプ ↔ 日時文字列の変換 (ローカルタイムゾーン) |
+| **数値変換**    | `add-comma` / `remove-comma`                                                                       | 数値への 3 桁カンマ区切り付与・削除                           |
+| **ケース変換**  | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | 識別子のケース変換                                            |
 
 正規表現モードは `[regex]` セクションでパターン・置換文字列・オプションを設定する。
 
@@ -162,10 +190,10 @@ ClipRefiner は **Windows 専用**です。ユーザ向けの概要・クイッ�
 <summary><strong>UTM パラメータの削除</strong> (<code>remove-utm</code>)</summary>
 <br>
 
-| | |
-| :-- | :-- |
+|          |                                                                        |
+| :------- | :--------------------------------------------------------------------- |
 | **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
-| **出力** | `https://example.com/page?id=123` |
+| **出力** | `https://example.com/page?id=123`                                      |
 
 </details>
 
@@ -206,8 +234,8 @@ case_insensitive = false
 multiline = false
 ```
 
-| | |
-| :-- | :-- |
+|          |                                        |
+| :------- | :------------------------------------- |
 | **入力** | `会議日: 2024-01-15、締切: 2024-02-28` |
 | **出力** | `会議日: 2024/01/15、締切: 2024/02/28` |
 
@@ -219,9 +247,9 @@ multiline = false
 
 ローカルタイムゾーン基準。出力例はタイムゾーンにより異なる。
 
-| | |
-| :-- | :-- |
-| **入力** | `1700000000` |
+|                  |                       |
+| :--------------- | :-------------------- |
+| **入力**         | `1700000000`          |
 | **出力例 (JST)** | `2023-11-15 07:13:20` |
 
 </details>
@@ -230,9 +258,9 @@ multiline = false
 <summary><strong>ケース変換</strong> (<code>to-snake-case</code>)</summary>
 <br>
 
-| | |
-| :-- | :-- |
-| **入力** | `HelloWorld` |
+|          |               |
+| :------- | :------------ |
+| **入力** | `HelloWorld`  |
 | **出力** | `hello_world` |
 
 </details>
@@ -241,9 +269,9 @@ multiline = false
 <summary><strong>カンマ区切り付与</strong> (<code>add-comma</code>)</summary>
 <br>
 
-| | |
-| :-- | :-- |
-| **入力** | `1234567` |
+|          |             |
+| :------- | :---------- |
+| **入力** | `1234567`   |
 | **出力** | `1,234,567` |
 
 </details>
@@ -255,7 +283,7 @@ multiline = false
 `Alt+Shift+S` のように、`+` 区切りで修飾キーとキーを指定します。
 
 - **修飾キー**: `Alt`, `Shift`, `Ctrl` (`Control` 可), `Meta` (`Super` / `Win` 可)
-- **キー**: `A`〜`Z`, `0`〜`9`, `F1`〜`F12`
+- **キー**: `A`〜`Z`, `0`〜`9`, `F1`〜`F12`, `Backspace`
 
 不正な値は読み込み時・設定 UI 保存時にデフォルトへ置き換えられます (お気に入りスロットの空文字は意図的な無効化として維持)。設定ウィンドウの「ショートカット」タブからも編集できます。
 
@@ -265,24 +293,24 @@ multiline = false
 
 デスクトップ通知は **マスター** (`notification_settings.enabled`) と **種類別トグル** で制御する。起動失敗・設定読み込み失敗・クリップボード初期化失敗などの **エラー通知はマスター OFF でも常に表示** する。
 
-| 操作 | 動作 |
-| :--- | :--- |
-| トレイ「通知」サブメニュー | マスター ON/OFF と種類別トグルの切替 |
+| 操作                       | 動作                                                                  |
+| :------------------------- | :-------------------------------------------------------------------- |
+| トレイ「通知」サブメニュー | マスター ON/OFF と種類別トグルの切替                                  |
 | 設定ウィンドウ「通知」タブ | マスターと個別項目を GUI で編集 (マスター OFF 時も個別設定は変更可能) |
-| `Alt+Shift+N` | マスター ON/OFF のみ切替 (`hotkeys.notification`) |
+| `Alt+Shift+N`              | マスター ON/OFF のみ切替 (`hotkeys.notification`)                     |
 
 種類別トグルと対象操作:
 
-| キー | 既定 | 対象 |
-| :--- | :--- | :--- |
-| `notify_process` | `true` | 監視モードでの加工完了 |
-| `notify_pause` | `true` | 一時停止・再開 |
-| `notify_history_restore` | `true` | 履歴からの復元 |
-| `notify_ocr` | `true` | 画面 OCR 完了 |
-| `notify_registered_clip` | `true` | 登録クリップのコピー・登録 |
-| `notify_favorites` | `true` | お気に入り変換の切替 |
-| `notify_continuous_record` | `true` | 連続記録の有効化・取り出しなど |
-| `notify_result` | `false` | 上記通知本文にクリップボード内容を含めるか (マスターとは独立) |
+| キー                       | 既定    | 対象                                                          |
+| :------------------------- | :------ | :------------------------------------------------------------ |
+| `notify_process`           | `true`  | 監視モードでの加工完了                                        |
+| `notify_pause`             | `true`  | 一時停止・再開                                                |
+| `notify_history_restore`   | `true`  | 履歴からの復元                                                |
+| `notify_ocr`               | `true`  | 画面 OCR 完了                                                 |
+| `notify_registered_clip`   | `true`  | 登録クリップのコピー・登録                                    |
+| `notify_favorites`         | `true`  | お気に入り変換の切替                                          |
+| `notify_continuous_record` | `true`  | 連続記録の有効化・取り出しなど                                |
+| `notify_result`            | `false` | 上記通知本文にクリップボード内容を含めるか (マスターとは独立) |
 
 `notify_result` が `true` のときも、機密らしい内容は `[機密情報のため非表示]` にマスクする。加工パイプライン適用時の加工完了通知は、連鎖したモード名を連結して表示する ([加工パイプライン](#加工パイプライン-pipeline) 参照)。
 
@@ -301,12 +329,12 @@ notify_continuous_record = true
 notify_result = false
 ```
 
-**旧設定からの移行:** v0.12.1 以前の `notify_mode` / `notify_actions` は読み込み時に新項目へ自動移行し、次回保存時に TOML から除去される。
+**旧設定からの移行:** v0.12.1 以前の `notify_mode` / `notify_actions` は読み込み時に新項目へ自動移行し、次回保存時に TOML から除去される。変更経緯は [CHANGELOG.md](CHANGELOG.md) の v0.12.2 を参照。
 
-| 旧キー | 移行先 |
-| :----- | :----- |
-| `notify_mode = false` かつ `notify_result` 未指定 | `notify_process = false` |
-| `notify_actions = false` | `notify_history_restore` / `notify_ocr` / `notify_registered_clip` / `notify_favorites` / `notify_continuous_record` を `false` |
+| 旧キー                                            | 移行先                                                                                                                          |
+| :------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------ |
+| `notify_mode = false` かつ `notify_result` 未指定 | `notify_process = false`                                                                                                        |
+| `notify_actions = false`                          | `notify_history_restore` / `notify_ocr` / `notify_registered_clip` / `notify_favorites` / `notify_continuous_record` を `false` |
 
 ---
 
@@ -314,28 +342,28 @@ notify_result = false
 
 ### システムトレイメニュー
 
-| メニュー | 内容 |
-| :------- | :--- |
-| **変換モード** | カテゴリ別サブメニューから選択。お気に入りの登録・解除・即切替も可能。`pipeline` 設定時は連鎖中の全モードにチェック。連続記録 ON 時は無効化 |
-| **監視方式** | `ポーリング` / `イベント` を切り替え |
-| **監視周期** | `0.5秒` / `1秒` / `2秒` / `5秒` のプリセット、または `カスタム…` (設定ウィンドウで 100〜60000 ms を数値入力)。プリセット外の値では `カスタム (N ms)` と表示 (イベント方式では無効) |
-| **履歴** | 有効化・クリア、過去の加工結果の呼び出し |
-| **連続記録** | 有効化・クリア、記録済みテキストの取り出し (FIFO) |
-| **登録クリップ** | 登録済み文字列の呼び出し、クリップボードからの新規登録 |
-| **通知** | マスター ON/OFF、種類別トグル、クリップボード内容表示。詳細は [通知 (`notification_settings`)](#通知-notification_settings) |
-| **設定を開く** | [設定ウィンドウ](#設定ウィンドウ) を表示 |
-| **クリップボード監視を再開** | ワーカー初期化失敗などで監視が停止したときに手動復旧 (通常は無効) |
-| **一時停止 / 終了** | 監視の一時停止・再開、アプリ終了 |
+| メニュー                     | 内容                                                                                                                                                                               |
+| :--------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **変換モード**               | カテゴリ別サブメニューから選択。お気に入りの登録・解除・即切替も可能。`pipeline` 設定時は連鎖中の全モードにチェック。連続記録 ON 時は無効化                                        |
+| **監視方式**                 | `ポーリング` / `イベント` を切り替え                                                                                                                                               |
+| **監視周期**                 | `0.5秒` / `1秒` / `2秒` / `5秒` のプリセット、または `カスタム…` (設定ウィンドウで 100〜60000 ms を数値入力)。プリセット外の値では `カスタム (N ms)` と表示 (イベント方式では無効) |
+| **履歴**                     | 有効化・クリア、過去の加工結果の呼び出し                                                                                                                                           |
+| **連続記録**                 | 有効化・クリア、記録済みテキストの取り出し (FIFO)                                                                                                                                  |
+| **登録クリップ**             | 登録済み文字列の呼び出し、クリップボードからの新規登録                                                                                                                             |
+| **通知**                     | マスター ON/OFF、種類別トグル、クリップボード内容表示。詳細は [通知 (`notification_settings`)](#通知-notification_settings)                                                        |
+| **設定を開く**               | [設定ウィンドウ](#設定ウィンドウ) を表示                                                                                                                                           |
+| **クリップボード監視を再開** | ワーカー初期化失敗などで監視が停止したときに手動復旧 (通常は無効)                                                                                                                  |
+| **一時停止 / 終了**          | 監視の一時停止・再開、アプリ終了                                                                                                                                                   |
 
-### クイックセレクタ (`Alt+Shift+S`)
+### クイックセレクター (`Alt+Shift+S`)
 
 - **検索:** モード名・カテゴリ・CLI 名の部分一致 (ハイライト表示)
 - **お気に入り:** 星印または `Ctrl+D` で登録・解除。`Ctrl+Shift+↑/↓` で並び替え
 - **キー:** `↑/↓` 移動、`Enter` 決定、`Esc` クリアまたは閉じる
 
-### 登録クリップセレクタ (`Alt+Shift+T`)
+### 登録クリップセレクター (`Alt+Shift+T`)
 
-- **登録:** トレイ「登録クリップ → クリップボードを登録」、またはセレクタ内 `Ctrl+Enter` (画像優先)
+- **登録:** トレイ「登録クリップ → クリップボードを登録」、またはセレクター内 `Ctrl+Enter` (画像優先)
 - **上限:** 最大 100 件、ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 8192 px
 - **キー:** `Enter` でコピー、`Del` で削除、`Esc` クリアまたは閉じる
 
@@ -346,16 +374,17 @@ notify_result = false
 - **有効化:** トレイ「連続記録 → 連続記録を有効にする」、または `Alt+Shift+C`
 - **記録:** 監視時にコピーした元テキストを加工せずキュー末尾へ追加 (有効化時点のクリップボード内容は記録せず、以降のコピーから積む)
 - **自動加工停止:** 有効中はコピー監視による自動加工を行わない。トレイの「変換モード」メニューは無効化され、連続記録サブメニュー名は「連続記録 (自動加工停止)」、ツールチップは「ClipRefiner (連続記録中・自動加工停止)」と表示される
-- **取り出し:** 連続記録 ON 時の `Ctrl+V` でキュー先頭をクリップボードへ載せてから貼り付け、またはトレイメニューから項目を選択して取り出し (除去)
+- **取り出し:** `Alt+Shift+X` でキュー先頭をクリップボードへ載せてから貼り付け、またはトレイメニューから項目を選択して取り出し (除去)
+- **取り消し:** トレイ「連続記録 → 直近の記録を取り消す」、または `Alt+Shift+Backspace` でキュー末尾 (直近コピー) を 1 件削除。クリップボード本体は変更しない
 - **クリア:** トレイ「連続記録 → 記録をクリア」
 - **上限:** 最大 `continuous_record_limit` 件 (1〜100、デフォルト 10)。超過時は先頭から破棄。同一内容の再コピーでも重複排除せず積む
-- **手動加工:** お気に入りホットキーやクイックセレクタなど、明示的な手動加工は従来どおり動作する
+- **手動加工:** お気に入りホットキーやクイックセレクターなど、明示的な手動加工は従来どおり動作する
 
 ### お気に入り変換モード
 
-- **登録:** トレイ「変換モード → お気に入り」またはクイックセレクタ `Ctrl+D`
+- **登録:** トレイ「変換モード → お気に入り」またはクイックセレクター `Ctrl+D`
 - **上限:** 最大 20 件 (`favorite_modes` に永続化)
-- **ホットキー:** 登録順に `Alt+Shift+1`〜`9` / `F1`〜`F11`。`hotkeys.favorite_mode_slots` でカスタマイズ (空文字で無効)
+- **ホットキー:** 登録順に `Alt+Shift+1`〜`Alt+Shift+9` / `Alt+Shift+F1`〜`Alt+Shift+F11`。`hotkeys.favorite_mode_slots` でカスタマイズ (空文字で無効)
 
 ```toml
 favorite_modes = ["UrlDecode", "Trim", "JsonFormat"]
@@ -376,16 +405,16 @@ favorite_mode_slots = ["", "Alt+Ctrl+J"]  # 2 件目のみカスタム、1 件�
 
 ヘッダーの **config.toml** ボタン、または「ショートカット」タブから設定ファイルを既定エディタで開ける。ホットキー割り当ては設定ウィンドウの「ショートカット」タブで編集できる (`config.toml` の `[hotkeys]` でも同様に編集可能)。
 
-| タブ | 内容 |
-| :--- | :--- |
-| **一般** | ログイン時の自動起動 |
-| **お気に入り** | お気に入り変換モードの追加・並び替え・削除 (最大 20 件) |
-| **正規表現** | `[regex]` のパターン・置換文字列・オプション。Rust 正規表現エンジンによるライブプレビュー付き |
-| **履歴・連続記録** | 有効化・保持件数・クリア。連続記録 ON 時はバナーで自動加工停止を表示 |
-| **登録クリップ** | 一覧表示・コピー・削除・クリップボードからの新規登録 |
-| **監視** | 一時停止、監視方式・周期 (100〜60000 ms の数値入力)、デフォルトモード、加工パイプラインの追加・並び替え・削除。連続記録 ON 時は加工設定セクションを無効表示 |
-| **通知** | マスター ON/OFF、加工完了・一時停止・履歴復元・OCR・登録クリップ・お気に入り・連続記録の個別トグル、クリップボード内容表示 (`notify_result`) |
-| **ショートカット** | グローバルホットキーの編集 (固定割り当て + お気に入りスロット。空欄でお気に入りスロットを無効化) |
+| タブ               | 内容                                                                                                                                                        |
+| :----------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **一般**           | ログイン時の自動起動                                                                                                                                        |
+| **お気に入り**     | お気に入り変換モードの追加・並び替え・削除 (最大 20 件)                                                                                                     |
+| **正規表現**       | `[regex]` のパターン・置換文字列・オプション。Rust 正規表現エンジンによるライブプレビュー付き                                                               |
+| **履歴・連続記録** | 有効化・保持件数・クリア。連続記録 ON 時はバナーで自動加工停止を表示                                                                                        |
+| **登録クリップ**   | 一覧表示・コピー・削除・クリップボードからの新規登録                                                                                                        |
+| **監視**           | 一時停止、監視方式・周期 (100〜60000 ms の数値入力)、デフォルトモード、加工パイプラインの追加・並び替え・削除。連続記録 ON 時は加工設定セクションを無効表示 |
+| **通知**           | マスター ON/OFF、加工完了・一時停止・履歴復元・OCR・登録クリップ・お気に入り・連続記録の個別トグル、クリップボード内容表示 (`notify_result`)                |
+| **ショートカット** | グローバルホットキーの編集 (固定割り当て + お気に入りスロット。空欄でお気に入りスロットを無効化)                                                            |
 
 **正規表現タブ:** パターン入力中はクライアント側でバイト長を検証し、構文チェックと `regex-replace` の置換プレビューはバックエンド (本番と同じ Rust エンジン、固定サンプル `Hello world 123`) で実行する。コンパイルできないパターンは保存されない。履歴・連続記録・登録クリップの削除は確認ダイアログを表示する。
 
@@ -397,7 +426,7 @@ favorite_mode_slots = ["", "Alt+Ctrl+J"]  # 2 件目のみカスタム、1 件�
 
 `Alt+Shift+O` で全画面オーバーレイを表示し、ドラッグで範囲選択。確定後にキャプチャと OCR を実行し、結果をクリップボードへ書き込む。`Esc` または再度ホットキーでキャンセル。
 
-OCR エンジンは `Windows.Media.Ocr` (日本語言語パック優先)。範囲選択は Win32 ネイティブオーバーレイ。
+OCR エンジンは `Windows.Media.Ocr` (日本語言語パック優先)。範囲選択は Win32 ネイティブオーバーレイ。キャプチャと認識は同時に 1 本だけ実行し、新しい範囲選択が始まると進行中ジョブの結果書き込み・通知は破棄する (エンジン自体の強制中断はできない)。
 
 - **小さい選択範囲:** 短辺が小さい画像は自動拡大してから OCR
 - **日本語の空白:** OCR が挿入する不要スペースを除去 (英単語間は維持)
@@ -417,20 +446,20 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 - **画像出力**: `ExcelToImage` はパイプライン末尾へ自動移動
 - **通知**: 連鎖適用時は `URLデコード → 全体をトリム → JSON整形` のようにモード名を連結して表示
 
-ワンショット実行時は CLI の `--pipeline` でも同様に連鎖指定できます (`--mode` より優先)。例:
+ワンショット実行時は CLI の `--pipeline` でも同様に連鎖指定できます (`--mode` より優先)。トレイ常駐中は常駐プロセスへ IPC 委譲し、監視の再加工を避けます。常駐が無い場合のみローカルで直接加工します。例:
 
-```bash
-./ClipRefiner.exe --pipeline url-decode trim json-format
+```powershell
+.\ClipRefiner.exe --pipeline url-decode trim json-format
 ```
 
 ---
 
 ## 監視方式 (`monitor_mode`)
 
-| 方式 | 説明 |
-| :--- | :--- |
-| `Polling` | 一定間隔 (`interval_ms`) でクリップボードの内容を読み取り、変更を検知する基本方式 |
-| `Event` | Windows のシーケンス番号を監視。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷 |
+| 方式      | 説明                                                                                                |
+| :-------- | :-------------------------------------------------------------------------------------------------- |
+| `Polling` | 一定間隔 (`interval_ms`) でクリップボードの内容を読み取り、変更を検知する基本方式                   |
+| `Event`   | Windows のシーケンス番号を監視。本文の定期読み取りを避けるため、ポーリングより低遅延かつ低 CPU 負荷 |
 
 ---
 
@@ -438,12 +467,13 @@ pipeline = ["UrlDecode", "Trim", "JsonFormat"]
 
 履歴とは独立した FIFO キュー。トレイ「連続記録 → 連続記録を有効にする」または `Alt+Shift+C` で有効化 (`continuous_record_enabled`、デフォルト無効)。監視時は加工を行わずコピーした元テキストを専用キューへ末尾追加する。有効化時点で既にあるクリップボード内容は記録せず、以降のコピーから積む。有効中はコピー監視による自動加工が停止し、トレイの変換モードメニューは無効化される。最大 `continuous_record_limit` 件 (1〜100、デフォルト 10) を保持し、上限超過時は先頭から破棄する。同一内容の再コピーでも重複排除せず積む。
 
-| 操作 | 動作 |
-| :--- | :--- |
-| コピー (監視) | 元テキストをキュー末尾へ追加 |
-| `Ctrl+V` 貼り付け | 連続記録 ON 時、キュー先頭をクリップボードへ載せてから通常の貼り付けを実行 (キューが空のときは従来どおり) |
-| トレイメニュー項目選択 | 指定位置のエントリをクリップボードへ取り出し (除去) |
-| 有効化直後 | 既存のクリップボード内容は記録せず、以降のコピーからキューへ積む |
+| 操作                                   | 動作                                                                                                                                   |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------- |
+| コピー (監視)                          | 元テキストをキュー末尾へ追加                                                                                                           |
+| `Alt+Shift+X` 貼り付け                | キュー先頭をクリップボードへ載せてから通常の貼り付けを実行 (キューが空、または連続記録 OFF のときは現在のクリップボード内容を貼り付け) |
+| トレイメニュー項目選択                 | 指定位置のエントリをクリップボードへ取り出し (除去)                                                                                    |
+| 直近の取り消し (`Alt+Shift+Backspace`) | キュー末尾 (直近コピー) を 1 件削除。クリップボードは変更しない                                                                        |
+| 有効化直後                             | 既存のクリップボード内容は記録せず、以降のコピーからキューへ積む                                                                       |
 
 ```toml
 continuous_record_enabled = true
@@ -451,6 +481,8 @@ continuous_record_limit = 10
 
 [hotkeys]
 continuous_record = "Alt+Shift+C"
+continuous_record_undo = "Alt+Shift+Backspace"
+continuous_record_paste = "Alt+Shift+X"
 ```
 
 ホットキーやメニューからの手動加工は従来どおり動作する。トレイメニューとホットキーの操作は [UI 操作](#ui-操作) を参照。
@@ -465,14 +497,14 @@ continuous_record = "Alt+Shift+C"
 
 履歴は機密情報を含む可能性があるため、**ディスクへ書き込まない**ことに加え、**メモリ上でも平文を常駐させない**よう多層的に保護している。
 
-| 対策 | 内容 |
-| :--- | :--- |
-| **ディスク非永続化** | 履歴・連続記録はファイル・DB へ書き込まず、プロセス実行中のメモリ上のみ。再起動で消える |
-| **メモリ内暗号化** | 起動ごとに生成したセッション鍵 (32 バイト) で各エントリを ChaCha20-Poly1305 暗号化。エントリごとにランダムノンス |
-| **平文の非保持** | 履歴の重複判定は BLAKE3 ハッシュのみ。履歴・連続記録ストア内に本文の平文は格納しない |
-| **復号時のゼロ化** | 呼び出し・取り消しで復号した文字列は `SecretString` で保持し、スコープ終了時にゼロ化 |
-| **終了時の破棄** | プロセス終了時に暗号鍵と暗号文バッファをクリア |
-| **表示マスキング** | 履歴メニューのラベルで API キー・JWT 等を `[機密情報のため非表示]` に置換 |
+| 対策                 | 内容                                                                                                             |
+| :------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| **ディスク非永続化** | 履歴・連続記録はファイル・DB へ書き込まず、プロセス実行中のメモリ上のみ。再起動で消える                          |
+| **メモリ内暗号化**   | 起動ごとに生成したセッション鍵 (32 バイト) で各エントリを ChaCha20-Poly1305 暗号化。エントリごとにランダムノンス |
+| **平文の非保持**     | 履歴の重複判定は BLAKE3 ハッシュのみ。履歴・連続記録ストア内に本文の平文は格納しない                             |
+| **復号時のゼロ化**   | 呼び出し・取り消しで復号した文字列は `SecretString` で保持し、スコープ終了時にゼロ化                             |
+| **終了時の破棄**     | プロセス終了時に暗号鍵と暗号文バッファをクリア                                                                   |
+| **表示マスキング**   | 履歴メニューのラベルで API キー・JWT 等を `[機密情報のため非表示]` に置換                                        |
 
 加工の取り消し用に保持する直近 1 件の加工前テキストも、同様にメモリ上のみ・ゼロ化付きで管理する。
 
@@ -480,13 +512,15 @@ continuous_record = "Alt+Shift+C"
 
 登録クリップは履歴・連続記録と異なりディスクへ永続化するが、平文では保存しない。本文は暗号化ファイル `registered-clips.dat`、画像は `registered-images/` に ChaCha20-Poly1305 で暗号化して保存する。暗号化鍵は設定ディレクトリの `registered-clips.key` に置き、Windows DPAPI (現在ユーザースコープ) で保護したうえで現在ユーザー専用 DACL を付与する。設定ウィンドウ・セレクターのプレビュー表示では、履歴と同様に機密らしい内容を `[機密情報のため非表示]` にマスクする。
 
+登録クリップをバックアップ・移行する場合は `registered-clips.dat`、`registered-clips.key`、`registered-images/` を一組として扱う。鍵は作成した Windows ユーザーの DPAPI で保護されるため、別ユーザーや別環境へファイルだけコピーしても復号できない。`registered-clips.key` を失うと保存済みデータは復元できない。
+
 > **補足:** OS のメモリスワップや他プロセスからのメモリダンプなど、ランタイム環境に依存するリスクまでは完全には防げない。機密性の高い内容は履歴をオフにするか、使用後に「履歴をクリア」することを推奨する。
 
 ---
 
 ## ログイン時の自動起動
 
-設定ウィンドウ「一般」タブから切り替える。現在のユーザー向けレジストリ `Run` キーに登録する。
+設定ウィンドウ「一般」タブから切り替える。現在のユーザー向けレジストリ `Run` キーに登録し、`config.toml` には保存しない。
 
 実行ファイルのパスが変わった場合 (再インストールや移動後など) は、一度オフにしてから再度オンにすると正しいパスで再登録される。
 
@@ -496,8 +530,21 @@ continuous_record = "Alt+Shift+C"
 
 ログファイルは設定ディレクトリ内の `logs/` フォルダに日次ローテーションで保存されます。ファイル名の日付 (`clip-refiner.log.YYYY-MM-DD`) はローカルタイムゾーン基準です。不具合報告時は該当する日付のログファイルを添付してください。
 
-| プラットフォーム | パス |
-| :--------------- | :--- |
-| **Windows** | `%APPDATA%\ClipRefiner\logs\` |
+| プラットフォーム | パス                          |
+| :--------------- | :---------------------------- |
+| **Windows**      | `%APPDATA%\ClipRefiner\logs\` |
 
 ログレベルの詳細設定 (`RUST_LOG` など) と開発用の環境変数は [DEVELOPMENT.md の環境変数節](DEVELOPMENT.md#環境変数) を参照してください。
+
+---
+
+## トラブルシューティング
+
+| 症状 | 対処 |
+| :--- | :--- |
+| 起動時に設定の解析エラーが出る | `config.toml.bak` を開いて通知・ログに示された TOML 構文を修正し、アプリ終了後に `config.toml` として戻す |
+| 未知キーの警告が出る | [設定項目](#設定項目) と照合し、タイプミスや廃止済みキーを削除する。既知の設定は引き続き適用される |
+| 外部編集が反映されない | 保存後 2 秒ほど待つ。構文エラー通知と当日ログを確認する |
+| ホットキーが既定値へ戻る | [対応するキー形式](#ホットキー形式)か、他の割り当てと重複していないか確認する |
+| 大きなテキストや画像を処理できない | [処理の制限](#処理の制限)のサイズ・件数上限を確認する |
+| 設定や登録クリップを保存できない | `%APPDATA%\ClipRefiner` の書き込み権限、空き容量、セキュリティソフトのブロックを確認する |

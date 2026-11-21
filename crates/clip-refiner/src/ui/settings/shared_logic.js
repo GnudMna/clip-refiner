@@ -31,6 +31,8 @@ var SettingsSharedLogic = (function () {
         ['hotkey-notification', 'notification'],
         ['hotkey-pause', 'pause'],
         ['hotkey-continuous-record', 'continuousRecord'],
+        ['hotkey-continuous-record-undo', 'continuousRecordUndo'],
+        ['hotkey-continuous-record-paste', 'continuousRecordPaste'],
         ['hotkey-undo', 'undo'],
         ['hotkey-quit', 'quit'],
     ];
@@ -43,6 +45,8 @@ var SettingsSharedLogic = (function () {
         ['notification', '成功通知の切替'],
         ['pause', '一時停止 / 再開'],
         ['continuousRecord', '連続記録の切替'],
+        ['continuousRecordUndo', '連続記録の取り消し'],
+        ['continuousRecordPaste', '連続記録の貼り付け'],
         ['undo', '加工の取り消し'],
         ['quit', '終了'],
     ];
@@ -182,10 +186,11 @@ var SettingsSharedLogic = (function () {
         const isLetter = /^[A-Z]$/.test(upper);
         const isDigit = /^[0-9]$/.test(upper);
         const isFunction = /^F([1-9]|1[0-2])$/i.test(keyPart);
-        if (!isLetter && !isDigit && !isFunction) {
+        const isBackspace = upper === 'BACKSPACE';
+        if (!isLetter && !isDigit && !isFunction && !isBackspace) {
             return {
                 valid: false,
-                message: '未対応のキーです (A-Z / 0-9 / F1-F12)',
+                message: '未対応のキーです (A-Z / 0-9 / F1-F12 / Backspace)',
             };
         }
         return { valid: true, message: '' };

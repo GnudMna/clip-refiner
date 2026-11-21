@@ -53,6 +53,27 @@ pub struct HotkeySettings {
         alias = "continuousRecord"
     )]
     pub continuous_record: String,
+    /// 連続記録の直近 1 件取り消し
+    #[serde(
+        default = "default_hotkey_continuous_record_undo",
+        rename(
+            serialize = "continuousRecordUndo",
+            deserialize = "continuous_record_undo"
+        ),
+        alias = "continuousRecordUndo"
+    )]
+    pub continuous_record_undo: String,
+    /// 連続記録キュー先頭の貼り付け
+    #[serde(
+        default = "default_hotkey_continuous_record_paste",
+        rename(
+            serialize = "continuousRecordPaste",
+            deserialize = "continuous_record_paste"
+        ),
+        alias = "continuousRecordPaste",
+        alias = "paste_queue"
+    )]
+    pub continuous_record_paste: String,
     /// お気に入り変換モード用ホットキー (登録順インデックスに対応。空文字で無効)
     #[serde(
         default,
@@ -73,6 +94,8 @@ impl Default for HotkeySettings {
             clip_selector: default_hotkey_clip_selector(),
             ocr: default_hotkey_ocr(),
             continuous_record: default_hotkey_continuous_record(),
+            continuous_record_undo: default_hotkey_continuous_record_undo(),
+            continuous_record_paste: default_hotkey_continuous_record_paste(),
             favorite_mode_slots: Vec::new(),
         }
     }
@@ -133,6 +156,16 @@ impl HotkeySettings {
             consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
             "continuous_record",
         );
+        fix_hotkey_field(
+            &mut self.continuous_record_undo,
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,
+            "continuous_record_undo",
+        );
+        fix_hotkey_field(
+            &mut self.continuous_record_paste,
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE,
+            "continuous_record_paste",
+        );
         self.normalize_favorite_mode_slots();
         self.fix_duplicates();
     }
@@ -188,6 +221,18 @@ impl HotkeySettings {
             &mut self.continuous_record,
             "continuous_record",
             consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.continuous_record_undo,
+            "continuous_record_undo",
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,
+            &mut used,
+        );
+        dedupe_fixed_field(
+            &mut self.continuous_record_paste,
+            "continuous_record_paste",
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE,
             &mut used,
         );
         self.fix_duplicate_favorite_slots(&mut used);
@@ -340,6 +385,16 @@ fn default_hotkey_ocr() -> String {
 /// 連続記録切替のデフォルトホットキーを返す
 fn default_hotkey_continuous_record() -> String {
     consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD.to_string()
+}
+
+/// 連続記録取り消しのデフォルトホットキーを返す
+fn default_hotkey_continuous_record_undo() -> String {
+    consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO.to_string()
+}
+
+/// 連続記録貼り付けのデフォルトホットキーを返す
+fn default_hotkey_continuous_record_paste() -> String {
+    consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE.to_string()
 }
 
 /// お気に入りスロットのデフォルトホットキー文字列を返す

@@ -178,6 +178,30 @@ pub fn registered_clip_register_failure(err: AddRegisteredClipError) -> UserNoti
     UserNotification::static_message(titles::REGISTERED_CLIP, body)
 }
 
+/// 設定ファイルの保存失敗をユーザー通知へ変換する
+///
+/// # Returns
+/// * `UserNotification` - 保存失敗の案内
+#[must_use]
+pub fn config_save_failure() -> UserNotification {
+    UserNotification::static_message(
+        titles::SETTINGS,
+        "設定の保存に失敗しました。変更は再起動後に失われる可能性があります",
+    )
+}
+
+/// 設定パッチのキュー投入失敗をユーザー通知へ変換する
+///
+/// # Returns
+/// * `UserNotification` - キュー投入失敗の案内
+#[must_use]
+pub fn settings_patch_enqueue_failure() -> UserNotification {
+    UserNotification::static_message(
+        titles::SETTINGS,
+        "設定の更新キューへの反映に失敗しました。操作をやり直してください",
+    )
+}
+
 /// 起動失敗向けの通知を組み立てる
 ///
 /// # Arguments
@@ -252,6 +276,22 @@ mod tests {
         let notification = UserNotification::from(ClipboardProcessError::NoText);
         assert_eq!(notification.title(), titles::PROCESS);
         assert_eq!(notification.body(), "クリップボードにテキストがありません");
+    }
+
+    /// 設定保存失敗通知が固定の案内文を返すこと
+    #[test]
+    fn config_save_failure_has_settings_title() {
+        let notification = config_save_failure();
+        assert_eq!(notification.title(), titles::SETTINGS);
+        assert!(notification.body().contains("保存に失敗"));
+    }
+
+    /// 設定パッチキュー失敗通知が固定の案内文を返すこと
+    #[test]
+    fn settings_patch_enqueue_failure_has_settings_title() {
+        let notification = settings_patch_enqueue_failure();
+        assert_eq!(notification.title(), titles::SETTINGS);
+        assert!(notification.body().contains("キュー"));
     }
 
     /// 起動失敗通知は長文を切り詰めようにすること

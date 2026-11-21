@@ -1,4 +1,4 @@
-use crate::platform::{self, screen_capture::RgbaImage};
+use crate::platform;
 use crate::security::secret_from;
 use crate::tray::dispatch;
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
@@ -8,14 +8,9 @@ use anyhow::Result;
 // ======================================================================
 // OCR 実行
 // ======================================================================
-/// 画像から OCR を実行し、結果をクリップボードへ書き込む
-///
-/// 呼び出し元でバックグラウンドスレッドへ逃がすこと
-pub(crate) fn run_ocr_on_image(image: &RgbaImage, worker: &ClipboardWorkerHandle) {
-    dispatch_ocr_result(platform::ocr::recognize_text(image), worker);
-}
-
 /// OCR 認識結果をワーカーへ送るか、エラー・空結果を通知する
+///
+/// 呼び出し元で世代チェック済みであること。古いジョブの結果は送らない
 pub(crate) fn dispatch_ocr_result(result: Result<String>, worker: &ClipboardWorkerHandle) {
     match result {
         Ok(text) if text.trim().is_empty() => {

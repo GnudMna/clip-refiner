@@ -4,6 +4,7 @@ use std::time::Instant;
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
 use super::super::event::toggle_continuous_record as apply_continuous_record_toggle;
+use super::super::event::undo_last_continuous_record as apply_continuous_record_undo;
 use super::super::event::update_refine;
 use super::super::menu::TrayMenu;
 use super::super::notify::{
@@ -71,6 +72,10 @@ impl HotkeyHandler {
             Self::toggle_pause(ctx);
         } else if event.id == self.continuous_record_hotkey.id() {
             Self::toggle_continuous_record(ctx);
+        } else if event.id == self.continuous_record_undo_hotkey.id() {
+            Self::undo_last_continuous_record(ctx);
+        } else if event.id == self.continuous_record_paste_hotkey.id() {
+            Self::paste_continuous_record(ctx);
         } else if event.id == self.quit_hotkey.id() {
             *ctx.control_flow = ControlFlow::Exit;
         } else if event.id == self.undo_hotkey.id() {
@@ -237,6 +242,19 @@ impl HotkeyHandler {
             } else {
                 "連続記録を無効にしました"
             },
+        );
+    }
+
+    /// 連続記録の直近 1 件を取り消す
+    pub(super) fn undo_last_continuous_record(ctx: &mut HotkeyEventContext<'_>) {
+        apply_continuous_record_undo(ctx.menu, ctx.state, "ショートカット");
+    }
+
+    /// 連続記録キュー先頭の貼り付けをワーカーへ依頼する
+    pub(super) fn paste_continuous_record(ctx: &mut HotkeyEventContext<'_>) {
+        dispatch::send_clipboard_command(
+            ctx.clipboard_worker,
+            ClipboardCommand::PasteContinuousRecordFront,
         );
     }
 }

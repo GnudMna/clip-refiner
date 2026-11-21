@@ -90,6 +90,8 @@ pub struct ContinuousRecordMenu {
     pub main_submenu: Submenu,
     /// 連続記録の有効/無効を切り替える項目
     pub enabled_item: CheckMenuItem,
+    /// 直近の記録を 1 件取り消す項目
+    pub undo_item: MenuItem,
     /// 記録を全削除する項目
     pub clear_item: MenuItem,
     /// 記録項目 (表示用 ID とストア内インデックス) のリスト

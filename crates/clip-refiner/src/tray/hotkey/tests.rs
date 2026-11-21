@@ -88,6 +88,8 @@ fn test_hotkeys() -> HotkeySettings {
         clip_selector: "Alt+Shift+F6".to_string(),
         ocr: "Alt+Shift+F7".to_string(),
         continuous_record: "Alt+Shift+F8".to_string(),
+        continuous_record_undo: "Alt+Shift+F9".to_string(),
+        continuous_record_paste: "Alt+Shift+F10".to_string(),
         favorite_mode_slots: Vec::new(),
     }
 }
@@ -103,6 +105,8 @@ fn ui_test_hotkeys() -> HotkeySettings {
         clip_selector: "Alt+Ctrl+Shift+F6".to_string(),
         ocr: "Alt+Ctrl+Shift+F7".to_string(),
         continuous_record: "Alt+Ctrl+Shift+F8".to_string(),
+        continuous_record_undo: "Alt+Ctrl+Shift+F9".to_string(),
+        continuous_record_paste: "Alt+Ctrl+Shift+F10".to_string(),
         favorite_mode_slots: Vec::new(),
     }
 }
@@ -151,6 +155,43 @@ fn assert_continuous_record_toggle(handler: &mut HotkeyHandler, ctx: &mut Hotkey
     );
     assert!(ctx.state.with_config(|c| c.continuous_record_enabled));
     assert!(ctx.menu.continuous_record.enabled_item.is_checked());
+}
+
+fn assert_continuous_record_undo(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
+    ctx.state.enqueue_continuous_record("first");
+    ctx.state.enqueue_continuous_record("second");
+    assert_eq!(ctx.state.clipboard_session().continuous_record_len(), 2);
+
+    handler.handle_event(
+        press_event(handler.continuous_record_undo_hotkey_id()),
+        &mut ctx.ctx(),
+    );
+    assert_eq!(ctx.state.clipboard_session().continuous_record_len(), 1);
+    assert_eq!(
+        ctx.state
+            .clipboard_session()
+            .get_continuous_record_entry(0)
+            .as_ref()
+            .map(|s| s.as_str()),
+        Some("first")
+    );
+}
+
+fn assert_continuous_record_paste(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
+    assert_eq!(ctx.state.clipboard_session().continuous_record_len(), 1);
+
+    let (tx, rx) = mpsc::channel();
+    ctx.clipboard_worker = ClipboardWorkerHandle::for_test(Arc::clone(&ctx.state), tx);
+    handler.handle_event(
+        press_event(handler.continuous_record_paste_hotkey_id()),
+        &mut ctx.ctx(),
+    );
+    assert!(matches!(
+        rx.recv().expect("連続記録貼り付けコマンドが送信される"),
+        ClipboardCommand::PasteContinuousRecordFront
+    ));
+    // キュー排出はワーカー処理後。ここではコマンド送出のみを検証する
+    assert_eq!(ctx.state.clipboard_session().continuous_record_len(), 1);
 }
 
 fn assert_undo_sends_command(
@@ -230,6 +271,8 @@ fn hotkey_event_handling() {
     assert_pause_toggle(&mut handler, &mut ctx);
     assert_notification_toggle(&mut handler, &mut ctx);
     assert_continuous_record_toggle(&mut handler, &mut ctx);
+    assert_continuous_record_undo(&mut handler, &mut ctx);
+    assert_continuous_record_paste(&mut handler, &mut ctx);
     let rx = assert_undo_sends_command(&mut handler, &mut ctx);
     assert_favorite_hotkeys(&mut handler, &mut ctx, &rx);
     assert_quit_exits(&mut handler, &mut ctx);
@@ -274,6 +317,8 @@ fn reload_updates_registered_hotkey_ids() {
         clip_selector: "Alt+Ctrl+F6".to_string(),
         ocr: "Alt+Ctrl+F7".to_string(),
         continuous_record: "Alt+Ctrl+F8".to_string(),
+        continuous_record_undo: "Alt+Ctrl+F10".to_string(),
+        continuous_record_paste: "Alt+Ctrl+F9".to_string(),
         favorite_mode_slots: Vec::new(),
     };
     let mut handler = HotkeyHandler::new(&initial, &[])
@@ -290,7 +335,7 @@ fn reload_updates_registered_hotkey_ids() {
     assert_ne!(handler.quit_hotkey_id(), quit_before);
 
     let ocr_before = handler.ocr_hotkey_id();
-    updated.ocr = "Alt+Ctrl+F9".to_string();
+    updated.ocr = "Alt+Ctrl+F11".to_string();
     handler
         .reload(&updated, &[])
         .expect("OCR ホットキーの再登録に失敗");

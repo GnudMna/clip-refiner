@@ -14,6 +14,11 @@ pub const APP_NAME: &str = "ClipRefiner";
 /// 多重起動防止やレジストリ、設定のスコープ分離に使用される
 pub const APP_ID: &str = "com.y_hirata.clip-refiner";
 
+/// ワンショット CLI と常駐プロセス間の名前付きパイプパス
+///
+/// 常駐側がサーバー、`--mode` / `--pipeline` 実行側がクライアントになる
+pub const ONESHOT_IPC_PIPE_NAME: &str = r"\\.\pipe\com.y_hirata.clip-refiner.oneshot";
+
 /// 設定ディレクトリ上書き用の環境変数名
 ///
 /// 設定時は `%APPDATA%\ClipRefiner` の代わりに指定パスを使う (E2E / テスト向け)
@@ -101,6 +106,12 @@ pub const DEFAULT_HOTKEY_OCR: &str = "Alt+Shift+O";
 
 /// 連続記録切替のデフォルトホットキー
 pub const DEFAULT_HOTKEY_CONTINUOUS_RECORD: &str = "Alt+Shift+C";
+
+/// 連続記録の直近 1 件取り消しのデフォルトホットキー
+pub const DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO: &str = "Alt+Shift+Backspace";
+
+/// 連続記録キュー先頭の貼り付けのデフォルトホットキー
+pub const DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE: &str = "Alt+Shift+X";
 
 /// 登録クリップの最大件数
 pub const MAX_REGISTERED_CLIPS: usize = 100;

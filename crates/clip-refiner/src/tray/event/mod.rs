@@ -23,12 +23,13 @@ mod user_event;
 
 pub(crate) use super::features::{
     copy_registered_clip, delete_registered_clip, move_favorite_mode, refresh_clips_views,
-    toggle_continuous_record, toggle_favorite_mode, update_monitor_mode, update_refine,
+    toggle_continuous_record, toggle_favorite_mode, undo_last_continuous_record,
+    update_monitor_mode, update_refine,
 };
 pub(crate) use config_reload::reload_config_with_notification;
 pub(crate) use context::AppEventContext;
 pub(crate) use loop_event::handle_loop_event;
-pub(crate) use ocr::run_ocr_on_image;
+pub(crate) use ocr::dispatch_ocr_result;
 
 // ======================================================================
 // テスト

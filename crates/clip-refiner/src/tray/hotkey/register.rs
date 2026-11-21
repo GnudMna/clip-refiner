@@ -48,6 +48,8 @@ pub struct HotkeyHandler {
     pub(super) undo_hotkey: HotKey,
     pub(super) clip_selector_hotkey: HotKey,
     pub(super) continuous_record_hotkey: HotKey,
+    pub(super) continuous_record_undo_hotkey: HotKey,
+    pub(super) continuous_record_paste_hotkey: HotKey,
     pub(super) ocr_hotkey: HotKey,
     favorite_hotkeys: Vec<FavoriteHotkeyBinding>,
 }
@@ -80,6 +82,8 @@ impl HotkeyHandler {
             undo_hotkey: resolved.undo,
             clip_selector_hotkey: resolved.clip_selector,
             continuous_record_hotkey: resolved.continuous_record,
+            continuous_record_undo_hotkey: resolved.continuous_record_undo,
+            continuous_record_paste_hotkey: resolved.continuous_record_paste,
             ocr_hotkey: resolved.ocr,
             favorite_hotkeys: Vec::new(),
         };
@@ -119,6 +123,8 @@ impl HotkeyHandler {
         self.undo_hotkey = resolved.undo;
         self.clip_selector_hotkey = resolved.clip_selector;
         self.continuous_record_hotkey = resolved.continuous_record;
+        self.continuous_record_undo_hotkey = resolved.continuous_record_undo;
+        self.continuous_record_paste_hotkey = resolved.continuous_record_paste;
         self.ocr_hotkey = resolved.ocr;
 
         failures.extend(self.register_favorite_hotkeys(hotkeys, favorite_modes.len()));
@@ -152,6 +158,8 @@ impl HotkeyHandler {
             self.undo_hotkey,
             self.clip_selector_hotkey,
             self.continuous_record_hotkey,
+            self.continuous_record_undo_hotkey,
+            self.continuous_record_paste_hotkey,
             self.ocr_hotkey,
         ];
         hotkeys
@@ -218,7 +226,7 @@ fn register_resolved_hotkeys(
     resolved: &ResolvedHotkeys,
 ) -> Vec<HotkeyRegistrationFailure> {
     let mut failures = Vec::new();
-    let entries: [(&str, &str, HotKey); 8] = [
+    let entries: [(&str, &str, HotKey); 10] = [
         (
             "quick_selector",
             hotkeys.quick_selector.as_str(),
@@ -241,6 +249,16 @@ fn register_resolved_hotkeys(
             "continuous_record",
             hotkeys.continuous_record.as_str(),
             resolved.continuous_record,
+        ),
+        (
+            "continuous_record_undo",
+            hotkeys.continuous_record_undo.as_str(),
+            resolved.continuous_record_undo,
+        ),
+        (
+            "continuous_record_paste",
+            hotkeys.continuous_record_paste.as_str(),
+            resolved.continuous_record_paste,
         ),
         ("ocr", hotkeys.ocr.as_str(), resolved.ocr),
     ];
@@ -284,6 +302,8 @@ fn hotkey_action_label(key: &str) -> String {
         "clip_selector" => "登録クリップセレクター".to_string(),
         "ocr" => "画面 OCR".to_string(),
         "continuous_record" => "連続記録の切替".to_string(),
+        "continuous_record_undo" => "連続記録の取り消し".to_string(),
+        "continuous_record_paste" => "連続記録の貼り付け".to_string(),
         other => other.to_string(),
     }
 }
@@ -361,6 +381,16 @@ impl HotkeyHandler {
     /// テスト用: 連続記録切替ホットキーの ID を返す
     pub(crate) fn continuous_record_hotkey_id(&self) -> u32 {
         self.continuous_record_hotkey.id()
+    }
+
+    /// テスト用: 連続記録取り消しホットキーの ID を返す
+    pub(crate) fn continuous_record_undo_hotkey_id(&self) -> u32 {
+        self.continuous_record_undo_hotkey.id()
+    }
+
+    /// テスト用: 連続記録貼り付けホットキーの ID を返す
+    pub(crate) fn continuous_record_paste_hotkey_id(&self) -> u32 {
+        self.continuous_record_paste_hotkey.id()
     }
 
     /// テスト用: 取り消しホットキーの ID を返す

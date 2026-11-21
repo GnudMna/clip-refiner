@@ -91,6 +91,7 @@ pause = "Alt+Shift+P"
 undo = "Alt+Shift+Z"
 notification = "Alt+Shift+N"
 continuous_record = "Alt+Shift+C"
+continuous_record_undo = "Alt+Shift+Backspace"
 ocr = "Alt+Shift+O"
 quit = "Alt+Shift+Q"
 `;

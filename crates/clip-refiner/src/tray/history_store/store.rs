@@ -202,6 +202,18 @@ impl EncryptedHistoryStore {
         self.decrypt_entry(&entry).ok()
     }
 
+    /// キュー末尾 (最後に記録した項目) を取り除く
+    ///
+    /// # Arguments
+    /// * `self` - この `EncryptedHistoryStore`
+    ///
+    /// # Returns
+    /// * `Option<SecretString>` - 末尾エントリ。空の場合は `None`
+    pub fn pop_back(&mut self) -> Option<SecretString> {
+        let entry = self.entries.pop()?;
+        self.decrypt_entry(&entry).ok()
+    }
+
     /// 履歴をすべて削除する
     ///
     /// # Arguments
@@ -367,6 +379,29 @@ mod tests {
         assert_eq!(
             store.discharge_at(0).as_ref().map(|s| s.as_str()),
             Some("only")
+        );
+    }
+
+    /// FIFO キュー末尾の取り消しが正しく動作すること
+    #[test]
+    fn test_enqueue_pop_back_undo_last() {
+        let mut store = EncryptedHistoryStore::new().expect("テスト用履歴ストアの生成に失敗");
+
+        assert!(store.pop_back().is_none());
+
+        store.enqueue("first", 10);
+        store.enqueue("second", 10);
+        store.enqueue("third", 10);
+
+        assert_eq!(store.pop_back().as_ref().map(|s| s.as_str()), Some("third"));
+        assert_eq!(store.len(), 2);
+        assert_eq!(
+            store.entry_at(0).as_ref().map(|s| s.as_str()),
+            Some("first")
+        );
+        assert_eq!(
+            store.entry_at(1).as_ref().map(|s| s.as_str()),
+            Some("second")
         );
     }
 }

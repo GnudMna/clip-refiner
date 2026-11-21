@@ -27,7 +27,10 @@ macro_rules! define_settings_model {
         #[derive(Debug, Clone, Default, Deserialize, Serialize)]
         #[serde(rename_all = "camelCase", default)]
         pub(crate) struct SettingsPatch {
-            $( pub $field : Option<$ty>, )*
+            $(
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub $field : Option<$ty>,
+            )*
         }
 
         impl SettingsWritable {
@@ -109,7 +112,11 @@ impl SettingsPatch {
     }
 }
 
-/// JSON オブジェクトを再帰的にマージする (`null` はスキップ)
+/// JSON オブジェクトを再帰的にマージする (`null` / 非オブジェクトはスキップ方針)
+///
+/// - オブジェクト同士はキー単位で再帰マージする
+/// - `null` は「未指定」として扱い、既存値を維持する
+/// - 配列とプリミティブは後勝ちで上書きする
 pub(crate) fn deep_merge_json_values(base: &mut serde_json::Value, other: &serde_json::Value) {
     let (Some(base_map), Some(other_map)) = (base.as_object_mut(), other.as_object()) else {
         if !other.is_null() {
@@ -149,8 +156,10 @@ mod tests {
         let writable = SettingsWritable::from_config(&AppConfig::default());
         let writable_json: serde_json::Value =
             serde_json::to_value(&writable).expect("SettingsWritable の JSON 化");
+        let patch: SettingsPatch =
+            serde_json::from_value(writable_json.clone()).expect("Writable JSON から Patch へ");
         let patch_json: serde_json::Value =
-            serde_json::to_value(SettingsPatch::default()).expect("SettingsPatch の JSON 化");
+            serde_json::to_value(&patch).expect("SettingsPatch の JSON 化");
 
         let writable_keys = writable_json
             .as_object()
@@ -158,16 +167,16 @@ mod tests {
             .keys()
             .cloned()
             .collect::<std::collections::HashSet<_>>();
-        for key in patch_json
+        let patch_keys = patch_json
             .as_object()
             .expect("SettingsPatch はオブジェクト")
             .keys()
-        {
-            assert!(
-                writable_keys.contains(key),
-                "SettingsPatch のキー {key} が SettingsWritable に無い"
-            );
-        }
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            writable_keys, patch_keys,
+            "SettingsWritable と SettingsPatch の JSON キー集合が一致すること"
+        );
     }
 
     /// `apply_patch` が指定フィールドのみ更新すること
@@ -185,5 +194,49 @@ mod tests {
         assert!(writable.history_enabled);
         assert_eq!(writable.mode, RefineMode::Trim);
         assert_eq!(writable.interval_ms, original_interval);
+    }
+
+    /// `SettingsPatch` の未設定フィールドは JSON に含めないこと
+    #[test]
+    fn settings_patch_omits_none_fields_on_serialize() {
+        let patch = SettingsPatch {
+            history_enabled: Some(true),
+            ..SettingsPatch::default()
+        };
+        let json = serde_json::to_value(&patch).expect("SettingsPatch の JSON 化");
+        let object = json.as_object().expect("オブジェクト");
+        assert_eq!(object.get("historyEnabled"), Some(&serde_json::json!(true)));
+        assert!(!object.contains_key("intervalMs"));
+        assert!(!object.values().any(serde_json::Value::is_null));
+    }
+
+    /// `deep_merge_json_values` が `null` をスキップし既存値を維持すること
+    #[test]
+    fn deep_merge_json_values_skips_null() {
+        let mut base = serde_json::json!({
+            "historyEnabled": true,
+            "notificationSettings": {
+                "enabled": false,
+                "notifyProcess": true
+            }
+        });
+        let patch = serde_json::json!({
+            "historyEnabled": null,
+            "notificationSettings": {
+                "enabled": true,
+                "notifyPause": null,
+                "notifyResult": true
+            },
+            "intervalMs": 2000
+        });
+
+        deep_merge_json_values(&mut base, &patch);
+
+        assert_eq!(base["historyEnabled"], true);
+        assert_eq!(base["intervalMs"], 2000);
+        assert_eq!(base["notificationSettings"]["enabled"], true);
+        assert_eq!(base["notificationSettings"]["notifyProcess"], true);
+        assert_eq!(base["notificationSettings"]["notifyResult"], true);
+        assert!(base["notificationSettings"].get("notifyPause").is_none());
     }
 }

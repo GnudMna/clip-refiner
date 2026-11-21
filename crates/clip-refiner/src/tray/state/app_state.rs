@@ -44,10 +44,11 @@ impl AppState {
     /// * `proxy` - メインイベントループへ通知を送るプロキシ
     ///
     /// # Returns
-    /// * `Result<(Self, Option<ConfigLoadFallback>)>` - 生成された `AppState` と、設定読み込み失敗時のフォールバック理由
+    /// * `Result<(Self, Option<ConfigLoadFallback>, Vec<String>)>` - 生成された `AppState`、
+    ///   設定読み込み失敗時のフォールバック理由、認識できない設定キー
     pub fn new(
         proxy: EventLoopProxy<AppEvent>,
-    ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>)> {
+    ) -> anyhow::Result<(Self, Option<ConfigLoadFallback>, Vec<String>)> {
         let load_outcome = AppConfig::load();
         let config = load_outcome.config;
         Ok((
@@ -61,6 +62,7 @@ impl AppState {
                 proxy,
             },
             load_outcome.fallback,
+            load_outcome.unknown_keys,
         ))
     }
 
@@ -92,7 +94,7 @@ impl AppState {
             return;
         }
         if let Err(e) = self.with_config(crate::config::AppConfig::save) {
-            crate::log_error!("設定の保存に失敗: {:?}", e);
+            crate::user_error::config_save_failure().notify_with_debug(&e);
             return;
         }
         self.config_sync.begin_save_grace();
@@ -197,6 +199,21 @@ impl AppState {
             dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
         }
         discharged
+    }
+
+    /// 連続記録キュー末尾 (直近の記録) を取り消す
+    ///
+    /// 取り消し成功時は UI スレッドへ連続記録更新イベントを通知する
+    ///
+    /// # Returns
+    /// * `bool` - 取り消した場合は `true`、キューが空の場合は `false`
+    pub fn undo_last_continuous_record(&self) -> bool {
+        let undone = self.clipboard_session.undo_last_continuous_record();
+        if undone.is_some() {
+            dispatch::send_app_event(&self.proxy, AppEvent::RefreshContinuousRecord);
+            return true;
+        }
+        false
     }
 }
 

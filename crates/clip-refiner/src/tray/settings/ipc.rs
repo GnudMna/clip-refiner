@@ -8,6 +8,7 @@ use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, AppState, RegexPreviewRequest};
+use crate::user_error;
 
 use serde::Deserialize;
 use tao::event_loop::EventLoopProxy;
@@ -139,28 +140,48 @@ pub(crate) enum SettingsIpcAction {
 }
 
 /// 適用待ちキューへ部分更新 JSON を原子的にマージして格納する
+///
+/// マージに失敗した場合は既存キューを保持し、`false` を返す
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub(crate) fn enqueue_settings_patch_json(state: &Arc<AppState>, patch_json: &str) -> bool {
     let mut guard = state.settings_pending().patch_mut();
     let merged_json = if let Some(existing) = guard.as_ref() {
-        merge_settings_patch_json_strings(existing, patch_json)
-            .unwrap_or_else(|| patch_json.to_string())
+        match merge_settings_patch_json_strings(existing, patch_json) {
+            Some(merged) => merged,
+            None => return false,
+        }
     } else {
-        patch_json.to_string()
+        // 単体投入でも不正 JSON は受け付けない
+        let parsed: serde_json::Value = match serde_json::from_str(patch_json) {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        if !parsed.is_object() {
+            return false;
+        }
+        match serde_json::to_string(&parsed) {
+            Ok(json) => json,
+            Err(_) => return false,
+        }
     };
     *guard = Some(merged_json);
     true
 }
 
 /// 適用待ちキューへ部分更新を原子的にマージして格納する
+///
+/// マージに失敗した場合は既存キューを保持し、`false` を返す
 pub(crate) fn enqueue_settings_patch(state: &Arc<AppState>, patch: &SettingsPatch) -> bool {
-    let Ok(incoming_json) = serde_json::to_string(&patch) else {
+    let Ok(incoming_json) = serde_json::to_string(patch) else {
         return false;
     };
 
     let mut guard = state.settings_pending().patch_mut();
     let merged_json = if let Some(existing) = guard.as_ref() {
-        merge_settings_patch_json_strings(existing, &incoming_json).unwrap_or(incoming_json)
+        match merge_settings_patch_json_strings(existing, &incoming_json) {
+            Some(merged) => merged,
+            None => return false,
+        }
     } else {
         incoming_json
     };
@@ -203,7 +224,7 @@ pub(crate) fn dispatch_settings_ipc(
             if enqueue_settings_patch(state, &patch) {
                 dispatch::send_app_event(proxy, AppEvent::SettingsApplyPatch);
             } else {
-                crate::log_warn!("設定パッチのキューイングに失敗");
+                user_error::settings_patch_enqueue_failure().notify();
             }
         }
         SettingsIpcAction::ClearHistory => {
@@ -457,6 +478,38 @@ mod tests {
         let patch: SettingsPatch = serde_json::from_str(&json).expect("パッチ JSON のパース");
         assert_eq!(patch.history_enabled, Some(true));
         assert_eq!(patch.continuous_record_enabled, Some(true));
+    }
+
+    /// マージ失敗時は既存キューを保持すること
+    #[test]
+    fn enqueue_settings_patch_json_preserves_queue_on_merge_failure() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+
+        assert!(enqueue_settings_patch(
+            &state,
+            &SettingsPatch {
+                history_enabled: Some(true),
+                ..SettingsPatch::default()
+            }
+        ));
+        assert!(!enqueue_settings_patch_json(&state, "not-json"));
+
+        let json = state
+            .settings_pending()
+            .take_patch()
+            .expect("既存キューが残ること");
+        let patch: SettingsPatch = serde_json::from_str(&json).expect("パッチ JSON のパース");
+        assert_eq!(patch.history_enabled, Some(true));
+        assert_eq!(patch.continuous_record_enabled, None);
+    }
+
+    /// 不正な単体 JSON はキューへ入れないこと
+    #[test]
+    fn enqueue_settings_patch_json_rejects_invalid_standalone_payload() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        assert!(!enqueue_settings_patch_json(&state, "not-json"));
+        assert!(!enqueue_settings_patch_json(&state, r#""string""#));
+        assert!(state.settings_pending().take_patch().is_none());
     }
 
     /// `close` メッセージを解釈できるようにすること

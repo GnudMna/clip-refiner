@@ -69,6 +69,8 @@ pub enum HotkeyKey {
     F10,
     F11,
     F12,
+    /// Backspace
+    Backspace,
 }
 
 /// `Alt+Shift+S` 形式から解析したホットキー
@@ -117,7 +119,7 @@ const LAST_RESORT_HOTKEY: ParsedHotkey = ParsedHotkey {
 /// `Alt+Shift+S` 形式の文字列を `ParsedHotkey` に変換する
 ///
 /// 修飾キーは `Alt` / `Shift` / `Ctrl` / `Control` / `Meta` / `Super` / `Win` に対応する
-/// キーは `A`〜`Z` または `F1`〜`F12` に対応する
+/// キーは `A`〜`Z` / `0`〜`9` / `F1`〜`F12` / `Backspace` に対応する
 ///
 /// # Arguments
 /// * `binding` - ホットキー文字列
@@ -258,7 +260,10 @@ fn parse_key_name(name: &str) -> Option<HotkeyKey> {
         };
     }
 
-    None
+    match upper.as_str() {
+        "BACKSPACE" => Some(HotkeyKey::Backspace),
+        _ => None,
+    }
 }
 
 /// 数字を `HotkeyKey` に変換する
@@ -331,6 +336,8 @@ mod tests {
             consts::DEFAULT_HOTKEY_UNDO,
             consts::DEFAULT_HOTKEY_OCR,
             consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD,
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_UNDO,
+            consts::DEFAULT_HOTKEY_CONTINUOUS_RECORD_PASTE,
         ] {
             parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
         }
