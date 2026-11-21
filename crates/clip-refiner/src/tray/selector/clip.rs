@@ -7,7 +7,7 @@ use super::window::{WebSelectorWindow, WebViewWindowOptions, embed_clip_selector
 use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::tray::dispatch;
-use crate::tray::state::{AppEvent, ClipsEvent, SelectorEvent};
+use crate::tray::state::{AppEvent, ClipRef, ClipsEvent, SelectorEvent};
 
 // ======================================================================
 // 登録クリップセレクタ IPC
@@ -161,7 +161,7 @@ impl ClipSelectorWindow {
                     Some(ClipSelectorIpcAction::SelectClip(index)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            ClipsEvent::RequestCopy(index).into(),
+                            ClipsEvent::RequestCopy(ClipRef::unchecked(index)).into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::Register) => {
@@ -170,25 +170,26 @@ impl ClipSelectorWindow {
                     Some(ClipSelectorIpcAction::DeleteClip(index)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            ClipsEvent::RequestDelete(index).into(),
+                            ClipsEvent::RequestDelete(ClipRef::unchecked(index)).into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::MoveClip(index, direction)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            ClipsEvent::RequestMove(index, direction).into(),
+                            ClipsEvent::RequestMove(ClipRef::unchecked(index), direction).into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::SetTemplate(index, enabled)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            ClipsEvent::RequestSetTemplate(index, enabled).into(),
+                            ClipsEvent::RequestSetTemplate(ClipRef::unchecked(index), enabled)
+                                .into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::ResetCounter(index)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
-                            ClipsEvent::RequestResetCounter(index).into(),
+                            ClipsEvent::RequestResetCounter(ClipRef::unchecked(index)).into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::RequestFullText(index)) => {

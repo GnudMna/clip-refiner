@@ -32,7 +32,7 @@ use crate::tray::menu::create_window_icon;
 use crate::tray::selector::{
     WebSelectorWindow, WebViewWindowOptions, json_parse_call_script, settings_load_script,
 };
-use crate::tray::state::{AppEvent, AppState};
+use crate::tray::state::{AppEvent, AppState, ClipRef};
 use crate::user_error::titles;
 use assets::{
     CLOSE_FROM_OS_SCRIPT, FLUSH_PENDING_APPLY_SCRIPT, assemble_settings_html,
@@ -185,14 +185,20 @@ impl SettingsWindow {
     ///
     /// # Arguments
     /// * `index` - 登録クリップのインデックス
+    /// * `token` - 登録クリップの識別トークン (保存時の照合に使う)
     /// * `label` - 現在の表示ラベル
     /// * `text` - 現在の本文
-    pub(crate) fn show_clip_editor(&self, index: usize, label: &str, text: &str) {
+    pub(crate) fn show_clip_editor(&self, index: usize, token: u64, label: &str, text: &str) {
         let inner = self.inner.borrow();
         let Some(inner) = inner.as_ref() else {
             return;
         };
-        let payload = serde_json::json!({ "index": index, "label": label, "text": text });
+        let payload = serde_json::json!({
+            "index": index,
+            "token": ClipRef::format_token(token),
+            "label": label,
+            "text": text,
+        });
         inner.evaluate_script(&json_parse_call_script(
             "showClipEditor",
             &payload.to_string(),

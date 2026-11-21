@@ -157,6 +157,7 @@ impl ClipboardSessionState {
     ///
     /// # Returns
     /// * `Option<SecretString>` - 値がある場合は `Some`、ない場合は `None`
+    #[cfg(any(test, feature = "test-helpers", debug_assertions))]
     pub fn take_undo_source(&self) -> Option<SecretString> {
         self.undo_text
             .lock_ignore_poison()

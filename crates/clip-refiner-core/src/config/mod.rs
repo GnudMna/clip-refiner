@@ -550,6 +550,38 @@ history_enabled = true
         });
     }
 
+    /// 識別トークンが登録ごとに異なり、並べ替え・テンプレート・連番では変わらず、本文の更新で変わること
+    #[test]
+    fn test_registered_clip_identity_token() {
+        use super::types::FavoriteMoveDirection;
+
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("same").expect("add a");
+            config.add_registered_clip("same").expect("add b");
+            let tokens: Vec<u64> = config
+                .clips
+                .iter()
+                .map(super::types::RegisteredClip::identity_token)
+                .collect();
+            // 同じ本文でもノンスが異なるため区別できる
+            assert_ne!(tokens[0], tokens[1]);
+
+            // 位置・テンプレート指定・連番が変わっても同じ登録を指す
+            assert!(config.move_registered_clip(0, FavoriteMoveDirection::Down));
+            assert_eq!(config.clips[1].identity_token(), tokens[0]);
+            assert!(config.set_registered_clip_template(1, true));
+            assert!(config.set_registered_clip_counter(1, 3));
+            assert_eq!(config.clips[1].identity_token(), tokens[0]);
+
+            // 本文を更新すると別物として扱う
+            config
+                .update_registered_clip(1, "", "changed")
+                .expect("update");
+            assert_ne!(config.clips[1].identity_token(), tokens[0]);
+        });
+    }
+
     /// `set_registered_clip_template` がテキスト登録だけを切り替え、変化の有無を返すこと
     #[test]
     fn test_set_registered_clip_template() {

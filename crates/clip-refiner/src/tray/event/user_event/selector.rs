@@ -8,16 +8,17 @@ use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::e2e;
 use crate::tray::event::{
-    AppEventContext, apply_refine_once, copy_registered_clip, delete_registered_clip,
-    move_favorite_mode, move_registered_clip, refresh_clips_views, registered_clip_for_edit,
-    reset_registered_clip_counter, select_auto_refine_mode, set_registered_clip_template,
-    show_registered_clip_full_text, toggle_favorite_mode, update_registered_clip,
+    AppEventContext, STALE_CLIP_MESSAGE, StaleClip, apply_refine_once, copy_registered_clip,
+    delete_registered_clip, move_favorite_mode, move_registered_clip, refresh_clips_views,
+    registered_clip_for_edit, reset_registered_clip_counter, select_auto_refine_mode,
+    set_registered_clip_template, show_registered_clip_full_text, toggle_favorite_mode,
+    update_registered_clip,
 };
 use crate::tray::selector::{
     clip_selector_json, hide_with_retention, quick_selector_current_mode, quick_selector_json,
 };
 use crate::tray::settings::{refresh_settings_clips, refresh_settings_favorites_and_shortcuts};
-use crate::tray::state::{ClipsEvent, FavoritesEvent, SelectorEvent};
+use crate::tray::state::{ClipRef, ClipsEvent, FavoritesEvent, SelectorEvent};
 use crate::tray::worker::ClipboardCommand;
 
 // ======================================================================
@@ -128,42 +129,73 @@ fn show_clip_selector(ctx: &mut AppEventContext<'_>) {
     e2e::signal_ready();
 }
 
+/// 対象の登録クリップが見つからなかった操作を設定ウィンドウへ伝える
+///
+/// 設定ウィンドウは表示時のトークンを付けて操作するため、一覧が更新されて照合に失敗した場合に限り通知する
+/// 一覧はこの後の再描画で最新になる
+fn report_stale_clip(ctx: &AppEventContext<'_>, target: ClipRef, result: Result<(), StaleClip>) {
+    if result.is_err() && target.token.is_some() {
+        ctx.settings
+            .notify_clip_edit_result(false, STALE_CLIP_MESSAGE);
+    }
+}
+
 /// 登録クリップのコピー要求を処理する
-fn handle_clip_copy(ctx: &mut AppEventContext<'_>, index: usize) {
+fn handle_clip_copy(ctx: &mut AppEventContext<'_>, target: ClipRef) {
     hide_selector(ctx, SelectorKind::Clip);
-    copy_registered_clip(ctx.state, ctx.clipboard_worker, index);
+    let result = copy_registered_clip(ctx.state, ctx.clipboard_worker, target);
+    report_stale_clip(ctx, target, result);
     exit_if_e2e_selector_closed(ctx);
 }
 
 /// 登録クリップの削除要求を処理する
-fn handle_clip_delete(ctx: &mut AppEventContext<'_>, index: usize) {
-    delete_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, index);
+fn handle_clip_delete(ctx: &mut AppEventContext<'_>, target: ClipRef) {
+    let result = delete_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, target);
     refresh_settings_clips(ctx.state, ctx.settings);
+    report_stale_clip(ctx, target, result);
 }
 
 /// 登録クリップの表示順変更要求を処理する
-fn handle_clip_move(ctx: &mut AppEventContext<'_>, index: usize, direction: FavoriteMoveDirection) {
-    move_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, index, direction);
+fn handle_clip_move(
+    ctx: &mut AppEventContext<'_>,
+    target: ClipRef,
+    direction: FavoriteMoveDirection,
+) {
+    let result = move_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, target, direction);
     refresh_settings_clips(ctx.state, ctx.settings);
+    report_stale_clip(ctx, target, result);
 }
 
 /// 登録クリップのテンプレート展開の切り替え要求を処理する
-fn handle_clip_set_template(ctx: &mut AppEventContext<'_>, index: usize, enabled: bool) {
-    set_registered_clip_template(ctx.state, ctx.menu, &ctx.selectors.clip, index, enabled);
+fn handle_clip_set_template(ctx: &mut AppEventContext<'_>, target: ClipRef, enabled: bool) {
+    let result =
+        set_registered_clip_template(ctx.state, ctx.menu, &ctx.selectors.clip, target, enabled);
     refresh_settings_clips(ctx.state, ctx.settings);
+    report_stale_clip(ctx, target, result);
 }
 
 /// 登録クリップの連番リセット要求を処理する
-fn handle_clip_reset_counter(ctx: &mut AppEventContext<'_>, index: usize) {
-    reset_registered_clip_counter(ctx.state, ctx.menu, &ctx.selectors.clip, index);
+fn handle_clip_reset_counter(ctx: &mut AppEventContext<'_>, target: ClipRef) {
+    let result = reset_registered_clip_counter(ctx.state, ctx.menu, &ctx.selectors.clip, target);
     refresh_settings_clips(ctx.state, ctx.settings);
+    report_stale_clip(ctx, target, result);
 }
 
 /// 登録クリップの編集開始要求を処理し、設定ウィンドウへ本文を渡す
-fn handle_clip_edit_open(ctx: &mut AppEventContext<'_>, index: usize) {
-    match registered_clip_for_edit(ctx.state, index) {
-        Ok((label, text)) => ctx.settings.show_clip_editor(index, &label, &text),
-        Err(message) => ctx.settings.notify_clip_edit_result(false, message),
+///
+/// 一覧が更新されて照合に失敗した場合は、最新の一覧を反映してから失敗を伝える
+fn handle_clip_edit_open(ctx: &mut AppEventContext<'_>, target: ClipRef) {
+    match registered_clip_for_edit(ctx.state, target) {
+        Ok((label, text, token)) => {
+            ctx.settings
+                .show_clip_editor(target.index, token, &label, &text);
+        }
+        Err(message) => {
+            if message == STALE_CLIP_MESSAGE {
+                refresh_settings_clips(ctx.state, ctx.settings);
+            }
+            ctx.settings.notify_clip_edit_result(false, message);
+        }
     }
 }
 

@@ -2,7 +2,7 @@ use std::mem;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput,
-    VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT, VK_V,
+    VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
 };
 
 use super::super::state::AppState;
@@ -88,18 +88,10 @@ pub(crate) fn send_continuous_record_ctrl_v() {
 
 /// 修飾キーを離してから `Ctrl+V` を送り、フォアグラウンドアプリへ貼り付けを通す
 ///
-/// ホットキー (`Alt+Shift+X` 等) の修飾が押下中でも、合成 `Ctrl+V` が
-/// 別の組み合わせにならないよう先に `Ctrl` / `Alt` / `Shift` を離す
+/// ホットキー (`Alt+Shift+X`・`Win+Shift+X` 等) の修飾が押下中でも、合成 `Ctrl+V` が
+/// 別の組み合わせにならないよう先に `Ctrl` / `Alt` / `Shift` / `Win` を離す
 fn simulate_ctrl_v() -> bool {
-    let inputs = [
-        keyboard_input(VK_CONTROL, true),
-        keyboard_input(VK_MENU, true),
-        keyboard_input(VK_SHIFT, true),
-        keyboard_input(VK_CONTROL, false),
-        keyboard_input(VK_V, false),
-        keyboard_input(VK_V, true),
-        keyboard_input(VK_CONTROL, true),
-    ];
+    let inputs = ctrl_v_inputs();
     let Ok(cbsize) = i32::try_from(mem::size_of::<INPUT>()) else {
         return false;
     };
@@ -109,6 +101,21 @@ fn simulate_ctrl_v() -> bool {
     // SAFETY: `inputs` はすべてキーボード入力として初期化済みで、`cbsize` は `INPUT` の実サイズ
     let sent = unsafe { SendInput(&inputs, cbsize) };
     sent == expected
+}
+
+/// 押下中の修飾を離してから `Ctrl+V` を押下・解放する入力列
+fn ctrl_v_inputs() -> [INPUT; 9] {
+    [
+        keyboard_input(VK_CONTROL, true),
+        keyboard_input(VK_MENU, true),
+        keyboard_input(VK_SHIFT, true),
+        keyboard_input(VK_LWIN, true),
+        keyboard_input(VK_RWIN, true),
+        keyboard_input(VK_CONTROL, false),
+        keyboard_input(VK_V, false),
+        keyboard_input(VK_V, true),
+        keyboard_input(VK_CONTROL, true),
+    ]
 }
 
 fn keyboard_input(vk: VIRTUAL_KEY, key_up: bool) -> INPUT {
@@ -138,6 +145,36 @@ mod tests {
     use super::*;
     use crate::test_helpers::InMemoryTextClipboard;
     use crate::tray::state::test_app_state;
+
+    /// `Ctrl+V` の前に `Ctrl` / `Alt` / `Shift` / `Win` (左右) をすべて離すこと
+    ///
+    /// `Win` を離さないとフォアグラウンドアプリへ `Win+Ctrl+V` として届く
+    #[test]
+    fn ctrl_v_inputs_release_all_modifiers_before_paste() {
+        // (仮想キー, 解放か) の列へ変換する
+        let events: Vec<(VIRTUAL_KEY, bool)> = ctrl_v_inputs()
+            .iter()
+            .map(|input| {
+                // SAFETY: `keyboard_input` は常に `ki` を初期化して返す
+                let ki = unsafe { input.Anonymous.ki };
+                (ki.wVk, ki.dwFlags == KEYEVENTF_KEYUP)
+            })
+            .collect();
+
+        let v_down = events
+            .iter()
+            .position(|&event| event == (VK_V, false))
+            .expect("V の押下が含まれる");
+        for modifier in [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN] {
+            let release = events
+                .iter()
+                .position(|&event| event == (modifier, true))
+                .expect("修飾の解放が含まれる");
+            assert!(release < v_down, "{modifier:?} の解放が V の押下より後");
+        }
+        // 末尾は押し直した Ctrl の解放
+        assert_eq!(events.last(), Some(&(VK_CONTROL, true)));
+    }
 
     /// 連続記録無効時は貼り付け排出を行わないようにすること
     #[test]

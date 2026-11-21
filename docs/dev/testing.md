@@ -179,6 +179,8 @@ npm run test:e2e
 
 ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。
 
+ハーネスは終了時に、一時設定ディレクトリと `%TEMP%` の `ClipRefiner-*-WebView2-e2e-<ポート>` (WebView2 のデータ) を削除する。強制終了で残った分は、次の実行の開始時 (`e2e/global-setup.ts`) に、作成から 10 分以上たったものだけ削除する。
+
 ### 手動確認が残る範囲
 
 設定 / セレクター / OCR ドラッグ / 画像プレビュー / お気に入り並びは上記の自動テストでカバーする。次は OS / 実機依存のため自動化していない。

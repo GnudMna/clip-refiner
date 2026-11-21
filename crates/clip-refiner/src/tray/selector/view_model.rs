@@ -7,6 +7,7 @@ use crate::config::{AppConfig, RegisteredClip, ResolvedClip};
 use crate::consts;
 use crate::refiner::RefineMode;
 use crate::security::looks_sensitive;
+use crate::tray::state::ClipRef;
 
 // ======================================================================
 // セレクター表示モデル
@@ -120,6 +121,7 @@ fn clip_selector_item(
         "kind": if clip.is_image() { "image" } else { "text" },
         "template": clip.template,
         "counter": clip.counter,
+        "token": ClipRef::format_token(clip.identity_token()),
     });
 
     if clip.is_image()

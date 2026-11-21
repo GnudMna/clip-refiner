@@ -29,6 +29,22 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-18
+
+### Changed
+
+- 更新のダウンロードや WebView の初期化で `%TEMP%` に残った作業フォルダを、常駐の起動時に削除
+  - 作成から 1 日を過ぎた `clip-refiner-update` 配下のフォルダと、`ClipRefiner-*-WebView2*` 内の `pid-*` が対象
+- 本体の利用条件を日本語と英語の併記に変更し、インストールと使用の許諾・無保証と免責・リバースエンジニアリングの禁止・違反時の許諾の終了を明記
+
+### Fixed
+
+- 登録クリップの一部だけ読み込めなかったとき、そのクリップが退避されないまま次の保存で失われる不具合を修正
+  - 読み込めなかったクリップを含むファイルは `registered-clips.dat.bak` へ退避する
+- 連続記録の貼り付けホットキーに Win を含む組み合わせ (`Win+Shift+X` など) を設定すると、貼り付けが失敗する不具合を修正
+- 設定ウィンドウで登録クリップの一覧が古いまま操作すると、別のクリップを削除・編集・移動する恐れがある不具合を修正
+  - 表示後に一覧が変わっていた場合は操作を中止し、最新の一覧を表示する
+
 ## [2.1.1] - 2026-10-15
 
 ### Fixed
@@ -986,7 +1002,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.2.0...develop
+[2.2.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.1...v2.2.0
 [2.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.1.0...v2.1.1
 [2.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v2.0.0...v2.1.0
 [2.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v1.4.2...v2.0.0

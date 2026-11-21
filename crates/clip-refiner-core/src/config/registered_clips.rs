@@ -78,6 +78,8 @@ struct RegisteredClipsPayloadWire {
 /// 平文 `text` フィールドを持つ旧形式は暗号文へ移行する
 /// ファイルがあるのに読み込めなかった場合は `registered-clips.dat.bak` へ退避し、
 /// 次回以降の保存で空の一覧によるファイル削除や上書きが起きないようにする
+/// 個別エントリの変換に失敗してスキップした場合も同様に退避し、
+/// 次の保存で該当エントリが退避なしに失われないようにする
 ///
 /// # Returns
 /// * `Result<(Vec<RegisteredClip>, bool)>` - 登録クリップ一覧と、形式移行が発生したか
@@ -86,28 +88,23 @@ struct RegisteredClipsPayloadWire {
 /// 鍵取得、ファイル読み込み、復号、JSON 解析、本文暗号化のいずれかに失敗した場合
 pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
     let result = read_registered_clips();
-    match (&result, registered_clips_path()) {
-        (Ok(_), Ok(path)) => mark_clips_file_loaded(&path),
-        (Err(_), Ok(path)) if path.is_file() => {
-            mark_clips_file_unloaded(&path);
-            if backup_registered_clips_file(&path).is_ok() {
-                tracing::warn!(
-                    "読み込めなかった登録クリップファイルを退避した: {}",
-                    backup_path_of(&path).display()
-                );
-            }
-        }
+    let path = registered_clips_path();
+    match (&result, path) {
+        (Ok((_, _, false)), Ok(path)) => mark_clips_file_loaded(&path),
+        (Ok((_, _, true)), Ok(path)) => quarantine_unloaded_clips_file(&path),
+        (Err(_), Ok(path)) if path.is_file() => quarantine_unloaded_clips_file(&path),
         _ => {}
     }
-    result
+    result.map(|(clips, migrated, _)| (clips, migrated))
 }
 
-fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
+/// ファイルを読み込み、`(一覧, 形式移行の有無, スキップしたエントリの有無)` を返す
+fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool, bool)> {
     ensure_clip_store_key()?;
 
     let path = registered_clips_path()?;
     if !path.is_file() {
-        return Ok((Vec::new(), false));
+        return Ok((Vec::new(), false, false));
     }
 
     let bytes = fs::read(&path).map_err(|e| {
@@ -129,6 +126,7 @@ fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
         .map_err(|e| clips_err(format!("登録クリップファイルの JSON 解析に失敗: {e}")))?;
 
     let mut migrated = false;
+    let mut skipped = false;
     let mut clips = Vec::with_capacity(payload.clips.len());
     for wire in payload.clips {
         match registered_clip_from_wire(wire) {
@@ -139,10 +137,11 @@ fn read_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
             Err(err) => {
                 tracing::warn!("登録クリップの読み込みをスキップ: {:?}", err);
                 migrated = true;
+                skipped = true;
             }
         }
     }
-    Ok((clips, migrated))
+    Ok((clips, migrated, skipped))
 }
 
 /// 登録クリップ一覧を暗号化ファイルへ保存する
@@ -317,6 +316,17 @@ fn registered_clips_path() -> Result<PathBuf> {
 
 fn backup_path_of(path: &Path) -> PathBuf {
     path.with_file_name(REGISTERED_CLIPS_BACKUP_FILE)
+}
+
+/// 一覧と食い違う登録クリップファイルを未読込として記録し、`.bak` へ退避する
+fn quarantine_unloaded_clips_file(path: &Path) {
+    mark_clips_file_unloaded(path);
+    if backup_registered_clips_file(path).is_ok() {
+        tracing::warn!(
+            "読み込めなかった登録クリップを含むファイルを退避した: {}",
+            backup_path_of(path).display()
+        );
+    }
 }
 
 /// 読み込めなかった登録クリップファイルを `registered-clips.dat.bak` へ退避する
@@ -588,6 +598,40 @@ mod tests {
             let clip = registered_clip_from_plain_text("l".into(), "body").expect("enc");
             assert!(save_registered_clips(&[clip]).is_err());
             assert_eq!(fs::read(&path).expect("kept"), b"broken");
+        });
+    }
+
+    /// 個別エントリの変換に失敗してスキップした場合も `.bak` へ退避し、空の一覧では削除しないこと
+    ///
+    /// 保存すると退避コピーを残したまま、スキップしたエントリのない状態で上書きする
+    #[test]
+    fn skipped_entry_backs_up_and_protects_file_until_save() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            ensure_clip_store_key().expect("key");
+            let key = clip_store_key().expect("key");
+            let json =
+                br#"{"clips":[{"label":"ok","text":"body"},{"label":"empty","text":"   "}]}"#;
+            let encrypted = encrypt_bytes(&key, json).expect("outer enc");
+            let path = registered_clips_path().expect("path");
+            fs::write(&path, &encrypted).expect("write");
+
+            let (loaded, migrated) = load_registered_clips().expect("load");
+            assert!(migrated);
+            assert_eq!(loaded.len(), 1);
+            assert_eq!(fs::read(backup_path_of(&path)).expect("backup"), encrypted);
+            assert!(is_clips_file_unloaded(&path));
+
+            // スキップしたエントリが残るファイルは、空の一覧で削除しない
+            save_registered_clips(&[]).expect("save empty");
+            assert_eq!(fs::read(&path).expect("kept"), encrypted);
+
+            // 保存後は退避コピーを残したまま通常状態へ戻る
+            save_registered_clips(&loaded).expect("save");
+            assert_eq!(fs::read(backup_path_of(&path)).expect("backup"), encrypted);
+            assert!(!is_clips_file_unloaded(&path));
+            let (reloaded, migrated) = load_registered_clips().expect("reload");
+            assert!(!migrated);
+            assert_eq!(reloaded.len(), 1);
         });
     }
 

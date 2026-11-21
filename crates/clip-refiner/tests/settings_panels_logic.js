@@ -233,9 +233,9 @@ function test_resolve_content_click_action() {
                     return name === 'clip-copy';
                 },
             },
-            dataset: { index: '3' },
+            dataset: { index: '3', token: 'aa' },
         }),
-        { type: 'clip-copy', index: 3 }
+        { type: 'clip-copy', index: 3, token: 'aa' }
     );
     assert.deepEqual(
         SettingsPanelsLogic.resolveContentClickAction({
@@ -244,9 +244,9 @@ function test_resolve_content_click_action() {
                     return name === 'clip-up';
                 },
             },
-            dataset: { index: '1' },
+            dataset: { index: '1', token: 'bb' },
         }),
-        { type: 'clip-move', index: 1, direction: 'up' }
+        { type: 'clip-move', index: 1, token: 'bb', direction: 'up' }
     );
     assert.deepEqual(
         SettingsPanelsLogic.resolveContentClickAction({
@@ -255,9 +255,9 @@ function test_resolve_content_click_action() {
                     return name === 'clip-template';
                 },
             },
-            dataset: { index: '2', enabled: 'true' },
+            dataset: { index: '2', token: 'cc', enabled: 'true' },
         }),
-        { type: 'clip-template', index: 2, enabled: true }
+        { type: 'clip-template', index: 2, token: 'cc', enabled: true }
     );
     assert.deepEqual(
         SettingsPanelsLogic.resolveContentClickAction({
@@ -266,9 +266,9 @@ function test_resolve_content_click_action() {
                     return name === 'clip-counter-reset';
                 },
             },
-            dataset: { index: '4' },
+            dataset: { index: '4', token: 'dd' },
         }),
-        { type: 'clip-counter-reset', index: 4 }
+        { type: 'clip-counter-reset', index: 4, token: 'dd' }
     );
     assert.equal(
         SettingsPanelsLogic.resolveContentClickAction({
@@ -317,6 +317,31 @@ function test_render_clip_row_edit_button() {
     assert.ok(!imageHtml.includes('clip-edit'));
 }
 
+/** 各操作ボタンが表示時のインデックスと識別トークンを持つこと */
+function test_render_clip_row_carries_token() {
+    const html = SettingsPanelsLogic.renderClipRow(
+        { id: '2', label: 'メモ', preview: 'hello', kind: 'text', counter: 3, token: 'ab"<c' },
+        SettingsSharedLogic.escapeHtml,
+        1,
+        3
+    );
+    const buttons = html.match(/<button [^>]*data-index="2"[^>]*>/g) || [];
+    // 連番リセット・テンプレート・編集・↑・↓・コピー・削除
+    assert.equal(buttons.length, 7);
+    for (const button of buttons) {
+        assert.ok(button.includes('data-token="ab&quot;&lt;c"'), button);
+    }
+
+    // トークンが無い一覧でも属性が壊れない
+    const noToken = SettingsPanelsLogic.renderClipRow(
+        { id: '0', label: 'a', kind: 'text' },
+        SettingsSharedLogic.escapeHtml,
+        0,
+        1
+    );
+    assert.ok(noToken.includes('class="ghost-btn clip-copy" data-index="0" data-token="">'));
+}
+
 /** 編集ボタンのクリックを編集要求へ解決できること */
 function test_resolve_content_click_action_clip_edit() {
     assert.deepEqual(
@@ -326,9 +351,9 @@ function test_resolve_content_click_action_clip_edit() {
                     return name === 'clip-edit';
                 },
             },
-            dataset: { index: '6' },
+            dataset: { index: '6', token: 'ee' },
         }),
-        { type: 'clip-edit', index: 6 }
+        { type: 'clip-edit', index: 6, token: 'ee' }
     );
 }
 
@@ -356,10 +381,10 @@ function test_validate_clip_edit() {
 
 /** 編集対象が開いた時点のままかを一覧から判定できること */
 function test_clip_editor_target_unchanged() {
-    const editor = { index: 1, label: 'b', preview: 'pb' };
+    const editor = { index: 1, token: 't2', label: 'b', preview: 'pb' };
     const clips = [
-        { label: 'a', preview: 'pa', kind: 'text' },
-        { label: 'b', preview: 'pb', kind: 'text' },
+        { label: 'a', preview: 'pa', kind: 'text', token: 't1' },
+        { label: 'b', preview: 'pb', kind: 'text', token: 't2' },
     ];
     assert.equal(SettingsPanelsLogic.clipEditorTargetUnchanged(editor, clips), true);
 
@@ -372,7 +397,16 @@ function test_clip_editor_target_unchanged() {
     assert.equal(
         SettingsPanelsLogic.clipEditorTargetUnchanged(editor, [
             clips[0],
-            { label: 'b', preview: 'pb', kind: 'image' },
+            { label: 'b', preview: 'pb', kind: 'image', token: 't2' },
+        ]),
+        false
+    );
+
+    // ラベル・プレビューが同じでも、識別トークンが違えば別のクリップ扱い
+    assert.equal(
+        SettingsPanelsLogic.clipEditorTargetUnchanged(editor, [
+            clips[0],
+            { label: 'b', preview: 'pb', kind: 'text', token: 'other' },
         ]),
         false
     );
@@ -456,6 +490,7 @@ const tests = [
     test_resolve_content_click_action,
     test_clip_register_button_state,
     test_render_clip_row_edit_button,
+    test_render_clip_row_carries_token,
     test_resolve_content_click_action_clip_edit,
     test_validate_clip_edit,
     test_clip_editor_target_unchanged,

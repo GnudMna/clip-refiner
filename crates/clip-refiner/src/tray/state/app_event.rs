@@ -1,4 +1,4 @@
-use crate::config::FavoriteMoveDirection;
+use crate::config::{AppConfig, FavoriteMoveDirection};
 use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
 
@@ -57,25 +57,108 @@ pub enum SelectorEvent {
 // ======================================================================
 // 登録クリップ
 // ======================================================================
+/// 操作対象の登録クリップの指定
+///
+/// 一覧内の位置 (`index`) に加え、設定ウィンドウからの操作では表示時点の識別トークンを持つ
+/// トークンがある場合は実行時の一覧と照合し、表示後に並びや内容が変わっていれば別のクリップを操作しない
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClipRef {
+    /// 登録クリップのインデックス
+    pub index: usize,
+    /// 表示時点の識別トークン (`RegisteredClip::identity_token`)。`None` は照合しない
+    pub token: Option<u64>,
+}
+
+impl ClipRef {
+    /// 識別トークンで照合しない指定を生成する
+    ///
+    /// # Arguments
+    /// * `index` - 登録クリップのインデックス
+    ///
+    /// # Returns
+    /// * `Self` - インデックスのみの指定
+    pub fn unchecked(index: usize) -> Self {
+        Self { index, token: None }
+    }
+
+    /// 識別トークンで照合する指定を生成する
+    ///
+    /// # Arguments
+    /// * `index` - 登録クリップのインデックス
+    /// * `token` - 表示時点の識別トークン
+    ///
+    /// # Returns
+    /// * `Self` - 照合付きの指定
+    pub fn checked(index: usize, token: u64) -> Self {
+        Self {
+            index,
+            token: Some(token),
+        }
+    }
+
+    /// 識別トークンを UI とやり取りする文字列 (16 桁の 16 進数) にする
+    ///
+    /// JavaScript の数値では `u64` を正確に扱えないため文字列で渡す
+    ///
+    /// # Arguments
+    /// * `token` - 識別トークン
+    ///
+    /// # Returns
+    /// * `String` - 16 桁の 16 進数
+    pub fn format_token(token: u64) -> String {
+        format!("{token:016x}")
+    }
+
+    /// `format_token` で作った文字列を識別トークンへ戻す
+    ///
+    /// # Arguments
+    /// * `text` - 16 桁の 16 進数
+    ///
+    /// # Returns
+    /// * `Option<u64>` - 形式が正しい場合は `Some(token)`
+    pub fn parse_token(text: &str) -> Option<u64> {
+        if text.len() != 16 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        u64::from_str_radix(text, 16).ok()
+    }
+
+    /// 現在の一覧で指しているインデックスを返す
+    ///
+    /// # Arguments
+    /// * `self` - 対象の指定
+    /// * `config` - 照合先の設定
+    ///
+    /// # Returns
+    /// * `Option<usize>` - 範囲内でトークンが一致する (または照合しない) 場合は `Some(index)`
+    pub fn resolve(&self, config: &AppConfig) -> Option<usize> {
+        let clip = config.clips.get(self.index)?;
+        match self.token {
+            Some(token) if clip.identity_token() != token => None,
+            _ => Some(self.index),
+        }
+    }
+}
+
 /// 登録クリップ関連イベント
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClipsEvent {
     /// 登録クリップのクリップボードコピー要求
-    RequestCopy(usize),
+    RequestCopy(ClipRef),
     /// クリップボードの内容を登録クリップとして保存する要求
     RequestRegister,
     /// 登録クリップの削除要求
-    RequestDelete(usize),
+    RequestDelete(ClipRef),
     /// 登録クリップの表示順変更要求
-    RequestMove(usize, FavoriteMoveDirection),
+    RequestMove(ClipRef, FavoriteMoveDirection),
     /// 登録クリップのテンプレート展開の切り替え要求
-    RequestSetTemplate(usize, bool),
+    RequestSetTemplate(ClipRef, bool),
     /// 登録クリップの `{counter}` の連番を最初に戻す要求
-    RequestResetCounter(usize),
+    RequestResetCounter(ClipRef),
     /// 登録クリップセレクターのホバー表示用に本文の全文を返す要求
     RequestFullText(usize),
     /// 設定ウィンドウの編集用に本文の全文を返す要求
-    RequestEditOpen(usize),
+    RequestEditOpen(ClipRef),
     /// 設定ウィンドウから預かった編集内容の保存要求
     RequestEditApply,
     /// 登録クリップメニュー / UI の再構築要求

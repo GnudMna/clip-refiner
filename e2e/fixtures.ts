@@ -5,6 +5,8 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
+import { removeWebViewData } from './temp-cleanup';
+
 const READY_MARKER = 'E2E_READY';
 
 /** 1x1 透明 PNG (サムネ / ホバープレビュー用) */
@@ -43,6 +45,7 @@ type RunningHarness = {
   page: Page;
   child: ChildProcessWithoutNullStreams;
   configDir: string;
+  port: number;
 };
 
 /**
@@ -219,18 +222,19 @@ export async function startHarness(
       undefined,
       { timeout: 15_000 },
     );
-    return { browser, page, child, configDir };
+    return { browser, page, child, configDir, port };
   } catch (err) {
     if (!child.killed) {
       child.kill();
     }
     fs.rmSync(configDir, { recursive: true, force: true });
+    await removeWebViewData(port);
     throw err;
   }
 }
 
 /**
- * ハーネスを終了し一時ディレクトリを削除する
+ * ハーネスを終了し、一時設定ディレクトリと WebView2 のデータを削除する
  */
 export async function stopHarness(harness: RunningHarness): Promise<void> {
   try {
@@ -249,6 +253,7 @@ export async function stopHarness(harness: RunningHarness): Promise<void> {
     });
   }
   fs.rmSync(harness.configDir, { recursive: true, force: true });
+  await removeWebViewData(harness.port);
 }
 
 /**

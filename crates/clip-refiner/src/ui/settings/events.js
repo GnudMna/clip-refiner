@@ -104,6 +104,7 @@ function handleContentClick(event) {
         postIpcEnvelope({
             type: 'clip-move',
             index: resolved.index,
+            token: resolved.token,
             direction: resolved.direction,
         });
         return;
@@ -113,23 +114,36 @@ function handleContentClick(event) {
         postIpcEnvelope({
             type: 'clip-template',
             index: resolved.index,
+            token: resolved.token,
             enabled: resolved.enabled,
         });
         return;
     }
 
     if (resolved.type === 'clip-counter-reset') {
-        postIpcEnvelope({ type: 'clip-counter-reset', index: resolved.index });
+        postIpcEnvelope({
+            type: 'clip-counter-reset',
+            index: resolved.index,
+            token: resolved.token,
+        });
         return;
     }
 
     if (resolved.type === 'clip-edit') {
-        postIpcEnvelope({ type: 'clip-edit-open', index: resolved.index });
+        postIpcEnvelope({
+            type: 'clip-edit-open',
+            index: resolved.index,
+            token: resolved.token,
+        });
         return;
     }
 
     if (resolved.type === 'clip-copy') {
-        postIpcEnvelope({ type: 'clip-copy', index: resolved.index });
+        postIpcEnvelope({
+            type: 'clip-copy',
+            index: resolved.index,
+            token: resolved.token,
+        });
         return;
     }
 
@@ -141,6 +155,7 @@ function handleContentClick(event) {
                 postIpcEnvelope({
                     type: 'clip-delete',
                     index: resolved.index,
+                    token: resolved.token,
                 });
             },
         });

@@ -96,21 +96,32 @@ test.describe('設定 WebView', () => {
   test('登録クリップの編集ダイアログで検証・Esc 閉じ・失敗表示ができる', async ({ page }) => {
     await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
     // 実ストアは空のため、一覧は画面側にだけ差し込む。画像行には編集ボタンが出ない
-    await page.evaluate(() => {
-      (window as any).updateClips([
-        { id: '0', label: 'メモ', preview: 'hello', kind: 'text' },
-        { id: '1', label: '画像', preview: '', kind: 'image' },
-      ]);
-    });
+    const injectClips = () =>
+      page.evaluate(() => {
+        (window as any).updateClips([
+          { id: '0', label: 'メモ', preview: 'hello', kind: 'text', token: '0000000000000001' },
+          { id: '1', label: '画像', preview: '', kind: 'image', token: '0000000000000002' },
+        ]);
+      });
+    await injectClips();
     await expect(page.locator('.clip-edit')).toHaveCount(1);
 
-    // 存在しないクリップの編集要求は Rust が拒否し、バナーで伝える
+    // 存在しないクリップの編集要求は Rust が拒否し、バナーで伝える。一覧は実ストアの内容へ戻る
     await page.locator('.clip-edit').click();
-    await expect(page.locator('#apply-feedback')).toHaveText('登録クリップが見つかりません');
+    await expect(page.locator('#apply-feedback')).toHaveText(
+      '登録クリップの一覧が更新されたため、操作を中止しました。もう一度操作してください'
+    );
     await expect(page.locator('#clip-editor')).toBeHidden();
+    await expect(page.locator('.clip-edit')).toHaveCount(0);
 
+    await injectClips();
     await page.evaluate(() => {
-      (window as any).showClipEditor({ index: 0, label: 'メモ', text: 'hello\nworld' });
+      (window as any).showClipEditor({
+        index: 0,
+        token: '0000000000000001',
+        label: 'メモ',
+        text: 'hello\nworld',
+      });
     });
     await expect(page.locator('#clip-editor')).toBeVisible();
     await expect(page.locator('#clip-editor-label')).toHaveValue('メモ');

@@ -1,4 +1,5 @@
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -64,6 +65,23 @@ impl RegisteredClip {
     /// * `bool` - `image_file` が設定されている場合は `true`
     pub fn is_image(&self) -> bool {
         self.image_file.is_some()
+    }
+
+    /// 一覧内の位置が変わっても同じ登録クリップを指せる識別トークンを返す
+    ///
+    /// 暗号文 (ノンスを含むため登録ごとに異なる) または画像ファイル名から導出する
+    /// ラベル・テンプレート指定・連番は含めず、プロセス内でのみ比較に使う (永続化しない)
+    ///
+    /// # Arguments
+    /// * `self` - 対象の登録クリップ
+    ///
+    /// # Returns
+    /// * `u64` - 識別トークン
+    pub fn identity_token(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.text_ciphertext.hash(&mut hasher);
+        self.image_file.hash(&mut hasher);
+        hasher.finish()
     }
 }
 

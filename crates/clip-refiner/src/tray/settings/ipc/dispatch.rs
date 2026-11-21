@@ -46,27 +46,30 @@ pub(crate) fn dispatch_settings_ipc(
         SettingsIpcAction::ClearContinuousRecord => {
             dispatch::send_app_event(proxy, SettingsEvent::ClearContinuousRecord.into());
         }
-        SettingsIpcAction::ClipCopy(index) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestCopy(index).into());
+        SettingsIpcAction::ClipCopy(target) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestCopy(target).into());
         }
-        SettingsIpcAction::ClipDelete(index) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestDelete(index).into());
+        SettingsIpcAction::ClipDelete(target) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestDelete(target).into());
         }
-        SettingsIpcAction::ClipMove(index, direction) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestMove(index, direction).into());
+        SettingsIpcAction::ClipMove(target, direction) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestMove(target, direction).into());
         }
-        SettingsIpcAction::ClipTemplate(index, enabled) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestSetTemplate(index, enabled).into());
+        SettingsIpcAction::ClipTemplate(target, enabled) => {
+            dispatch::send_app_event(
+                proxy,
+                ClipsEvent::RequestSetTemplate(target, enabled).into(),
+            );
         }
-        SettingsIpcAction::ClipCounterReset(index) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestResetCounter(index).into());
+        SettingsIpcAction::ClipCounterReset(target) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestResetCounter(target).into());
         }
-        SettingsIpcAction::ClipEditOpen(index) => {
-            dispatch::send_app_event(proxy, ClipsEvent::RequestEditOpen(index).into());
+        SettingsIpcAction::ClipEditOpen(target) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestEditOpen(target).into());
         }
-        SettingsIpcAction::ClipEdit(index, label, text) => {
+        SettingsIpcAction::ClipEdit(target, label, text) => {
             state.settings_pending().push_clip_edit(ClipEditRequest {
-                index,
+                target,
                 label,
                 text: text.0,
             });

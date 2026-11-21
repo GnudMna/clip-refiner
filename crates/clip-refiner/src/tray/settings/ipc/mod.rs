@@ -27,6 +27,7 @@ mod tests {
     use crate::config::{FavoriteMoveDirection, NotificationSettings};
     use crate::platform::bundled_docs::BundledDocument;
     use crate::refiner::RefineMode;
+    use crate::tray::state::ClipRef;
 
     /// JSON エンベロープ形式の `apply` を解釈できるようにすること
     #[test]
@@ -252,9 +253,35 @@ mod tests {
     #[test]
     fn parse_ipc_clip_copy() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-copy","index":2}"#),
-            Some(SettingsIpcAction::ClipCopy(2))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-copy","index":2,"token":"00000000000000ab"}"#
+            ),
+            Some(SettingsIpcAction::ClipCopy(target)) if target == ClipRef::checked(2, 0xab)
         ));
+    }
+
+    /// 識別トークンの無い・形式が不正な登録クリップ操作は解釈しないこと
+    ///
+    /// 照合を省いた操作で別のクリップを変更しないようにする
+    #[test]
+    fn parse_ipc_clip_operations_require_valid_token() {
+        for message in [
+            r#"{"type":"clip-delete","index":1}"#,
+            r#"{"type":"clip-delete","index":1,"token":"zz"}"#,
+            r#"{"type":"clip-delete","index":1,"token":"ab"}"#,
+            r#"{"type":"clip-delete","index":1,"token":"+0000000000000ab"}"#,
+            r#"{"type":"clip-delete","index":1,"token":171}"#,
+            r#"{"type":"clip-move","index":1,"direction":"up"}"#,
+            r#"{"type":"clip-template","index":1,"enabled":true}"#,
+            r#"{"type":"clip-counter-reset","index":1}"#,
+            r#"{"type":"clip-edit-open","index":1}"#,
+            r#"{"type":"clip-edit","index":1,"label":"a","text":"b"}"#,
+        ] {
+            assert!(
+                parse_settings_ipc_message(message).is_none(),
+                "解釈されないこと: {message}"
+            );
+        }
     }
 
     /// `enqueue_settings_patch` で連続投入したパッチがマージされるようにすること
@@ -349,8 +376,10 @@ mod tests {
     #[test]
     fn parse_ipc_clip_delete() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-delete","index":1}"#),
-            Some(SettingsIpcAction::ClipDelete(1))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-delete","index":1,"token":"00000000000000ab"}"#
+            ),
+            Some(SettingsIpcAction::ClipDelete(target)) if target == ClipRef::checked(1, 0xab)
         ));
     }
 
@@ -358,8 +387,11 @@ mod tests {
     #[test]
     fn parse_ipc_clip_move() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-move","index":2,"direction":"down"}"#),
-            Some(SettingsIpcAction::ClipMove(2, FavoriteMoveDirection::Down))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-move","index":2,"token":"00000000000000ab","direction":"down"}"#
+            ),
+            Some(SettingsIpcAction::ClipMove(target, FavoriteMoveDirection::Down))
+                if target == ClipRef::checked(2, 0xab)
         ));
     }
 
@@ -367,8 +399,11 @@ mod tests {
     #[test]
     fn parse_ipc_clip_template() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-template","index":1,"enabled":true}"#),
-            Some(SettingsIpcAction::ClipTemplate(1, true))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-template","index":1,"token":"00000000000000ab","enabled":true}"#
+            ),
+            Some(SettingsIpcAction::ClipTemplate(target, true))
+                if target == ClipRef::checked(1, 0xab)
         ));
     }
 
@@ -376,8 +411,11 @@ mod tests {
     #[test]
     fn parse_ipc_clip_counter_reset() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-counter-reset","index":4}"#),
-            Some(SettingsIpcAction::ClipCounterReset(4))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-counter-reset","index":4,"token":"00000000000000ab"}"#
+            ),
+            Some(SettingsIpcAction::ClipCounterReset(target))
+                if target == ClipRef::checked(4, 0xab)
         ));
     }
 
@@ -385,8 +423,10 @@ mod tests {
     #[test]
     fn parse_ipc_clip_edit_open() {
         assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"clip-edit-open","index":3}"#),
-            Some(SettingsIpcAction::ClipEditOpen(3))
+            parse_settings_ipc_message(
+                r#"{"type":"clip-edit-open","index":3,"token":"00000000000000ab"}"#
+            ),
+            Some(SettingsIpcAction::ClipEditOpen(target)) if target == ClipRef::checked(3, 0xab)
         ));
     }
 
@@ -394,22 +434,30 @@ mod tests {
     #[test]
     fn parse_ipc_clip_edit() {
         let action = parse_settings_ipc_message(
-            r#"{"type":"clip-edit","index":1,"label":"見出し","text":"secret\nbody"}"#,
+            r#"{"type":"clip-edit","index":1,"token":"00000000000000ab","label":"見出し","text":"secret\nbody"}"#,
         );
-        let Some(SettingsIpcAction::ClipEdit(index, label, text)) = &action else {
+        let Some(SettingsIpcAction::ClipEdit(target, label, text)) = &action else {
             panic!("ClipEdit アクションとして解釈されること");
         };
-        assert_eq!((*index, label.as_str()), (1, "見出し"));
+        assert_eq!(
+            (*target, label.as_str()),
+            (ClipRef::checked(1, 0xab), "見出し")
+        );
         assert_eq!(text.0.as_str(), "secret\nbody");
         assert!(!format!("{action:?}").contains("secret"));
 
         // 本文が無い・文字列でないメッセージは解釈しない
         assert!(
-            parse_settings_ipc_message(r#"{"type":"clip-edit","index":1,"label":"a"}"#).is_none()
+            parse_settings_ipc_message(
+                r#"{"type":"clip-edit","index":1,"token":"00000000000000ab","label":"a"}"#
+            )
+            .is_none()
         );
         assert!(
-            parse_settings_ipc_message(r#"{"type":"clip-edit","index":1,"label":"a","text":1}"#)
-                .is_none()
+            parse_settings_ipc_message(
+                r#"{"type":"clip-edit","index":1,"token":"00000000000000ab","label":"a","text":1}"#
+            )
+            .is_none()
         );
     }
 

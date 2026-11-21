@@ -106,6 +106,8 @@ function Invoke-ScriptMain {
     )
 
     $exitCode = 0
+    # 外部コマンドを実行しない本体でも判定できるよう、未定義 (StrictMode で参照エラー) や前回の値を消しておく
+    $global:LASTEXITCODE = 0
 
     try {
         & $Body

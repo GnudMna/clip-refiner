@@ -7,6 +7,7 @@ use crate::config::{FavoriteMoveDirection, RegexSettings};
 use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
 use crate::security::{SecretString, secret_from};
+use crate::tray::state::ClipRef;
 
 // ======================================================================
 // IPC メッセージ
@@ -35,42 +36,49 @@ enum SettingsIpcMessage {
     ClearRecord,
     /// 登録クリップをクリップボードへコピーする
     ClipCopy {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
     },
     /// 登録クリップを削除する
     ClipDelete {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
     },
     /// 登録クリップの表示順を変更する
     ClipMove {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
         /// 移動方向 (`up` / `down`)
         direction: IpcFavoriteMoveDirection,
     },
     /// 登録クリップのテンプレート展開を切り替える
     ClipTemplate {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
         /// テンプレートとして展開するかどうか
         enabled: bool,
     },
     /// 登録クリップの `{counter}` の連番を最初に戻す
     ClipCounterReset {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
     },
     /// 登録クリップの編集用に本文を要求する
     ClipEditOpen {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
     },
     /// 登録クリップのラベルと本文を更新する
     ClipEdit {
-        /// 登録クリップのインデックス
-        index: usize,
+        /// 操作対象の登録クリップ
+        #[serde(flatten)]
+        clip: IpcClipTarget,
         /// 新しい表示ラベル
         label: String,
         /// 新しい本文
@@ -105,6 +113,34 @@ enum SettingsIpcMessage {
     CheckUpdate,
     /// 確認済みの更新をダウンロードして適用する
     ApplyUpdate,
+}
+
+/// IPC で受け取る登録クリップの指定 (表示時のインデックスと識別トークン)
+///
+/// トークンは必須で、形式が不正なメッセージは解釈しない
+#[derive(Debug, Clone, Copy, Deserialize)]
+struct IpcClipTarget {
+    /// 登録クリップのインデックス
+    index: usize,
+    /// 表示時点の識別トークン (16 桁の 16 進数)
+    #[serde(deserialize_with = "deserialize_clip_token")]
+    token: u64,
+}
+
+impl From<IpcClipTarget> for ClipRef {
+    fn from(target: IpcClipTarget) -> Self {
+        Self::checked(target.index, target.token)
+    }
+}
+
+/// 識別トークンの文字列を数値へ戻す
+fn deserialize_clip_token<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let text = String::deserialize(deserializer)?;
+    ClipRef::parse_token(&text)
+        .ok_or_else(|| serde::de::Error::custom("識別トークンの形式が不正です"))
 }
 
 /// IPC で受け取る本文 (破棄時にゼロ化し、`Debug` では内容を出さない)
@@ -186,19 +222,19 @@ pub(crate) enum SettingsIpcAction {
     /// 連続記録を全削除する
     ClearContinuousRecord,
     /// 登録クリップをクリップボードへコピーする
-    ClipCopy(usize),
+    ClipCopy(ClipRef),
     /// 登録クリップを削除する
-    ClipDelete(usize),
+    ClipDelete(ClipRef),
     /// 登録クリップの表示順を変更する
-    ClipMove(usize, FavoriteMoveDirection),
+    ClipMove(ClipRef, FavoriteMoveDirection),
     /// 登録クリップのテンプレート展開を切り替える
-    ClipTemplate(usize, bool),
+    ClipTemplate(ClipRef, bool),
     /// 登録クリップの `{counter}` の連番を最初に戻す
-    ClipCounterReset(usize),
+    ClipCounterReset(ClipRef),
     /// 登録クリップの編集用に本文を要求する
-    ClipEditOpen(usize),
+    ClipEditOpen(ClipRef),
     /// 登録クリップのラベルと本文を更新する
-    ClipEdit(usize, String, IpcSecretText),
+    ClipEdit(ClipRef, String, IpcSecretText),
     /// クリップボード内容を登録クリップとして追加する
     ClipRegister,
     /// お気に入り変換モードの登録状態を切り替える
@@ -222,18 +258,18 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
             SettingsIpcMessage::Apply { patch } => Self::Apply(patch),
             SettingsIpcMessage::ClearHistory => Self::ClearHistory,
             SettingsIpcMessage::ClearRecord => Self::ClearContinuousRecord,
-            SettingsIpcMessage::ClipCopy { index } => Self::ClipCopy(index),
-            SettingsIpcMessage::ClipDelete { index } => Self::ClipDelete(index),
-            SettingsIpcMessage::ClipMove { index, direction } => {
-                Self::ClipMove(index, direction.into())
+            SettingsIpcMessage::ClipCopy { clip } => Self::ClipCopy(clip.into()),
+            SettingsIpcMessage::ClipDelete { clip } => Self::ClipDelete(clip.into()),
+            SettingsIpcMessage::ClipMove { clip, direction } => {
+                Self::ClipMove(clip.into(), direction.into())
             }
-            SettingsIpcMessage::ClipTemplate { index, enabled } => {
-                Self::ClipTemplate(index, enabled)
+            SettingsIpcMessage::ClipTemplate { clip, enabled } => {
+                Self::ClipTemplate(clip.into(), enabled)
             }
-            SettingsIpcMessage::ClipCounterReset { index } => Self::ClipCounterReset(index),
-            SettingsIpcMessage::ClipEditOpen { index } => Self::ClipEditOpen(index),
-            SettingsIpcMessage::ClipEdit { index, label, text } => {
-                Self::ClipEdit(index, label, text)
+            SettingsIpcMessage::ClipCounterReset { clip } => Self::ClipCounterReset(clip.into()),
+            SettingsIpcMessage::ClipEditOpen { clip } => Self::ClipEditOpen(clip.into()),
+            SettingsIpcMessage::ClipEdit { clip, label, text } => {
+                Self::ClipEdit(clip.into(), label, text)
             }
             SettingsIpcMessage::ClipRegister => Self::ClipRegister,
             SettingsIpcMessage::FavoriteToggle { mode } => Self::FavoriteToggle(mode),

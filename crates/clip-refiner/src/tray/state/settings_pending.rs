@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use super::app_event::ClipRef;
 use super::lock_ext::LockExt;
 use crate::config::RegexSettings;
 use crate::platform::update::{
@@ -17,8 +18,8 @@ use crate::security::SecretString;
 ///
 /// `AppEvent` は `Copy` かつ `Debug` のため、本文は含めずここへ預ける
 pub(crate) struct ClipEditRequest {
-    /// 登録クリップのインデックス
-    pub index: usize,
+    /// 編集対象の登録クリップ
+    pub target: ClipRef,
     /// 新しい表示ラベル
     pub label: String,
     /// 新しい本文 (破棄時にゼロ化)
@@ -28,7 +29,7 @@ pub(crate) struct ClipEditRequest {
 impl fmt::Debug for ClipEditRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClipEditRequest")
-            .field("index", &self.index)
+            .field("target", &self.target)
             .field("label", &self.label)
             .field("text", &"...")
             .finish()
@@ -256,19 +257,22 @@ mod tests {
         let pending = SettingsPendingState::new();
         for (index, text) in [(0, "secret-one"), (2, "secret-two")] {
             pending.push_clip_edit(ClipEditRequest {
-                index,
+                target: ClipRef::checked(index, 7),
                 label: format!("label{index}"),
                 text: crate::security::secret_from(text),
             });
         }
 
         let first = pending.take_clip_edit().expect("first");
-        assert_eq!((first.index, first.label.as_str()), (0, "label0"));
+        assert_eq!(
+            (first.target, first.label.as_str()),
+            (ClipRef::checked(0, 7), "label0")
+        );
         assert_eq!(first.text.as_str(), "secret-one");
         let debug = format!("{first:?}");
         assert!(debug.contains("label0"));
         assert!(!debug.contains("secret-one"));
-        assert_eq!(pending.take_clip_edit().expect("second").index, 2);
+        assert_eq!(pending.take_clip_edit().expect("second").target.index, 2);
         assert!(pending.take_clip_edit().is_none());
     }
 

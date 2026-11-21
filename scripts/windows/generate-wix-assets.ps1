@@ -212,6 +212,7 @@ function ConvertTo-RtfUnicodeText {
     return $builder.ToString()
 }
 
+# LICENSE の 1 行を 1 段落にする。同意画面は幅が狭いため、LICENSE は固定幅で改行せず 1 段落 1 行で書き、長い罫線も使わない
 function ConvertTo-RtfParagraphs {
     param([string[]]$Lines)
 

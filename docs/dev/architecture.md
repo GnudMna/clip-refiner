@@ -19,7 +19,7 @@ clip-refiner/
 ├── crates/
 │   ├── clip-refiner/    # デスクトップアプリ (バイナリ + tray)。core API は re-export しない
 │   │   ├── src/
-│   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / panic_hook / instance / oneshot / portable)
+│   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / panic_hook / instance / oneshot / portable / temp_cleanup)
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC (`protocol` / `client` / `server`。`ClientError` は test-helpers / debug 向け)
 │   │   │   ├── platform/    # デスクトップ常駐向け OS 連携 (通知・自動起動・OCR・WebView2・更新)
 │   │   │   │   └── update/  # 確認 (check/) / 埋め込みキー復号 (bridge_key) / digest・署名検証 (signature) / MSI・ポータブル適用
@@ -249,6 +249,7 @@ flowchart TB
 - **ワンショット CLI → 常駐**: 名前付きパイプで加工要求を送り、サーバーが `ProcessOneshotPipeline` をワーカーへ渡す (監視エコー回避)
 - **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了、`RecordEvent::SendPaste`)
 - **ホットキー → UI**: 専用スレッドが `HotkeyEvent::Received` を送り、メインスレッドの `HotkeyHandler` が処理
+- **登録クリップの指定**: 設定ウィンドウは、一覧内の位置 (`ClipRef::index`) に加えて表示時点の `RegisteredClip::identity_token` (暗号文または画像ファイル名から導出。永続化しない) を送る。`tray/features/clips/` が更新と同じロック内で照合し、一致しなければ何も変更せず `STALE_CLIP_MESSAGE` を設定ウィンドウへ通知して一覧を再描画する。トークンのない設定 IPC メッセージは解釈しない。セレクターとトレイは位置のみ (`ClipRef::unchecked`) で指定する
 - **クリップボード**: 本文の読み書きはワーカースレッド内の `OwnedClipboard` 1 インスタンスに集約する (常駐なしワンショットのみ短命に別インスタンスを開く)。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する。変更検知は役割を分ける
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
   - `OwnedClipboard` (`arboard`): テキスト / 通常画像 / HTML 形式 (`CF_HTML`) の `OpenClipboard` I/O。HTML 形式の有無は `IsClipboardFormatAvailable` で開かずに判定する

@@ -8,6 +8,7 @@ mod logging;
 mod oneshot;
 mod panic_hook;
 mod portable;
+mod temp_cleanup;
 
 use anyhow::Result;
 use clap::Parser;
@@ -22,6 +23,7 @@ use instance::ensure_single_instance;
 use logging::{setup_console, setup_logging};
 use oneshot::run_once;
 use portable::run_portable_update_helper;
+use temp_cleanup::remove_stale_temp_dirs;
 
 // ======================================================================
 // エントリポイント
@@ -81,6 +83,8 @@ fn run_application(args: &Args) -> Result<()> {
     } else {
         // 前回の起動で書き出した、貼り付け用の画像ファイルのうち古いものを削除する
         refiner::remove_stale_image_files();
+        // 更新や WebView2 の作業ディレクトリのうち、古いものを削除する
+        remove_stale_temp_dirs();
         tray::run_loop(args.e2e_window)
     }
 }

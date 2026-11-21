@@ -70,7 +70,7 @@ function setSavingState(saving) {
  *
  * Rust から `window.showClipEditor(payload)` として呼び出す
  *
- * @param {{ index: number, label: string, text: string }} payload
+ * @param {{ index: number, token: string, label: string, text: string }} payload
  */
 export function showClipEditor(payload) {
     const dialog = dialogEl();
@@ -80,9 +80,14 @@ export function showClipEditor(payload) {
     if (!dialog || !labelInput || !textInput || !clip || clip.kind !== 'text') {
         return;
     }
+    // 本文を読み出した後に一覧が変わっていた場合は、別のクリップを開かない
+    if (clip.token !== payload.token) {
+        return;
+    }
 
     ctx.clipEditor = {
         index: payload.index,
+        token: payload.token,
         label: clip.label ?? '',
         preview: clip.preview ?? '',
         saving: false,
@@ -162,6 +167,7 @@ function saveClipEditor() {
     postIpcEnvelope({
         type: 'clip-edit',
         index: editor.index,
+        token: editor.token,
         label: labelInput.value,
         text: textInput.value,
     });

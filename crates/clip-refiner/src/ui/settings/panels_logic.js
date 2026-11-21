@@ -160,6 +160,8 @@ const SettingsPanelsLogic = (function () {
      */
     function renderClipRow(clip, escapeHtml, index, count) {
         const label = clip.label || clip.preview || '(無題)';
+        // 操作は表示時のインデックスに加えて識別トークンを送り、並びが変わった後の誤操作を防ぐ
+        const indexAttrEnd = '" data-token="' + escapeHtml(clip.token ?? '') + '"';
         const kindBadge =
             clip.kind === 'image'
                 ? '<span class="clip-kind clip-kind--image">画像</span>'
@@ -183,7 +185,8 @@ const SettingsPanelsLogic = (function () {
                   (clip.template ? ' is-active' : '') +
                   '" data-index="' +
                   escapeHtml(clip.id) +
-                  '" data-enabled="' +
+                  indexAttrEnd +
+                  ' data-enabled="' +
                   (clip.template ? 'false' : 'true') +
                   '" aria-pressed="' +
                   (clip.template ? 'true' : 'false') +
@@ -194,7 +197,8 @@ const SettingsPanelsLogic = (function () {
                 ? ''
                 : '<button type="button" class="ghost-btn clip-edit" data-index="' +
                   escapeHtml(clip.id) +
-                  '" title="ラベルと本文を編集する">編集</button>';
+                  indexAttrEnd +
+                  ' title="ラベルと本文を編集する">編集</button>';
         // 連番は払い出し済みのテキストだけに出す。リセットはその横のボタンで行う
         const hasCounter = clip.kind !== 'image' && clip.counter > 0;
         const counterBadge = hasCounter
@@ -205,7 +209,8 @@ const SettingsPanelsLogic = (function () {
         const counterResetButton = hasCounter
             ? '<button type="button" class="ghost-btn clip-counter-reset" data-index="' +
               escapeHtml(clip.id) +
-              '" title="次のコピーで {counter} を 1 から数え直す">連番リセット</button>'
+              indexAttrEnd +
+              ' title="次のコピーで {counter} を 1 から数え直す">連番リセット</button>'
             : '';
         const previewHtml =
             clip.preview && clip.preview !== label
@@ -228,20 +233,24 @@ const SettingsPanelsLogic = (function () {
             editButton +
             '<button type="button" class="icon-btn clip-up" data-index="' +
             escapeHtml(clip.id) +
-            '" title="上へ"' +
+            indexAttrEnd +
+            ' title="上へ"' +
             (index === 0 ? ' disabled' : '') +
             '>↑</button>' +
             '<button type="button" class="icon-btn clip-down" data-index="' +
             escapeHtml(clip.id) +
-            '" title="下へ"' +
+            indexAttrEnd +
+            ' title="下へ"' +
             (index === count - 1 ? ' disabled' : '') +
             '>↓</button>' +
             '<button type="button" class="ghost-btn clip-copy" data-index="' +
             escapeHtml(clip.id) +
-            '">コピー</button>' +
+            indexAttrEnd +
+            '>コピー</button>' +
             '<button type="button" class="icon-btn clip-delete" data-index="' +
             escapeHtml(clip.id) +
-            '" title="削除">×</button>' +
+            indexAttrEnd +
+            ' title="削除">×</button>' +
             '</td></tr>'
         );
     }
@@ -309,7 +318,7 @@ const SettingsPanelsLogic = (function () {
      * コンテンツクリックから委譲アクションを解決する
      *
      * @param {{ classList: { contains: (name: string) => boolean }, dataset: Record<string, string> }} button
-     * @returns {{ type: string, mode?: string, direction?: string, index?: number, enabled?: boolean }|null}
+     * @returns {{ type: string, mode?: string, direction?: string, index?: number, token?: string, enabled?: boolean }|null}
      */
     function resolveContentClickAction(button) {
         if (
@@ -352,29 +361,56 @@ const SettingsPanelsLogic = (function () {
             return { type: 'favorite-move', mode: button.dataset.mode, direction: 'down' };
         }
         if (button.classList.contains('clip-up')) {
-            return { type: 'clip-move', index: Number(button.dataset.index), direction: 'up' };
+            return {
+                type: 'clip-move',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+                direction: 'up',
+            };
         }
         if (button.classList.contains('clip-down')) {
-            return { type: 'clip-move', index: Number(button.dataset.index), direction: 'down' };
+            return {
+                type: 'clip-move',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+                direction: 'down',
+            };
         }
         if (button.classList.contains('clip-template')) {
             return {
                 type: 'clip-template',
                 index: Number(button.dataset.index),
+                token: button.dataset.token,
                 enabled: button.dataset.enabled === 'true',
             };
         }
         if (button.classList.contains('clip-counter-reset')) {
-            return { type: 'clip-counter-reset', index: Number(button.dataset.index) };
+            return {
+                type: 'clip-counter-reset',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+            };
         }
         if (button.classList.contains('clip-edit')) {
-            return { type: 'clip-edit', index: Number(button.dataset.index) };
+            return {
+                type: 'clip-edit',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+            };
         }
         if (button.classList.contains('clip-copy')) {
-            return { type: 'clip-copy', index: Number(button.dataset.index) };
+            return {
+                type: 'clip-copy',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+            };
         }
         if (button.classList.contains('clip-delete')) {
-            return { type: 'clip-delete', index: Number(button.dataset.index) };
+            return {
+                type: 'clip-delete',
+                index: Number(button.dataset.index),
+                token: button.dataset.token,
+            };
         }
         return null;
     }
@@ -422,8 +458,8 @@ const SettingsPanelsLogic = (function () {
      *
      * 他の操作で削除・並べ替えされると、保存先のインデックスがずれて別のクリップを上書きするため
      *
-     * @param {{ index: number, label: string, preview: string }|null} editor
-     * @param {Array<{ label?: string, preview?: string, kind: string }>} clips
+     * @param {{ index: number, token?: string, label: string, preview: string }|null} editor
+     * @param {Array<{ label?: string, preview?: string, kind: string, token?: string }>} clips
      * @returns {boolean}
      */
     function clipEditorTargetUnchanged(editor, clips) {
@@ -434,6 +470,7 @@ const SettingsPanelsLogic = (function () {
         return (
             !!clip &&
             clip.kind === 'text' &&
+            (editor.token === undefined || clip.token === editor.token) &&
             (clip.label ?? '') === editor.label &&
             (clip.preview ?? '') === editor.preview
         );
