@@ -71,6 +71,68 @@ test.describe('登録クリップセレクター WebView', () => {
     expect(page.isClosed()).toBe(true);
   });
 
+  test('並べ替えボタンは端で無効になり、検索中は表示しない', async ({ page }) => {
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          refreshItems: (
+            items: Array<{ id: string; label: string; preview?: string; kind: string }>,
+          ) => void;
+        }
+      ).refreshItems([
+        { id: '0', label: '先頭クリップ', preview: 'first', kind: 'text' },
+        { id: '1', label: '末尾クリップ', preview: 'last', kind: 'text' },
+      ]);
+    });
+
+    const clipItems = page.locator('#results .item:not(.action)');
+    await expect(clipItems).toHaveCount(2);
+    await expect(clipItems.nth(0).locator('.reorder-button[title="上へ移動"]')).toBeDisabled();
+    await expect(clipItems.nth(0).locator('.reorder-button[title="下へ移動"]')).toBeEnabled();
+    await expect(clipItems.nth(1).locator('.reorder-button[title="上へ移動"]')).toBeEnabled();
+    await expect(clipItems.nth(1).locator('.reorder-button[title="下へ移動"]')).toBeDisabled();
+    await expect(page.locator('#results .item.action .reorder-buttons')).toHaveCount(0);
+
+    await page.locator('#input').fill('先頭');
+    await expect(clipItems).toHaveCount(1);
+    await expect(page.locator('#results .reorder-buttons')).toHaveCount(0);
+  });
+
+  test('テンプレートのクリップにバッジを表示し、Ctrl+T でも閉じない', async ({ page }) => {
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          refreshItems: (
+            items: Array<{
+              id: string;
+              label: string;
+              preview?: string;
+              kind: string;
+              template?: boolean;
+            }>,
+          ) => void;
+        }
+      ).refreshItems([
+        { id: '0', label: '日報', preview: '{date} 日報', kind: 'text', template: true },
+        { id: '1', label: '定型文', preview: 'plain', kind: 'text' },
+      ]);
+    });
+
+    const clipItems = page.locator('#results .item:not(.action)');
+    await expect(clipItems).toHaveCount(2);
+    await expect(clipItems.nth(0).locator('.template-badge')).toHaveText('テンプレート');
+    await expect(clipItems.nth(1).locator('.template-badge')).toHaveCount(0);
+
+    await page.locator('#input').click();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Control+t');
+    await expect(page.locator('#container')).toBeVisible();
+
+    await page.locator('#input').fill('テンプレート');
+    await expect(clipItems).toHaveCount(1);
+    await expect(clipItems.first()).toContainText('日報');
+  });
+
   test('画像クリップのサムネイルとホバープレビューが表示される', async ({ page }) => {
     await page.evaluate((png) => {
       (

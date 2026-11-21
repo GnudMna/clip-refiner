@@ -8,16 +8,22 @@ use super::super::notify::{
 };
 use super::super::state::{AppState, ClipsEvent, RecordEvent, SettingsEvent};
 use super::command::ClipboardCommand;
+use crate::clip_template::{
+    ClipTemplateContext, clip_template_uses_clipboard, expand_clip_template,
+};
 use crate::config::{AddRegisteredClipError, ResolvedClip};
 use crate::ipc::OneshotProcessResult;
 use crate::refiner::{
-    ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode, TextClipboard,
-    process_clipboard_pipeline_io,
+    ClipboardProcessOutcome, HtmlClipboard, ImageClipboard, RefineContext, RefineMode,
+    TextClipboard, process_clipboard_pipeline_io,
 };
-use crate::security::SecretString;
+use crate::security::{SecretString, secret_from};
 use crate::user_error::{
-    ClipboardWriteContext, UserNotification, registered_clip_register_failure, titles,
+    ClipboardWriteContext, UserNotification, registered_clip_register_failure,
+    registered_clip_template_failure, titles,
 };
+
+use chrono::Local;
 
 // ======================================================================
 // コマンド処理
@@ -31,7 +37,7 @@ use crate::user_error::{
 /// * `state` - アプリケーションの共有状態
 /// * `refine_ctx` - 加工コンテキスト (正規表現コンパイルキャッシュを保持)
 /// * `cmd` - 受信したコマンド
-pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
+pub(crate) fn handle_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     refine_ctx: &mut RefineContext,
@@ -105,7 +111,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard>(
 }
 
 /// 手動加工コマンドを処理する
-fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
+fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     refine_ctx: &mut RefineContext,
@@ -151,7 +157,7 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard>(
 }
 
 /// CLI ワンショット要求を処理する (トレイ通知なし・監視エコー回避あり)
-fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard>(
+fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     pipeline: &[RefineMode],
@@ -255,14 +261,33 @@ fn set_continuous_record_from_queue<C: TextClipboard>(
 // 登録クリップ
 // ======================================================================
 /// 登録済みクリップボード内容をクリップボードへコピーする
+///
+/// テンプレート指定のテキストはプレースホルダを展開してからコピーする。
+/// 展開に失敗した場合はクリップボードを変更せず通知する
 fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     index: usize,
 ) {
-    let clip = state.with_config(|config| config.resolve_registered_clip(index));
+    let (clip, template) = state.with_config(|config| {
+        (
+            config.resolve_registered_clip(index),
+            config.clips.get(index).is_some_and(|entry| entry.template),
+        )
+    });
     match clip {
-        Some(ResolvedClip::Text(text)) => {
+        Some(ResolvedClip::Text(source)) => {
+            let text = if template {
+                match expand_registered_clip_template(clipboard, &source) {
+                    Ok(text) => text,
+                    Err(notification) => {
+                        notification.notify();
+                        return;
+                    }
+                }
+            } else {
+                source
+            };
             if let Err(e) = clipboard.set_text(text.to_string()) {
                 ClipboardWriteContext::RegisteredClip
                     .notification()
@@ -299,6 +324,43 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
         }
         None => {}
     }
+}
+
+/// 登録クリップのテンプレートを展開する
+///
+/// `{clipboard}` を含む場合だけ現在のクリップボードのテキストを読む (テキストが無ければ空文字)
+///
+/// # Arguments
+/// * `clipboard` - `{clipboard}` の読み取りに使うクリップボード
+/// * `source` - 復号済みのテンプレート本文
+///
+/// # Returns
+/// * `Result<SecretString, UserNotification>` - 展開後のテキスト。失敗時は案内用の通知
+fn expand_registered_clip_template<C: TextClipboard>(
+    clipboard: &mut C,
+    source: &SecretString,
+) -> Result<SecretString, UserNotification> {
+    let current = if clip_template_uses_clipboard(source.as_str()) {
+        clipboard.get_text().ok().map(secret_from)
+    } else {
+        None
+    };
+    let user_name = std::env::var("USERNAME").ok();
+    let ctx = ClipTemplateContext {
+        now: Local::now().fixed_offset(),
+        clipboard: current.as_deref().map(String::as_str),
+        user_name: user_name.as_deref(),
+    };
+    expand_clip_template(source.as_str(), &ctx, random_uuid_bytes)
+        .map(secret_from)
+        .map_err(|err| registered_clip_template_failure(&err))
+}
+
+/// `{uuid}` 用の乱数 16 バイトを OS から取得する
+fn random_uuid_bytes() -> Option<[u8; 16]> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).ok()?;
+    Some(bytes)
 }
 
 /// 登録クリップ操作後に設定ウィンドウの pending 状態を解除する

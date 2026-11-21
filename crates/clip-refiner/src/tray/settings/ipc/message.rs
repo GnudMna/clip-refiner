@@ -34,6 +34,20 @@ enum SettingsIpcMessage {
         /// 登録クリップのインデックス
         index: usize,
     },
+    /// 登録クリップの表示順を変更する
+    ClipMove {
+        /// 登録クリップのインデックス
+        index: usize,
+        /// 移動方向 (`up` / `down`)
+        direction: IpcFavoriteMoveDirection,
+    },
+    /// 登録クリップのテンプレート展開を切り替える
+    ClipTemplate {
+        /// 登録クリップのインデックス
+        index: usize,
+        /// テンプレートとして展開するかどうか
+        enabled: bool,
+    },
     /// クリップボード内容を登録クリップとして追加する
     ClipRegister,
     /// お気に入り変換モードの登録状態を切り替える
@@ -65,7 +79,7 @@ enum SettingsIpcMessage {
     ApplyUpdate,
 }
 
-/// IPC 向けお気に入り移動方向
+/// IPC 向けの表示順の移動方向 (お気に入り・登録クリップ共通)
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum IpcFavoriteMoveDirection {
@@ -104,6 +118,10 @@ pub(crate) enum SettingsIpcAction {
     ClipCopy(usize),
     /// 登録クリップを削除する
     ClipDelete(usize),
+    /// 登録クリップの表示順を変更する
+    ClipMove(usize, FavoriteMoveDirection),
+    /// 登録クリップのテンプレート展開を切り替える
+    ClipTemplate(usize, bool),
     /// クリップボード内容を登録クリップとして追加する
     ClipRegister,
     /// お気に入り変換モードの登録状態を切り替える
@@ -128,6 +146,12 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
             SettingsIpcMessage::ClearRecord => Self::ClearContinuousRecord,
             SettingsIpcMessage::ClipCopy { index } => Self::ClipCopy(index),
             SettingsIpcMessage::ClipDelete { index } => Self::ClipDelete(index),
+            SettingsIpcMessage::ClipMove { index, direction } => {
+                Self::ClipMove(index, direction.into())
+            }
+            SettingsIpcMessage::ClipTemplate { index, enabled } => {
+                Self::ClipTemplate(index, enabled)
+            }
             SettingsIpcMessage::ClipRegister => Self::ClipRegister,
             SettingsIpcMessage::FavoriteToggle { mode } => Self::FavoriteToggle(mode),
             SettingsIpcMessage::FavoriteMove { mode, direction } => {

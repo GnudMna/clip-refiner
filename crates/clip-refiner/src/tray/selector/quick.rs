@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use super::retention::RetainedSelector;
@@ -10,7 +11,7 @@ use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::refiner::RefineMode;
 use crate::tray::dispatch;
-use crate::tray::state::{AppEvent, FavoritesEvent, SelectorEvent};
+use crate::tray::state::{AppEvent, FavoritesEvent, LockExt, SelectorEvent};
 
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 use tao::window::{Window, WindowId};
@@ -21,8 +22,10 @@ use tao::window::{Window, WindowId};
 /// クイックセレクターから送られる IPC メッセージの種別
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum QuickSelectorIpcAction {
-    /// 変換モードが選択された
+    /// 自動変換モードとして選択された
     SelectMode(RefineMode),
+    /// 現在のクリップボードへ一回だけ適用する
+    ApplyMode(RefineMode),
     /// お気に入り登録状態を切り替える
     ToggleFavorite(RefineMode),
     /// お気に入りの表示順を変更する
@@ -37,6 +40,10 @@ pub(crate) fn parse_quick_selector_ipc_message(msg: &str) -> Option<QuickSelecto
         serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
             .ok()
             .map(QuickSelectorIpcAction::SelectMode)
+    } else if let Some(mode_str) = msg.strip_prefix("apply:") {
+        serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
+            .ok()
+            .map(QuickSelectorIpcAction::ApplyMode)
     } else if let Some(mode_str) = msg.strip_prefix("toggle-favorite:") {
         serde_json::from_str::<RefineMode>(&format!("\"{mode_str}\""))
             .ok()
@@ -57,6 +64,32 @@ pub(crate) fn parse_quick_selector_ipc_message(msg: &str) -> Option<QuickSelecto
     }
 }
 
+/// 展開中カテゴリとして受け付ける最大件数 (カテゴリ数より十分大きい)
+const MAX_EXPANDED_CATEGORIES: usize = 64;
+/// 展開中カテゴリ名として受け付ける最大文字数
+const MAX_EXPANDED_CATEGORY_CHARS: usize = 64;
+
+/// `expanded-categories:` メッセージから展開中のカテゴリ名を取り出す
+///
+/// 上限を超える件数・文字数のカテゴリ名は捨てる
+///
+/// # Arguments
+/// * `msg` - IPC メッセージ文字列
+///
+/// # Returns
+/// * `Option<Vec<String>>` - 展開中カテゴリ名。対象外または不正な JSON の場合は `None`
+pub(crate) fn parse_expanded_categories_message(msg: &str) -> Option<Vec<String>> {
+    let json = msg.strip_prefix("expanded-categories:")?;
+    let categories = serde_json::from_str::<Vec<String>>(json).ok()?;
+    Some(
+        categories
+            .into_iter()
+            .filter(|category| category.chars().count() <= MAX_EXPANDED_CATEGORY_CHARS)
+            .take(MAX_EXPANDED_CATEGORIES)
+            .collect(),
+    )
+}
+
 /// クイックセレクター用 HTML を組み立てる
 pub(crate) fn assemble_quick_selector_html(modes_json: &str) -> String {
     embed_quick_selector_assets(include_str!("../../ui/quick_selector.html")).replace(
@@ -66,13 +99,21 @@ pub(crate) fn assemble_quick_selector_html(modes_json: &str) -> String {
 }
 
 /// クイックセレクター表示時に実行するフォーカス用スクリプトを生成する
-pub(crate) fn quick_selector_focus_script(current_mode: RefineMode, modes_json: &str) -> String {
+pub(crate) fn quick_selector_focus_script(
+    current_mode: Option<RefineMode>,
+    modes_json: &str,
+    expanded_categories: &[String],
+) -> String {
     let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
-    format!("focusInput({mode_id}, {modes_json});")
+    let expanded = serde_json::to_string(expanded_categories).unwrap_or_else(|_| "[]".into());
+    format!("focusInput({mode_id}, {modes_json}, {expanded});")
 }
 
 /// モード一覧の再描画用スクリプトを生成する
-pub(crate) fn quick_selector_refresh_script(current_mode: RefineMode, modes_json: &str) -> String {
+pub(crate) fn quick_selector_refresh_script(
+    current_mode: Option<RefineMode>,
+    modes_json: &str,
+) -> String {
     let mode_id = serde_json::to_string(&current_mode).unwrap_or_default();
     format!("refreshModes({mode_id}, {modes_json});")
 }
@@ -91,6 +132,8 @@ pub struct QuickSelectorWindow {
     inner: RefCell<Option<WebSelectorWindow>>,
     /// `DisposeAfterIdle` 用の非表示開始時刻
     idle_hidden_at: Cell<Option<Instant>>,
+    /// 展開中のカテゴリ名 (`WebView` を破棄しても起動中は保持する)
+    expanded_categories: Arc<Mutex<Vec<String>>>,
     /// テスト用の擬似表示フラグ (`WebView` なしで相互排他を検証する)
     #[cfg(test)]
     force_visible: Cell<bool>,
@@ -112,6 +155,7 @@ impl QuickSelectorWindow {
             proxy,
             inner: RefCell::new(None),
             idle_hidden_at: Cell::new(None),
+            expanded_categories: Arc::new(Mutex::new(Vec::new())),
             #[cfg(test)]
             force_visible: Cell::new(false),
         }
@@ -122,12 +166,14 @@ impl QuickSelectorWindow {
     /// # Arguments
     /// * `window` - ホストとなる `tao` ウィンドウ
     /// * `proxy` - UI スレッドへメッセージを送信するプロキシ
+    /// * `expanded_categories` - `WebView` から通知された展開中カテゴリの保存先
     ///
     /// # Returns
     /// * `anyhow::Result<WebSelectorWindow>` - 成功時は構築済み `WebView`
     fn build_webview(
         window: Window,
         proxy: &EventLoopProxy<AppEvent>,
+        expanded_categories: Arc<Mutex<Vec<String>>>,
     ) -> anyhow::Result<WebSelectorWindow> {
         let modes_json = RefineMode::to_json_list(&[]);
         let html = assemble_quick_selector_html(&modes_json);
@@ -140,11 +186,21 @@ impl QuickSelectorWindow {
             &html,
             move |req| {
                 let msg = req.body();
+                if let Some(categories) = parse_expanded_categories_message(msg) {
+                    *expanded_categories.lock_ignore_poison() = categories;
+                    return;
+                }
                 match parse_quick_selector_ipc_message(msg) {
                     Some(QuickSelectorIpcAction::SelectMode(mode)) => {
                         dispatch::send_app_event(
                             &proxy_clone,
                             SelectorEvent::RequestModeChange(mode).into(),
+                        );
+                    }
+                    Some(QuickSelectorIpcAction::ApplyMode(mode)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            SelectorEvent::RequestApplyOnce(mode).into(),
                         );
                     }
                     Some(QuickSelectorIpcAction::ToggleFavorite(mode)) => {
@@ -186,7 +242,8 @@ impl QuickSelectorWindow {
             520.0,
             600.0,
         )?;
-        let webview = Self::build_webview(window, &self.proxy)?;
+        let webview =
+            Self::build_webview(window, &self.proxy, Arc::clone(&self.expanded_categories))?;
         *self.inner.borrow_mut() = Some(webview);
         Ok(())
     }
@@ -202,12 +259,12 @@ impl QuickSelectorWindow {
     ///
     /// # Arguments
     /// * `event_loop` - 遅延生成用のイベントループ
-    /// * `current_mode` - 現在アプリケーションで選択されている変換モード
+    /// * `current_mode` - 自動変換で使用中の変換モード (自動変換が無効なら `None`)
     /// * `modes_json` - モード一覧 JSON
     pub fn show(
         &self,
         event_loop: &EventLoopWindowTarget<AppEvent>,
-        current_mode: RefineMode,
+        current_mode: Option<RefineMode>,
         modes_json: &str,
     ) {
         self.idle_hidden_at.set(None);
@@ -215,7 +272,11 @@ impl QuickSelectorWindow {
             crate::user_error::notify_webview_window_init_failure("クイックセレクター", &err);
             return;
         }
-        let script = quick_selector_focus_script(current_mode, modes_json);
+        let script = quick_selector_focus_script(
+            current_mode,
+            modes_json,
+            &self.expanded_categories.lock_ignore_poison(),
+        );
         if let Some(inner) = self.inner.borrow().as_ref() {
             inner.show_with_script(&script);
         }
@@ -227,8 +288,8 @@ impl QuickSelectorWindow {
     ///
     /// # Arguments
     /// * `modes_json` - モード一覧 JSON
-    /// * `current_mode` - 現在選択されている変換モード
-    pub fn refresh_modes(&self, modes_json: &str, current_mode: RefineMode) {
+    /// * `current_mode` - 自動変換で使用中の変換モード (自動変換が無効なら `None`)
+    pub fn refresh_modes(&self, modes_json: &str, current_mode: Option<RefineMode>) {
         let inner = self.inner.borrow();
         let Some(inner) = inner.as_ref() else {
             return;
@@ -367,7 +428,7 @@ mod tests {
         assert!(!quick.is_visible());
         assert!(!quick.is_created());
         assert!(quick.id().is_none());
-        quick.refresh_modes("[]", RefineMode::Trim);
+        quick.refresh_modes("[]", Some(RefineMode::Trim));
         quick.hide();
         quick.dispose();
         assert!(!quick.is_visible());
@@ -381,6 +442,15 @@ mod tests {
         assert_eq!(
             parse_quick_selector_ipc_message("select:UrlDecode"),
             Some(QuickSelectorIpcAction::SelectMode(RefineMode::UrlDecode))
+        );
+    }
+
+    /// `apply:` プレフィックス付きメッセージを一回適用として解釈できるようにすること
+    #[test]
+    fn parse_ipc_apply_mode() {
+        assert_eq!(
+            parse_quick_selector_ipc_message("apply:JsonFormat"),
+            Some(QuickSelectorIpcAction::ApplyMode(RefineMode::JsonFormat))
         );
     }
 
@@ -426,6 +496,7 @@ mod tests {
     fn parse_ipc_unknown_returns_none() {
         assert_eq!(parse_quick_selector_ipc_message("invalid"), None);
         assert_eq!(parse_quick_selector_ipc_message("select:not-a-mode"), None);
+        assert_eq!(parse_quick_selector_ipc_message("apply:not-a-mode"), None);
         assert_eq!(
             parse_quick_selector_ipc_message("toggle-favorite:not-a-mode"),
             None
@@ -454,9 +525,57 @@ mod tests {
     /// フォーカス用スクリプトに現在モードと一覧 JSON が含まれるようにすること
     #[test]
     fn quick_selector_focus_script_contains_mode_json() {
-        let script = quick_selector_focus_script(RefineMode::JsonFormat, "[]");
+        let script = quick_selector_focus_script(Some(RefineMode::JsonFormat), "[]", &[]);
         assert!(script.starts_with("focusInput("));
         assert!(script.contains("JsonFormat"));
         assert!(script.ends_with(");"));
+    }
+
+    /// 自動変換が無効なときは現在モードに `null` を渡すこと
+    #[test]
+    fn quick_selector_focus_script_passes_null_without_auto_refine() {
+        let script = quick_selector_focus_script(None, "[]", &[]);
+        assert_eq!(script, "focusInput(null, [], []);");
+    }
+
+    /// フォーカス用スクリプトに展開中カテゴリを JSON 配列で渡すこと
+    #[test]
+    fn quick_selector_focus_script_passes_expanded_categories() {
+        let script = quick_selector_focus_script(None, "[]", &["URL操作".to_string()]);
+        assert_eq!(script, r#"focusInput(null, [], ["URL操作"]);"#);
+    }
+
+    /// `expanded-categories:` メッセージから展開中カテゴリを取り出せること
+    #[test]
+    fn parse_expanded_categories_message_reads_json_array() {
+        assert_eq!(
+            parse_expanded_categories_message(r#"expanded-categories:["URL操作","行操作"]"#),
+            Some(vec!["URL操作".to_string(), "行操作".to_string()])
+        );
+        assert_eq!(
+            parse_expanded_categories_message("expanded-categories:[]"),
+            Some(Vec::new())
+        );
+        assert_eq!(
+            parse_expanded_categories_message("expanded-categories:{"),
+            None
+        );
+        assert_eq!(parse_expanded_categories_message("close"), None);
+    }
+
+    /// 上限を超える件数・長すぎるカテゴリ名は捨てること
+    #[test]
+    fn parse_expanded_categories_message_limits_input() {
+        let long = "あ".repeat(MAX_EXPANDED_CATEGORY_CHARS + 1);
+        let many: Vec<String> = (0..MAX_EXPANDED_CATEGORIES + 10)
+            .map(|i| i.to_string())
+            .collect();
+        let msg = format!(
+            "expanded-categories:{}",
+            serde_json::to_string(&[vec![long], many].concat()).expect("json")
+        );
+        let parsed = parse_expanded_categories_message(&msg).expect("parsed");
+        assert_eq!(parsed.len(), MAX_EXPANDED_CATEGORIES);
+        assert_eq!(parsed[0], "0");
     }
 }

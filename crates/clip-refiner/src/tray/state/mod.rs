@@ -150,13 +150,17 @@ mod tests {
         assert!(!snap.regex_presets.is_empty());
     }
 
-    /// `auto_processing_enabled` が連続記録と一時停止の状態を反映すること
+    /// `auto_processing_enabled` が自動変換・連続記録・一時停止の状態を反映すること
     #[test]
     fn test_auto_processing_enabled() {
         let state = test_app_state();
 
-        let snap = state.monitor_snapshot();
-        assert!(snap.auto_processing_enabled());
+        assert!(state.monitor_snapshot().auto_processing_enabled());
+
+        state.with_config_mut(|c| c.auto_refine_enabled = false);
+        assert!(!state.monitor_snapshot().auto_processing_enabled());
+
+        state.with_config_mut(|c| c.auto_refine_enabled = true);
 
         state.with_config_mut(|c| c.continuous_record_enabled = true);
         assert!(!state.monitor_snapshot().auto_processing_enabled());

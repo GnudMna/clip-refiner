@@ -143,22 +143,78 @@ function test_favorite_ids_sorted() {
     assert.deepEqual(QuickSelectorLogic.favoriteIds(SAMPLE_MODES), ['UrlDecode', 'Trim']);
 }
 
-/** 空クエリではお気に入り + 全モードの表示一覧を組み立てること */
+/** 空クエリではお気に入りの後に折りたたんだカテゴリ見出しだけを並べること */
 function test_build_display_list_without_query() {
-    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, '');
-    assert.equal(display.length, 5);
-    assert.equal(display[0].id, 'UrlDecode');
+    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, '', new Set());
+    assert.deepEqual(
+        display.map((row) => row.id),
+        ['UrlDecode', 'Trim', 'category:テキスト', 'category:エンコード']
+    );
     assert.equal(display[0].listSection, 'favorites');
-    assert.equal(display[1].id, 'Trim');
-    assert.equal(display[1].listSection, 'favorites');
-    assert.equal(display[2].listSection, 'category');
+    assert.equal(display[2].listSection, 'header');
+    assert.equal(display[2].expanded, false);
+    assert.equal(display[2].count, 2);
+    assert.equal(display[3].count, 1);
 }
 
-/** クエリでモードを絞り込めること */
+/** 展開中のカテゴリだけ見出しの直後にモードを並べること */
+function test_build_display_list_with_expanded_category() {
+    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, '', new Set(['テキスト']));
+    assert.deepEqual(
+        display.map((row) => row.id),
+        ['UrlDecode', 'Trim', 'category:テキスト', 'Trim', 'JsonFormat', 'category:エンコード']
+    );
+    assert.equal(display[2].expanded, true);
+    assert.equal(display[3].listSection, 'category');
+}
+
+/** カテゴリなしのモードは見出しを持たず常に表示すること */
+function test_build_display_list_uncategorized_always_visible() {
+    const modes = [{ id: 'Plain', label: '無加工', category: '' }, ...SAMPLE_MODES];
+    const display = QuickSelectorLogic.buildDisplayList(modes, '', new Set());
+    assert.equal(display[2].id, 'Plain');
+    assert.equal(display[2].listSection, 'category');
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 2), -1);
+}
+
+/** クエリでモードを絞り込み、検索中はカテゴリの開閉を無視すること */
 function test_build_display_list_with_query() {
-    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, 'json');
+    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, 'json', new Set());
     assert.equal(display.length, 1);
     assert.equal(display[0].id, 'JsonFormat');
+    assert.equal(QuickSelectorLogic.isCategoryRow(display[0]), false);
+}
+
+/** 行が属するカテゴリ見出しのインデックスを求められること */
+function test_category_row_index_of() {
+    const display = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, '', new Set(['テキスト']));
+    // お気に入り行は見出しに属さない
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 0), -1);
+    // 見出し行は自身
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 2), 2);
+    // カテゴリ内のモード行は直前の見出し
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 4), 2);
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 5), 5);
+    assert.equal(QuickSelectorLogic.categoryRowIndexOf(display, 99), -1);
+}
+
+/** 展開カテゴリの切り替えと保存値の復元ができること */
+function test_expanded_categories_state() {
+    const initial = new Set(['テキスト']);
+    const expanded = QuickSelectorLogic.withCategoryExpanded(initial, 'エンコード', true);
+    assert.deepEqual([...expanded].sort(), ['エンコード', 'テキスト']);
+    // 元の集合は変更しない
+    assert.deepEqual([...initial], ['テキスト']);
+    const collapsed = QuickSelectorLogic.withCategoryExpanded(expanded, 'テキスト', false);
+    assert.deepEqual([...collapsed], ['エンコード']);
+
+    assert.deepEqual([...QuickSelectorLogic.toExpandedCategories(['a', 1, 'b'])], ['a', 'b']);
+    assert.equal(QuickSelectorLogic.toExpandedCategories(undefined).size, 0);
+    assert.equal(QuickSelectorLogic.toExpandedCategories({ a: 1 }).size, 0);
+    assert.equal(
+        QuickSelectorLogic.expandedCategoriesMessage(new Set(['URL操作'])),
+        'expanded-categories:["URL操作"]'
+    );
 }
 
 /** カテゴリ見出しラベルを解決できること */
@@ -166,6 +222,18 @@ function test_section_category() {
     const favorite = { id: 'Trim', label: 'Trim', category: 'テキスト', listSection: 'favorites' };
     assert.equal(QuickSelectorLogic.sectionCategory(favorite, ''), 'お気に入り');
     assert.equal(QuickSelectorLogic.sectionCategory(favorite, 't'), null);
+    assert.equal(
+        QuickSelectorLogic.sectionCategory(
+            {
+                id: 'category:テキスト',
+                label: 'テキスト',
+                category: 'テキスト',
+                listSection: 'header',
+            },
+            ''
+        ),
+        'テキスト'
+    );
     assert.equal(
         QuickSelectorLogic.sectionCategory(
             { id: 'Trim', label: 'Trim', category: 'テキスト', listSection: 'category' },
@@ -177,7 +245,7 @@ function test_section_category() {
 
 /** フィルタ後の選択インデックスを維持できること */
 function test_next_index_after_filter() {
-    const filtered = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, 'url');
+    const filtered = QuickSelectorLogic.buildDisplayList(SAMPLE_MODES, 'url', new Set());
     assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, 'UrlDecode'), 0);
     assert.equal(QuickSelectorLogic.nextIndexAfterFilter(filtered, 'missing'), 0);
 }
@@ -198,6 +266,7 @@ function test_can_move_selected_favorite() {
 
 /** クイックセレクター IPC メッセージを組み立てられること */
 function test_quick_selector_ipc_messages() {
+    assert.equal(QuickSelectorLogic.applyMessage('Trim'), 'apply:Trim');
     assert.equal(QuickSelectorLogic.selectMessage('Trim'), 'select:Trim');
     assert.equal(QuickSelectorLogic.toggleFavoriteMessage('Trim'), 'toggle-favorite:Trim');
     assert.equal(QuickSelectorLogic.moveFavoriteMessage('Trim', 'up'), 'move-favorite:Trim:up');
@@ -212,8 +281,27 @@ function test_build_item_inner_html() {
         SelectorCommon.highlightText
     );
     assert.ok(html.includes('<mark>空白</mark>'));
-    assert.ok(html.includes('選択中'));
+    assert.ok(html.includes('自動変換中'));
     assert.ok(html.includes('value-hint'));
+}
+
+/** 選択行のテンプレート切り替え要求をテキストクリップだけで返すこと */
+function test_clip_resolve_template_toggle() {
+    const clips = [
+        ...SAMPLE_CLIPS,
+        { id: '2', label: '日報', preview: '{date} 日報', kind: 'text', template: true },
+    ];
+    assert.deepEqual(ClipSelectorLogic.resolveTemplateToggle(0, clips), { id: '0', enabled: true });
+    assert.deepEqual(ClipSelectorLogic.resolveTemplateToggle(2, clips), {
+        id: '2',
+        enabled: false,
+    });
+    // 画像・登録行 (範囲外) は対象外
+    assert.equal(ClipSelectorLogic.resolveTemplateToggle(1, clips), null);
+    assert.equal(ClipSelectorLogic.resolveTemplateToggle(3, clips), null);
+    // テンプレートのクリップは「テンプレート」でも検索できる
+    assert.equal(ClipSelectorLogic.itemMatches(clips[2], 'テンプレート'), true);
+    assert.equal(ClipSelectorLogic.itemMatches(clips[0], 'テンプレート'), false);
 }
 
 /** クリップ検索と画像キーワード一致ができること */
@@ -276,6 +364,22 @@ function test_clip_selector_ipc_messages() {
     assert.equal(ClipSelectorLogic.selectMessage('3'), 'select:3');
     assert.equal(ClipSelectorLogic.registerMessage(), 'register');
     assert.equal(ClipSelectorLogic.deleteMessage('3'), 'delete:3');
+    assert.equal(ClipSelectorLogic.moveMessage('3', 'up'), 'move:3:up');
+    assert.equal(ClipSelectorLogic.templateMessage('3', true), 'template:3:on');
+    assert.equal(ClipSelectorLogic.templateMessage('3', false), 'template:3:off');
+}
+
+/** 並べ替えの移動先を検索中・登録行・端を除いて求められること */
+function test_clip_move_target_index() {
+    assert.equal(ClipSelectorLogic.canReorder(''), true);
+    assert.equal(ClipSelectorLogic.canReorder('a'), false);
+    assert.equal(ClipSelectorLogic.moveTargetIndex('', 1, 3, 'up'), 0);
+    assert.equal(ClipSelectorLogic.moveTargetIndex('', 1, 3, 'down'), 2);
+    assert.equal(ClipSelectorLogic.moveTargetIndex('', 0, 3, 'up'), null);
+    assert.equal(ClipSelectorLogic.moveTargetIndex('', 2, 3, 'down'), null);
+    // 登録行 (index === filteredLength) は動かさない
+    assert.equal(ClipSelectorLogic.moveTargetIndex('', 3, 3, 'up'), null);
+    assert.equal(ClipSelectorLogic.moveTargetIndex('a', 1, 3, 'up'), null);
 }
 
 /** カテゴリ見出し HTML を組み立てられること */
@@ -303,7 +407,11 @@ const tests = [
     test_handle_escape_key,
     test_favorite_ids_sorted,
     test_build_display_list_without_query,
+    test_build_display_list_with_expanded_category,
+    test_build_display_list_uncategorized_always_visible,
     test_build_display_list_with_query,
+    test_category_row_index_of,
+    test_expanded_categories_state,
     test_section_category,
     test_next_index_after_filter,
     test_can_move_selected_favorite,
@@ -316,6 +424,8 @@ const tests = [
     test_clip_image_preview,
     test_clip_resolve_activate_selection,
     test_clip_selector_ipc_messages,
+    test_clip_resolve_template_toggle,
+    test_clip_move_target_index,
     test_build_category_header_inner_html,
     test_build_register_row_inner_html,
 ];

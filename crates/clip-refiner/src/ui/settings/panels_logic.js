@@ -152,11 +152,13 @@ const SettingsPanelsLogic = (function () {
     /**
      * 登録クリップ 1 行分のテーブル行 HTML を組み立てる
      *
-     * @param {{ id: string, label?: string, preview?: string, kind: string, thumbnail?: string }} clip
+     * @param {{ id: string, label?: string, preview?: string, kind: string, template?: boolean, thumbnail?: string }} clip
      * @param {(text: string) => string} escapeHtml
+     * @param {number} index - 一覧内の位置 (先頭は上へ移動を無効にする)
+     * @param {number} count - 一覧の件数 (末尾は下へ移動を無効にする)
      * @returns {string}
      */
-    function renderClipRow(clip, escapeHtml) {
+    function renderClipRow(clip, escapeHtml, index, count) {
         const label = clip.label || clip.preview || '(無題)';
         const kindBadge =
             clip.kind === 'image'
@@ -172,6 +174,20 @@ const SettingsPanelsLogic = (function () {
                     '<span class="clip-thumbnail clip-thumbnail--placeholder" aria-hidden="true">🖼</span>';
             }
         }
+        // テンプレート展開はテキストのみ。押下で現在と逆の状態を要求し、有効状態はボタンの強調で示す
+        // 画像行に無いボタンを先頭に置き、↑↓・コピー・削除の位置を行間で揃える
+        const templateButton =
+            clip.kind === 'image'
+                ? ''
+                : '<button type="button" class="ghost-btn clip-template' +
+                  (clip.template ? ' is-active' : '') +
+                  '" data-index="' +
+                  escapeHtml(clip.id) +
+                  '" data-enabled="' +
+                  (clip.template ? 'false' : 'true') +
+                  '" aria-pressed="' +
+                  (clip.template ? 'true' : 'false') +
+                  '" title="コピー時に {date} などを展開する">テンプレート</button>';
         const previewHtml =
             clip.preview && clip.preview !== label
                 ? '<span class="clip-preview">' + escapeHtml(clip.preview) + '</span>'
@@ -187,6 +203,17 @@ const SettingsPanelsLogic = (function () {
             '</div>' +
             previewHtml +
             '</div></div></td><td class="list-actions">' +
+            templateButton +
+            '<button type="button" class="icon-btn clip-up" data-index="' +
+            escapeHtml(clip.id) +
+            '" title="上へ"' +
+            (index === 0 ? ' disabled' : '') +
+            '>↑</button>' +
+            '<button type="button" class="icon-btn clip-down" data-index="' +
+            escapeHtml(clip.id) +
+            '" title="下へ"' +
+            (index === count - 1 ? ' disabled' : '') +
+            '>↓</button>' +
             '<button type="button" class="ghost-btn clip-copy" data-index="' +
             escapeHtml(clip.id) +
             '">コピー</button>' +
@@ -260,7 +287,7 @@ const SettingsPanelsLogic = (function () {
      * コンテンツクリックから委譲アクションを解決する
      *
      * @param {{ classList: { contains: (name: string) => boolean }, dataset: Record<string, string> }} button
-     * @returns {{ type: string, mode?: string, direction?: string, index?: number }|null}
+     * @returns {{ type: string, mode?: string, direction?: string, index?: number, enabled?: boolean }|null}
      */
     function resolveContentClickAction(button) {
         if (
@@ -301,6 +328,19 @@ const SettingsPanelsLogic = (function () {
         }
         if (button.classList.contains('favorite-down')) {
             return { type: 'favorite-move', mode: button.dataset.mode, direction: 'down' };
+        }
+        if (button.classList.contains('clip-up')) {
+            return { type: 'clip-move', index: Number(button.dataset.index), direction: 'up' };
+        }
+        if (button.classList.contains('clip-down')) {
+            return { type: 'clip-move', index: Number(button.dataset.index), direction: 'down' };
+        }
+        if (button.classList.contains('clip-template')) {
+            return {
+                type: 'clip-template',
+                index: Number(button.dataset.index),
+                enabled: button.dataset.enabled === 'true',
+            };
         }
         if (button.classList.contains('clip-copy')) {
             return { type: 'clip-copy', index: Number(button.dataset.index) };

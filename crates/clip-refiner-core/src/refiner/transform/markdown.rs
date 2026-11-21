@@ -43,6 +43,22 @@ pub fn markdown_to_html(text: &str) -> Cow<'_, str> {
     }
 }
 
+/// `Markdown` をリッチテキスト貼り付け向けの `HTML` へ変換する
+///
+/// Word / Outlook は罫線指定のない表を枠なしで表示するため、表に罫線と余白を付ける
+///
+/// # Arguments
+/// * `text` - 変換対象のMarkdownテキスト
+///
+/// # Returns
+/// * `String` - `CF_HTML` の断片として書き込む HTML
+pub(crate) fn markdown_to_rich_text_html(text: &str) -> String {
+    markdown_to_html(text).replace(
+        "<table>",
+        r#"<table border="1" cellpadding="4" style="border-collapse: collapse;">"#,
+    )
+}
+
 // ======================================================================
 // Excel → Markdown 変換
 // ======================================================================
@@ -299,6 +315,21 @@ mod tests {
         assert!(output.contains("<table>"));
         assert!(output.contains("<th>"));
         assert!(output.contains("<td>"));
+    }
+
+    /// リッチテキスト向け HTML では表に罫線を付けるようにすること
+    #[test]
+    fn test_markdown_to_rich_text_html_adds_table_border() {
+        let output = markdown_to_rich_text_html(
+            "| A |
+|---|
+| 1 |",
+        );
+        assert!(
+            output.starts_with(r#"<table border="1" cellpadding="4""#),
+            "{output}"
+        );
+        assert!(!output.contains("<table>"));
     }
 
     /// `excel_to_markdown_table`: 基本的な TSV 変換できるようにすること

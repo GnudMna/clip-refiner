@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify;
-use crate::tray::state::{AppState, SettingsEvent, UpdateEvent, WorkerEvent};
+use crate::tray::state::{AppState, SelectorEvent, SettingsEvent, WorkerEvent};
 
 use tao::event_loop::ControlFlow;
 
@@ -37,8 +37,8 @@ pub(crate) fn handle_app_control(
         bump_monitor_generation(state);
         let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
         true
-    } else if id == menu.check_update_item.id() {
-        let _ = state.proxy.send_event(UpdateEvent::TrayCheck.into());
+    } else if id == menu.quick_selector_item.id() {
+        let _ = state.proxy.send_event(SelectorEvent::ShowQuick.into());
         true
     } else if id == menu.open_settings_window_item.id() {
         let _ = state.proxy.send_event(SettingsEvent::Show.into());
@@ -90,13 +90,13 @@ mod tests {
         assert!(matches!(control_flow, ControlFlow::Wait));
     }
 
-    /// 更新確認メニューで処理が完了しイベントループを終了しないようにすること
+    /// クイック変換メニューで処理が完了しイベントループを終了しないようにすること
     #[test]
-    fn handle_app_control_check_update_keeps_event_loop() {
+    fn handle_app_control_quick_selector_keeps_event_loop() {
         let ctx = TrayTestContext::new();
         let mut control_flow = ControlFlow::Wait;
 
-        let id = ctx.menu().check_update_item.id();
+        let id = ctx.menu().quick_selector_item.id();
         let handled = handle_app_control(id, ctx.menu(), ctx.state(), &mut control_flow);
 
         assert!(handled);

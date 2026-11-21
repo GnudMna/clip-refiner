@@ -8,10 +8,13 @@ use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::e2e;
 use crate::tray::event::{
-    AppEventContext, copy_registered_clip, delete_registered_clip, move_favorite_mode,
-    refresh_clips_views, toggle_favorite_mode, update_refine,
+    AppEventContext, apply_refine_once, copy_registered_clip, delete_registered_clip,
+    move_favorite_mode, move_registered_clip, refresh_clips_views, select_auto_refine_mode,
+    set_registered_clip_template, toggle_favorite_mode,
 };
-use crate::tray::selector::{clip_selector_json, hide_with_retention, quick_selector_json};
+use crate::tray::selector::{
+    clip_selector_json, hide_with_retention, quick_selector_current_mode, quick_selector_json,
+};
 use crate::tray::settings::{refresh_settings_clips, refresh_settings_favorites_and_shortcuts};
 use crate::tray::state::{ClipsEvent, FavoritesEvent, SelectorEvent};
 use crate::tray::worker::ClipboardCommand;
@@ -24,7 +27,12 @@ pub(super) fn handle(ctx: &mut AppEventContext<'_>, event: SelectorEvent) {
     match event {
         SelectorEvent::RequestModeChange(mode) => {
             hide_selector(ctx, SelectorKind::Quick);
-            update_refine(ctx.state, ctx.menu, ctx.clipboard_worker, mode, None);
+            select_auto_refine_mode(ctx.state, ctx.menu, ctx.clipboard_worker, mode, None);
+            exit_if_e2e_selector_closed(ctx);
+        }
+        SelectorEvent::RequestApplyOnce(mode) => {
+            hide_selector(ctx, SelectorKind::Quick);
+            apply_refine_once(ctx.clipboard_worker, mode);
             exit_if_e2e_selector_closed(ctx);
         }
         SelectorEvent::HideQuick => {
@@ -51,6 +59,10 @@ pub(super) fn handle_clips(ctx: &mut AppEventContext<'_>, event: ClipsEvent) {
             );
         }
         ClipsEvent::RequestDelete(index) => handle_clip_delete(ctx, index),
+        ClipsEvent::RequestMove(index, direction) => handle_clip_move(ctx, index, direction),
+        ClipsEvent::RequestSetTemplate(index, enabled) => {
+            handle_clip_set_template(ctx, index, enabled);
+        }
         ClipsEvent::Refresh => {
             refresh_clips_views(ctx.state, ctx.menu, &ctx.selectors.clip);
             refresh_settings_clips(ctx.state, ctx.settings);
@@ -92,7 +104,7 @@ fn show_quick_selector(ctx: &mut AppEventContext<'_>) {
     let modes_json = ctx.state.with_config(quick_selector_json);
     ctx.selectors.quick.show(
         ctx.event_loop,
-        ctx.state.with_config(|c| c.mode),
+        ctx.state.with_config(quick_selector_current_mode),
         &modes_json,
     );
     e2e::signal_ready();
@@ -119,6 +131,18 @@ fn handle_clip_copy(ctx: &mut AppEventContext<'_>, index: usize) {
 /// 登録クリップの削除要求を処理する
 fn handle_clip_delete(ctx: &mut AppEventContext<'_>, index: usize) {
     delete_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, index);
+    refresh_settings_clips(ctx.state, ctx.settings);
+}
+
+/// 登録クリップの表示順変更要求を処理する
+fn handle_clip_move(ctx: &mut AppEventContext<'_>, index: usize, direction: FavoriteMoveDirection) {
+    move_registered_clip(ctx.state, ctx.menu, &ctx.selectors.clip, index, direction);
+    refresh_settings_clips(ctx.state, ctx.settings);
+}
+
+/// 登録クリップのテンプレート展開の切り替え要求を処理する
+fn handle_clip_set_template(ctx: &mut AppEventContext<'_>, index: usize, enabled: bool) {
+    set_registered_clip_template(ctx.state, ctx.menu, &ctx.selectors.clip, index, enabled);
     refresh_settings_clips(ctx.state, ctx.settings);
 }
 

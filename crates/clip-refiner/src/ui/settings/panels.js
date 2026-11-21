@@ -5,6 +5,7 @@
 import { ctx } from './ctx.js';
 import {
     TABS,
+    advancedSection,
     buildModeOptions,
     card,
     escapeHtml,
@@ -30,14 +31,12 @@ import SettingsSharedLogic from './shared_logic.js';
 
 /** @type {Record<string, () => string>} */
 export const PANEL_RENDERERS = {
-    general: renderGeneralPanel,
-    favorites: renderFavoritesPanel,
+    convert: renderConvertPanel,
     regex: renderRegexPanel,
-    history: renderHistoryPanel,
-    clips: renderClipsPanel,
-    monitor: renderMonitorPanel,
+    clipboard: renderClipboardPanel,
     notifications: renderNotificationsPanel,
     shortcuts: renderShortcutsPanel,
+    general: renderGeneralPanel,
 };
 
 /** サイドバーのアクティブタブ表示を DOM に反映する */
@@ -129,20 +128,12 @@ export function ensureSidebar() {
     syncSidebarActiveTab();
 }
 
-/** @returns {string} 監視タブのパネル HTML */
-function renderMonitorPanel() {
-    const intervalDisabled = ctx.state.monitorMode === 'Event' ? ' disabled' : '';
-    const intervalBounds = intervalMsBounds();
-    const pipelineMax = maxPipelineLength();
-    const processingDisabled = ctx.state.continuousRecordEnabled ? ' is-disabled' : '';
-
-    const body =
+/** @returns {string} 一般タブの監視の状態カード HTML */
+function renderMonitorStateCards() {
+    return (
         '<div id="monitor-pause-banner" class="status-banner status-paused" role="status"' +
         (ctx.state.isPaused ? '' : ' hidden') +
         '>クリップボード監視は一時停止中です</div>' +
-        '<div id="monitor-record-banner" class="status-banner status-continuous-record" role="status"' +
-        (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
-        '>連続記録中はコピー時の自動加工を停止しています</div>' +
         card(
             '監視の状態',
             optionCheckbox(
@@ -151,7 +142,16 @@ function renderMonitorPanel() {
                 'クリップボード監視を一時停止',
                 '有効にすると加工と履歴の記録を止める'
             )
-        ) +
+        )
+    );
+}
+
+/** @returns {string} 一般タブの詳細設定に置く監視方式・監視周期カード HTML */
+function renderMonitorAdvancedCards() {
+    const intervalDisabled = ctx.state.monitorMode === 'Event' ? ' disabled' : '';
+    const intervalBounds = intervalMsBounds();
+
+    return (
         card(
             '監視方式',
             '' +
@@ -184,10 +184,31 @@ function renderMonitorPanel() {
                 '〜' +
                 intervalBounds.max +
                 ' ms。イベント監視時は使用されない</p></div>'
-        ) +
+        )
+    );
+}
+
+/** @returns {string} 変換タブのパネル HTML */
+function renderConvertPanel() {
+    const pipelineMax = maxPipelineLength();
+    const processingDisabled = ctx.state.continuousRecordEnabled ? ' is-disabled' : '';
+
+    const body =
+        '<div id="monitor-record-banner" class="status-banner status-continuous-record" role="status"' +
+        (ctx.state.continuousRecordEnabled ? '' : ' hidden') +
+        '>連続記録中はコピー時の自動加工を停止しています</div>' +
         '<div id="monitor-processing-section"' +
         processingDisabled +
         '>' +
+        card(
+            '自動変換',
+            optionCheckbox(
+                'auto-refine-enabled',
+                ctx.state.autoRefineEnabled,
+                'コピー時に自動変換する',
+                '無効のときはクイックセレクターやお気に入りホットキーで手動変換だけを行う'
+            )
+        ) +
         card(
             'デフォルトモード',
             '' +
@@ -196,7 +217,7 @@ function renderMonitorPanel() {
                 '<select id="default-mode">' +
                 buildModeOptions(ctx.state.mode) +
                 '</select>' +
-                '<p class="hint">パイプラインが空のときに監視で適用するモード</p></div>'
+                '<p class="hint">パイプラインが空のときに自動変換で適用するモード</p></div>'
         ) +
         card(
             '加工パイプライン',
@@ -215,9 +236,10 @@ function renderMonitorPanel() {
                 ' 段まで。空の場合はデフォルトモードのみ適用</p>' +
                 '<p class="hint">Excel→画像 など画像出力モードは末尾に1つのみ配置され、途中に追加した場合は自動的に末尾へ移動する</p>'
         ) +
-        '</div>';
+        '</div>' +
+        renderFavoritesCard();
 
-    return panelWrap('monitor', body);
+    return panelWrap('convert', body);
 }
 
 /** @returns {string} 通知タブのパネル HTML */
@@ -279,8 +301,8 @@ function renderNotificationsPanel() {
     return panelWrap('notifications', body);
 }
 
-/** @returns {string} 履歴・連続記録タブのパネル HTML */
-function renderHistoryPanel() {
+/** @returns {string} クリップボードタブのパネル HTML */
+function renderClipboardPanel() {
     const historyBounds = historyLimitBounds();
     const recordBounds = recordLimitBounds();
 
@@ -343,7 +365,10 @@ function renderHistoryPanel() {
             '<div class="card-actions"><button type="button" class="danger-btn" id="clear-record-btn">連続記録をクリア</button></div>'
     );
 
-    return panelWrap('history', '<div class="card-grid">' + historyCard + recordCard + '</div>');
+    return panelWrap(
+        'clipboard',
+        '<div class="card-grid">' + historyCard + recordCard + '</div>' + renderClipsCard()
+    );
 }
 
 /** @returns {string} 正規表現タブのパネル HTML */
@@ -367,8 +392,8 @@ function renderRegexPanel() {
     return panelWrap('regex', body);
 }
 
-/** @returns {string} お気に入りタブのパネル HTML */
-function renderFavoritesPanel() {
+/** @returns {string} 変換タブのお気に入り変換モードカード HTML */
+function renderFavoritesCard() {
     const favorites = ctx.state.favoriteModes || [];
     const listHtml =
         favorites.length === 0
@@ -380,7 +405,7 @@ function renderFavoritesPanel() {
               );
 
     const availableModes = SettingsPanelsLogic.availableFavoriteModes(ctx.state.modes, favorites);
-    const body = card(
+    return card(
         'お気に入り変換モード',
         listHtml +
             '<div class="favorite-add">' +
@@ -401,10 +426,8 @@ function renderFavoritesPanel() {
             '</div>' +
             '<p class="hint">最大 ' +
             maxFavoriteModes() +
-            ' 件。お気に入り用ホットキーは「ショートカット」タブで編集</p>'
+            ' 件。お気に入りは現在のクリップボードへ一回だけ適用する。ホットキーは「ショートカット」タブで編集</p>'
     );
-
-    return panelWrap('favorites', body);
 }
 
 /** @returns {string} ショートカットタブのパネル HTML */
@@ -466,7 +489,8 @@ function renderShortcutsPanel() {
     const body =
         '<div class="info-banner" role="note">' +
         '<div>形式は <code>Alt+Shift+S</code>。修飾キーは Alt / Shift / Ctrl / Win。' +
-        'キーは A-Z / 0-9 / F1-F12。不正・重複は保存時に自動補正する。</div></div>' +
+        'キーは A-Z / 0-9 / F1-F24 / Space / Enter / Tab / Esc / 矢印キー / Home / End / PageUp / PageDown / Insert / Delete / Numpad0-9 / - , . / など。' +
+        '不正・重複は保存時に自動補正する。</div></div>' +
         card(
             '固定ホットキー',
             wrappedTable(
@@ -575,34 +599,48 @@ function renderGeneralPanel() {
             renderUpdateStatusHtml()
     );
 
-    return panelWrap('general', launchCard + selectorCard + versionCard);
+    return panelWrap(
+        'general',
+        renderMonitorStateCards() +
+            launchCard +
+            versionCard +
+            advancedSection(
+                '詳細設定',
+                renderMonitorAdvancedCards() + selectorCard,
+                ctx.advancedSectionOpen
+            )
+    );
 }
 
 /**
  * 登録クリップ 1 行分のテーブル行 HTML
  *
  * @param {{ id: string, label?: string, preview?: string, kind: string, thumbnail?: string }} clip
+ * @param {number} index
+ * @param {number} count
  * @returns {string}
  */
-function renderClipRow(clip) {
-    return SettingsPanelsLogic.renderClipRow(clip, escapeHtml);
+function renderClipRow(clip, index, count) {
+    return SettingsPanelsLogic.renderClipRow(clip, escapeHtml, index, count);
 }
 
-/** @returns {string} 登録クリップタブのパネル HTML */
-function renderClipsPanel() {
+/** @returns {string} クリップボードタブの登録クリップカード HTML */
+function renderClipsCard() {
     const clips = ctx.state.clips || [];
     const listHtml =
         clips.length === 0
             ? '<div class="empty-hint">登録クリップはありません</div>'
             : wrappedTable(
                   '<table class="list-table clip-table"><thead><tr><th>クリップ</th><th>操作</th></tr></thead><tbody>' +
-                      clips.map((clip) => renderClipRow(clip)).join('') +
+                      clips
+                          .map((clip, index) => renderClipRow(clip, index, clips.length))
+                          .join('') +
                       '</tbody></table>'
               );
 
     const registerBtn = SettingsPanelsLogic.clipRegisterButtonState(ctx.clipRegisterPending);
 
-    const body = card(
+    return card(
         '登録クリップ',
         '' +
             '<div class="toolbar"><button type="button" class="' +
@@ -619,6 +657,4 @@ function renderClipsPanel() {
             '<p class="hint">プレビューのマスキングは表示のみ。コピー時はクリップボードへ元の本文を載せる</p>' +
             '<p class="hint">鍵は現在ユーザーの DPAPI で保護する。同一ユーザーの他プロセスからは設定・鍵に到達しうる</p>'
     );
-
-    return panelWrap('clips', body);
 }

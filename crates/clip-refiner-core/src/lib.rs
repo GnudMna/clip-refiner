@@ -34,6 +34,7 @@
 ))]
 compile_error!("clip-refiner-core の clipboard / config feature は Windows 専用です");
 
+pub mod clip_template;
 pub mod config;
 pub mod consts;
 pub mod error;
@@ -47,6 +48,9 @@ mod native;
 pub mod refiner;
 pub mod security;
 
+pub use clip_template::{
+    ClipTemplateContext, ClipTemplateError, clip_template_uses_clipboard, expand_clip_template,
+};
 #[cfg(feature = "config")]
 pub use config::{
     AppConfig, CONFIG_VERSION, ConfigDiskReload, ConfigFileFingerprint, ConfigLoadFallback,

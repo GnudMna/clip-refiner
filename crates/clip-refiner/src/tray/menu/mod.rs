@@ -1,6 +1,6 @@
 //! システムトレイのメニュー構造体と構築ロジックを提供するモジュール
 //!
-//! 変換モード、正規表現プリセット、監視設定、登録クリップ、履歴、通知などのサブメニューを組み立てる
+//! 変換モード (正規表現プリセットを含む)・登録クリップ・履歴・連続記録などのサブメニューを組み立てる
 
 mod build;
 pub(crate) mod icon;
@@ -11,8 +11,8 @@ mod types;
 pub use icon::create_window_icon;
 pub(crate) use rebuild::{DYNAMIC_RECORD_MENU_SNIPPET_MAX_CHARS, rebuild_toggle_records_submenu};
 pub use types::{
-    CategoryGroup, ClipsMenu, ContinuousRecordMenu, HistoryMenu, IntervalMenu, MonitorMenu,
-    NotificationMenu, RefineMenu, RegexPresetMenu, TrayMenu,
+    CategoryGroup, ClipsMenu, ContinuousRecordMenu, HistoryMenu, RefineMenu, RegexPresetMenu,
+    TrayMenu,
 };
 
 // ======================================================================
@@ -24,7 +24,7 @@ mod tests {
 
     use super::icon::create_icon;
     use super::*;
-    use crate::config::{HotkeySettings, MonitorMode, NotificationSettings};
+    use crate::config::HotkeySettings;
     use crate::refiner::{RefineCategory, RefineMode};
 
     use tray_icon::{
@@ -42,7 +42,7 @@ mod tests {
             TrayMenu::build_refine_menu(RefineMode::Trim, &active, &[], &HotkeySettings::default())
                 .expect("変換モードメニューの構築に失敗");
         let modes: Vec<_> = refine.all_mode_items().map(|(_, mode)| *mode).collect();
-        assert_eq!(modes.len(), 42);
+        assert_eq!(modes.len(), 46);
         assert!(
             refine
                 .all_mode_items()
@@ -71,10 +71,6 @@ mod tests {
             quit_item: MenuItem::new("終了", true, None),
             pause_item: CheckMenuItem::new("一時停止", true, false, None),
             refine,
-            monitor: TrayMenu::build_monitor_menu(MonitorMode::Polling)
-                .expect("監視方式メニューの構築に失敗"),
-            interval: TrayMenu::build_interval_menu(1000, MonitorMode::Polling)
-                .expect("監視周期メニューの構築に失敗"),
             history: TrayMenu::build_history_menu(false).expect("履歴メニューの構築に失敗"),
             continuous_record: TrayMenu::build_continuous_record_menu(false)
                 .expect("連続記録メニューの構築に失敗"),
@@ -89,9 +85,7 @@ mod tests {
                 records: Mutex::new(Vec::new()),
                 empty_hint_item: MenuItem::new("(未登録)", false, None),
             },
-            notification: TrayMenu::build_notification_menu(&NotificationSettings::default())
-                .expect("通知メニューの構築に失敗"),
-            check_update_item: MenuItem::new("更新を確認…", true, None),
+            quick_selector_item: MenuItem::new("クイック変換…", true, None),
             open_settings_window_item: MenuItem::new("設定ウィンドウ", true, None),
             retry_clipboard_worker_item: MenuItem::new("クリップボード監視を再開", true, None),
         };
@@ -107,59 +101,39 @@ mod tests {
         assert!(url_group.submenu.text().starts_with('✓'));
     }
 
-    /// イベント監視時は監視周期メニューが無効になるようにすること
+    /// 自動変換の切り替えと変換モード変更が変換モードのサブメニュー名へ反映されること
     #[test]
-    fn build_interval_menu_disabled_for_event_mode() {
-        let interval = TrayMenu::build_interval_menu(1000, MonitorMode::Event)
-            .expect("監視周期メニューの構築に失敗");
-        assert!(!interval.main_submenu.is_enabled());
-    }
-
-    /// ポーリング監視時は現在の間隔だけがチェックされるようにすること
-    #[test]
-    fn build_interval_menu_checks_current_interval() {
-        let interval = TrayMenu::build_interval_menu(2000, MonitorMode::Polling)
-            .expect("監視周期メニューの構築に失敗");
-        assert!(interval.main_submenu.is_enabled());
-        assert!(
-            interval
-                .items
-                .iter()
-                .any(|(item, ms)| *ms == 2000 && item.is_checked())
+    fn refine_submenu_title_follows_auto_refine_and_mode() {
+        let ctx = crate::test_helpers::TrayTestContext::with_config(|c| {
+            c.auto_refine_enabled = false;
+            c.mode = RefineMode::Trim;
+        });
+        let trim = RefineMode::Trim.label();
+        assert_eq!(
+            ctx.menu().refine.main_submenu.text(),
+            format!("変換モード: {trim} (自動変換オフ)")
         );
-        assert!(
-            interval
-                .items
-                .iter()
-                .any(|(item, ms)| *ms == 1000 && !item.is_checked())
+
+        crate::tray::event::set_auto_refine_enabled(ctx.state(), ctx.menu(), true);
+        assert_eq!(
+            ctx.menu().refine.main_submenu.text(),
+            format!("変換モード: {trim} (自動変換オン)")
         );
-        assert!(!interval.custom_item.is_checked());
-    }
 
-    /// プリセット外の間隔ではカスタム項目がチェックされるようにすること
-    #[test]
-    fn build_interval_menu_checks_custom_interval() {
-        let interval = TrayMenu::build_interval_menu(750, MonitorMode::Polling)
-            .expect("監視周期メニューの構築に失敗");
-        assert!(interval.custom_item.is_checked());
-        assert!(interval.custom_item.text().contains("750"));
-        assert!(interval.items.iter().all(|(item, _)| !item.is_checked()));
-    }
-
-    /// 通知メニューの有効状態が初期値を反映すること
-    #[test]
-    fn build_notification_menu_reflects_settings() {
-        let mut settings = NotificationSettings::default();
-        settings.enabled = true;
-        settings.notify_process = false;
-        settings.notify_result = true;
-        settings.notify_pause = false;
-        let notification =
-            TrayMenu::build_notification_menu(&settings).expect("通知メニューの構築に失敗");
-        assert!(notification.enabled_item.is_checked());
-        assert!(!notification.notify_process_item.is_checked());
-        assert!(notification.notify_result_item.is_checked());
-        assert!(!notification.notify_pause_item.is_checked());
+        crate::tray::event::update_refine(
+            ctx.state(),
+            ctx.menu(),
+            ctx.worker(),
+            RefineMode::JsonFormat,
+            None,
+        );
+        assert_eq!(
+            ctx.menu().refine.main_submenu.text(),
+            format!(
+                "変換モード: {} (自動変換オン)",
+                RefineMode::JsonFormat.label()
+            )
+        );
     }
 
     /// 連続記録有効時は変換モード・正規表現プリセットメニューが無効になるようにすること

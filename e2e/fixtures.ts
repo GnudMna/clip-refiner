@@ -211,7 +211,13 @@ export async function startHarness(
     if (!page) {
       page = await context.waitForEvent('page', { timeout: 15_000 });
     }
-    await page.waitForLoadState('domcontentloaded');
+    // 初期の空ページ (about:blank) のまま返すと、直後の埋め込み HTML 読み込みで
+    // テスト冒頭の evaluate が破棄されるため、埋め込み HTML の読み込み完了まで待つ
+    await page.waitForFunction(
+      () => document.readyState === 'complete' && document.body?.childElementCount > 0,
+      undefined,
+      { timeout: 15_000 },
+    );
     return { browser, page, child, configDir };
   } catch (err) {
     if (!child.killed) {

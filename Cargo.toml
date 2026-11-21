@@ -3,7 +3,7 @@ members = ["crates/clip-refiner", "crates/clip-refiner-core"]
 resolver = "2"
 
 [workspace.package]
-version = "1.1.1"
+version = "1.2.0"
 edition = "2024"
 rust-version = "1.96"
 authors = ["Yuto Hirata"]
@@ -23,6 +23,7 @@ clipboard-win = { version = "5.4.1", features = ["std"] }
 csv = "1.4.0"
 getrandom = "0.4.3"
 global-hotkey = "0.8.0"
+htmd = "0.5.5"
 image = { version = "0.25.10", default-features = false, features = ["bmp", "jpeg", "png"] }
 indexmap = { version = "2.14.2", features = ["serde"] }
 minisign = "0.10.0"

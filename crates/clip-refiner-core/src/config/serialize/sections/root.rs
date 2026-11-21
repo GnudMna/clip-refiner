@@ -1,11 +1,11 @@
 use std::fmt::Write;
 
 use super::super::docs::{
-    DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_IS_PAUSED, DOC_MODE, DOC_MONITOR_MODE,
-    DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD,
-    SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW, doc_continuous_record_limit,
-    doc_favorite_modes, doc_history_limit, doc_interval_ms, doc_pipeline,
-    doc_selector_webview_idle_minutes,
+    DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_IS_PAUSED,
+    DOC_MODE, DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC,
+    SECTION_CONTINUOUS_RECORD, SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW,
+    doc_continuous_record_limit, doc_favorite_modes, doc_history_limit, doc_interval_ms,
+    doc_pipeline, doc_selector_webview_idle_minutes,
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
@@ -27,6 +27,13 @@ pub(crate) fn apply(doc: &mut DocumentMut, config: &AppConfig) -> Result<()> {
 
 fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     set_table_value(root, "version", DOC_VERSION, "", &config.version)?;
+    set_table_value(
+        root,
+        "auto_refine_enabled",
+        DOC_AUTO_REFINE_ENABLED,
+        "",
+        &config.auto_refine_enabled,
+    )?;
     set_table_value(root, "mode", DOC_MODE, "", &config.mode)?;
     set_table_value(root, "pipeline", &doc_pipeline(), "", &config.pipeline)?;
     set_table_value(
@@ -103,6 +110,13 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
 pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Result<()> {
     write_section(out, SECTION_BASIC)?;
     write_field(out, "", DOC_VERSION, "version", &config.version)?;
+    write_field(
+        out,
+        "",
+        DOC_AUTO_REFINE_ENABLED,
+        "auto_refine_enabled",
+        &config.auto_refine_enabled,
+    )?;
     write_field(out, "", DOC_MODE, "mode", &config.mode)?;
     write_field(out, "", &doc_pipeline(), "pipeline", &config.pipeline)?;
     write_field(

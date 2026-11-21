@@ -11,6 +11,17 @@ use image::{DynamicImage, ImageBuffer, ImageFormat};
 // セレクター表示モデル
 // ======================================================================
 
+/// クイックセレクターで「自動変換中」として示す変換モードを返す
+///
+/// # Arguments
+/// * `config` - 参照する設定
+///
+/// # Returns
+/// * `Option<RefineMode>` - 自動変換が有効なら `mode`、無効なら `None`
+pub(crate) fn quick_selector_current_mode(config: &AppConfig) -> Option<RefineMode> {
+    config.auto_refine_enabled.then_some(config.mode)
+}
+
 /// クイックセレクター向けの変換モード JSON 配列を生成する
 ///
 /// # Arguments
@@ -84,6 +95,7 @@ fn clip_selector_item(
         "label": clip.label,
         "preview": preview,
         "kind": if clip.is_image() { "image" } else { "text" },
+        "template": clip.template,
     });
 
     if clip.is_image()
@@ -177,6 +189,7 @@ mod tests {
                 preview: "プレビュー".to_string(),
                 text_ciphertext: vec![1, 2, 3],
                 image_file: None,
+                template: false,
             }],
             ..AppConfig::default()
         };
@@ -187,6 +200,7 @@ mod tests {
         assert_eq!(item["label"], "表示名");
         assert_eq!(item["preview"], "プレビュー");
         assert_eq!(item["kind"], "text");
+        assert_eq!(item["template"], false);
         assert!(item.get("text_ciphertext").is_none());
     }
 
@@ -199,6 +213,7 @@ mod tests {
                 preview: String::new(),
                 text_ciphertext: Vec::new(),
                 image_file: Some("missing.enc".to_string()),
+                template: false,
             }],
             ..AppConfig::default()
         };

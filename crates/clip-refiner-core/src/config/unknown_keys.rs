@@ -7,6 +7,7 @@ const UNKNOWN_KEYS_MESSAGE_LIMIT: usize = 5;
 /// ルートレベルの既知キー (レガシー `clips` を含む)
 const ROOT_KEYS: &[&str] = &[
     "version",
+    "auto_refine_enabled",
     "mode",
     "pipeline",
     "favorite_modes",

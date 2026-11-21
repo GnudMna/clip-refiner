@@ -145,7 +145,6 @@ fn assert_notification_toggle(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestC
         &mut ctx.ctx(),
     );
     assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
-    assert!(ctx.menu.notification.enabled_item.is_checked());
 }
 
 fn assert_continuous_record_toggle(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
@@ -216,6 +215,8 @@ fn assert_favorite_hotkeys(
 ) {
     ctx.state.with_config_mut(|config| {
         config.favorite_modes = vec![RefineMode::Trim, RefineMode::JsonFormat];
+        config.mode = RefineMode::UrlDecode;
+        config.pipeline = vec![RefineMode::UrlDecode, RefineMode::Trim];
     });
     handler
         .reload_favorite_slots(&test_hotkeys(), 2)
@@ -225,10 +226,8 @@ fn assert_favorite_hotkeys(
         .favorite_hotkey_id_at(1)
         .expect("スロット 1 のホットキーが登録される");
     handler.handle_event(press_event(favorite_slot_one), &mut ctx.ctx());
-    assert_eq!(
-        ctx.state.with_config(|config| config.mode),
-        RefineMode::JsonFormat
-    );
+    // 一回適用のため自動変換の設定は変わらない
+    assert_auto_refine_unchanged(ctx);
     assert!(matches!(
         rx.recv()
             .expect("お気に入りホットキーで加工コマンドが送信される"),
@@ -239,14 +238,19 @@ fn assert_favorite_hotkeys(
         .favorite_hotkey_id_at(0)
         .expect("スロット 0 のホットキーが登録される");
     handler.handle_event(press_event(favorite_slot_zero), &mut ctx.ctx());
-    assert_eq!(
-        ctx.state.with_config(|config| config.mode),
-        RefineMode::Trim
-    );
+    assert_auto_refine_unchanged(ctx);
     assert!(matches!(
         rx.recv().expect("スロット 0 で加工コマンドが送信される"),
         ClipboardCommand::ProcessMode(RefineMode::Trim)
     ));
+}
+
+fn assert_auto_refine_unchanged(ctx: &HotkeyTestContext) {
+    let (mode, pipeline) = ctx
+        .state
+        .with_config(|config| (config.mode, config.pipeline.clone()));
+    assert_eq!(mode, RefineMode::UrlDecode);
+    assert_eq!(pipeline, vec![RefineMode::UrlDecode, RefineMode::Trim]);
 }
 
 fn assert_quit_exits(handler: &mut HotkeyHandler, ctx: &mut HotkeyTestContext) {
@@ -297,13 +301,12 @@ fn toggle_continuous_record_updates_state_and_menu() {
     assert!(ctx.menu.continuous_record.enabled_item.is_checked());
 }
 
-/// `toggle_notification` が設定とメニューを更新すること
+/// `toggle_notification` が設定を更新すること
 #[test]
-fn toggle_notification_updates_state_and_menu() {
+fn toggle_notification_updates_state() {
     let mut ctx = HotkeyTestContext::new();
     HotkeyHandler::toggle_notification(&mut ctx.ctx());
     assert!(ctx.state.with_config(|c| c.notification_settings.enabled));
-    assert!(ctx.menu.notification.enabled_item.is_checked());
 }
 
 /// `reload` でホットキー ID が更新されるようにすること

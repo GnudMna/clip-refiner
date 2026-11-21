@@ -67,6 +67,29 @@ pub trait ImageClipboard {
     -> Result<(), ClipboardIoError>;
 }
 
+/// HTML 形式 (`CF_HTML`) のクリップボード読み書き
+pub trait HtmlClipboard {
+    /// クリップボードから HTML 断片を取得する
+    ///
+    /// `CF_HTML` の `StartFragment` から `EndFragment` までを返す
+    ///
+    /// # Returns
+    /// * `Ok(Some(html))` - HTML 形式が存在する
+    /// * `Ok(None)` - HTML 形式が存在しない
+    ///
+    /// # Errors
+    /// HTML 形式は存在するが読み取りに失敗した場合
+    fn get_html(&mut self) -> Result<Option<String>, ClipboardIoError>;
+
+    /// クリップボードへ HTML と代替テキストを書き込む
+    ///
+    /// 既存の内容を消去し、`CF_UNICODETEXT` に `alt_text`、`CF_HTML` に `html` を置く
+    ///
+    /// # Errors
+    /// クリップボードへの書き込みに失敗した場合
+    fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError>;
+}
+
 #[cfg(feature = "clipboard")]
 impl TextClipboard for arboard::Clipboard {
     fn get_text(&mut self) -> Result<String, ClipboardIoError> {
@@ -106,6 +129,28 @@ impl ImageClipboard for arboard::Clipboard {
             },
         )
         .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
+    }
+}
+
+#[cfg(feature = "clipboard")]
+impl HtmlClipboard for arboard::Clipboard {
+    fn get_html(&mut self) -> Result<Option<String>, ClipboardIoError> {
+        // 存在確認は `OpenClipboard` を伴わない。無い場合は arboard の汎用エラーと区別できないため先に判定する
+        let available = clipboard_win::register_format("HTML Format")
+            .is_some_and(|format| clipboard_win::is_format_avail(format.get()));
+        if !available {
+            return Ok(None);
+        }
+
+        self.get()
+            .html()
+            .map(Some)
+            .map_err(|e| ClipboardIoError::ReadFailed(e.to_string()))
+    }
+
+    fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError> {
+        arboard::Clipboard::set_html(self, html, Some(alt_text))
+            .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
     }
 }
 

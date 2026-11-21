@@ -40,6 +40,20 @@ impl ClipboardHarness {
         }
     }
 
+    /// クリップボードに HTML 形式 (`CF_HTML` の断片) を同時に置く
+    ///
+    /// # Arguments
+    /// * `html` - HTML 断片
+    ///
+    /// # Returns
+    /// * `Self` - HTML を置いた `self`
+    #[must_use]
+    pub fn with_html(mut self, html: impl Into<String>) -> Self {
+        let text = self.clipboard.text().to_string();
+        self.clipboard = InMemoryTextClipboard::with_text(text).with_html(html);
+        self
+    }
+
     /// 変換モードを設定する
     ///
     /// # Arguments
@@ -136,6 +150,17 @@ impl ClipboardHarness {
     /// * `&str` - インメモリクリップボードの現在内容
     pub fn clipboard_text(&self) -> &str {
         self.clipboard.text()
+    }
+
+    /// クリップボード上の HTML 形式を返す
+    ///
+    /// # Arguments
+    /// * `self` - この `ClipboardHarness`
+    ///
+    /// # Returns
+    /// * `Option<&str>` - HTML 断片。HTML 形式が無い場合は `None`
+    pub fn clipboard_html(&self) -> Option<&str> {
+        self.clipboard.html()
     }
 
     /// クリップボード上のテキストを直接置き換える (外部コピーを模倣)

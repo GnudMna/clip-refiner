@@ -7,7 +7,6 @@ use super::super::ipc::SettingsPatch;
 use super::super::regex_preview::RegexPreviewResponse;
 use super::SettingsWindow;
 use super::open_settings_window;
-use crate::platform::update::UpdateCheckSource;
 use crate::tray::features::{start_update_apply, start_update_check};
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
@@ -92,7 +91,7 @@ impl SettingsWindow {
                 }
             }
             SettingsEvent::CheckUpdate => {
-                let _ = start_update_check(state, UpdateCheckSource::Settings, Some(self));
+                let _ = start_update_check(state, self);
             }
             SettingsEvent::ApplyUpdate => {
                 let _ = start_update_apply(state, self);

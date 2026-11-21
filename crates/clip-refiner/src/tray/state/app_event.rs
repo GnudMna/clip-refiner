@@ -47,8 +47,10 @@ pub enum SelectorEvent {
     ShowClip,
     /// 登録クリップセレクターを非表示にする
     HideClip,
-    /// クリップボード変換モードの変更要求
+    /// 自動変換モードの変更要求
     RequestModeChange(RefineMode),
+    /// 自動変換を変えずに現在のクリップボードへ一回だけ適用する要求
+    RequestApplyOnce(RefineMode),
 }
 
 // ======================================================================
@@ -63,6 +65,10 @@ pub enum ClipsEvent {
     RequestRegister,
     /// 登録クリップの削除要求
     RequestDelete(usize),
+    /// 登録クリップの表示順変更要求
+    RequestMove(usize, FavoriteMoveDirection),
+    /// 登録クリップのテンプレート展開の切り替え要求
+    RequestSetTemplate(usize, bool),
     /// 登録クリップメニュー / UI の再構築要求
     Refresh,
 }
@@ -160,11 +166,9 @@ pub enum SettingsEvent {
 // ======================================================================
 // アプリ更新
 // ======================================================================
-/// アプリ更新関連イベント (トレイ起点・完了通知)
+/// アプリ更新関連イベント (バックグラウンド処理の完了通知)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateEvent {
-    /// トレイメニューからの更新確認要求
-    TrayCheck,
     /// バックグラウンドの更新確認が完了した
     CheckFinished,
     /// バックグラウンドの更新適用が完了した

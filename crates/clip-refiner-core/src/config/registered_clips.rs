@@ -50,6 +50,8 @@ struct RegisteredClipWire {
     text_ciphertext: Option<String>,
     #[serde(default)]
     image_file: Option<String>,
+    #[serde(default)]
+    template: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,6 +264,7 @@ pub(crate) fn registered_clip_from_plain_text(label: String, text: &str) -> Resu
         preview,
         text_ciphertext,
         image_file: None,
+        template: false,
     })
 }
 
@@ -287,6 +290,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
                 preview: wire.preview,
                 text_ciphertext: Vec::new(),
                 image_file: wire.image_file,
+                template: false,
             },
             false,
         ));
@@ -304,6 +308,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
             preview: wire.preview,
             text_ciphertext,
             image_file: None,
+            template: wire.template,
         };
         let mut migrated = false;
         if clip.preview.is_empty()
@@ -353,6 +358,28 @@ mod tests {
             let content = String::from_utf8_lossy(&bytes);
             assert!(!content.contains("secret-body"));
             assert!(!content.contains("secret-label"));
+        });
+    }
+
+    /// テンプレート指定を保存・読み込みで維持し、未指定の旧データは無効として読むこと
+    #[test]
+    fn save_and_load_preserve_template_flag() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut template = registered_clip_from_plain_text("t".into(), "{date}").expect("enc");
+            template.template = true;
+            let plain = registered_clip_from_plain_text("p".into(), "body").expect("enc");
+
+            save_registered_clips(&[template, plain]).expect("save");
+            let (loaded, migrated) = load_registered_clips().expect("load");
+            assert!(!migrated);
+            assert!(loaded[0].template);
+            assert!(!loaded[1].template);
+
+            // 無効なクリップは `template` キーを書かない (旧版でも読める形を保つ)
+            let key = clip_store_key().expect("key");
+            let bytes = fs::read(registered_clips_path().expect("path")).expect("read");
+            let inner = String::from_utf8(decrypt_bytes(&key, &bytes).expect("dec")).expect("utf8");
+            assert_eq!(inner.matches("\"template\"").count(), 1);
         });
     }
 

@@ -3,9 +3,9 @@ use std::time::Instant;
 
 use super::super::clipboard_monitor::bump_monitor_generation;
 use super::super::dispatch;
+use super::super::event::apply_refine_once;
 use super::super::event::toggle_continuous_record as apply_continuous_record_toggle;
 use super::super::event::undo_last_continuous_record as apply_continuous_record_undo;
-use super::super::event::update_refine;
 use super::super::menu::TrayMenu;
 use super::super::notify::{
     NotificationCategory, show_category_notification, show_pause_notification,
@@ -13,7 +13,7 @@ use super::super::notify::{
 use super::super::ocr::OcrCaptureWindow;
 use super::super::selector::{
     ClipSelectorWindow, QuickSelectorWindow, clip_selector_json, hide_with_retention,
-    quick_selector_json,
+    quick_selector_current_mode, quick_selector_json,
 };
 use super::super::state::AppState;
 use super::super::worker::{ClipboardCommand, ClipboardWorkerHandle};
@@ -90,6 +90,8 @@ impl HotkeyHandler {
     }
 
     /// お気に入り変換モード用ホットキーを処理する
+    ///
+    /// 自動変換の設定は変えず、現在のクリップボードへ一回だけ適用する
     fn handle_favorite_mode_hotkey(ctx: &mut HotkeyEventContext<'_>, slot_index: usize) {
         let Some(mode) = ctx
             .state
@@ -109,13 +111,7 @@ impl HotkeyHandler {
             hide_with_retention(clip_selector, retention);
         }
 
-        update_refine(
-            ctx.state,
-            ctx.menu,
-            ctx.clipboard_worker,
-            mode,
-            ctx.quick_selector,
-        );
+        apply_refine_once(ctx.clipboard_worker, mode);
     }
 
     /// クイックセレクター表示ホットキーを処理する
@@ -138,7 +134,11 @@ impl HotkeyHandler {
                 return;
             };
             let modes_json = ctx.state.with_config(quick_selector_json);
-            quick_selector.show(event_loop, ctx.state.with_config(|c| c.mode), &modes_json);
+            quick_selector.show(
+                event_loop,
+                ctx.state.with_config(quick_selector_current_mode),
+                &modes_json,
+            );
         }
     }
 
@@ -211,7 +211,6 @@ impl HotkeyHandler {
             c.notification_settings.enabled = !c.notification_settings.enabled;
             c.notification_settings.enabled
         });
-        ctx.menu.notification.enabled_item.set_checked(new_val);
         ctx.state.save_config();
         platform::show_notification(
             "ショートカット",

@@ -7,6 +7,8 @@ use crate::consts;
 // (`config/spec.rs`) が生成 TOML コメントのドリフトを検出する
 
 pub(crate) const DOC_VERSION: &str = "設定スキーマのバージョン";
+pub(crate) const DOC_AUTO_REFINE_ENABLED: &str =
+    "コピー時に `mode` / `pipeline` で自動変換するかどうか";
 pub(crate) const DOC_MODE: &str = "使用する変換モード (`pipeline` が空の場合に監視で適用)";
 pub(crate) const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \"Event\")";
 pub(crate) const DOC_SELECTOR_WEBVIEW_RETENTION: &str =

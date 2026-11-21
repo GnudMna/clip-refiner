@@ -61,25 +61,17 @@ fn update_refine_updates_config_and_sends_command() {
     }
 }
 
-/// `update_monitor_mode` が設定と監視周期メニューを更新すること
+/// `update_monitor_mode` が監視方式を更新すること
 #[test]
-fn update_monitor_mode_switches_to_event_and_disables_interval() {
+fn update_monitor_mode_switches_to_event() {
     let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
 
-    update_monitor_mode(ctx.state(), ctx.menu(), MonitorMode::Event);
+    update_monitor_mode(ctx.state(), MonitorMode::Event);
 
     assert_eq!(
         ctx.state().with_config(|c| c.monitor_mode),
         MonitorMode::Event
     );
-    assert!(
-        ctx.menu()
-            .monitor
-            .items
-            .iter()
-            .any(|(item, mode)| *mode == MonitorMode::Event && item.is_checked())
-    );
-    assert!(!ctx.menu().interval.main_submenu.is_enabled());
 }
 
 /// 同一モードへの `update_monitor_mode` は no-op であようにすること
@@ -87,13 +79,12 @@ fn update_monitor_mode_switches_to_event_and_disables_interval() {
 fn update_monitor_mode_noop_when_unchanged() {
     let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
 
-    update_monitor_mode(ctx.state(), ctx.menu(), MonitorMode::Polling);
+    update_monitor_mode(ctx.state(), MonitorMode::Polling);
 
     assert_eq!(
         ctx.state().with_config(|c| c.monitor_mode),
         MonitorMode::Polling
     );
-    assert!(ctx.menu().interval.main_submenu.is_enabled());
 }
 
 // ======================================================================
@@ -134,6 +125,53 @@ fn handle_menu_event_pause_enables_paused() {
     );
 
     assert!(ctx.state().with_config(|c| c.is_paused));
+}
+
+/// 自動変換メニューのチェック OFF で自動変換が無効になること
+#[test]
+fn handle_menu_event_auto_refine_toggle_disables_auto_refine() {
+    let ctx = TrayTestContext::new();
+    let mut control_flow = ControlFlow::Wait;
+
+    ctx.menu().refine.auto_refine_item.set_checked(false);
+    handle_menu_event(
+        &menu_event(ctx.menu().refine.auto_refine_item.id()),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert!(!ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.state().monitor_snapshot().auto_processing_enabled());
+}
+
+/// 自動変換が無効でも変換モードメニューを選ぶと自動変換が有効になること
+#[test]
+fn handle_menu_event_mode_selection_enables_auto_refine() {
+    let ctx = TrayTestContext::with_config(|c| c.auto_refine_enabled = false);
+    let mut control_flow = ControlFlow::Wait;
+
+    let id = ctx
+        .menu()
+        .refine
+        .all_mode_items()
+        .find(|(_, mode)| *mode == RefineMode::JsonFormat)
+        .map(|(item, _)| item.id().clone())
+        .expect("JsonFormat のメニュー項目");
+    handle_menu_event(
+        &menu_event(&id),
+        ctx.menu(),
+        ctx.state(),
+        ctx.worker(),
+        None,
+        &mut control_flow,
+    );
+
+    assert!(ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert_eq!(ctx.state().with_config(|c| c.mode), RefineMode::JsonFormat);
+    assert!(ctx.menu().refine.auto_refine_item.is_checked());
 }
 
 /// 履歴クリアで履歴が空になるようにすること
@@ -239,126 +277,6 @@ fn handle_menu_event_refine_mode_change() {
         ClipboardCommand::ProcessMode(received) => assert_eq!(received, *mode),
         other => panic!("unexpected command: {other:?}"),
     }
-}
-
-/// 通知 ON で設定が更新されるようにすること
-#[test]
-fn handle_menu_event_notification_enabled() {
-    let ctx = TrayTestContext::new();
-    let mut control_flow = ControlFlow::Wait;
-
-    ctx.menu().notification.enabled_item.set_checked(true);
-    handle_menu_event(
-        &menu_event(ctx.menu().notification.enabled_item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert!(ctx.state().with_config(|c| c.notification_settings.enabled));
-}
-
-/// クリップボード内容表示の切替で `notify_result` が更新されるようにすること
-#[test]
-fn handle_menu_event_notification_clipboard_content_toggle() {
-    let ctx = TrayTestContext::new();
-    let mut control_flow = ControlFlow::Wait;
-
-    ctx.menu().notification.notify_result_item.set_checked(true);
-    handle_menu_event(
-        &menu_event(ctx.menu().notification.notify_result_item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert!(
-        ctx.state()
-            .with_config(|c| c.notification_settings.notify_result)
-    );
-}
-
-/// 監視周期選択で `interval_ms` が更新されるようにすること
-#[test]
-fn handle_menu_event_interval_change() {
-    let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
-    let (item, _) = ctx
-        .menu()
-        .interval
-        .items
-        .iter()
-        .find(|(_, ms)| *ms == 500)
-        .expect("0.5秒の監視周期項目が存在する");
-    let mut control_flow = ControlFlow::Wait;
-
-    handle_menu_event(
-        &menu_event(item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert_eq!(ctx.state().with_config(|c| c.interval_ms), 500);
-    assert!(item.is_checked());
-    assert!(!ctx.menu().interval.custom_item.is_checked());
-}
-
-/// カスタム周期項目は設定ウィンドウを開き、周期値は変えないようにすること
-#[test]
-fn handle_menu_event_custom_interval_opens_settings() {
-    let ctx = TrayTestContext::with_config(|c| {
-        c.monitor_mode = MonitorMode::Polling;
-        c.interval_ms = 750;
-    });
-    assert!(ctx.menu().interval.custom_item.is_checked());
-    let mut control_flow = ControlFlow::Wait;
-
-    handle_menu_event(
-        &menu_event(ctx.menu().interval.custom_item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
-    assert!(ctx.menu().interval.custom_item.is_checked());
-}
-
-/// 監視方式メニューで Event モードへ切り替わようにすること
-#[test]
-fn handle_menu_event_monitor_mode_change() {
-    let ctx = TrayTestContext::with_config(|c| c.monitor_mode = MonitorMode::Polling);
-    let (item, _) = ctx
-        .menu()
-        .monitor
-        .items
-        .iter()
-        .find(|(_, mode)| *mode == MonitorMode::Event)
-        .expect("イベント監視項目が存在する");
-    let mut control_flow = ControlFlow::Wait;
-
-    handle_menu_event(
-        &menu_event(item.id()),
-        ctx.menu(),
-        ctx.state(),
-        ctx.worker(),
-        None,
-        &mut control_flow,
-    );
-
-    assert_eq!(
-        ctx.state().with_config(|c| c.monitor_mode),
-        MonitorMode::Event
-    );
-    assert!(!ctx.menu().interval.main_submenu.is_enabled());
 }
 
 /// 履歴有効化で設定が更新されるようにすること

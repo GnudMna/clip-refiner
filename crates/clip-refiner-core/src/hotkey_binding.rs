@@ -69,8 +69,74 @@ pub enum HotkeyKey {
     F10,
     F11,
     F12,
+    /// F13〜F24
+    F13,
+    F14,
+    F15,
+    F16,
+    F17,
+    F18,
+    F19,
+    F20,
+    F21,
+    F22,
+    F23,
+    F24,
     /// Backspace
     Backspace,
+    /// Space
+    Space,
+    /// Enter
+    Enter,
+    /// Tab
+    Tab,
+    /// Escape
+    Escape,
+    /// Insert
+    Insert,
+    /// Delete
+    Delete,
+    /// Home
+    Home,
+    /// End
+    End,
+    /// Page Up
+    PageUp,
+    /// Page Down
+    PageDown,
+    /// 矢印キー
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    /// Print Screen
+    PrintScreen,
+    /// Pause / Break
+    Pause,
+    /// Scroll Lock
+    ScrollLock,
+    /// テンキー 0〜9
+    Numpad0,
+    Numpad1,
+    Numpad2,
+    Numpad3,
+    Numpad4,
+    Numpad5,
+    Numpad6,
+    Numpad7,
+    Numpad8,
+    Numpad9,
+    /// テンキー `+` / `-` / `*` / `/` / `.`
+    NumpadAdd,
+    NumpadSubtract,
+    NumpadMultiply,
+    NumpadDivide,
+    NumpadDecimal,
+    /// 記号キー `-` / `,` / `.` / `/` (US / JIS 配列で同じ仮想キー)
+    Minus,
+    Comma,
+    Period,
+    Slash,
 }
 
 /// `Alt+Shift+S` 形式から解析したホットキー
@@ -119,7 +185,8 @@ const LAST_RESORT_HOTKEY: ParsedHotkey = ParsedHotkey {
 /// `Alt+Shift+S` 形式の文字列を `ParsedHotkey` に変換する
 ///
 /// 修飾キーは `Alt` / `Shift` / `Ctrl` / `Control` / `Meta` / `Super` / `Win` に対応する
-/// キーは `A`〜`Z` / `0`〜`9` / `F1`〜`F12` / `Backspace` に対応する
+/// キーは `A`〜`Z` / `0`〜`9` / `F1`〜`F24` / 編集・移動キー / テンキー / 一部の記号キーに対応する
+/// (一覧は `docs/user/configuration.md` のホットキー形式)
 ///
 /// # Arguments
 /// * `binding` - ホットキー文字列
@@ -239,10 +306,20 @@ fn parse_key_name(name: &str) -> Option<HotkeyKey> {
         if ch.is_ascii_digit() {
             return digit_to_key(ch);
         }
-        return letter_to_key(ch);
+        if ch.is_ascii_alphabetic() {
+            return letter_to_key(ch);
+        }
+        return symbol_to_key(ch);
     }
 
-    if let Some(num) = upper.strip_prefix('F') {
+    if let Some(num) = upper.strip_prefix("NUMPAD") {
+        return numpad_to_key(num);
+    }
+
+    if let Some(num) = upper
+        .strip_prefix('F')
+        .filter(|num| num.bytes().all(|b| b.is_ascii_digit()))
+    {
         return match num.parse::<u8>().ok()? {
             1 => Some(HotkeyKey::F1),
             2 => Some(HotkeyKey::F2),
@@ -256,14 +333,82 @@ fn parse_key_name(name: &str) -> Option<HotkeyKey> {
             10 => Some(HotkeyKey::F10),
             11 => Some(HotkeyKey::F11),
             12 => Some(HotkeyKey::F12),
+            13 => Some(HotkeyKey::F13),
+            14 => Some(HotkeyKey::F14),
+            15 => Some(HotkeyKey::F15),
+            16 => Some(HotkeyKey::F16),
+            17 => Some(HotkeyKey::F17),
+            18 => Some(HotkeyKey::F18),
+            19 => Some(HotkeyKey::F19),
+            20 => Some(HotkeyKey::F20),
+            21 => Some(HotkeyKey::F21),
+            22 => Some(HotkeyKey::F22),
+            23 => Some(HotkeyKey::F23),
+            24 => Some(HotkeyKey::F24),
             _ => None,
         };
     }
 
-    match upper.as_str() {
-        "BACKSPACE" => Some(HotkeyKey::Backspace),
-        _ => None,
-    }
+    Some(match upper.as_str() {
+        "BACKSPACE" => HotkeyKey::Backspace,
+        "SPACE" => HotkeyKey::Space,
+        "ENTER" | "RETURN" => HotkeyKey::Enter,
+        "TAB" => HotkeyKey::Tab,
+        "ESCAPE" | "ESC" => HotkeyKey::Escape,
+        "INSERT" | "INS" => HotkeyKey::Insert,
+        "DELETE" | "DEL" => HotkeyKey::Delete,
+        "HOME" => HotkeyKey::Home,
+        "END" => HotkeyKey::End,
+        "PAGEUP" | "PGUP" => HotkeyKey::PageUp,
+        "PAGEDOWN" | "PGDN" => HotkeyKey::PageDown,
+        "ARROWUP" | "UP" => HotkeyKey::ArrowUp,
+        "ARROWDOWN" | "DOWN" => HotkeyKey::ArrowDown,
+        "ARROWLEFT" | "LEFT" => HotkeyKey::ArrowLeft,
+        "ARROWRIGHT" | "RIGHT" => HotkeyKey::ArrowRight,
+        "PRINTSCREEN" => HotkeyKey::PrintScreen,
+        "PAUSE" => HotkeyKey::Pause,
+        "SCROLLLOCK" => HotkeyKey::ScrollLock,
+        "MINUS" => HotkeyKey::Minus,
+        "COMMA" => HotkeyKey::Comma,
+        "PERIOD" => HotkeyKey::Period,
+        "SLASH" => HotkeyKey::Slash,
+        _ => return None,
+    })
+}
+
+/// 記号 1 文字を `HotkeyKey` に変換する
+///
+/// `+` は区切り文字のため扱わない
+fn symbol_to_key(ch: char) -> Option<HotkeyKey> {
+    Some(match ch {
+        '-' => HotkeyKey::Minus,
+        ',' => HotkeyKey::Comma,
+        '.' => HotkeyKey::Period,
+        '/' => HotkeyKey::Slash,
+        _ => return None,
+    })
+}
+
+/// `Numpad` 以降の名前をテンキーの `HotkeyKey` に変換する
+fn numpad_to_key(suffix: &str) -> Option<HotkeyKey> {
+    Some(match suffix {
+        "0" => HotkeyKey::Numpad0,
+        "1" => HotkeyKey::Numpad1,
+        "2" => HotkeyKey::Numpad2,
+        "3" => HotkeyKey::Numpad3,
+        "4" => HotkeyKey::Numpad4,
+        "5" => HotkeyKey::Numpad5,
+        "6" => HotkeyKey::Numpad6,
+        "7" => HotkeyKey::Numpad7,
+        "8" => HotkeyKey::Numpad8,
+        "9" => HotkeyKey::Numpad9,
+        "ADD" => HotkeyKey::NumpadAdd,
+        "SUBTRACT" => HotkeyKey::NumpadSubtract,
+        "MULTIPLY" => HotkeyKey::NumpadMultiply,
+        "DIVIDE" => HotkeyKey::NumpadDivide,
+        "DECIMAL" => HotkeyKey::NumpadDecimal,
+        _ => return None,
+    })
 }
 
 /// 数字を `HotkeyKey` に変換する
@@ -365,6 +510,34 @@ mod tests {
         assert!(parse_hotkey_binding("Alt+Shift+0").is_ok());
     }
 
+    /// 追加したキー名と別名を解析できるようにすること
+    #[test]
+    fn test_parse_extended_keys() {
+        for (binding, key) in [
+            ("Ctrl+F13", HotkeyKey::F13),
+            ("Ctrl+F24", HotkeyKey::F24),
+            ("Alt+Space", HotkeyKey::Space),
+            ("Ctrl+Shift+Enter", HotkeyKey::Enter),
+            ("Ctrl+Shift+Return", HotkeyKey::Enter),
+            ("Ctrl+Alt+Esc", HotkeyKey::Escape),
+            ("Alt+Shift+Del", HotkeyKey::Delete),
+            ("Alt+Shift+PgUp", HotkeyKey::PageUp),
+            ("Alt+Shift+Up", HotkeyKey::ArrowUp),
+            ("Alt+Shift+ArrowRight", HotkeyKey::ArrowRight),
+            ("Ctrl+PrintScreen", HotkeyKey::PrintScreen),
+            ("Ctrl+Numpad0", HotkeyKey::Numpad0),
+            ("Ctrl+numpadadd", HotkeyKey::NumpadAdd),
+            ("Alt+Shift+-", HotkeyKey::Minus),
+            ("Alt+Shift+Minus", HotkeyKey::Minus),
+            ("Alt+Shift+,", HotkeyKey::Comma),
+            ("Alt+Shift+.", HotkeyKey::Period),
+            ("Alt+Shift+/", HotkeyKey::Slash),
+        ] {
+            let parsed = parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
+            assert_eq!(parsed.key, key, "{binding}");
+        }
+    }
+
     /// 不正なホットキーはエラーを返すようにすること
     #[test]
     fn test_parse_invalid_hotkey() {
@@ -380,5 +553,14 @@ mod tests {
             parse_hotkey_binding("Alt+Shift+F99"),
             Err(HotkeyParseError::UnsupportedKey(_))
         ));
+        for binding in ["Alt+Shift+F25", "Alt+;", "Alt+Numpad10", "Alt+CapsLock"] {
+            assert!(
+                matches!(
+                    parse_hotkey_binding(binding),
+                    Err(HotkeyParseError::UnsupportedKey(_))
+                ),
+                "{binding}"
+            );
+        }
     }
 }

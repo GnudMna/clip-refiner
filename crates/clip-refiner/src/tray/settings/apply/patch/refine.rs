@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::outcome::PatchApplyOutcome;
-use crate::tray::event::update_refine;
+use crate::tray::event::{set_auto_refine_enabled, update_refine};
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::ipc::SettingsPatch;
@@ -22,6 +22,12 @@ pub(super) fn apply_refine_patch(
     outcome: &mut PatchApplyOutcome,
     config_dirty: &mut bool,
 ) {
+    if let Some(enabled) = patch.auto_refine_enabled
+        && set_auto_refine_enabled(state, menu, enabled)
+    {
+        *config_dirty = true;
+    }
+
     if let Some(pipeline) = patch.pipeline.clone() {
         state.with_config_mut(|c| {
             c.pipeline = pipeline;
@@ -32,6 +38,7 @@ pub(super) fn apply_refine_patch(
         });
         outcome.pipeline_changed = true;
         sync_refine_menu_checks(state, menu);
+        menu.sync_auto_processing_state(state);
         *config_dirty = true;
         outcome.bump_monitor = true;
     }

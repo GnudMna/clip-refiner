@@ -1,6 +1,5 @@
 use std::sync::Mutex;
 
-use crate::config::MonitorMode;
 use crate::refiner::{RefineCategory, RefineMode};
 
 use tray_icon::{
@@ -25,6 +24,8 @@ pub struct CategoryGroup {
 pub struct RefineMenu {
     /// 「変換モード」のルートとなるサブメニュー
     pub main_submenu: Submenu,
+    /// コピー時の自動変換を有効にする項目 (`auto_refine_enabled`)
+    pub auto_refine_item: CheckMenuItem,
     /// お気に入り変換モード用サブメニュー
     pub favorites_submenu: Submenu,
     /// お気に入りサブメニュー内の動的項目
@@ -52,24 +53,6 @@ impl RefineMenu {
             .iter()
             .chain(self.groups.iter().flat_map(|g| g.items.iter()))
     }
-}
-
-/// 監視方式(ポーリング/イベント)を選択するメニューの構成
-pub struct MonitorMenu {
-    /// 「監視方式」サブメニュー
-    pub main_submenu: Submenu,
-    /// 監視方式ごとのチェックメニュー項目
-    pub items: Vec<(CheckMenuItem, MonitorMode)>,
-}
-
-/// 監視間隔(周期)を選択するメニューの構成
-pub struct IntervalMenu {
-    /// 「監視周期」サブメニュー
-    pub main_submenu: Submenu,
-    /// プリセット間隔ごとのチェックメニュー項目
-    pub items: Vec<(CheckMenuItem, u64)>,
-    /// プリセット外の間隔を示す項目 (クリックで設定ウィンドウを開く)
-    pub custom_item: CheckMenuItem,
 }
 
 /// クリップボード履歴に関連するメニューの構成
@@ -120,30 +103,6 @@ pub struct RegexPresetMenu {
     pub empty_hint_item: MenuItem,
 }
 
-/// 通知設定に関連するメニューの構成
-pub struct NotificationMenu {
-    /// 「通知」サブメニュー
-    pub main_submenu: Submenu,
-    /// デスクトップ通知の有効/無効を切り替える項目
-    pub enabled_item: CheckMenuItem,
-    /// 加工完了を通知するかどうかの項目
-    pub notify_process_item: CheckMenuItem,
-    /// 一時停止の切替を通知するかどうかの項目
-    pub notify_pause_item: CheckMenuItem,
-    /// 履歴復元を通知するかどうかの項目
-    pub notify_history_restore_item: CheckMenuItem,
-    /// OCR を通知するかどうかの項目
-    pub notify_ocr_item: CheckMenuItem,
-    /// 登録クリップを通知するかどうかの項目
-    pub notify_registered_clip_item: CheckMenuItem,
-    /// お気に入りを通知するかどうかの項目
-    pub notify_favorites_item: CheckMenuItem,
-    /// 連続記録を通知するかどうかの項目
-    pub notify_continuous_record_item: CheckMenuItem,
-    /// クリップボードの内容を通知に含めるかどうかの項目
-    pub notify_result_item: CheckMenuItem,
-}
-
 /// システムトレイアイコンおよび付随するすべてのメニューを保持・管理する構造体
 pub struct TrayMenu {
     /// トレイアイコンのハンドル。この構造体がドロップされるとアイコンも消滅する。
@@ -154,10 +113,6 @@ pub struct TrayMenu {
     pub pause_item: CheckMenuItem,
     /// 変換モード関連メニュー
     pub refine: RefineMenu,
-    /// 監視方式関連メニュー
-    pub monitor: MonitorMenu,
-    /// 監視周期関連メニュー
-    pub interval: IntervalMenu,
     /// クリップボード履歴メニュー
     pub history: HistoryMenu,
     /// 連続記録メニュー
@@ -166,10 +121,8 @@ pub struct TrayMenu {
     pub clips: ClipsMenu,
     /// 正規表現プリセット選択メニュー
     pub regex_presets: RegexPresetMenu,
-    /// 通知設定メニュー
-    pub notification: NotificationMenu,
-    /// 更新を確認する項目
-    pub check_update_item: MenuItem,
+    /// クイックセレクターを開く項目
+    pub quick_selector_item: MenuItem,
     /// 設定ウィンドウを開く項目
     pub open_settings_window_item: MenuItem,
     /// 停止したクリップボードワーカーを再起動する項目

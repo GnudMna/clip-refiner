@@ -20,7 +20,7 @@ impl RefineCategory {
     }
 
     /// トレイメニューのサブメニュー表示順(`Normal` を除く)
-    pub const SUBMENU_ORDER: [Self; 14] = [
+    pub const SUBMENU_ORDER: [Self; 15] = [
         Self::LineActions,
         Self::UrlActions,
         Self::Path,
@@ -35,6 +35,7 @@ impl RefineCategory {
         Self::Datetime,
         Self::Number,
         Self::Case,
+        Self::Width,
     ];
 
     /// ルート直下の通常項目の後ろにサブメニューを遅延配置するカテゴリかどうか
@@ -94,7 +95,9 @@ impl RefineMode {
             Self::JsonFormat | Self::JsonFormatPreserveOrder => RefineCategory::JsonFormat,
             Self::YamlToJson | Self::YamlToJsonPreserveOrder => RefineCategory::ToJson,
             Self::JsonToYaml | Self::JsonToYamlPreserveOrder => RefineCategory::ToYaml,
-            Self::MarkdownToHtml => RefineCategory::Markdown,
+            Self::MarkdownToHtml | Self::MarkdownToRichText | Self::HtmlToMarkdown => {
+                RefineCategory::Markdown
+            }
             Self::ExcelToMarkdown | Self::MarkdownToExcel | Self::ExcelToImage => {
                 RefineCategory::Excel
             }
@@ -105,6 +108,7 @@ impl RefineMode {
             | Self::ToPascalCase
             | Self::ToKebabCase
             | Self::ToScreamingSnakeCase => RefineCategory::Case,
+            Self::ToHalfwidth | Self::ToFullwidth => RefineCategory::Width,
         }
     }
 
@@ -117,6 +121,32 @@ impl RefineMode {
     /// * `bool` - 画像出力モード (`ExcelToImage` など) の場合は `true`
     pub fn produces_image(self) -> bool {
         matches!(self, Self::ExcelToImage)
+    }
+
+    /// 加工結果をリッチテキスト (`CF_HTML`) としてクリップボードへ書き込むモードかどうか
+    ///
+    /// パイプラインのテキスト加工の最終段にある場合のみ `CF_HTML` を書き込む
+    ///
+    /// # Arguments
+    /// * `self` - この `RefineMode`
+    ///
+    /// # Returns
+    /// * `bool` - `MarkdownToRichText` の場合は `true`
+    pub fn produces_rich_text(self) -> bool {
+        matches!(self, Self::MarkdownToRichText)
+    }
+
+    /// クリップボードの HTML 形式 (`CF_HTML`) を入力に使うモードかどうか
+    ///
+    /// パイプラインの先頭にある場合のみ、テキストより `CF_HTML` を優先して読む
+    ///
+    /// # Arguments
+    /// * `self` - この `RefineMode`
+    ///
+    /// # Returns
+    /// * `bool` - `HtmlToMarkdown` の場合は `true`
+    pub fn reads_html(self) -> bool {
+        matches!(self, Self::HtmlToMarkdown)
     }
 
     /// クイックセレクタ向けのモード表示順を返す
@@ -206,7 +236,7 @@ mod tests {
         assert_eq!(RefineMode::UrlEncode.label(), "URLエンコード");
         assert_eq!(RefineMode::UrlEncode.category(), RefineCategory::UrlActions);
 
-        assert_eq!(RefineMode::JsonFormat.label(), "JSON整形(キー順序不同)");
+        assert_eq!(RefineMode::JsonFormat.label(), "JSON整形(キー順序ソート)");
         assert_eq!(
             RefineMode::JsonFormat.category(),
             RefineCategory::JsonFormat
@@ -402,6 +432,6 @@ mod tests {
         assert!(variants.contains(&RefineMode::SortLinesAsc));
         assert!(variants.contains(&RefineMode::SortLinesDesc));
         assert!(variants.contains(&RefineMode::TimestampToDatetime));
-        assert_eq!(variants.len(), 42);
+        assert_eq!(variants.len(), 46);
     }
 }

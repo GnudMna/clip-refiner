@@ -88,11 +88,22 @@ function test_next_tab_index_for_key() {
 function test_render_clip_row() {
     const textHtml = SettingsPanelsLogic.renderClipRow(
         { id: '0', label: 'メモ', preview: 'hello', kind: 'text' },
-        SettingsSharedLogic.escapeHtml
+        SettingsSharedLogic.escapeHtml,
+        0,
+        2
     );
     assert.ok(textHtml.includes('clip-kind--text'));
     assert.ok(textHtml.includes('data-index="0"'));
+    // テンプレート切り替えは画像行と位置を揃えるため操作列の先頭に置く
+    assert.ok(textHtml.indexOf('clip-template') < textHtml.indexOf('clip-up'));
+    // テキストはテンプレート切り替えボタンを持ち、無効時は有効化を要求する
+    assert.ok(textHtml.includes('clip-template'));
+    assert.ok(textHtml.includes('data-enabled="true"'));
+    assert.ok(textHtml.includes('aria-pressed="false"'));
     assert.ok(!textHtml.includes('clip-thumbnail'));
+    // 先頭行は上へ移動できず、下へは移動できる
+    assert.ok(textHtml.includes('title="上へ" disabled'));
+    assert.ok(!textHtml.includes('title="下へ" disabled'));
 
     const imageHtml = SettingsPanelsLogic.renderClipRow(
         {
@@ -102,9 +113,25 @@ function test_render_clip_row() {
             kind: 'image',
             thumbnail: 'data:image/png;base64,abc',
         },
-        SettingsSharedLogic.escapeHtml
+        SettingsSharedLogic.escapeHtml,
+        1,
+        2
     );
     assert.ok(imageHtml.includes('clip-kind--image'));
+    assert.ok(!imageHtml.includes('clip-template'));
+
+    const templateHtml = SettingsPanelsLogic.renderClipRow(
+        { id: '2', label: '日報', preview: '{date}', kind: 'text', template: true },
+        SettingsSharedLogic.escapeHtml,
+        1,
+        3
+    );
+    // 有効時はボタンを強調し、押下で無効化を要求する
+    assert.ok(templateHtml.includes('clip-template is-active'));
+    assert.ok(templateHtml.includes('data-enabled="false"'));
+    assert.ok(templateHtml.includes('aria-pressed="true"'));
+    assert.ok(!imageHtml.includes('title="上へ" disabled'));
+    assert.ok(imageHtml.includes('title="下へ" disabled'));
     assert.ok(imageHtml.includes('clip-thumbnail'));
 }
 
@@ -182,6 +209,28 @@ function test_resolve_content_click_action() {
             dataset: { index: '3' },
         }),
         { type: 'clip-copy', index: 3 }
+    );
+    assert.deepEqual(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'clip-up';
+                },
+            },
+            dataset: { index: '1' },
+        }),
+        { type: 'clip-move', index: 1, direction: 'up' }
+    );
+    assert.deepEqual(
+        SettingsPanelsLogic.resolveContentClickAction({
+            classList: {
+                contains(name) {
+                    return name === 'clip-template';
+                },
+            },
+            dataset: { index: '2', enabled: 'true' },
+        }),
+        { type: 'clip-template', index: 2, enabled: true }
     );
     assert.equal(
         SettingsPanelsLogic.resolveContentClickAction({

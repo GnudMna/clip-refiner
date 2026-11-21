@@ -11,7 +11,8 @@ use tao::window::{Window, WindowBuilder};
 // ======================================================================
 const GEOMETRY_FILE: &str = "settings-window.json";
 
-const DEFAULT_WIDTH: f64 = 780.0;
+/// 既定の幅 (登録クリップ一覧のプレビュー最大幅と操作ボタンが収まる幅)
+const DEFAULT_WIDTH: f64 = 960.0;
 const DEFAULT_HEIGHT: f64 = 600.0;
 const MIN_WIDTH: f64 = 640.0;
 const MIN_HEIGHT: f64 = 480.0;

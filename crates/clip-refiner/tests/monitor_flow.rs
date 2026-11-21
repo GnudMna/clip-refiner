@@ -22,6 +22,17 @@ fn monitor_process_then_undo_restores_original() {
     assert_eq!(harness.clipboard_text(), "  hello  ");
 }
 
+/// 自動変換が無効なときは監視でクリップボードを加工しないこと
+#[test]
+fn monitor_skips_processing_when_auto_refine_disabled() {
+    let mut harness = ClipboardHarness::with_text("  hello  ").with_mode(RefineMode::Trim);
+    harness.with_config_mut(|c| c.auto_refine_enabled = false);
+
+    assert!(!harness.run_monitor_update(false));
+    assert!(!harness.run_monitor_update(true));
+    assert_eq!(harness.clipboard_text(), "  hello  ");
+}
+
 /// ポーリング時に同一テキストの再観測では再加工しないようにすること
 #[test]
 fn polling_does_not_reprocess_unchanged_clipboard() {
@@ -252,4 +263,35 @@ fn monitor_applies_updated_pipeline_from_snapshot() {
 
     assert!(harness.run_monitor_update(false));
     assert_eq!(harness.clipboard_text(), "c%20d");
+}
+
+/// 監視でリッチテキストを書き込み、直後のエコーでは再加工しないこと
+#[test]
+fn monitor_writes_rich_text_and_skips_echo() {
+    let mut harness =
+        ClipboardHarness::with_text("# Title").with_mode(RefineMode::MarkdownToRichText);
+
+    assert!(harness.run_monitor_update(true));
+    assert_eq!(harness.clipboard_text(), "# Title");
+    assert_eq!(harness.clipboard_html(), Some("<h1>Title</h1>"));
+
+    // 書き込みによる変更通知ではテキストが同じため加工しない
+    assert!(!harness.run_monitor_update(true));
+    assert_eq!(harness.clipboard_html(), Some("<h1>Title</h1>"));
+}
+
+/// 監視でコピーされた HTML 形式を Markdown テキストへ変換すること
+#[test]
+fn monitor_converts_copied_html_to_markdown() {
+    let mut harness = ClipboardHarness::with_text("Docs")
+        .with_html(r#"<a href="https://example.com/">Docs</a>"#)
+        .with_mode(RefineMode::HtmlToMarkdown);
+
+    assert!(harness.run_monitor_update(true));
+    assert_eq!(harness.clipboard_text(), "[Docs](https://example.com/)");
+    assert_eq!(harness.clipboard_html(), None);
+
+    // Undo では加工前のテキストへ戻す
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "Docs");
 }

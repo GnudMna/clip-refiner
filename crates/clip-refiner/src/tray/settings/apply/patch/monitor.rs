@@ -3,7 +3,6 @@ use std::sync::Arc;
 use super::outcome::PatchApplyOutcome;
 use crate::config::MonitorMode;
 use crate::tray::event::update_monitor_mode;
-use crate::tray::menu::TrayMenu;
 use crate::tray::settings::ipc::SettingsPatch;
 use crate::tray::state::AppState;
 
@@ -17,14 +16,13 @@ use crate::tray::state::AppState;
 pub(super) fn apply_monitor_patch(
     patch: &SettingsPatch,
     state: &Arc<AppState>,
-    menu: &TrayMenu,
     outcome: &mut PatchApplyOutcome,
     config_dirty: &mut bool,
 ) {
     if let Some(monitor_mode) = patch.monitor_mode
         && state.with_config(|c| c.monitor_mode) != monitor_mode
     {
-        update_monitor_mode(state, menu, monitor_mode);
+        update_monitor_mode(state, monitor_mode);
         outcome.monitor_mode_changed = true;
     }
 
@@ -38,8 +36,6 @@ pub(super) fn apply_monitor_patch(
             c.interval_ms = interval_ms;
             c.normalize();
         });
-        let interval_ms = state.with_config(|c| c.interval_ms);
-        menu.sync_interval_menu(interval_ms);
         *config_dirty = true;
     }
 }
@@ -64,13 +60,7 @@ mod tests {
         let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        apply_monitor_patch(&patch, ctx.state(), &mut outcome, &mut config_dirty);
 
         assert_eq!(
             ctx.state().with_config(|c| c.interval_ms),
@@ -94,13 +84,7 @@ mod tests {
         let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        apply_monitor_patch(&patch, ctx.state(), &mut outcome, &mut config_dirty);
 
         assert_eq!(
             ctx.state().with_config(|c| c.interval_ms),
@@ -126,13 +110,7 @@ mod tests {
         let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        apply_monitor_patch(&patch, ctx.state(), &mut outcome, &mut config_dirty);
 
         assert_eq!(
             ctx.state().with_config(|c| c.monitor_mode),
@@ -153,59 +131,13 @@ mod tests {
         let mut outcome = PatchApplyOutcome::default();
         let mut config_dirty = false;
 
-        apply_monitor_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            &mut outcome,
-            &mut config_dirty,
-        );
+        apply_monitor_patch(&patch, ctx.state(), &mut outcome, &mut config_dirty);
 
         assert_eq!(
             ctx.state().with_config(|c| c.monitor_mode),
             MonitorMode::Polling
         );
         assert_eq!(ctx.state().with_config(|c| c.interval_ms), 500);
-        assert!(config_dirty);
-        assert!(
-            ctx.menu()
-                .interval
-                .items
-                .iter()
-                .any(|(item, ms)| *ms == 500 && item.is_checked())
-        );
-        assert!(!ctx.menu().interval.custom_item.is_checked());
-    }
-
-    /// プリセット外の周期パッチでカスタム項目がチェックされるようにすること
-    #[test]
-    fn interval_ms_patch_marks_custom_item() {
-        let ctx = TrayTestContext::new();
-        let patch = SettingsPatch {
-            interval_ms: Some(750),
-            ..SettingsPatch::default()
-        };
-        let mut outcome = PatchApplyOutcome::default();
-        let mut config_dirty = false;
-
-        apply_monitor_patch(
-            &patch,
-            ctx.state(),
-            ctx.menu(),
-            &mut outcome,
-            &mut config_dirty,
-        );
-
-        assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
-        assert!(ctx.menu().interval.custom_item.is_checked());
-        assert!(ctx.menu().interval.custom_item.text().contains("750"));
-        assert!(
-            ctx.menu()
-                .interval
-                .items
-                .iter()
-                .all(|(item, _)| !item.is_checked())
-        );
         assert!(config_dirty);
     }
 }

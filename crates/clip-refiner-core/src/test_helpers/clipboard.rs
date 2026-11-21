@@ -1,4 +1,6 @@
-use crate::refiner::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
+use crate::refiner::text_clipboard::{
+    ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard,
+};
 
 // ======================================================================
 // インメモリクリップボード
@@ -6,6 +8,7 @@ use crate::refiner::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipb
 /// 単体・統合テスト用のインメモリクリップボード
 pub struct InMemoryTextClipboard {
     text: String,
+    html: Option<String>,
     source_image: Option<(u32, u32, Vec<u8>)>,
     written_image: Option<(u32, u32, Vec<u8>)>,
     fail_on_read: bool,
@@ -25,6 +28,7 @@ impl InMemoryTextClipboard {
     pub fn with_text(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
+            html: None,
             source_image: None,
             written_image: None,
             fail_on_read: false,
@@ -47,6 +51,22 @@ impl InMemoryTextClipboard {
     pub fn with_source_image(self, width: u32, height: u32, rgba: Vec<u8>) -> Self {
         Self {
             source_image: Some((width, height, rgba)),
+            ..self
+        }
+    }
+
+    /// HTML 形式 (`CF_HTML` の断片) を同時に保持するクリップボードを生成する
+    ///
+    /// # Arguments
+    /// * `self` - ベースとなるインメモリクリップボード
+    /// * `html` - HTML 断片
+    ///
+    /// # Returns
+    /// * `Self` - HTML 付きクリップボード
+    #[must_use]
+    pub fn with_html(self, html: impl Into<String>) -> Self {
+        Self {
+            html: Some(html.into()),
             ..self
         }
     }
@@ -101,6 +121,17 @@ impl InMemoryTextClipboard {
         &self.text
     }
 
+    /// 保持中の HTML 断片を返す
+    ///
+    /// # Arguments
+    /// * `self` - 参照元のインメモリクリップボード
+    ///
+    /// # Returns
+    /// * `Option<&str>` - 保持中の HTML。HTML 形式が無い場合は `None`
+    pub fn html(&self) -> Option<&str> {
+        self.html.as_deref()
+    }
+
     /// 書き込み後の画像サイズを返す
     ///
     /// # Arguments
@@ -127,7 +158,9 @@ impl TextClipboard for InMemoryTextClipboard {
         if self.fail_on_write {
             return Err(ClipboardIoError::WriteFailed("write failed".to_string()));
         }
+        // OS クリップボードと同様に、テキストの書き込みで他の形式を消す
         self.text = text;
+        self.html = None;
         Ok(())
     }
 
@@ -150,6 +183,21 @@ impl ImageClipboard for InMemoryTextClipboard {
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
         self.written_image = Some((width, height, rgba));
+        Ok(())
+    }
+}
+
+impl HtmlClipboard for InMemoryTextClipboard {
+    fn get_html(&mut self) -> Result<Option<String>, ClipboardIoError> {
+        Ok(self.html.clone())
+    }
+
+    fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError> {
+        if self.fail_on_write {
+            return Err(ClipboardIoError::WriteFailed("write failed".to_string()));
+        }
+        self.text = alt_text;
+        self.html = Some(html);
         Ok(())
     }
 }

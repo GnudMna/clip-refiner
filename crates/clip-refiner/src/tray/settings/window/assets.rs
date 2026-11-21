@@ -176,14 +176,12 @@ mod tests {
 
         let js = assemble_settings_js();
         for tab_id in [
-            "general",
-            "favorites",
+            "convert",
             "regex",
-            "history",
-            "clips",
-            "monitor",
+            "clipboard",
             "notifications",
             "shortcuts",
+            "general",
         ] {
             // esbuild 出力はダブルクォート
             let marker = format!(r#"id: "{tab_id}""#);

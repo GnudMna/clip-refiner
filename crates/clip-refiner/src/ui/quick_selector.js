@@ -20,6 +20,11 @@ const {
 
 const {
     FAVORITES_CATEGORY,
+    isCategoryRow,
+    categoryRowIndexOf,
+    withCategoryExpanded,
+    toExpandedCategories,
+    expandedCategoriesMessage,
     favoriteIds,
     buildDisplayList,
     sectionCategory,
@@ -27,6 +32,7 @@ const {
     shouldShowReorderButtons,
     canMoveSelectedFavorite,
     buildItemInnerHtml,
+    applyMessage,
     selectMessage,
     toggleFavoriteMessage,
     moveFavoriteMessage,
@@ -39,10 +45,21 @@ const input = document.getElementById('input');
 /** @type {HTMLElement} */
 const results = document.getElementById('results');
 
+/**
+ * 展開中カテゴリをアプリ側へ通知する
+ *
+ * `WebView` を破棄しても次の表示で `focusInput` から復元できるよう、アプリ起動中はアプリ側で保持する
+ */
+function saveExpandedCategories() {
+    postIpc(expandedCategoriesMessage(expandedCategories));
+}
+
 /** @type {string|null} */
 let currentModeId = null;
+/** @type {Set<string>} */
+let expandedCategories = new Set();
 /** @type {import('./quick_selector_logic').QuickSelectorMode[]} */
-let filtered = buildDisplayList(modes, '');
+let filtered = buildDisplayList(modes, '', expandedCategories);
 const selection = createSelection(results, () => filtered.length);
 
 /**
@@ -52,7 +69,7 @@ const selection = createSelection(results, () => filtered.length);
  */
 function loadModes(nextModes) {
     modes = nextModes;
-    filtered = buildDisplayList(modes, '');
+    filtered = buildDisplayList(modes, '', expandedCategories);
 }
 
 /**
@@ -124,6 +141,42 @@ function createFavoriteButton(mode) {
 }
 
 /**
+ * カテゴリ見出し行 (開閉トグル) の DOM 要素を生成する
+ *
+ * @param {import('./quick_selector_logic').QuickSelectorMode} row
+ * @param {number} index
+ * @returns {HTMLDivElement}
+ */
+function createCategoryRow(row, index) {
+    const div = document.createElement('div');
+    div.className =
+        'item category-header category-toggle' +
+        (row.expanded ? ' is-expanded' : '') +
+        (index === selection.index ? ' selected' : '');
+    div.setAttribute('role', 'button');
+    div.setAttribute('aria-expanded', row.expanded ? 'true' : 'false');
+    div.innerHTML = buildCategoryHeaderInnerHtml(row.category, escapeHtml);
+
+    const chevron = document.createElement('span');
+    chevron.className = 'category-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = row.expanded ? '▾' : '▸';
+    div.prepend(chevron);
+
+    const count = document.createElement('span');
+    count.className = 'category-count';
+    count.textContent = String(row.count);
+    div.appendChild(count);
+
+    div.onmouseenter = () => selection.setSelectedIndex(index, false);
+    div.onclick = () => {
+        selection.index = index;
+        setCategoryExpanded(row.category, !row.expanded);
+    };
+    return div;
+}
+
+/**
  * モード 1 行分の DOM 要素を生成する
  *
  * @param {import('./quick_selector_logic').QuickSelectorMode} mode
@@ -146,7 +199,7 @@ function createItem(mode, index, query) {
     div.appendChild(createFavoriteButton(mode));
 
     div.onmouseenter = () => selection.setSelectedIndex(index, false);
-    div.onclick = () => select(mode.id);
+    div.onclick = (e) => select(mode.id, e.ctrlKey || e.metaKey);
     return div;
 }
 
@@ -176,6 +229,16 @@ function renderList(scrollToSelection) {
     filtered.forEach((mode) => {
         let parent = results;
         const category = sectionCategory(mode, query);
+
+        if (isCategoryRow(mode)) {
+            currentSection = document.createElement('div');
+            currentSection.className = 'category-section category-section--collapsible';
+            currentSection.appendChild(createCategoryRow(mode, itemIndex));
+            results.appendChild(currentSection);
+            lastCategory = category;
+            itemIndex++;
+            return;
+        }
 
         if (!query) {
             if (category) {
@@ -218,18 +281,64 @@ function filter() {
     const query = normalizeQuery(input.value);
     const previousId = filtered[selection.index]?.id;
 
-    filtered = buildDisplayList(modes, query);
+    filtered = buildDisplayList(modes, query, expandedCategories);
     selection.index = nextIndexAfterFilter(filtered, previousId);
     renderList(true);
 }
 
 /**
- * モードを選択して IPC 送信する
+ * カテゴリを展開 / 折りたたみ、選択中の行を維持して再描画する
+ *
+ * @param {string} category
+ * @param {boolean} expand
+ */
+function setCategoryExpanded(category, expand) {
+    expandedCategories = withCategoryExpanded(expandedCategories, category, expand);
+    saveExpandedCategories();
+    filter();
+}
+
+/**
+ * ←/→ キーでカテゴリを開閉する
+ *
+ * 見出し行では → で展開・← で折りたたむ。カテゴリ内のモード行で ← を押すと見出しへ戻って折りたたむ
+ *
+ * @param {KeyboardEvent} e
+ * @returns {boolean} 処理した場合は `true`
+ */
+function handleCategoryKeys(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+        return false;
+    }
+    if (normalizeQuery(input.value) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        return false;
+    }
+
+    const headerIndex = categoryRowIndexOf(filtered, selection.index);
+    if (headerIndex === -1) {
+        return false;
+    }
+    const header = filtered[headerIndex];
+    const expand = e.key === 'ArrowRight';
+    e.preventDefault();
+    if (header.expanded === expand) {
+        return true;
+    }
+    if (!expand) {
+        selection.index = headerIndex;
+    }
+    setCategoryExpanded(header.category, expand);
+    return true;
+}
+
+/**
+ * モードを IPC 送信する
  *
  * @param {string} id
+ * @param {boolean} setAsAuto - `true` で自動変換モードに設定し、`false` で一回だけ適用する
  */
-function select(id) {
-    postIpc(selectMessage(id));
+function select(id, setAsAuto) {
+    postIpc(setAsAuto ? selectMessage(id) : applyMessage(id));
 }
 
 /**
@@ -259,6 +368,9 @@ function moveFavorite(id, direction) {
  */
 function moveSelectedFavorite(delta) {
     const mode = filtered[selection.index];
+    if (isCategoryRow(mode)) {
+        return false;
+    }
     if (!canMoveSelectedFavorite(normalizeQuery(input.value), mode)) {
         return false;
     }
@@ -277,7 +389,15 @@ function applyFocus(modeId) {
     input.value = '';
     filter();
 
-    const index = filtered.findIndex((mode) => mode.id === currentModeId);
+    let index = filtered.findIndex((mode) => mode.id === currentModeId);
+    // 自動変換中のモードが折りたたまれたカテゴリにある場合は開いて選択する
+    const current = currentModeId ? modes.find((mode) => mode.id === currentModeId) : null;
+    if (index === -1 && current?.category) {
+        expandedCategories = withCategoryExpanded(expandedCategories, current.category, true);
+        saveExpandedCategories();
+        filtered = buildDisplayList(modes, '', expandedCategories);
+        index = filtered.findIndex((mode) => mode.id === currentModeId);
+    }
     if (index !== -1) {
         selection.index = index;
     }
@@ -296,15 +416,35 @@ input.oninput = filter;
  * @param {KeyboardEvent} e
  */
 window.onkeydown = (e) => {
+    // 並べ替えの Ctrl+Shift+↑↓ は選択移動より先に判定する
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
+        if (moveSelectedFavorite(-1)) {
+            e.preventDefault();
+        }
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowDown') {
+        if (moveSelectedFavorite(1)) {
+            e.preventDefault();
+        }
+        return;
+    }
     if (handleArrowKeys(e, selection.moveSelection)) {
         return;
     }
     if (handleHomeEndKeys(e, () => filtered.length, selection.setSelectedIndex)) {
         return;
     }
+    if (handleCategoryKeys(e)) {
+        return;
+    }
     if (e.key === 'Enter') {
-        if (filtered[selection.index]) {
-            select(filtered[selection.index].id);
+        const row = filtered[selection.index];
+        if (isCategoryRow(row)) {
+            setCategoryExpanded(row.category, !row.expanded);
+            e.preventDefault();
+        } else if (row) {
+            select(row.id, e.ctrlKey || e.metaKey);
             e.preventDefault();
         }
         return;
@@ -313,16 +453,8 @@ window.onkeydown = (e) => {
         return;
     }
     if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
-        if (filtered[selection.index]) {
+        if (filtered[selection.index] && !isCategoryRow(filtered[selection.index])) {
             toggleFavorite(filtered[selection.index].id);
-            e.preventDefault();
-        }
-    } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowUp') {
-        if (moveSelectedFavorite(-1)) {
-            e.preventDefault();
-        }
-    } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'ArrowDown') {
-        if (moveSelectedFavorite(1)) {
             e.preventDefault();
         }
     }
@@ -333,8 +465,12 @@ window.onkeydown = (e) => {
  *
  * @param {string|null} modeId
  * @param {import('./quick_selector_logic').QuickSelectorMode[]} [modesJson]
+ * @param {string[]} [expanded] - アプリ側で保持している展開中カテゴリ
  */
-window.focusInput = (modeId, modesJson) => {
+window.focusInput = (modeId, modesJson, expanded) => {
+    if (expanded) {
+        expandedCategories = toExpandedCategories(expanded);
+    }
     if (modesJson) {
         loadModes(modesJson);
     }
@@ -353,7 +489,7 @@ window.refreshModes = (modeId, modesJson) => {
         loadModes(modesJson);
     }
     currentModeId = modeId;
-    filtered = buildDisplayList(modes, normalizeQuery(input.value));
+    filtered = buildDisplayList(modes, normalizeQuery(input.value), expandedCategories);
     selection.index = nextIndexAfterFilter(filtered, previousId);
     renderList(true);
 };

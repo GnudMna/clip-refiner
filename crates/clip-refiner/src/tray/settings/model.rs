@@ -69,6 +69,7 @@ define_settings_model! {
     hotkeys: HotkeySettings,
     launch_at_login: bool,
     is_paused: bool,
+    auto_refine_enabled: bool,
 }
 
 impl SettingsWritable {
@@ -96,6 +97,7 @@ impl SettingsWritable {
             hotkeys: config.hotkeys.clone(),
             launch_at_login: autostart::is_enabled(),
             is_paused: config.is_paused,
+            auto_refine_enabled: config.auto_refine_enabled,
         }
     }
 }

@@ -37,8 +37,9 @@ clip-refiner/
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)。ライブラリ利用はこちら
 │       ├── README.md    # ライブラリとしての利用
 │       └── src/
+│           ├── clip_template.rs # 登録クリップのテンプレート展開 (`{date}` など。feature 非依存)
 │           ├── config/      # types/hotkeys/ ・ persistence/ (load/save) ・ serialize ・ spec (ドキュメント同期テスト) など
-│           ├── native/      # DPAPI (`config`)・クリップボード画像 (`clipboard`)。変換のみでは未コンパイル
+│           ├── native/      # DPAPI (`config`)・クリップボード画像と監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   └── transform/regex/  # キャッシュ / マッチタイムアウト / 実行パス / プレビュー
 │           ├── security/
@@ -107,15 +108,14 @@ clip-refiner/
 
 | サブモジュール | 対応するトレイメニュー / 操作 |
 | :------------- | :---------------------------- |
-| `refine` | 変換モード・お気に入り (`favorites.rs`) |
-| `regex` | 正規表現プリセットのトレイ切替 |
-| `monitor` | 監視方式・監視周期 |
+| `refine` | 変換モード (自動変換の切り替えを含む)・お気に入り (`favorites.rs`) |
+| `regex` | 正規表現プリセットのトレイ切替 (変換モード内のサブメニュー) |
+| `monitor` | 監視方式の更新 (トレイメニューは持たず、設定ウィンドウから呼ぶ) |
 | `clips` | 登録クリップ |
 | `history` | 履歴メニュー (有効化・クリア・過去項目の選択) |
 | `record` | 連続記録 |
-| `notification` | 通知設定 |
-| `update` | 更新確認・適用 (`platform/update/` をバックグラウンド起動。トレイ / 設定 UI 共通) |
-| `app_control` | 終了・一時停止・設定ウィンドウ・更新を確認・監視再開 |
+| `update` | 更新確認・適用 (`platform/update/` をバックグラウンド起動。設定 UI から呼ぶ) |
+| `app_control` | 終了・一時停止・クイック変換・設定ウィンドウ・監視再開 |
 
 設定ウィンドウ (`src/ui/settings/`) は次のファイルに分割している。
 
@@ -153,7 +153,7 @@ clip-refiner/
 
 ### アプリ更新 (`platform/update/`)
 
-トレイ「更新を確認…」と設定「一般」タブは `tray/features/update.rs` から同じ確認・適用経路を呼ぶ。同時実行は `settings_pending` の更新オペレーション排他で 1 本に制限する。
+設定「一般」タブは `tray/features/update.rs` から確認・適用経路を呼ぶ。同時実行は `settings_pending` の更新オペレーション排他で 1 本に制限する。
 
 | モジュール | 責務 |
 | :--------- | :--- |
@@ -292,7 +292,7 @@ flowchart TB
 - **ホットキー → UI**: 専用スレッドが `HotkeyEvent::Received` を送り、メインスレッドの `HotkeyHandler` が処理
 - **クリップボード**: 本文の読み書きはワーカースレッド内の `OwnedClipboard` 1 インスタンスに集約する (常駐なしワンショットのみ短命に別インスタンスを開く)。連続記録貼り付けもワーカーが書き込み、メインスレッドは `SendInput` のみ担当する。変更検知は役割を分ける
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
-  - `OwnedClipboard` (`arboard`): テキスト / 通常画像の `OpenClipboard` I/O
+  - `OwnedClipboard` (`arboard`): テキスト / 通常画像 / HTML 形式 (`CF_HTML`) の `OpenClipboard` I/O。HTML 形式の有無は `IsClipboardFormatAvailable` で開かずに判定する
   - `native/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
@@ -308,7 +308,6 @@ flowchart TB
 | **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・一時停止など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
 | **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
-| **features** | `tray/features/notification/` | トレイメニュー「通知」の構築・クリック処理 |
 | **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
 
 - エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)

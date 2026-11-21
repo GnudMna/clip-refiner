@@ -46,7 +46,7 @@ pub const PORTABLE_DATA_DIR_NAME: &str = "data";
 ///
 /// スキーマを変更したら 1 ずつ増やし、`config/migrate.rs` に `migrate_vN_to_vM` の実装を追加する
 /// 手順を書き忘れると既存項目を維持して警告し、デフォルトへは置換しない
-pub const CONFIG_VERSION: u32 = 3;
+pub const CONFIG_VERSION: u32 = 4;
 
 /// 履歴のデフォルト最大保持数
 pub const DEFAULT_HISTORY_LIMIT: usize = 10;
@@ -107,6 +107,11 @@ pub const REGEX_MATCH_MAX_IN_FLIGHT: usize = 2;
 
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;
+
+/// HTML→Markdown 変換で許容する要素の入れ子の最大深さ
+///
+/// 変換器は DOM を再帰でたどるため、深い入れ子によるスタック枯渇を防ぐ
+pub const MAX_HTML_NESTING_DEPTH: usize = 256;
 
 /// 機密情報と判定した場合の通知・メニュー・プレビュー表示用ラベル
 ///

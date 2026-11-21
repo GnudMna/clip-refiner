@@ -17,6 +17,7 @@ mod to_json;
 mod to_yaml;
 mod trim;
 mod url;
+mod width;
 
 // ======================================================================
 // 加工インターフェース
@@ -59,6 +60,7 @@ fn refine_by_category<'a>(mode: RefineMode, text: &'a str, ctx: &RefineContext) 
         RefineCategory::Datetime => datetime::refine(mode, text, ctx),
         RefineCategory::Number => number::refine(mode, text, ctx),
         RefineCategory::Case => case_convert::refine(mode, text, ctx),
+        RefineCategory::Width => width::refine(mode, text, ctx),
         RefineCategory::Normal => unreachable!("{mode:?} は Normal カテゴリに属さない"),
     }
 }

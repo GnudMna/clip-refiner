@@ -8,10 +8,10 @@ use serde_json::Value;
 // ======================================================================
 // JSON 整形
 // ======================================================================
-/// JSON文字列を整形(Pretty Print)する(キー順序不同)
+/// JSON文字列を整形(Pretty Print)する(キー順序ソート)
 ///
 /// 入力されたJSON文字列を解析し、インデントを追加して読みやすい形式に整形する
-/// キーの順序は保証されない
+/// オブジェクトのキーは辞書順に並べ替える
 ///
 /// # Arguments
 /// * `text` - 整形対象のJSON文字列
@@ -92,10 +92,10 @@ pub fn format_json_preserve_order(text: &str) -> Cow<'_, str> {
 // ======================================================================
 // JSON → YAML 変換
 // ======================================================================
-/// JSON文字列をYAML文字列へ変換する(キー順序不同)
+/// JSON文字列をYAML文字列へ変換する(キー順序ソート)
 ///
 /// 入力されたJSONを解析し、対応するYAML形式の文字列に変換する
-/// キーの順序は保証されない
+/// オブジェクトのキーは辞書順に並べ替える
 ///
 /// # Arguments
 /// * `text` - 変換対象のJSON文字列
@@ -191,14 +191,14 @@ mod tests {
         assert!(z_pos < a_pos && a_pos < m_pos, "キー順序が保持されていない");
     }
 
-    /// キー順序不同の整形: キーがアルファベット順(またはソート済み)になるようにすること
+    /// キー順序ソートの整形: キーが辞書順になるようにすること
     #[test]
     fn test_format_json_unordered_sorts_keys() {
         let input = r#"{"z":1,"a":2}"#;
         let output = format_json(input);
         let a_pos = output.find("\"a\"").unwrap();
         let z_pos = output.find("\"z\"").unwrap();
-        assert!(a_pos < z_pos, "serde_json はキーをソートするはず");
+        assert!(a_pos < z_pos, "キーが辞書順に並んでいない");
     }
 
     /// 不正 JSON は `preserve_order` でも元の文字列を返すようにすること
@@ -233,6 +233,16 @@ mod tests {
         let a_pos = output.find("a:").unwrap();
         let m_pos = output.find("m:").unwrap();
         assert!(z_pos < a_pos && a_pos < m_pos, "キー順序が保持されていない");
+    }
+
+    /// `json_to_yaml`: キーが辞書順になるようにすること
+    #[test]
+    fn test_json_to_yaml_sorts_keys() {
+        let input = r#"{"z":1,"a":2}"#;
+        let output = json_to_yaml(input);
+        let a_pos = output.find("a:").unwrap();
+        let z_pos = output.find("z:").unwrap();
+        assert!(a_pos < z_pos, "キーが辞書順に並んでいない");
     }
 
     /// 配列を含む JSON の変換できるようにすること

@@ -74,14 +74,6 @@ fn apply_ipc_accepts_custom_interval_ms() {
     assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"intervalMs":750}}"#));
 
     assert_eq!(ctx.state().with_config(|c| c.interval_ms), 750);
-    assert!(ctx.menu().interval.custom_item.is_checked());
-    assert!(
-        ctx.menu()
-            .interval
-            .items
-            .iter()
-            .all(|(item, _)| !item.is_checked())
-    );
 }
 
 /// 履歴件数パッチが `normalize` で上限へクランプされるようにすること
@@ -140,6 +132,20 @@ fn dequeue_and_apply_merged_patch() {
     assert!(ctx.apply_pending_patch());
     assert!(ctx.state().with_config(|c| c.is_paused));
     assert!(ctx.menu().pause_item.is_checked());
+}
+
+/// `autoRefineEnabled` パッチで自動変換とトレイのチェック状態が切り替わること
+#[test]
+fn apply_auto_refine_patch_updates_config_and_menu() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"autoRefineEnabled":false}}"#));
+    assert!(!ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(!ctx.menu().refine.auto_refine_item.is_checked());
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"autoRefineEnabled":true}}"#));
+    assert!(ctx.state().with_config(|c| c.auto_refine_enabled));
+    assert!(ctx.menu().refine.auto_refine_item.is_checked());
 }
 
 /// Event 監視への切替と同時の周期パッチでは周期をスキップすること

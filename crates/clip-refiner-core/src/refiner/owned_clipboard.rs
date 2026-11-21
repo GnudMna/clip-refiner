@@ -4,7 +4,7 @@
 //! 変更検知 (`clipboard_win::raw::seq_num` / `AddClipboardFormatListener`) は
 //! `OpenClipboard` を伴わない別経路であり、本文読み書きはこの型に集約する
 
-use super::text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
+use super::text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 
 // ======================================================================
 // 所有クリップボード
@@ -58,5 +58,15 @@ impl ImageClipboard for OwnedClipboard {
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
         ImageClipboard::set_image(&mut self.inner, width, height, rgba)
+    }
+}
+
+impl HtmlClipboard for OwnedClipboard {
+    fn get_html(&mut self) -> Result<Option<String>, ClipboardIoError> {
+        HtmlClipboard::get_html(&mut self.inner)
+    }
+
+    fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError> {
+        HtmlClipboard::set_html(&mut self.inner, html, alt_text)
     }
 }

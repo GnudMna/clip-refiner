@@ -26,6 +26,9 @@ pub struct RegisteredClip {
     /// 登録画像ファイル名 (`registered-images` ディレクトリ内の相対パス)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_file: Option<String>,
+    /// コピー時に `{date}` などのプレースホルダを展開するか。画像登録では常に `false`
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub template: bool,
 }
 
 impl fmt::Debug for RegisteredClip {
@@ -42,6 +45,7 @@ impl fmt::Debug for RegisteredClip {
                 },
             )
             .field("image_file", &self.image_file)
+            .field("template", &self.template)
             .finish()
     }
 }

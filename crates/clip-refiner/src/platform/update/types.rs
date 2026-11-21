@@ -306,15 +306,6 @@ impl From<&UpdateApplyOutcome> for UpdateApplyUiResponse {
     }
 }
 
-/// 更新確認の起動元
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum UpdateCheckSource {
-    /// 設定ウィンドウ
-    Settings,
-    /// トレイメニュー
-    Tray,
-}
-
 // ======================================================================
 // テスト
 // ======================================================================

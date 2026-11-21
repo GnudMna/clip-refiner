@@ -4,7 +4,9 @@ use crate::security::ContentFingerprint;
 
 /// 監視ループがループ先頭で一括取得する設定スナップショット
 ///
-/// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する
+/// 1ループあたり `config` `RwLock` の取得を1回に削減するために使用する。
+/// `bool` 項目は `AppConfig` の同名キーをそのまま写す
+#[allow(clippy::struct_excessive_bools)]
 pub struct MonitorSnapshot {
     /// 監視時に適用する変換モード列
     pub pipeline: Vec<RefineMode>,
@@ -12,6 +14,8 @@ pub struct MonitorSnapshot {
     pub interval_ms: u64,
     /// 一時停止中かどうか
     pub is_paused: bool,
+    /// コピー時の自動変換が有効かどうか
+    pub auto_refine_enabled: bool,
     /// クリップボード履歴が有効かどうか
     pub history_enabled: bool,
     /// 連続記録モードが有効かどうか
@@ -36,7 +40,7 @@ impl MonitorSnapshot {
 
     /// コピー監視による自動加工が有効かどうか
     ///
-    /// 連続記録モード中と一時停止中は `false`
+    /// 自動変換が無効なとき・連続記録モード中・一時停止中は `false`
     ///
     /// # Arguments
     /// * `self` - この `MonitorSnapshot`
@@ -44,7 +48,7 @@ impl MonitorSnapshot {
     /// # Returns
     /// * `bool` - 自動加工が有効な場合は `true`
     pub fn auto_processing_enabled(&self) -> bool {
-        !self.is_paused && !self.continuous_record_enabled
+        self.auto_refine_enabled && !self.is_paused && !self.continuous_record_enabled
     }
 }
 

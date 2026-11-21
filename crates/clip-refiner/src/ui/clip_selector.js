@@ -27,6 +27,11 @@ const {
     selectMessage,
     registerMessage,
     deleteMessage,
+    moveMessage,
+    templateMessage,
+    resolveTemplateToggle,
+    canReorder,
+    moveTargetIndex,
     buildRegisterRowInnerHtml,
 } = ClipSelectorLogic;
 
@@ -35,7 +40,7 @@ const input = document.getElementById('input');
 /** @type {HTMLElement} */
 const results = document.getElementById('results');
 
-/** @type {Array<{ id: string, label: string, preview?: string, kind: string, thumbnail?: string, hover_preview?: string }>} */
+/** @type {Array<{ id: string, label: string, preview?: string, kind: string, template?: boolean, thumbnail?: string, hover_preview?: string }>} */
 let items = [];
 /** @type {typeof items} */
 let filtered = [];
@@ -158,6 +163,13 @@ function createItem(item, index, query) {
     label.className = 'label';
     label.innerHTML = highlightText(item.label, query);
     modeInfo.appendChild(label);
+    if (item.template) {
+        const badge = document.createElement('span');
+        badge.className = 'template-badge';
+        badge.textContent = 'テンプレート';
+        badge.title = 'コピー時に {date} などを展開する';
+        modeInfo.appendChild(badge);
+    }
     content.appendChild(modeInfo);
 
     if (item.preview && !isImage) {
@@ -168,6 +180,10 @@ function createItem(item, index, query) {
     }
 
     div.appendChild(content);
+
+    if (canReorder(query)) {
+        div.appendChild(createReorderButtons(index));
+    }
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
@@ -185,6 +201,36 @@ function createItem(item, index, query) {
     div.onclick = () => select(item.id);
 
     return div;
+}
+
+/**
+ * 並べ替えボタン (▲▼) を生成する
+ *
+ * @param {number} index
+ * @returns {HTMLDivElement}
+ */
+function createReorderButtons(index) {
+    const container = document.createElement('div');
+    container.className = 'reorder-buttons';
+
+    for (const [direction, text, title] of [
+        ['up', '▲', '上へ移動'],
+        ['down', '▼', '下へ移動'],
+    ]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'reorder-button';
+        button.textContent = text;
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        button.disabled = moveTargetIndex('', index, filtered.length, direction) === null;
+        button.onclick = (event) => {
+            event.stopPropagation();
+            moveAt(index, direction);
+        };
+        container.appendChild(button);
+    }
+    return container;
 }
 
 /**
@@ -269,6 +315,39 @@ function deleteItem(id) {
     postIpc(deleteMessage(id));
 }
 
+/**
+ * 指定行の登録クリップを並べ替える
+ *
+ * 一覧の再描画後も移動した項目を選択したままにするため、先に選択位置を移動先へ合わせる
+ *
+ * @param {number} index
+ * @param {'up'|'down'} direction
+ * @returns {boolean} 移動を要求した場合は `true`
+ */
+function moveAt(index, direction) {
+    const target = moveTargetIndex(normalizeQuery(input.value), index, filtered.length, direction);
+    if (target === null) {
+        return false;
+    }
+    selection.index = target;
+    postIpc(moveMessage(filtered[index].id, direction));
+    return true;
+}
+
+/**
+ * 選択中のクリップのテンプレート展開を切り替える
+ *
+ * @returns {boolean} 切り替えを要求した場合は `true`
+ */
+function toggleSelectedTemplate() {
+    const target = resolveTemplateToggle(selection.index, filtered);
+    if (!target) {
+        return false;
+    }
+    postIpc(templateMessage(target.id, target.enabled));
+    return true;
+}
+
 /** 選択中のクリップを削除する */
 function deleteSelected() {
     const item = filtered[selection.index];
@@ -307,10 +386,22 @@ input.oninput = filter;
  * @param {KeyboardEvent} e
  */
 window.onkeydown = (e) => {
+    // 並べ替えの Ctrl+Shift+↑↓ は選択移動より先に判定する
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        if (moveAt(selection.index, e.key === 'ArrowUp' ? 'up' : 'down')) {
+            e.preventDefault();
+        }
+        return;
+    }
     if (handleArrowKeys(e, selection.moveSelection)) {
         return;
     }
     if (handleHomeEndKeys(e, () => totalRows(filtered.length), selection.setSelectedIndex)) {
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
+        toggleSelectedTemplate();
+        e.preventDefault();
         return;
     }
     if (e.key === 'Enter' && e.ctrlKey) {

@@ -95,8 +95,8 @@ pub enum RefineMode {
     /// 正規表現で分割し改行で結合する
     #[strum(message = "正規表現分割")]
     RegexSplit,
-    /// JSON形式をインデント整形する(キーの順序はパース時に不定となる)
-    #[strum(message = "JSON整形(キー順序不同)")]
+    /// JSON形式をインデント整形する(キーを辞書順に並べ替える)
+    #[strum(message = "JSON整形(キー順序ソート)")]
     JsonFormat,
     /// JSON形式をインデント整形する(元のキー順序を維持する)
     #[strum(message = "JSON整形(キー順序保持)")]
@@ -107,8 +107,8 @@ pub enum RefineMode {
     /// YAML形式をJSON形式へ変換する(元のキー順序を維持する)
     #[strum(message = "YAML→JSON(キー順序保持)")]
     YamlToJsonPreserveOrder,
-    /// JSON形式をYAML形式へ変換する
-    #[strum(message = "JSON→YAML(キー順序不同)")]
+    /// JSON形式をYAML形式へ変換する(キーを辞書順に並べ替える)
+    #[strum(message = "JSON→YAML(キー順序ソート)")]
     JsonToYaml,
     /// JSON形式をYAML形式へ変換する(元のキー順序を維持する)
     #[strum(message = "JSON→YAML(キー順序保持)")]
@@ -116,6 +116,16 @@ pub enum RefineMode {
     /// `Markdown形式のテキストをHTML形式へ変換する`
     #[strum(message = "Markdown→HTML")]
     MarkdownToHtml,
+    /// Markdown形式のテキストをリッチテキスト (`CF_HTML`) としてクリップボードへ書き込む
+    ///
+    /// プレーンテキスト側には変換前の Markdown を残す。テキストのみの加工では HTML ソースを返す
+    #[strum(message = "Markdown→リッチテキスト")]
+    MarkdownToRichText,
+    /// HTML を Markdown 形式へ変換する
+    ///
+    /// クリップボードにHTML形式 (`CF_HTML`) があればテキストより優先して入力にする
+    #[strum(message = "HTML→Markdown")]
+    HtmlToMarkdown,
     /// `ExcelでコピーしたTSV形式のテキストをMarkdown形式へ変換する`
     #[strum(message = "Excel→Markdown")]
     ExcelToMarkdown,
@@ -152,6 +162,12 @@ pub enum RefineMode {
     /// 識別子を `SCREAMING_SNAKE_CASE` へ変換する
     #[strum(message = "SCREAMING_SNAKE_CASEへ変換")]
     ToScreamingSnakeCase,
+    /// 全角の英数字・記号・スペース・カタカナを半角へ変換する
+    #[strum(message = "半角へ変換")]
+    ToHalfwidth,
+    /// 半角の英数字・記号・スペース・カタカナを全角へ変換する
+    #[strum(message = "全角へ変換")]
+    ToFullwidth,
 }
 
 // ======================================================================
@@ -171,16 +187,16 @@ pub enum RefineCategory {
     #[strum(message = "URL操作")]
     UrlActions,
     /// パス操作サブメニュー内
-    #[strum(message = "パス操作")]
+    #[strum(message = "ファイルパス")]
     Path,
     /// 行操作サブメニュー内
-    #[strum(message = "行操作")]
+    #[strum(message = "行の並べ替え・削除")]
     LineActions,
     /// トリムサブメニュー内
-    #[strum(message = "トリム")]
+    #[strum(message = "空白の除去")]
     Trim,
     /// エスケープサブメニュー内
-    #[strum(message = "エスケープ")]
+    #[strum(message = "エスケープ・解除")]
     Escape,
     /// 正規表現操作サブメニュー内
     #[strum(message = "正規表現")]
@@ -189,24 +205,27 @@ pub enum RefineCategory {
     #[strum(message = "JSON整形")]
     JsonFormat,
     /// JSON to YAMLサブメニュー内
-    #[strum(message = "YAMLへ変換")]
+    #[strum(message = "JSON→YAML")]
     ToYaml,
     /// YAML to JSONサブメニュー内
-    #[strum(message = "JSONへ変換")]
+    #[strum(message = "YAML→JSON")]
     ToJson,
     /// Markdown関連サブメニュー内
-    #[strum(message = "Markdown")]
+    #[strum(message = "Markdown・HTML")]
     Markdown,
     /// Excel関連サブメニュー内
     #[strum(message = "Excel")]
     Excel,
     /// 日時変換サブメニュー内
-    #[strum(message = "日時変換")]
+    #[strum(message = "Unixタイムスタンプ")]
     Datetime,
     /// 数値変換サブメニュー内
-    #[strum(message = "数値変換")]
+    #[strum(message = "桁区切りカンマ")]
     Number,
     /// ケース変換サブメニュー内
-    #[strum(message = "ケース変換")]
+    #[strum(message = "識別子の書式")]
     Case,
+    /// 全角・半角サブメニュー内
+    #[strum(message = "全角・半角")]
+    Width,
 }

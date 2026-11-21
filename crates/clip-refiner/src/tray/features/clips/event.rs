@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::config::FavoriteMoveDirection;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
@@ -78,6 +79,40 @@ pub(crate) fn delete_registered_clip(
         "登録クリップ",
         "登録クリップを削除しました",
     );
+}
+
+/// 登録クリップの表示順を変更し、メニューとセレクターを更新する
+pub(crate) fn move_registered_clip(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    clip_selector: &ClipSelectorWindow,
+    index: usize,
+    direction: FavoriteMoveDirection,
+) {
+    let moved = state.with_config_mut(|c| c.move_registered_clip(index, direction));
+    if !moved {
+        return;
+    }
+
+    state.save_config();
+    refresh_clips_views(state, menu, clip_selector);
+}
+
+/// 登録クリップのテンプレート展開を切り替え、メニューとセレクターを更新する
+pub(crate) fn set_registered_clip_template(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    clip_selector: &ClipSelectorWindow,
+    index: usize,
+    enabled: bool,
+) {
+    let changed = state.with_config_mut(|c| c.set_registered_clip_template(index, enabled));
+    if !changed {
+        return;
+    }
+
+    state.save_config();
+    refresh_clips_views(state, menu, clip_selector);
 }
 
 // ======================================================================

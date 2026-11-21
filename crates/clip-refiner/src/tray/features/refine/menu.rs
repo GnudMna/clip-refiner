@@ -98,10 +98,16 @@ impl TrayMenu {
         let add_favorite_item = MenuItem::new("現在のモードをお気に入りに登録", true, None);
         let remove_favorite_item = MenuItem::new("現在のモードをお気に入りから解除", true, None);
         let favorite_records = Mutex::new(Vec::new());
+        // チェック状態は `TrayMenu::sync_auto_processing_state` で設定から反映する
+        let auto_refine_item = CheckMenuItem::new("自動変換を有効にする", true, false, None);
+        let separator = PredefinedMenuItem::separator();
 
         // メインの変換モードメニュー組み立て
-        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> =
-            vec![&favorites_submenu as &dyn tray_icon::menu::IsMenuItem];
+        let mut mode_menu_items: Vec<&dyn tray_icon::menu::IsMenuItem> = vec![
+            &auto_refine_item as &dyn tray_icon::menu::IsMenuItem,
+            &separator,
+            &favorites_submenu,
+        ];
 
         // カテゴリグループの追加 (遅延配置を除く)
         for group in &groups {
@@ -127,6 +133,7 @@ impl TrayMenu {
 
         let refine = RefineMenu {
             main_submenu,
+            auto_refine_item,
             favorites_submenu,
             favorite_records,
             add_favorite_item,

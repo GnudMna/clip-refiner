@@ -169,6 +169,12 @@
     background: var(--hover-bg);
 }
 
+.icon-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+    background: var(--surface-raised);
+}
+
 .primary-btn {
     border-color: var(--accent-strong);
     background: var(--accent-strong);

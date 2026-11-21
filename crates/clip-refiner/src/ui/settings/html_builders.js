@@ -9,14 +9,9 @@ import SettingsSharedLogic from './shared_logic.js';
 /** @type {Array<{ id: string, label: string, description: string }>} */
 export const TABS = [
     {
-        id: 'general',
-        label: '一般',
-        description: '起動時の動作などアプリ全体の設定を管理する',
-    },
-    {
-        id: 'favorites',
-        label: 'お気に入り',
-        description: 'クイックセレクターとホットキーで使う変換モードを登録する',
+        id: 'convert',
+        label: '変換',
+        description: 'コピー時の自動変換・加工パイプライン・お気に入り変換モードを設定する',
     },
     {
         id: 'regex',
@@ -24,19 +19,9 @@ export const TABS = [
         description: '正規表現モード用のパターンと置換文字列を編集する',
     },
     {
-        id: 'history',
-        label: '履歴・連続記録',
-        description: 'クリップボード履歴と連続記録の保持設定を管理する',
-    },
-    {
-        id: 'clips',
-        label: '登録クリップ',
-        description: 'よく使うテキストや画像を登録してワンタッチでコピーする',
-    },
-    {
-        id: 'monitor',
-        label: '監視',
-        description: 'クリップボード監視の方式・周期・加工パイプラインを設定する',
+        id: 'clipboard',
+        label: 'クリップボード',
+        description: '履歴・連続記録・登録クリップを管理する',
     },
     {
         id: 'notifications',
@@ -47,6 +32,11 @@ export const TABS = [
         id: 'shortcuts',
         label: 'ショートカット',
         description: 'グローバルホットキーを編集する',
+    },
+    {
+        id: 'general',
+        label: '一般',
+        description: '一時停止・起動時の動作・更新など、アプリ全体の設定を管理する',
     },
 ];
 
@@ -123,6 +113,30 @@ export function card(title, bodyHtml) {
         bodyHtml +
         '</div>' +
         '</section>'
+    );
+}
+
+/**
+ * 折りたたみ表示の詳細設定セクション HTML を組み立てる
+ *
+ * @param {string} summary - 見出し
+ * @param {string} bodyHtml - 展開時に表示するカード群
+ * @param {boolean} open - 展開状態で描画するか
+ * @returns {string}
+ */
+export function advancedSection(summary, bodyHtml, open) {
+    return (
+        '' +
+        '<details class="advanced-section"' +
+        (open ? ' open' : '') +
+        '>' +
+        '<summary>' +
+        escapeHtml(summary) +
+        '</summary>' +
+        '<div class="advanced-section-body">' +
+        bodyHtml +
+        '</div>' +
+        '</details>'
     );
 }
 

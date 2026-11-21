@@ -69,9 +69,9 @@ pub(crate) fn apply_settings_patch_without_ui(
     };
     let mut config_dirty = false;
 
-    apply_monitor_patch(patch, state, menu, &mut outcome, &mut config_dirty);
+    apply_monitor_patch(patch, state, &mut outcome, &mut config_dirty);
     apply_selector_webview_patch(patch, state, menu, &mut outcome, &mut config_dirty);
-    apply_notification_patch(patch, state, menu, &mut config_dirty);
+    apply_notification_patch(patch, state, &mut config_dirty);
     apply_history_patch(patch, state, menu, &mut outcome, &mut config_dirty);
     apply_continuous_record_patch(
         patch,

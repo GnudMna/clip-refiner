@@ -17,6 +17,8 @@ pub enum RefineSkipReason {
     RegexTimedOut,
     /// JSON / YAML / Markdown パーサー入力が上限を超えた
     ParserInputTooLarge,
+    /// HTML の要素の入れ子が上限を超えた
+    HtmlNestingTooDeep,
 }
 
 // ======================================================================

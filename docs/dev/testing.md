@@ -45,14 +45,14 @@ UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run bu
 
 | ファイル | 検証内容 |
 | :------- | :------- |
-| `monitor_flow.rs` | 監視加工、Undo、一時停止、履歴上限、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン、連続記録中の自動加工停止 |
+| `monitor_flow.rs` | 監視加工、Undo、自動変換無効時・一時停止時のスキップ、履歴上限、本文上限超過時の非加工、同一テキストの再加工抑制、自身の書き戻しスキップ、パイプライン、連続記録中の自動加工停止、HTML 形式の読み取り (`html-to-markdown`) と書き込み (`markdown-to-rich-text`) |
 | `worker_flow.rs` | 手動加工 (`ProcessMode`)、変更なし加工、Undo 空実行、履歴復元後の再加工抑制 (Polling / Event) |
 | `worker_recovery_flow.rs` | クリップボードワーカーの起動、`restart` による復旧、復旧メニュー表示 |
 | `history_flow.rs` | 暗号化履歴の記録・重複処理・復号 |
 | `regex_flow.rs` | `config` の正規表現設定、コンパイルキャッシュ、Event 方式 |
 | `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
 | `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
-| `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
+| `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制、テンプレートの展開 (通常クリップは展開しない・書式不正時はクリップボードを変えない) |
 | `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止・`config.toml` 永続化往復 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
@@ -94,7 +94,7 @@ UI ロジックテストは Node.js 未インストール時にスキップす�
 | :--- | :--- | :--- |
 | JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
 | Rust IPC / 組み立て | `settings_flow` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
-| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・画像サムネ/ホバー、クイックのお気に入り順 (設定 / クイック / 登録クリップ)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
+| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 の描画・入力・フォーカス・矢印/Enter・Escape 閉じる、設定の debounce 保存と外部 `config.toml` バナー、お気に入り並べ替え→TOML、登録クリップの空表示・検索・並べ替えボタン・テンプレートバッジ・画像サムネ/ホバー、クイックのお気に入り順と `Ctrl+Shift+↑/↓` 並べ替え→TOML・`Ctrl+Enter`・カテゴリ見出しの開閉と再表示時の復元 (`settings.spec.ts` / `quick_selector.spec.ts` / `clip_selector.spec.ts`)。`--e2e-window` + CDP (`CLIP_REFINER_E2E_CDP_PORT`) |
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `ocr_flow.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
 OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクル・ドラッグ確定・枠描画は上記 Rust テストで回帰検知する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。

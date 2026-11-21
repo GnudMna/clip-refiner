@@ -48,6 +48,12 @@ pub(crate) fn dispatch_settings_ipc(
         SettingsIpcAction::ClipDelete(index) => {
             dispatch::send_app_event(proxy, ClipsEvent::RequestDelete(index).into());
         }
+        SettingsIpcAction::ClipMove(index, direction) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestMove(index, direction).into());
+        }
+        SettingsIpcAction::ClipTemplate(index, enabled) => {
+            dispatch::send_app_event(proxy, ClipsEvent::RequestSetTemplate(index, enabled).into());
+        }
         SettingsIpcAction::ClipRegister => {
             dispatch::send_app_event(proxy, ClipsEvent::RequestRegister.into());
         }

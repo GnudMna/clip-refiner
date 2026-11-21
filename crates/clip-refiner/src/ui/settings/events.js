@@ -95,6 +95,24 @@ function handleContentClick(event) {
         return;
     }
 
+    if (resolved.type === 'clip-move') {
+        postIpcEnvelope({
+            type: 'clip-move',
+            index: resolved.index,
+            direction: resolved.direction,
+        });
+        return;
+    }
+
+    if (resolved.type === 'clip-template') {
+        postIpcEnvelope({
+            type: 'clip-template',
+            index: resolved.index,
+            enabled: resolved.enabled,
+        });
+        return;
+    }
+
     if (resolved.type === 'clip-copy') {
         postIpcEnvelope({ type: 'clip-copy', index: resolved.index });
         return;
@@ -123,12 +141,17 @@ export function bindContentDelegation() {
     ctx.contentDelegationBound = true;
 }
 
-/** 監視タブのフォームイベントをバインドする */
+/** 監視・自動変換のフォームイベントをバインドする (変換タブと一般タブで共有) */
 export function bindMonitorEvents() {
     document.getElementById('monitor-paused')?.addEventListener('change', (event) => {
         ctx.state.isPaused = event.target.checked;
         scheduleApply({ isPaused: event.target.checked });
         syncMonitorPauseBanner();
+    });
+
+    document.getElementById('auto-refine-enabled')?.addEventListener('change', (event) => {
+        ctx.state.autoRefineEnabled = event.target.checked;
+        scheduleApply({ autoRefineEnabled: event.target.checked });
     });
 
     document.querySelectorAll('input[name="monitorMode"]').forEach((input) => {
@@ -199,7 +222,7 @@ export function bindNotificationEvents() {
     }
 }
 
-/** 履歴・連続記録タブのフォームイベントをバインドする */
+/** クリップボードタブの履歴・連続記録フォームイベントをバインドする */
 export function bindHistoryEvents() {
     document.getElementById('history-enabled')?.addEventListener('change', (event) => {
         scheduleApply({ historyEnabled: event.target.checked });
@@ -485,6 +508,10 @@ export function bindFavoriteEvents() {
 
 /** 一般タブのイベントをバインドする */
 export function bindGeneralEvents() {
+    document.querySelector('.advanced-section')?.addEventListener('toggle', (event) => {
+        ctx.advancedSectionOpen = event.target.open;
+    });
+
     document.getElementById('launch-at-login')?.addEventListener('change', (event) => {
         scheduleApply({ launchAtLogin: event.target.checked });
     });
@@ -555,7 +582,7 @@ export function bindGeneralEvents() {
     });
 }
 
-/** 登録クリップタブのイベントをバインドする */
+/** クリップボードタブの登録クリップイベントをバインドする */
 export function bindClipEvents() {
     document.getElementById('clip-register-btn')?.addEventListener('click', () => {
         if (ctx.clipRegisterPending) {
@@ -569,29 +596,26 @@ export function bindClipEvents() {
 /** アクティブタブに応じたパネルイベントをバインドする */
 export function bindActivePanelEvents() {
     switch (ctx.activeTab) {
-        case 'monitor':
+        case 'convert':
             bindMonitorEvents();
-            break;
-        case 'notifications':
-            bindNotificationEvents();
-            break;
-        case 'history':
-            bindHistoryEvents();
+            bindFavoriteEvents();
             break;
         case 'regex':
             bindRegexEvents();
             break;
-        case 'favorites':
-            bindFavoriteEvents();
-            break;
-        case 'clips':
+        case 'clipboard':
+            bindHistoryEvents();
             bindClipEvents();
             break;
-        case 'general':
-            bindGeneralEvents();
+        case 'notifications':
+            bindNotificationEvents();
             break;
         case 'shortcuts':
             bindShortcutsEvents();
+            break;
+        case 'general':
+            bindGeneralEvents();
+            bindMonitorEvents();
             break;
         default:
             break;

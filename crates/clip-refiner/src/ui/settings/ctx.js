@@ -11,7 +11,7 @@ export const ctx = {
     /** @type {Record<string, unknown>|null} */
     state: null,
     /** @type {string} */
-    activeTab: 'general',
+    activeTab: 'convert',
     /** @type {ReturnType<typeof setTimeout>|null} */
     applyTimer: null,
     /** @type {ReturnType<typeof setTimeout>|null} */
@@ -36,6 +36,8 @@ export const ctx = {
     confirmDialogOnConfirm: null,
     /** @type {Record<string, number>} */
     tabScrollPositions: {},
+    /** @type {boolean} 一般タブの詳細設定を展開しているか (再描画後も維持する) */
+    advancedSectionOpen: false,
     /** @type {Set<string>} */
     renderedPanels: new Set(),
     /** @type {Set<string>} */

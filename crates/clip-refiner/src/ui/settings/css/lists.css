@@ -34,8 +34,29 @@
 
 .list-actions {
     display: flex;
+    align-items: center;
     gap: 6px;
     justify-content: flex-end;
+}
+
+/*
+ * 表の操作列はセルのまま扱う (flex にすると行の高さまで伸びず罫線が途切れる)
+ * 列幅をボタンの合計幅に絞り、残りをラベル列に回す
+ */
+td.list-actions {
+    display: table-cell;
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+    vertical-align: middle;
+}
+
+td.list-actions > * + * {
+    margin-left: 6px;
+}
+
+.list-actions button {
+    white-space: nowrap;
 }
 
 .toolbar {
@@ -197,6 +218,11 @@
 .clip-kind--text {
     background: rgba(168, 168, 179, 0.12);
     color: var(--text-muted);
+}
+
+.clip-template.is-active {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
 }
 
 .clip-preview {

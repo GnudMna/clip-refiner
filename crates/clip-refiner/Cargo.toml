@@ -35,6 +35,7 @@ app = [
     "dep:base64",
     "dep:chrono",
     "dep:clap",
+    "dep:getrandom",
     "dep:global-hotkey",
     "dep:image",
     "dep:minisign-verify",
@@ -136,6 +137,7 @@ arboard = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
 global-hotkey = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
 minisign-verify = { workspace = true, optional = true }

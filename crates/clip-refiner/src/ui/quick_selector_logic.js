@@ -9,6 +9,9 @@ const QuickSelectorLogic = (function () {
     /** @type {string} お気に入りセクションの表示名 */
     const FAVORITES_CATEGORY = 'お気に入り';
 
+    /** @type {string} カテゴリ見出し行の ID 接頭辞 (モード ID と衝突しない) */
+    const CATEGORY_ROW_PREFIX = 'category:';
+
     /**
      * @typedef {Object} QuickSelectorMode
      * @property {string} id
@@ -17,7 +20,9 @@ const QuickSelectorLogic = (function () {
      * @property {string} [value]
      * @property {boolean} [favorite]
      * @property {number} [favoriteIndex]
-     * @property {'favorites'|'category'} [listSection]
+     * @property {'favorites'|'category'|'header'} [listSection] - `header` はカテゴリ見出し行
+     * @property {boolean} [expanded] - 見出し行のカテゴリが展開中かどうか
+     * @property {number} [count] - 見出し行のカテゴリに属するモード数
      */
 
     /**
@@ -65,13 +70,37 @@ const QuickSelectorLogic = (function () {
     }
 
     /**
-     * 検索クエリに応じた表示用モード一覧を組み立てる
+     * カテゴリ見出し行の ID を返す
+     *
+     * @param {string} category
+     * @returns {string}
+     */
+    function categoryRowId(category) {
+        return CATEGORY_ROW_PREFIX + category;
+    }
+
+    /**
+     * 行がカテゴリ見出しかどうか
+     *
+     * @param {QuickSelectorMode|undefined|null} row
+     * @returns {boolean}
+     */
+    function isCategoryRow(row) {
+        return !!row && row.listSection === 'header';
+    }
+
+    /**
+     * 検索クエリに応じた表示用の行一覧を組み立てる
+     *
+     * 未検索時はお気に入り・カテゴリなしのモード・カテゴリ見出しの順に並べ、
+     * 展開中のカテゴリだけ見出しの直後にモードを並べる。検索中はカテゴリを無視して一致したモードだけを返す
      *
      * @param {QuickSelectorMode[]} modes
      * @param {string} query - 正規化済みクエリ
+     * @param {Set<string>} expandedCategories - 展開中のカテゴリ名
      * @returns {QuickSelectorMode[]}
      */
-    function buildDisplayList(modes, query) {
+    function buildDisplayList(modes, query, expandedCategories) {
         if (query) {
             return modes.filter((mode) => modeMatches(mode, query));
         }
@@ -83,10 +112,103 @@ const QuickSelectorLogic = (function () {
                 display.push(Object.assign({}, mode, { listSection: 'favorites' }));
             }
         }
+
+        /** @type {Map<string, QuickSelectorMode[]>} */
+        const byCategory = new Map();
         for (const mode of modes) {
-            display.push(Object.assign({}, mode, { listSection: 'category' }));
+            if (!mode.category) {
+                display.push(Object.assign({}, mode, { listSection: 'category' }));
+                continue;
+            }
+            if (!byCategory.has(mode.category)) {
+                byCategory.set(mode.category, []);
+            }
+            byCategory.get(mode.category).push(mode);
+        }
+
+        for (const [category, members] of byCategory) {
+            const expanded = expandedCategories.has(category);
+            display.push({
+                id: categoryRowId(category),
+                label: category,
+                category,
+                listSection: 'header',
+                expanded,
+                count: members.length,
+            });
+            if (expanded) {
+                for (const mode of members) {
+                    display.push(Object.assign({}, mode, { listSection: 'category' }));
+                }
+            }
         }
         return display;
+    }
+
+    /**
+     * 指定行が属するカテゴリ見出し行のインデックスを返す
+     *
+     * @param {QuickSelectorMode[]} rows
+     * @param {number} index
+     * @returns {number} 見出しに属さない行 (お気に入り・カテゴリなし・検索結果) は `-1`
+     */
+    function categoryRowIndexOf(rows, index) {
+        const row = rows[index];
+        if (!row || !row.category || row.listSection === 'favorites') {
+            return -1;
+        }
+        if (isCategoryRow(row)) {
+            return index;
+        }
+        if (row.listSection !== 'category') {
+            return -1;
+        }
+        for (let i = index - 1; i >= 0; i--) {
+            if (isCategoryRow(rows[i])) {
+                return rows[i].category === row.category ? i : -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 開閉状態を切り替えた後の展開カテゴリ集合を返す
+     *
+     * @param {Set<string>} expandedCategories
+     * @param {string} category
+     * @param {boolean} expand
+     * @returns {Set<string>}
+     */
+    function withCategoryExpanded(expandedCategories, category, expand) {
+        const next = new Set(expandedCategories);
+        if (expand) {
+            next.add(category);
+        } else {
+            next.delete(category);
+        }
+        return next;
+    }
+
+    /**
+     * アプリ側から渡された展開カテゴリを集合へ変換する
+     *
+     * @param {unknown} categories
+     * @returns {Set<string>} 配列でない値や文字列以外の要素は無視する
+     */
+    function toExpandedCategories(categories) {
+        return new Set(
+            Array.isArray(categories) ? categories.filter((value) => typeof value === 'string') : []
+        );
+    }
+
+    /**
+     * 展開中カテゴリの通知 IPC メッセージを組み立てる
+     *
+     * @param {Set<string>} expandedCategories
+     * @returns {string}
+     */
+    function expandedCategoriesMessage(expandedCategories) {
+        return 'expanded-categories:' + JSON.stringify([...expandedCategories]);
     }
 
     /**
@@ -102,6 +224,9 @@ const QuickSelectorLogic = (function () {
         }
         if (mode.listSection === 'favorites') {
             return FAVORITES_CATEGORY;
+        }
+        if (mode.listSection === 'header') {
+            return mode.category;
         }
         return mode.category || '';
     }
@@ -158,7 +283,7 @@ const QuickSelectorLogic = (function () {
             '<span class="label">' +
             highlightText(mode.label, query) +
             '</span>' +
-            (isCurrent ? '<span class="current-badge">選択中</span>' : '') +
+            (isCurrent ? '<span class="current-badge">自動変換中</span>' : '') +
             '</div>' +
             (query && mode.value
                 ? '<span class="value-hint">' + highlightText(mode.value, query) + '</span>'
@@ -167,7 +292,17 @@ const QuickSelectorLogic = (function () {
     }
 
     /**
-     * モード選択 IPC メッセージを組み立てる
+     * 現在のクリップボードへ一回だけ適用する IPC メッセージを組み立てる
+     *
+     * @param {string} id
+     * @returns {string}
+     */
+    function applyMessage(id) {
+        return 'apply:' + id;
+    }
+
+    /**
+     * 自動変換モードに設定する IPC メッセージを組み立てる
      *
      * @param {string} id
      * @returns {string}
@@ -199,6 +334,12 @@ const QuickSelectorLogic = (function () {
 
     return {
         FAVORITES_CATEGORY,
+        categoryRowId,
+        isCategoryRow,
+        categoryRowIndexOf,
+        withCategoryExpanded,
+        toExpandedCategories,
+        expandedCategoriesMessage,
         modeById,
         favoriteIds,
         modeMatches,
@@ -208,6 +349,7 @@ const QuickSelectorLogic = (function () {
         shouldShowReorderButtons,
         canMoveSelectedFavorite,
         buildItemInnerHtml,
+        applyMessage,
         selectMessage,
         toggleFavoriteMessage,
         moveFavoriteMessage,

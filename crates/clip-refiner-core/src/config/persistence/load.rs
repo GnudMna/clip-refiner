@@ -214,6 +214,7 @@ fn encrypt_legacy_toml_clips(legacy_clips: Vec<LegacyTomlRegisteredClip>) -> Vec
                 preview: String::new(),
                 text_ciphertext: Vec::new(),
                 image_file: Some(image_file),
+                template: false,
             });
             continue;
         }

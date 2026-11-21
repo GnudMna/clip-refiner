@@ -3,8 +3,7 @@ use std::time::Instant;
 
 use super::features::{
     handle_app_control, handle_clips_event, handle_continuous_record_event, handle_favorites_event,
-    handle_history_event, handle_monitor_event, handle_notification_event,
-    handle_refine_mode_event, handle_regex_preset_event,
+    handle_history_event, handle_refine_mode_event, handle_regex_preset_event,
 };
 use super::menu::TrayMenu;
 use super::selector::{
@@ -25,9 +24,10 @@ mod ocr;
 mod user_event;
 
 pub(crate) use super::features::{
-    copy_registered_clip, delete_registered_clip, move_favorite_mode, refresh_clips_views,
-    toggle_continuous_record, toggle_favorite_mode, undo_last_continuous_record,
-    update_monitor_mode, update_refine,
+    apply_refine_once, copy_registered_clip, delete_registered_clip, move_favorite_mode,
+    move_registered_clip, refresh_clips_views, select_auto_refine_mode, set_auto_refine_enabled,
+    set_registered_clip_template, toggle_continuous_record, toggle_favorite_mode,
+    undo_last_continuous_record, update_monitor_mode, update_refine,
 };
 pub(crate) use config_reload::reload_config_with_notification;
 pub(crate) use context::AppEventContext;
@@ -108,19 +108,13 @@ pub fn handle_menu_event(
     if handle_clips_event(&event.id, menu, state, clipboard_worker) {
         return;
     }
-    if handle_notification_event(&event.id, menu, state) {
-        return;
-    }
     if handle_favorites_event(&event.id, menu, state, quick_selector) {
         return;
     }
     if handle_refine_mode_event(&event.id, menu, state, clipboard_worker, quick_selector) {
         return;
     }
-    if handle_regex_preset_event(&event.id, menu, state) {
-        return;
-    }
-    handle_monitor_event(&event.id, menu, state);
+    handle_regex_preset_event(&event.id, menu, state);
 }
 
 /// UIウィンドウ (クイックセレクター / 登録クリップセレクター) に関連するイベントを処理する

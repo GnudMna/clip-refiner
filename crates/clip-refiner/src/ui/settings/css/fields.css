@@ -12,6 +12,22 @@
     border-radius: var(--border-radius);
 }
 
+.advanced-section {
+    margin-bottom: 14px;
+}
+
+.advanced-section > summary {
+    padding: 8px 2px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.advanced-section-body {
+    padding-top: 6px;
+}
+
 .card-title {
     margin: 0 0 12px;
     font-size: 13px;

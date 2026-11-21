@@ -3,6 +3,7 @@
 //! core の型付きエラーおよび更新の `UpdateError` から通知タイトル・本文を生成し、
 //! ログとデスクトップ通知を一元化する
 
+use crate::clip_template::ClipTemplateError;
 use crate::config::AddRegisteredClipError;
 use crate::platform;
 use crate::platform::update::UpdateError;
@@ -205,6 +206,18 @@ pub fn registered_clip_register_failure(err: AddRegisteredClipError) -> UserNoti
         AddRegisteredClipError::EncryptFailed => "登録クリップの暗号化に失敗しました",
     };
     UserNotification::static_message(titles::REGISTERED_CLIP, body)
+}
+
+/// 登録クリップのテンプレート展開失敗をユーザー通知へ変換する
+///
+/// # Arguments
+/// * `err` - 展開失敗理由
+///
+/// # Returns
+/// * `UserNotification` - 失敗理由を本文にした通知
+#[must_use]
+pub fn registered_clip_template_failure(err: &ClipTemplateError) -> UserNotification {
+    UserNotification::new(titles::REGISTERED_CLIP, err.to_string())
 }
 
 /// 連続記録で本文が上限超過のときの通知を返す

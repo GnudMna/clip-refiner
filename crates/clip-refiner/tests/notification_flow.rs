@@ -1,4 +1,4 @@
-//! 通知設定の移行・IPC・トレイメニュー連携の統合テスト
+//! 通知設定の移行・IPC の統合テスト
 
 use clip_refiner::test_helpers::SettingsTestContext;
 use clip_refiner_core::{AppConfig, NotificationSettings};
@@ -52,9 +52,9 @@ notify_actions = false
     assert!(!config.notification_settings.notify_ocr);
 }
 
-/// 通知 IPC パッチが全カテゴリとトレイメニューへ反映されるようにすること
+/// 通知 IPC パッチが全カテゴリへ反映されるようにすること
 #[test]
-fn apply_ipc_updates_all_notification_menu_items() {
+fn apply_ipc_updates_all_notification_settings() {
     let ctx = SettingsTestContext::new();
 
     assert!(ctx.apply_ipc(
@@ -71,17 +71,6 @@ fn apply_ipc_updates_all_notification_menu_items() {
     assert!(ns.notify_favorites);
     assert!(!ns.notify_continuous_record);
     assert!(ns.notify_result);
-
-    let menu = &ctx.menu().notification;
-    assert!(menu.enabled_item.is_checked());
-    assert!(!menu.notify_process_item.is_checked());
-    assert!(menu.notify_pause_item.is_checked());
-    assert!(!menu.notify_history_restore_item.is_checked());
-    assert!(menu.notify_ocr_item.is_checked());
-    assert!(!menu.notify_registered_clip_item.is_checked());
-    assert!(menu.notify_favorites_item.is_checked());
-    assert!(!menu.notify_continuous_record_item.is_checked());
-    assert!(menu.notify_result_item.is_checked());
 }
 
 /// マスター OFF 時でも個別通知トグルを設定へ保存できるようにすること
@@ -98,8 +87,6 @@ fn master_off_allows_persisting_sub_notification_toggles() {
     assert!(ns.notify_process);
     assert!(!ns.notify_ocr);
     assert!(ns.notify_result);
-    assert!(!ctx.menu().notification.enabled_item.is_checked());
-    assert!(ctx.menu().notification.notify_process_item.is_checked());
 }
 
 /// マスター OFF 時の部分パッチが他カテゴリを保持できるようにすること

@@ -38,7 +38,7 @@ pub use ordered_value::OrderedValue;
 #[cfg(feature = "clipboard")]
 pub use owned_clipboard::OwnedClipboard;
 pub use pipeline::{apply_text_pipeline, split_pipeline};
-pub use text_clipboard::{ClipboardIoError, ImageClipboard, TextClipboard};
+pub use text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 pub use transform::regex::{
     REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace, validate_regex_settings,
 };

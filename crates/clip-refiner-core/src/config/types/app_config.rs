@@ -37,11 +37,17 @@ fn default_continuous_record_limit() -> usize {
 /// アプリケーションの設定情報
 ///
 /// TOML ファイルとして保存・読み込みされるアプリケーション全体の構成設定
+///
+/// `bool` 項目は `config.toml` のキーと 1 対 1 に対応する独立した切り替えのため、まとめない
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct AppConfig {
     /// 設定ファイルのスキーマバージョン
     #[serde(default = "default_config_version")]
     pub version: u32,
+    /// コピー時に自動変換するかどうか (新規設定は無効。v3 以前からの移行時は有効)
+    #[serde(default)]
+    pub auto_refine_enabled: bool,
     /// 最後に使用した(または常駐時に使用する)変換モード
     pub mode: RefineMode,
     /// 監視時に順に適用する変換モードの連鎖 (空の場合は `mode` のみを使用)
@@ -100,6 +106,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             version: consts::CONFIG_VERSION,
+            auto_refine_enabled: false,
             mode: RefineMode::UrlDecode,
             pipeline: Vec::new(),
             interval_ms: 1000,
@@ -287,6 +294,7 @@ impl AppConfig {
             preview,
             text_ciphertext,
             image_file: None,
+            template: false,
         });
         self.normalize_clips();
         Ok(())
@@ -332,6 +340,7 @@ impl AppConfig {
             preview: String::new(),
             text_ciphertext: Vec::new(),
             image_file: Some(image_file),
+            template: false,
         });
         self.normalize_clips();
         Ok(())
@@ -356,6 +365,48 @@ impl AppConfig {
         }
         self.clips.remove(index);
         self.normalize_clips();
+        true
+    }
+
+    /// 指定インデックスのテキスト登録クリップのテンプレート展開を切り替える
+    ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `index` - 対象の登録クリップのインデックス
+    /// * `enabled` - テンプレートとして展開するかどうか
+    ///
+    /// # Returns
+    /// * `bool` - 変更した場合は `true`。範囲外・画像登録・値が同じ場合は `false`
+    pub fn set_registered_clip_template(&mut self, index: usize, enabled: bool) -> bool {
+        let Some(clip) = self.clips.get_mut(index) else {
+            return false;
+        };
+        if clip.is_image() || clip.template == enabled {
+            return false;
+        }
+        clip.template = enabled;
+        true
+    }
+
+    /// 指定インデックスの登録クリップを1つ上または下へ移動する
+    ///
+    /// # Arguments
+    /// * `self` - 更新対象の設定
+    /// * `index` - 移動する登録クリップのインデックス
+    /// * `direction` - 移動方向
+    ///
+    /// # Returns
+    /// * `bool` - 移動できた場合は `true`。範囲外または端で移動できない場合は `false`
+    pub fn move_registered_clip(&mut self, index: usize, direction: FavoriteMoveDirection) -> bool {
+        if index >= self.clips.len() {
+            return false;
+        }
+        let target = match direction {
+            FavoriteMoveDirection::Up if index > 0 => index - 1,
+            FavoriteMoveDirection::Down if index + 1 < self.clips.len() => index + 1,
+            _ => return false,
+        };
+        self.clips.swap(index, target);
         true
     }
 

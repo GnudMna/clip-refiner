@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 
 use super::serialize::config_to_toml;
 use super::serialize::docs::{
-    DOC_MODE, DOC_VERSION, doc_continuous_record_limit, doc_favorite_modes, doc_history_limit,
-    doc_hotkey_favorite_slots, doc_interval_ms, doc_pipeline, doc_regex_presets,
-    doc_selector_webview_idle_minutes, section_hotkeys,
+    DOC_AUTO_REFINE_ENABLED, DOC_MODE, DOC_VERSION, doc_continuous_record_limit,
+    doc_favorite_modes, doc_history_limit, doc_hotkey_favorite_slots, doc_interval_ms,
+    doc_pipeline, doc_regex_presets, doc_selector_webview_idle_minutes, section_hotkeys,
 };
 use super::types::{AppConfig, HotkeySettings, NotificationSettings};
 use crate::consts;
@@ -122,6 +122,10 @@ fn spec_root_fields(config: &AppConfig) -> Vec<SpecField> {
         SpecField {
             key: "version",
             default_cell: config.version.to_string(),
+        },
+        SpecField {
+            key: "auto_refine_enabled",
+            default_cell: config.auto_refine_enabled.to_string(),
         },
         SpecField {
             key: "mode",
@@ -280,6 +284,7 @@ fn processing_limit_needles() -> Vec<String> {
     vec![
         format_mib(consts::MAX_CLIPBOARD_TEXT_BYTES),
         format_mib(consts::MAX_PARSER_INPUT_BYTES),
+        format!("{} 階層", consts::MAX_HTML_NESTING_DEPTH),
         format_kib(consts::MAX_REGEX_PATTERN_BYTES),
         format!("{} 件", consts::MAX_REGEX_PRESETS),
         format!("{} 件", consts::MAX_REGEX_STEPS_PER_PRESET),
@@ -328,6 +333,7 @@ fn default_hotkeys() -> [&'static str; 10] {
 fn generated_toml_comments() -> Vec<String> {
     vec![
         DOC_VERSION.to_string(),
+        DOC_AUTO_REFINE_ENABLED.to_string(),
         DOC_MODE.to_string(),
         doc_pipeline(),
         doc_favorite_modes(),

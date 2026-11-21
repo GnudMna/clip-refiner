@@ -2,19 +2,22 @@ use std::sync::Arc;
 
 use super::favorites::refresh_quick_selector_modes;
 use crate::refiner::RefineMode;
+use crate::tray::clipboard_monitor::bump_monitor_generation;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
+use crate::tray::notify::{NotificationCategory, show_category_notification};
 use crate::tray::selector::QuickSelectorWindow;
-use crate::tray::state::AppState;
 use crate::tray::state::LockExt;
+use crate::tray::state::{AppState, SettingsEvent};
 use crate::tray::worker::{ClipboardCommand, ClipboardWorkerHandle};
 
 // ======================================================================
 // 変換モード更新
 // ======================================================================
-/// 変換モードを更新し、メニューの状態や設定ファイルへ反映させる
+/// 自動変換の変換モードを更新し、メニューの状態や設定ファイルへ反映させる
 ///
-/// 必要に応じてクリップボードワーカーに加工命令を送信する
+/// パイプラインは解除し、複数段だった場合は通知で知らせる。
+/// 現在のクリップボードにも新しいモードを適用する。
 ///
 /// # Arguments
 /// * `state` - アプリケーションの共有状態
@@ -28,9 +31,9 @@ pub fn update_refine(
     mode: RefineMode,
     quick_selector: Option<&QuickSelectorWindow>,
 ) {
-    state.with_config_mut(|c| {
+    let cleared_pipeline = state.with_config_mut(|c| {
         c.mode = mode;
-        c.pipeline.clear();
+        std::mem::take(&mut c.pipeline)
     });
 
     let active_modes: std::collections::HashSet<RefineMode> = std::iter::once(mode).collect();
@@ -45,10 +48,86 @@ pub fn update_refine(
 
     let favorite_modes = state.with_config(|config| config.favorite_modes.clone());
     menu.refine.sync_favorite_actions(mode, &favorite_modes);
+    menu.sync_auto_processing_state(state);
 
     state.save_config();
+    // 黙ってパイプラインが消えると監視結果が変わった理由が分からないため明示する
+    if cleared_pipeline.len() > 1 {
+        show_category_notification(
+            state,
+            NotificationCategory::Process,
+            "自動変換を変更",
+            &format!(
+                "パイプライン ({}) を解除し、{} に切り替えました",
+                RefineMode::pipeline_label(&cleared_pipeline),
+                mode.label()
+            ),
+        );
+    }
     dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::ProcessMode(mode));
     refresh_quick_selector_modes(state, quick_selector);
+}
+
+/// 変換モードを自動変換に設定し、自動変換が無効なら有効にする
+///
+/// トレイの変換モードメニューやクイックセレクターの `Ctrl+Enter` など、
+/// 利用者が自動変換のモードとして明示的に選んだときに使う
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `clipboard_worker` - クリップボード・ワーカーへの送信ハンドル
+/// * `mode` - 設定する変換モード
+/// * `quick_selector` - 一覧を再描画するクイックセレクター
+pub(crate) fn select_auto_refine_mode(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    clipboard_worker: &ClipboardWorkerHandle,
+    mode: RefineMode,
+    quick_selector: Option<&QuickSelectorWindow>,
+) {
+    if set_auto_refine_enabled(state, menu, true) {
+        let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
+    }
+    update_refine(state, menu, clipboard_worker, mode, quick_selector);
+}
+
+/// コピー時の自動変換の有効・無効を切り替え、メニュー表示と監視状態へ反映する
+///
+/// 設定ファイルへの保存は呼び出し側で行う
+///
+/// # Arguments
+/// * `state` - アプリケーションの共有状態
+/// * `menu` - トレイメニュー構造体
+/// * `enabled` - 自動変換を有効にする場合は `true`
+///
+/// # Returns
+/// * `bool` - 設定値が変わった場合は `true`
+pub(crate) fn set_auto_refine_enabled(
+    state: &Arc<AppState>,
+    menu: &TrayMenu,
+    enabled: bool,
+) -> bool {
+    let changed = state.with_config_mut(|c| {
+        let changed = c.auto_refine_enabled != enabled;
+        c.auto_refine_enabled = enabled;
+        changed
+    });
+    menu.sync_auto_processing_state(state);
+    if changed {
+        // 切り替え時点のクリップボードは加工せず、次のコピーから対象にする
+        bump_monitor_generation(state);
+    }
+    changed
+}
+
+/// 自動変換の設定を変えずに、現在のクリップボードへ変換モードを一回だけ適用する
+///
+/// # Arguments
+/// * `clipboard_worker` - クリップボード・ワーカーへの送信ハンドル
+/// * `mode` - 適用する変換モード
+pub(crate) fn apply_refine_once(clipboard_worker: &ClipboardWorkerHandle, mode: RefineMode) {
+    dispatch::send_clipboard_command(clipboard_worker, ClipboardCommand::ProcessMode(mode));
 }
 
 // ======================================================================
@@ -71,6 +150,15 @@ pub(crate) fn handle_refine_mode_event(
     clipboard_worker: &ClipboardWorkerHandle,
     quick_selector: Option<&QuickSelectorWindow>,
 ) -> bool {
+    if id == menu.refine.auto_refine_item.id() {
+        let enabled = menu.refine.auto_refine_item.is_checked();
+        if set_auto_refine_enabled(state, menu, enabled) {
+            state.save_config();
+            let _ = state.proxy.send_event(SettingsEvent::Refresh.into());
+        }
+        return true;
+    }
+
     if let Some(mode) = menu
         .refine
         .favorite_records
@@ -79,7 +167,7 @@ pub(crate) fn handle_refine_mode_event(
         .find(|(item, _)| item.id() == id)
         .map(|(_, mode)| *mode)
     {
-        update_refine(state, menu, clipboard_worker, mode, quick_selector);
+        select_auto_refine_mode(state, menu, clipboard_worker, mode, quick_selector);
         return true;
     }
 
@@ -88,7 +176,7 @@ pub(crate) fn handle_refine_mode_event(
         .all_mode_items()
         .find(|(item, _)| item.id() == id)
     {
-        update_refine(state, menu, clipboard_worker, *mode, quick_selector);
+        select_auto_refine_mode(state, menu, clipboard_worker, *mode, quick_selector);
         true
     } else {
         false

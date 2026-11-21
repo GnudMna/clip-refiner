@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use super::decision::{should_process_clipboard, should_record_continuous_clipboard};
-use crate::config::MonitorMode;
 use crate::refiner::{
-    ClipboardProcessError, ClipboardProcessOutcome, ImageClipboard, RefineContext, RefineMode,
-    TextClipboard, process_clipboard_pipeline_io,
+    ClipboardProcessError, ClipboardProcessOutcome, HtmlClipboard, ImageClipboard, RefineContext,
+    RefineMode, TextClipboard, process_clipboard_pipeline_io,
 };
 use crate::security::is_within_clipboard_limit;
 use crate::tray::notify;
@@ -90,7 +89,7 @@ pub(crate) fn recover_continuous_record_on_reset(
 ///
 /// # Returns
 /// * `ClipboardObserveResult` - 観測結果。`ReadFailed` のとき呼び出し元は変更トークンを進めない
-pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard>(
+pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
     state: &Arc<AppState>,
     snap: &MonitorSnapshot,
@@ -264,30 +263,14 @@ pub(crate) fn record_clipboard_outcome(
             ClipboardProcessError::NoText
             | ClipboardProcessError::TextTooLarge
             | ClipboardProcessError::RegexTimedOut
-            | ClipboardProcessError::ParserInputTooLarge,
+            | ClipboardProcessError::ParserInputTooLarge
+            | ClipboardProcessError::HtmlNestingTooDeep,
         ) => {
             state
                 .clipboard_session()
                 .record_clipboard_observed(observed_text);
             false
         }
-    }
-}
-
-// ======================================================================
-// トレイメニュー更新
-// ======================================================================
-/// 監視方式の切り替えに伴い、関連するUIコンポーネントの状態を更新する
-///
-/// 例えば、イベントモード時は「監視周期」の設定メニューを無効化する
-///
-/// # Arguments
-/// * `menu` - トレイメニュー構造体
-/// * `monitor_mode` - 新しく選択された監視方式
-pub fn update_monitor_mode_impl(menu: &crate::tray::menu::TrayMenu, monitor_mode: MonitorMode) {
-    match monitor_mode {
-        MonitorMode::Event => menu.interval.main_submenu.set_enabled(false),
-        MonitorMode::Polling => menu.interval.main_submenu.set_enabled(true),
     }
 }
 
@@ -334,6 +317,7 @@ mod tests {
             pipeline,
             interval_ms: 1000,
             is_paused: false,
+            auto_refine_enabled: true,
             history_enabled,
             continuous_record_enabled,
             regex_settings: RegexSettings::default(),

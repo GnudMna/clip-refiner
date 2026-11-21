@@ -71,7 +71,20 @@ function test_validate_hotkey_binding() {
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('').valid, false);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('', { allowEmpty: true }).valid, true);
     assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift').valid, false);
-    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Enter').valid, false);
+    for (const binding of [
+        'Alt+Enter',
+        'Ctrl+F24',
+        'Alt+Shift+Up',
+        'Ctrl+Numpad5',
+        'Ctrl+NumpadAdd',
+        'Alt+Shift+-',
+        'Alt+Shift+Esc',
+    ]) {
+        assert.equal(SettingsSharedLogic.validateHotkeyBinding(binding).valid, true, binding);
+    }
+    for (const binding of ['Alt+F25', 'Alt+;', 'Alt+CapsLock', 'Alt+Numpad10']) {
+        assert.equal(SettingsSharedLogic.validateHotkeyBinding(binding).valid, false, binding);
+    }
 }
 
 /** ホットキー DOM 状態から IPC パッチを組み立てられること */
@@ -168,16 +181,16 @@ function test_should_full_render_on_force_or_external_sync() {
     );
 }
 
-/** 編集中でもお気に入りはフル再描画し、ショートカットはフォーカス維持のため省略すること */
+/** 編集中でも変換タブはフル再描画し、ショートカットはフォーカス維持のため省略すること */
 function test_should_full_render_while_editing_favorites_or_shortcuts() {
-    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'favorites', false), true);
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'convert', false), true);
     assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'shortcuts', false), false);
     assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'regex', false), false);
 }
 
-/** 登録クリップ処理中は clips タブでフル再描画すること */
+/** 登録クリップ処理中はクリップボードタブでフル再描画すること */
 function test_should_full_render_when_clip_register_pending_on_clips_tab() {
-    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'clips', true), true);
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'clipboard', true), true);
     assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'regex', true), false);
 }
 

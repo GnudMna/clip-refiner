@@ -307,6 +307,24 @@ mod tests {
         ));
     }
 
+    /// `clip-move` メッセージを解釈できるようにすること
+    #[test]
+    fn parse_ipc_clip_move() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"clip-move","index":2,"direction":"down"}"#),
+            Some(SettingsIpcAction::ClipMove(2, FavoriteMoveDirection::Down))
+        ));
+    }
+
+    /// `clip-template` メッセージを解釈できるようにすること
+    #[test]
+    fn parse_ipc_clip_template() {
+        assert!(matches!(
+            parse_settings_ipc_message(r#"{"type":"clip-template","index":1,"enabled":true}"#),
+            Some(SettingsIpcAction::ClipTemplate(1, true))
+        ));
+    }
+
     /// `clip-register` メッセージを解釈できるようにすること
     #[test]
     fn parse_ipc_clip_register() {

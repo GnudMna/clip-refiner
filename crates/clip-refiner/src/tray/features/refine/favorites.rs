@@ -5,7 +5,9 @@ use crate::refiner::RefineMode;
 use crate::tray::dispatch;
 use crate::tray::menu::TrayMenu;
 use crate::tray::notify::{NotificationCategory, show_category_notification};
-use crate::tray::selector::{QuickSelectorWindow, quick_selector_json};
+use crate::tray::selector::{
+    QuickSelectorWindow, quick_selector_current_mode, quick_selector_json,
+};
 use crate::tray::state::{AppState, HotkeyEvent};
 
 // ======================================================================
@@ -123,7 +125,7 @@ pub(crate) fn refresh_quick_selector_modes(
         && quick_selector.is_visible()
     {
         let modes_json = state.with_config(quick_selector_json);
-        let current_mode = state.with_config(|config| config.mode);
+        let current_mode = state.with_config(quick_selector_current_mode);
         quick_selector.refresh_modes(&modes_json, current_mode);
     }
 }

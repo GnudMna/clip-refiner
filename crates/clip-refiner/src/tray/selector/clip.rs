@@ -6,6 +6,7 @@ use super::window::{
     WebSelectorWindow, WebViewWindowOptions, build_hidden_selector_window,
     embed_clip_selector_assets,
 };
+use crate::config::FavoriteMoveDirection;
 use crate::consts;
 use crate::tray::dispatch;
 use crate::tray::state::{AppEvent, ClipsEvent, SelectorEvent};
@@ -25,6 +26,10 @@ pub(crate) enum ClipSelectorIpcAction {
     Register,
     /// 登録クリップを削除する
     DeleteClip(usize),
+    /// 登録クリップの表示順を変更する
+    MoveClip(usize, FavoriteMoveDirection),
+    /// 登録クリップのテンプレート展開を切り替える
+    SetTemplate(usize, bool),
     /// セレクタを閉じる
     Close,
 }
@@ -45,6 +50,24 @@ pub(crate) fn parse_clip_selector_ipc_message(msg: &str) -> Option<ClipSelectorI
             .parse::<usize>()
             .ok()
             .map(ClipSelectorIpcAction::DeleteClip)
+    } else if let Some(rest) = msg.strip_prefix("move:") {
+        let (index_str, direction_str) = rest.split_once(':')?;
+        let index = index_str.parse::<usize>().ok()?;
+        let direction = match direction_str {
+            "up" => FavoriteMoveDirection::Up,
+            "down" => FavoriteMoveDirection::Down,
+            _ => return None,
+        };
+        Some(ClipSelectorIpcAction::MoveClip(index, direction))
+    } else if let Some(rest) = msg.strip_prefix("template:") {
+        let (index_str, state_str) = rest.split_once(':')?;
+        let index = index_str.parse::<usize>().ok()?;
+        let enabled = match state_str {
+            "on" => true,
+            "off" => false,
+            _ => return None,
+        };
+        Some(ClipSelectorIpcAction::SetTemplate(index, enabled))
     } else {
         None
     }
@@ -134,6 +157,18 @@ impl ClipSelectorWindow {
                         dispatch::send_app_event(
                             &proxy_clone,
                             ClipsEvent::RequestDelete(index).into(),
+                        );
+                    }
+                    Some(ClipSelectorIpcAction::MoveClip(index, direction)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            ClipsEvent::RequestMove(index, direction).into(),
+                        );
+                    }
+                    Some(ClipSelectorIpcAction::SetTemplate(index, enabled)) => {
+                        dispatch::send_app_event(
+                            &proxy_clone,
+                            ClipsEvent::RequestSetTemplate(index, enabled).into(),
                         );
                     }
                     Some(ClipSelectorIpcAction::Close) => {
@@ -373,6 +408,44 @@ mod tests {
             parse_clip_selector_ipc_message("delete:3"),
             Some(ClipSelectorIpcAction::DeleteClip(3))
         );
+    }
+
+    /// `move:` メッセージからインデックスと移動方向を復元できるようにすること
+    #[test]
+    fn parse_ipc_move_clip() {
+        assert_eq!(
+            parse_clip_selector_ipc_message("move:2:up"),
+            Some(ClipSelectorIpcAction::MoveClip(
+                2,
+                FavoriteMoveDirection::Up
+            ))
+        );
+        assert_eq!(
+            parse_clip_selector_ipc_message("move:0:down"),
+            Some(ClipSelectorIpcAction::MoveClip(
+                0,
+                FavoriteMoveDirection::Down
+            ))
+        );
+        assert_eq!(parse_clip_selector_ipc_message("move:0:left"), None);
+        assert_eq!(parse_clip_selector_ipc_message("move:x:up"), None);
+        assert_eq!(parse_clip_selector_ipc_message("move:1"), None);
+    }
+
+    /// `template:` メッセージからインデックスと有効・無効を復元できるようにすること
+    #[test]
+    fn parse_ipc_set_template() {
+        assert_eq!(
+            parse_clip_selector_ipc_message("template:1:on"),
+            Some(ClipSelectorIpcAction::SetTemplate(1, true))
+        );
+        assert_eq!(
+            parse_clip_selector_ipc_message("template:0:off"),
+            Some(ClipSelectorIpcAction::SetTemplate(0, false))
+        );
+        assert_eq!(parse_clip_selector_ipc_message("template:0:yes"), None);
+        assert_eq!(parse_clip_selector_ipc_message("template:x:on"), None);
+        assert_eq!(parse_clip_selector_ipc_message("template:1"), None);
     }
 
     /// 不正なメッセージは `None` を返すようにすること

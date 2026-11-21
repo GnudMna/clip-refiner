@@ -12,6 +12,7 @@ const ClipSelectorLogic = (function () {
      * @property {string} label
      * @property {string} [preview]
      * @property {string} kind
+     * @property {boolean} [template] - コピー時にプレースホルダを展開するか
      * @property {string} [thumbnail]
      * @property {string} [hover_preview]
      */
@@ -38,7 +39,12 @@ const ClipSelectorLogic = (function () {
             return true;
         }
 
-        const fields = [item.label, item.preview, item.kind === 'image' ? '画像' : ''];
+        const fields = [
+            item.label,
+            item.preview,
+            item.kind === 'image' ? '画像' : '',
+            item.template ? 'テンプレート' : '',
+        ];
         return fields.some((field) => field && field.toLowerCase().includes(query));
     }
 
@@ -153,6 +159,75 @@ const ClipSelectorLogic = (function () {
     }
 
     /**
+     * 並べ替え IPC メッセージを組み立てる
+     *
+     * @param {string} id
+     * @param {'up'|'down'} direction
+     * @returns {string}
+     */
+    function moveMessage(id, direction) {
+        return 'move:' + id + ':' + direction;
+    }
+
+    /**
+     * テンプレート切り替え IPC メッセージを組み立てる
+     *
+     * @param {string} id
+     * @param {boolean} enabled
+     * @returns {string}
+     */
+    function templateMessage(id, enabled) {
+        return 'template:' + id + ':' + (enabled ? 'on' : 'off');
+    }
+
+    /**
+     * 選択行のテンプレート展開を切り替えたときの要求内容を返す
+     *
+     * @param {number} selectedIndex
+     * @param {ClipSelectorItem[]} filtered
+     * @returns {{ id: string, enabled: boolean }|null} 登録行・画像・範囲外は `null`
+     */
+    function resolveTemplateToggle(selectedIndex, filtered) {
+        const item = filtered[selectedIndex];
+        if (!item || item.kind === 'image') {
+            return null;
+        }
+        return { id: item.id, enabled: !item.template };
+    }
+
+    /**
+     * 並べ替えボタンを表示するかどうか
+     *
+     * 検索中は表示順と保存順が一致しないため並べ替えを無効にする
+     *
+     * @param {string} query - 正規化済みクエリ
+     * @returns {boolean}
+     */
+    function canReorder(query) {
+        return !query;
+    }
+
+    /**
+     * 選択行を指定方向へ移動したときの移動先インデックスを返す
+     *
+     * @param {string} query - 正規化済みクエリ
+     * @param {number} index - 選択中の行インデックス
+     * @param {number} filteredLength
+     * @param {'up'|'down'} direction
+     * @returns {number|null} 移動できない場合 (検索中・登録行・端) は `null`
+     */
+    function moveTargetIndex(query, index, filteredLength, direction) {
+        if (!canReorder(query) || index < 0 || index >= filteredLength) {
+            return null;
+        }
+        const target = direction === 'up' ? index - 1 : index + 1;
+        if (target < 0 || target >= filteredLength) {
+            return null;
+        }
+        return target;
+    }
+
+    /**
      * 「クリップボードを登録」行の内部 HTML を組み立てる
      *
      * @param {string} query
@@ -186,6 +261,11 @@ const ClipSelectorLogic = (function () {
         selectMessage,
         registerMessage,
         deleteMessage,
+        moveMessage,
+        templateMessage,
+        resolveTemplateToggle,
+        canReorder,
+        moveTargetIndex,
         buildRegisterRowInnerHtml,
     };
 })();

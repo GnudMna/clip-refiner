@@ -394,6 +394,62 @@ history_enabled = true
         });
     }
 
+    /// `move_registered_clip` が隣の項目と入れ替わり、端と範囲外では移動しないこと
+    #[test]
+    fn test_move_registered_clip() {
+        use super::types::FavoriteMoveDirection;
+
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            for text in ["a", "b", "c"] {
+                config.add_registered_clip(text).expect("add");
+            }
+            let texts = |config: &AppConfig| -> Vec<String> {
+                (0..config.clips.len())
+                    .map(
+                        |i| match config.resolve_registered_clip(i).expect("resolve") {
+                            super::ResolvedClip::Text(text) => text.as_str().to_string(),
+                            super::ResolvedClip::Image { .. } => panic!("text expected"),
+                        },
+                    )
+                    .collect()
+            };
+
+            assert!(config.move_registered_clip(2, FavoriteMoveDirection::Up));
+            assert_eq!(texts(&config), ["a", "c", "b"]);
+            assert!(config.move_registered_clip(0, FavoriteMoveDirection::Down));
+            assert_eq!(texts(&config), ["c", "a", "b"]);
+
+            assert!(!config.move_registered_clip(0, FavoriteMoveDirection::Up));
+            assert!(!config.move_registered_clip(2, FavoriteMoveDirection::Down));
+            assert!(!config.move_registered_clip(3, FavoriteMoveDirection::Up));
+            assert_eq!(texts(&config), ["c", "a", "b"]);
+        });
+    }
+
+    /// `set_registered_clip_template` がテキスト登録だけを切り替え、変化の有無を返すこと
+    #[test]
+    fn test_set_registered_clip_template() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let mut config = AppConfig::default();
+            config.add_registered_clip("{date}").expect("add");
+            config
+                .add_registered_image(1, 1, &[0, 0, 0, 255])
+                .expect("add image");
+
+            assert!(config.set_registered_clip_template(0, true));
+            assert!(config.clips[0].template);
+            // 同じ値・画像登録・範囲外は変更しない
+            assert!(!config.set_registered_clip_template(0, true));
+            assert!(!config.set_registered_clip_template(1, true));
+            assert!(!config.clips[1].template);
+            assert!(!config.set_registered_clip_template(2, true));
+
+            assert!(config.set_registered_clip_template(0, false));
+            assert!(!config.clips[0].template);
+        });
+    }
+
     /// お気に入り変換モードの登録・解除と正規化が機能すること
     #[test]
     fn test_favorite_modes() {

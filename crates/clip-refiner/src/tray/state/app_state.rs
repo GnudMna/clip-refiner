@@ -148,6 +148,7 @@ impl AppState {
             pipeline: config.effective_pipeline(),
             interval_ms: config.interval_ms,
             is_paused: config.is_paused,
+            auto_refine_enabled: config.auto_refine_enabled,
             history_enabled: config.history_enabled,
             continuous_record_enabled: config.continuous_record_enabled,
             regex_settings: config.regex.clone(),
@@ -293,7 +294,9 @@ fn test_app_state_inner(persist_config: bool) -> AppState {
         .with_any_thread(true)
         .build();
 
+    // 監視経路を検証するテストが多いため、新規既定と異なり自動変換を有効にする
     let config = AppConfig {
+        auto_refine_enabled: true,
         mode: RefineMode::Trim,
         ..Default::default()
     };

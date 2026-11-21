@@ -107,7 +107,7 @@ window.loadSettings = function loadSettings(snapshot, options) {
         });
     }
 
-    if (ctx.clipRegisterPending && ctx.activeTab !== 'clips') {
+    if (ctx.clipRegisterPending && ctx.activeTab !== 'clipboard') {
         ctx.clipRegisterPending = false;
         ensureSidebar();
         syncServerFields();
@@ -144,7 +144,7 @@ window.updateClips = function updateClips(clips) {
     }
     ctx.state.clips = clips;
     ctx.clipRegisterPending = false;
-    if (ctx.activeTab === 'clips') {
+    if (ctx.activeTab === 'clipboard') {
         refreshActivePanel();
     }
 };
@@ -170,7 +170,7 @@ window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payloa
     }
     ctx.state.shortcuts = payload.shortcuts || [];
 
-    if (ctx.activeTab === 'favorites') {
+    if (ctx.activeTab === 'convert') {
         refreshActivePanel();
     } else if (ctx.activeTab === 'shortcuts') {
         const action = SettingsSharedLogic.resolveShortcutsDiffUpdate({

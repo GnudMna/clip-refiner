@@ -96,6 +96,16 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
         "<p><strong>bold</strong></p>",
     ),
     (
+        RefineMode::MarkdownToRichText,
+        "**bold**",
+        "<p><strong>bold</strong></p>",
+    ),
+    (
+        RefineMode::HtmlToMarkdown,
+        "<p><strong>bold</strong></p>",
+        "**bold**",
+    ),
+    (
         RefineMode::ExcelToMarkdown,
         "A\tB\n1\t2",
         "| A | B |\n|---|---|\n| 1 | 2 |",
@@ -112,6 +122,8 @@ pub const TEXT_MODE_CASES: &[(RefineMode, &str, &str)] = &[
     (RefineMode::ToPascalCase, "foo_bar", "FooBar"),
     (RefineMode::ToKebabCase, "fooBar", "foo-bar"),
     (RefineMode::ToScreamingSnakeCase, "fooBar", "FOO_BAR"),
+    (RefineMode::ToHalfwidth, "ＡＢＣ　ガ", "ABC ｶﾞ"),
+    (RefineMode::ToFullwidth, "ABC ｶﾞ", "ＡＢＣ　ガ"),
 ];
 
 // ======================================================================
@@ -135,7 +147,7 @@ pub fn regex_ctx(pattern: &str, replacement: &str) -> RefineContext {
 /// 全 `RefineMode` バリアントに回帰ケースが存在すること
 pub fn assert_all_modes_covered() {
     let fixed: HashSet<_> = TEXT_MODE_CASES.iter().map(|(mode, _, _)| *mode).collect();
-    // 固定ケース 35 + 日時 2 + 正規表現 4 + 画像 1 = 42
+    // 固定ケース 39 + 日時 2 + 正規表現 4 + 画像 1 = 46
     assert_eq!(
         fixed.len() + 7,
         RefineMode::iter().count(),

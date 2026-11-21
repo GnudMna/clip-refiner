@@ -1,10 +1,7 @@
 //! 設定ウィンドウ / アプリ更新のユーザーイベント処理
 
-use crate::platform::update::UpdateCheckSource;
 use crate::tray::event::AppEventContext;
-use crate::tray::features::{
-    handle_update_apply_finished, handle_update_check_finished, start_update_check,
-};
+use crate::tray::features::{handle_update_apply_finished, handle_update_check_finished};
 use crate::tray::state::{SettingsEvent, UpdateEvent};
 
 use tao::event_loop::ControlFlow;
@@ -30,9 +27,6 @@ pub(super) fn handle_settings(ctx: &mut AppEventContext<'_>, event: SettingsEven
 /// アプリ更新関連イベントを処理する
 pub(super) fn handle_update(ctx: &mut AppEventContext<'_>, event: UpdateEvent) {
     match event {
-        UpdateEvent::TrayCheck => {
-            let _ = start_update_check(ctx.state, UpdateCheckSource::Tray, Some(ctx.settings));
-        }
         UpdateEvent::CheckFinished => {
             handle_update_check_finished(ctx.state, ctx.settings);
         }

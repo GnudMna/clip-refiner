@@ -8,7 +8,6 @@ pub mod app_control;
 pub mod clips;
 pub mod history;
 pub mod monitor;
-pub mod notification;
 pub mod record;
 pub mod refine;
 pub mod regex;
@@ -16,16 +15,16 @@ pub mod update;
 
 pub(crate) use app_control::handle_app_control;
 pub(crate) use clips::{
-    copy_registered_clip, delete_registered_clip, handle_clips_event, refresh_clips_views,
+    copy_registered_clip, delete_registered_clip, handle_clips_event, move_registered_clip,
+    refresh_clips_views, set_registered_clip_template,
 };
 pub(crate) use history::handle_history_event;
-pub(crate) use monitor::handle_monitor_event;
-pub(crate) use notification::handle_notification_event;
 pub(crate) use record::{
     handle_continuous_record_event, toggle_continuous_record, undo_last_continuous_record,
 };
 pub(crate) use refine::{
-    handle_favorites_event, handle_refine_mode_event, move_favorite_mode, toggle_favorite_mode,
+    apply_refine_once, handle_favorites_event, handle_refine_mode_event, move_favorite_mode,
+    select_auto_refine_mode, set_auto_refine_enabled, toggle_favorite_mode,
 };
 pub(crate) use regex::handle_regex_preset_event;
 pub(crate) use update::{

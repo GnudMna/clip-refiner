@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::platform::update::{
-    UpdateApplyOutcome, UpdateApplyUiResponse, UpdateCheckSource, UpdateCheckUiResponse,
-    apply_update, check_for_update,
+    UpdateApplyOutcome, UpdateApplyUiResponse, UpdateCheckUiResponse, apply_update,
+    check_for_update,
 };
 use crate::tray::dispatch;
 use crate::tray::settings::SettingsWindow;
@@ -17,29 +17,16 @@ use crate::user_error::{UserNotification, titles};
 ///
 /// # Arguments
 /// * `state` - アプリケーション共有状態
-/// * `source` - 起動元 (設定 / トレイ)
-/// * `settings` - 設定ウィンドウ (ビジー応答の即時通知用。トレイからは `None`)
+/// * `settings` - 設定ウィンドウ (ビジー応答の即時通知用)
 ///
 /// # Returns
 /// * `bool` - スレッドを起動できた場合は `true`
-pub(crate) fn start_update_check(
-    state: &Arc<AppState>,
-    source: UpdateCheckSource,
-    settings: Option<&SettingsWindow>,
-) -> bool {
+pub(crate) fn start_update_check(state: &Arc<AppState>, settings: &SettingsWindow) -> bool {
     if !state.settings_pending().try_begin_update_op() {
-        if matches!(source, UpdateCheckSource::Settings)
-            && let Some(settings) = settings
-        {
-            settings.notify_update_check(&UpdateCheckUiResponse::Busy);
-        }
-        if matches!(source, UpdateCheckSource::Tray) {
-            UserNotification::static_message(titles::UPDATE, "更新確認はすでに実行中です").notify();
-        }
+        settings.notify_update_check(&UpdateCheckUiResponse::Busy);
         return false;
     }
 
-    state.settings_pending().set_update_check_source(source);
     let state = Arc::clone(state);
     thread::spawn(move || {
         let outcome = check_for_update();
@@ -93,20 +80,12 @@ pub(crate) fn start_update_apply(state: &Arc<AppState>, settings: &SettingsWindo
 /// * `state` - アプリケーション共有状態
 /// * `settings` - 設定ウィンドウ
 pub(crate) fn handle_update_check_finished(state: &Arc<AppState>, settings: &SettingsWindow) {
-    let source = state
-        .settings_pending()
-        .take_update_check_source()
-        .unwrap_or(UpdateCheckSource::Settings);
     let Some(response) = state.settings_pending().take_update_check_ui_response() else {
         return;
     };
 
     if settings.is_visible() {
         settings.notify_update_check(&response);
-    }
-
-    if matches!(source, UpdateCheckSource::Tray) {
-        notify_tray_check_result(&response);
     }
 }
 
@@ -166,29 +145,6 @@ pub(crate) fn handle_update_apply_finished(
         UpdateApplyOutcome::Error { message } => {
             UserNotification::new(titles::UPDATE, message.clone()).notify();
             false
-        }
-    }
-}
-
-/// トレイ起点の更新確認結果をデスクトップ通知する
-fn notify_tray_check_result(response: &UpdateCheckUiResponse) {
-    match response {
-        UpdateCheckUiResponse::UpToDate { latest_version, .. } => {
-            UserNotification::new(titles::UPDATE, format!("最新版です (v{latest_version})"))
-                .notify();
-        }
-        UpdateCheckUiResponse::Available { latest_version, .. } => {
-            UserNotification::new(
-                titles::UPDATE,
-                format!("v{latest_version} が利用可能です。設定の一般タブから適用できます"),
-            )
-            .notify();
-        }
-        UpdateCheckUiResponse::Error { message } => {
-            UserNotification::new(titles::UPDATE, message.clone()).notify();
-        }
-        UpdateCheckUiResponse::Busy => {
-            UserNotification::static_message(titles::UPDATE, "更新確認はすでに実行中です").notify();
         }
     }
 }

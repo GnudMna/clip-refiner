@@ -182,18 +182,72 @@ const SettingsSharedLogic = (function () {
             return { valid: false, message: 'キーが指定されていません' };
         }
 
-        const upper = keyPart.toUpperCase();
-        const isLetter = /^[A-Z]$/.test(upper);
-        const isDigit = /^[0-9]$/.test(upper);
-        const isFunction = /^F([1-9]|1[0-2])$/i.test(keyPart);
-        const isBackspace = upper === 'BACKSPACE';
-        if (!isLetter && !isDigit && !isFunction && !isBackspace) {
+        if (!isSupportedHotkeyKey(keyPart)) {
             return {
                 valid: false,
-                message: '未対応のキーです (A-Z / 0-9 / F1-F12 / Backspace)',
+                message:
+                    '未対応のキーです (A-Z / 0-9 / F1-F24 / Space / Enter / 矢印キー / Numpad0 など)',
             };
         }
         return { valid: true, message: '' };
+    }
+
+    /** 名前で指定できるキー (Rust 側 `parse_key_name` と同じ集合。大文字で比較する) */
+    const NAMED_HOTKEY_KEYS = new Set([
+        'BACKSPACE',
+        'SPACE',
+        'ENTER',
+        'RETURN',
+        'TAB',
+        'ESCAPE',
+        'ESC',
+        'INSERT',
+        'INS',
+        'DELETE',
+        'DEL',
+        'HOME',
+        'END',
+        'PAGEUP',
+        'PGUP',
+        'PAGEDOWN',
+        'PGDN',
+        'ARROWUP',
+        'UP',
+        'ARROWDOWN',
+        'DOWN',
+        'ARROWLEFT',
+        'LEFT',
+        'ARROWRIGHT',
+        'RIGHT',
+        'PRINTSCREEN',
+        'PAUSE',
+        'SCROLLLOCK',
+        'MINUS',
+        'COMMA',
+        'PERIOD',
+        'SLASH',
+        'NUMPADADD',
+        'NUMPADSUBTRACT',
+        'NUMPADMULTIPLY',
+        'NUMPADDIVIDE',
+        'NUMPADDECIMAL',
+    ]);
+
+    /**
+     * ホットキーのキー本体 (修飾キー以外) が対応キーか判定する
+     *
+     * @param {string} keyPart
+     * @returns {boolean}
+     */
+    function isSupportedHotkeyKey(keyPart) {
+        const upper = keyPart.toUpperCase();
+        return (
+            /^[A-Z0-9]$/.test(upper) ||
+            /^[-,./]$/.test(upper) ||
+            /^F([1-9]|1[0-9]|2[0-4])$/.test(upper) ||
+            /^NUMPAD[0-9]$/.test(upper) ||
+            NAMED_HOTKEY_KEYS.has(upper)
+        );
     }
 
     /**
@@ -276,14 +330,15 @@ const SettingsSharedLogic = (function () {
         if (opts.force || opts.externalSync) {
             return true;
         }
-        if (clipRegisterPending && activeTab === 'clips') {
+        if (clipRegisterPending && activeTab === 'clipboard') {
             return true;
         }
         if (!wasEditing) {
             return true;
         }
-        // ショートカットタブは入力中フォーカスを維持するためフル再描画しない
-        return activeTab === 'favorites';
+        // 変換タブはお気に入りの追加・削除を一覧へ反映するためフル再描画する。
+        // 他のタブは入力中のフォーカスを維持するためフル再描画しない
+        return activeTab === 'convert';
     }
 
     /**
@@ -357,14 +412,12 @@ const SettingsSharedLogic = (function () {
 
     /** @type {ReadonlyArray<string>} 設定ウィンドウのタブ ID */
     const SETTINGS_TAB_IDS = [
-        'general',
-        'favorites',
+        'convert',
         'regex',
-        'history',
-        'clips',
-        'monitor',
+        'clipboard',
         'notifications',
         'shortcuts',
+        'general',
     ];
 
     /**

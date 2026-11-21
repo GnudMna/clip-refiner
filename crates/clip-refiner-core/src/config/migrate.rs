@@ -74,6 +74,7 @@ fn migrate_config_to(config: AppConfig, target_version: u32) -> ConfigMigration 
             0 => migrate_v0_to_v1(config),
             1 => migrate_v1_to_v2(config),
             2 => migrate_v2_to_v3(config),
+            3 => migrate_v3_to_v4(config),
             v => {
                 tracing::warn!(
                     "未対応の設定 version={v} (現行={target_version})。既存項目を維持する。ディスクへは自動保存しない"
@@ -126,6 +127,16 @@ fn migrate_v1_to_v2(mut config: AppConfig) -> AppConfig {
 fn migrate_v2_to_v3(mut config: AppConfig) -> AppConfig {
     config.regex.normalize();
     config.version = 3;
+    config
+}
+
+/// v3 から v4 へ移行
+///
+/// v4 で追加: `auto_refine_enabled` (新規設定の既定は無効)
+/// 既存利用者はコピー時の自動変換を使っていたため、移行時は有効にして挙動を維持する
+fn migrate_v3_to_v4(mut config: AppConfig) -> AppConfig {
+    config.auto_refine_enabled = true;
+    config.version = 4;
     config
 }
 
@@ -274,6 +285,41 @@ mod tests {
         assert_eq!(result.config.version, consts::CONFIG_VERSION);
         assert_eq!(result.config.regex.active_preset_id, "p1");
         assert_eq!(result.config.regex.active_steps()[0].pattern, r"\d+");
+    }
+
+    /// v3 設定は v4 へ移行し、コピー時の自動変換を有効にすること
+    #[test]
+    fn migrate_v3_to_v4_enables_auto_refine() {
+        let config = AppConfig {
+            version: 3,
+            mode: RefineMode::Trim,
+            ..Default::default()
+        };
+        let result = migrate_config(config);
+        assert!(result.migrated);
+        assert_eq!(result.config.version, consts::CONFIG_VERSION);
+        assert!(result.config.auto_refine_enabled);
+        assert_eq!(result.config.mode, RefineMode::Trim);
+    }
+
+    /// `auto_refine_enabled` を持たない v3 TOML 相当は自動変換有効として読み込むこと
+    #[test]
+    fn migrate_v3_toml_without_auto_refine_key_enables_auto_refine() {
+        let toml = r#"
+version = 3
+mode = "UrlDecode"
+interval_ms = 1000
+"#;
+        let config: AppConfig = toml::from_str(toml).expect("v3 TOML のデシリアライズ");
+        assert!(!config.auto_refine_enabled);
+        let result = migrate_config(config);
+        assert!(result.config.auto_refine_enabled);
+    }
+
+    /// 新規の既定設定ではコピー時の自動変換を無効とすること
+    #[test]
+    fn default_config_disables_auto_refine() {
+        assert!(!AppConfig::default().auto_refine_enabled);
     }
 
     /// 旧フラット regex を含む v2 TOML 相当はプリセットへ包まれること

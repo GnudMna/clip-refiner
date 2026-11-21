@@ -245,6 +245,10 @@ export function syncServerFields() {
     if (paused) {
         paused.checked = ctx.state.isPaused;
     }
+    const autoRefine = document.getElementById('auto-refine-enabled');
+    if (autoRefine) {
+        autoRefine.checked = ctx.state.autoRefineEnabled;
+    }
     syncMonitorPauseBanner();
     syncContinuousRecordUi();
     syncMonitorIntervalSection();

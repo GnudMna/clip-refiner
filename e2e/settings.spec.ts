@@ -3,33 +3,33 @@ import { test, expect, parseFavoriteModes, readConfigToml, writeConfigToml, expe
 test.use({ e2eWindow: 'settings' });
 
 test.describe('設定 WebView', () => {
-  test('8 タブのサイドバーが表示される', async ({ page }) => {
+  test('6 タブのサイドバーが表示される', async ({ page }) => {
     await expect(page.locator('#sidebar')).toHaveAttribute('role', 'tablist');
     await expect(page.locator('#sidebar')).toHaveAttribute('aria-orientation', 'vertical');
-    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(8);
+    await expect(page.locator('#sidebar [role="tab"]')).toHaveCount(6);
+    await expect(page.locator('#sidebar [role="tab"][data-tab="convert"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toBeVisible();
-    await expect(page.locator('#sidebar [role="tab"][data-tab="shortcuts"]')).toBeVisible();
     await expect(page.locator('#sidebar [role="tab"][aria-selected="true"]')).toHaveCount(1);
     await expect(page.locator('#header h1')).toHaveText('ClipRefiner');
     await expectWebViewCsp(page);
   });
 
   test('矢印キーで設定タブを移動できる', async ({ page }) => {
-    const general = page.locator('#sidebar [role="tab"][data-tab="general"]');
-    await general.focus();
+    const convert = page.locator('#sidebar [role="tab"][data-tab="convert"]');
+    await convert.focus();
     await page.keyboard.press('ArrowDown');
-    await expect(page.locator('#sidebar [role="tab"][data-tab="favorites"]')).toHaveAttribute(
+    await expect(page.locator('#sidebar [role="tab"][data-tab="regex"]')).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    await expect(page.locator('#panel-favorites')).toBeVisible();
-    await expect(page.locator('#panel-favorites')).toHaveAttribute('role', 'tabpanel');
+    await expect(page.locator('#panel-regex')).toBeVisible();
+    await expect(page.locator('#panel-regex')).toHaveAttribute('role', 'tabpanel');
     await page.keyboard.press('End');
-    await expect(page.locator('#sidebar [role="tab"][data-tab="shortcuts"]')).toHaveAttribute(
+    await expect(page.locator('#sidebar [role="tab"][data-tab="general"]')).toHaveAttribute(
       'aria-selected',
       'true'
     );
-    await expect(page.locator('#panel-shortcuts')).toBeVisible();
+    await expect(page.locator('#panel-general')).toBeVisible();
   });
 
   test('ヘッダーに config.toml を開くボタンがある', async ({ page }) => {
@@ -37,16 +37,20 @@ test.describe('設定 WebView', () => {
     await expect(page.locator('#open-config-btn')).toContainText(/config\.toml/);
   });
 
-  test('監視タブで周期入力ができる', async ({ page }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
+  test('一般タブの詳細設定で周期入力ができる', async ({ page }) => {
+    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
     const interval = page.locator('#interval-ms');
+    // 詳細設定は折りたたみ表示のため、展開するまで表示されない
+    await expect(interval).toBeHidden();
+    await page.locator('.advanced-section > summary').click();
     await expect(interval).toBeVisible();
     await interval.fill('750');
     await expect(interval).toHaveValue('750');
   });
 
   test('監視周期の変更が debounce 後に config.toml へ保存される', async ({ page, configDir }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
+    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
+    await page.locator('.advanced-section > summary').click();
     const interval = page.locator('#interval-ms');
     await interval.fill('750');
     await interval.blur();
@@ -71,7 +75,7 @@ test.describe('設定 WebView', () => {
     await expect(feedback).toBeVisible({ timeout: 15_000 });
     await expect(feedback).toHaveText('設定ファイルが外部で更新されました');
 
-    await page.locator('#sidebar .nav-btn[data-tab="monitor"]').click();
+    await page.locator('#sidebar .nav-btn[data-tab="general"]').click();
     await expect(page.locator('#interval-ms')).toHaveValue('2500');
   });
 
@@ -83,7 +87,7 @@ test.describe('設定 WebView', () => {
   });
 
   test('履歴クリアで確認ダイアログが開く', async ({ page }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="history"]').click();
+    await page.locator('#sidebar .nav-btn[data-tab="clipboard"]').click();
     await page.locator('#clear-history-btn').click();
     await expect(page.locator('#confirm-dialog')).toBeVisible();
     await page.locator('#confirm-dialog-cancel').click();
@@ -96,7 +100,7 @@ test.describe('設定 WebView', () => {
   });
 
   test('お気に入りの並べ替えが config.toml に保存される', async ({ page, configDir }) => {
-    await page.locator('#sidebar .nav-btn[data-tab="favorites"]').click();
+    await page.locator('#sidebar .nav-btn[data-tab="convert"]').click();
     await expect(page.locator('.favorite-up[data-mode="UrlDecode"]')).toBeVisible();
 
     expect(parseFavoriteModes(readConfigToml(configDir))).toEqual(['Trim', 'UrlDecode']);

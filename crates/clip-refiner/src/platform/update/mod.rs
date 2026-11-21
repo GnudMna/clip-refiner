@@ -24,7 +24,7 @@ pub(crate) use check::check_for_update;
 pub(crate) use error::UpdateError;
 pub(crate) use replace::run_portable_replace;
 pub use types::{AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome};
-pub(crate) use types::{UpdateApplyUiResponse, UpdateCheckSource, UpdateCheckUiResponse};
+pub(crate) use types::{UpdateApplyUiResponse, UpdateCheckUiResponse};
 
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]
 pub use apply::ApplyOptions;

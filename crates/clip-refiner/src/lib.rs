@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! clip-refiner-core = { version = "1.1.1" }
+//! clip-refiner-core = { version = "1.2.0" }
 //! # テキスト変換のみ: default-features = false
 //! ```
 //!
@@ -51,6 +51,7 @@ pub mod test_helpers;
 // 内部モジュールエイリアス
 // ======================================================================
 // アプリ内部向け。公開 API には含めない (ライブラリ利用は clip_refiner_core)
+pub(crate) use clip_refiner_core::clip_template;
 pub(crate) use clip_refiner_core::config;
 pub(crate) use clip_refiner_core::consts;
 pub(crate) use clip_refiner_core::refiner;

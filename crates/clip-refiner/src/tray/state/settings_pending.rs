@@ -4,8 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use super::lock_ext::LockExt;
 use crate::config::RegexSettings;
 use crate::platform::update::{
-    AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome, UpdateCheckSource,
-    UpdateCheckUiResponse,
+    AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome, UpdateCheckUiResponse,
 };
 
 // ======================================================================
@@ -30,7 +29,6 @@ pub(crate) struct SettingsPendingState {
     patch: Mutex<Option<String>>,
     regex_preview: Mutex<Option<RegexPreviewRequest>>,
     update_busy: AtomicBool,
-    update_check_source: Mutex<Option<UpdateCheckSource>>,
     update_check_result: Mutex<Option<UpdateCheckOutcome>>,
     available_update: Mutex<Option<AvailableUpdate>>,
     update_apply_result: Mutex<Option<UpdateApplyOutcome>>,
@@ -46,7 +44,6 @@ impl SettingsPendingState {
             patch: Mutex::new(None),
             regex_preview: Mutex::new(None),
             update_busy: AtomicBool::new(false),
-            update_check_source: Mutex::new(None),
             update_check_result: Mutex::new(None),
             available_update: Mutex::new(None),
             update_apply_result: Mutex::new(None),
@@ -114,25 +111,6 @@ impl SettingsPendingState {
     /// * `self` - 自身
     pub fn end_update_op(&self) {
         self.update_busy.store(false, Ordering::SeqCst);
-    }
-
-    /// 更新確認の起動元を記録する
-    ///
-    /// # Arguments
-    /// * `source` - 設定ウィンドウまたはトレイ
-    pub fn set_update_check_source(&self, source: UpdateCheckSource) {
-        *self.update_check_source.lock_ignore_poison() = Some(source);
-    }
-
-    /// 更新確認の起動元を取り出す
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    ///
-    /// # Returns
-    /// * `Option<UpdateCheckSource>` - 値がある場合は `Some`、ない場合は `None`
-    pub fn take_update_check_source(&self) -> Option<UpdateCheckSource> {
-        self.update_check_source.lock_ignore_poison().take()
     }
 
     /// 更新確認結果を格納する
@@ -261,18 +239,6 @@ mod tests {
             message: "失敗".to_string(),
         });
         assert!(pending.take_available_update().is_none());
-    }
-
-    /// 更新確認の起動元を取り出して消費できるようにすること
-    #[test]
-    fn update_check_source_round_trip() {
-        let pending = SettingsPendingState::new();
-        pending.set_update_check_source(UpdateCheckSource::Tray);
-        assert_eq!(
-            pending.take_update_check_source(),
-            Some(UpdateCheckSource::Tray)
-        );
-        assert_eq!(pending.take_update_check_source(), None);
     }
 
     /// 更新適用結果を取り出して消費できるようにすること
