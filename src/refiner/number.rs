@@ -66,7 +66,7 @@ pub fn remove_commas(text: &str) -> String {
     trimmed.replace(',', "")
 }
 
-/// 入力が数値（およびカンマ、小数点、マイナス記号）のみで構成されているか判定
+/// 入力が数値(およびカンマ、小数点、マイナス記号)のみで構成されているか判定
 fn is_numeric_input(text: &str) -> bool {
     let mut has_decimal = false;
     let mut chars = text.chars().peekable();

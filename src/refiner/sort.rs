@@ -30,7 +30,7 @@ fn is_likely_csv(text: &str) -> bool {
     if let Some(Ok(first)) = records.next() {
         // カラムが2つ以上あればCSVとみなす
         if first.len() > 1 {
-            // さらに数行チェックしてカラム数が一致するか見る（簡易的な検証）
+            // さらに数行チェックしてカラム数が一致するか見る(簡易的な検証)
             if let Some(Ok(second)) = records.next() {
                 return first.len() == second.len();
             }
@@ -52,7 +52,7 @@ fn sort_csv_records(text: &str, line_ending: &str) -> String {
         .map(|r| r.iter().map(|s| s.to_string()).collect())
         .collect();
 
-    // 全体の内容でソート（大文字小文字無視）
+    // 全体の内容でソート(大文字小文字無視)
     records.sort_by(|a, b| {
         let sa = a.join(",");
         let sb = b.join(",");
