@@ -77,4 +77,16 @@ mod tests {
     fn normalize_keeps_line_breaks() {
         assert_eq!(normalize_ocr_text("あ い\nう え"), "あい\nうえ");
     }
+
+    /// 全角スペースも日本語間では除去すること
+    #[test]
+    fn normalize_removes_ideographic_spaces_between_japanese() {
+        assert_eq!(normalize_ocr_text("日\u{3000}本"), "日本");
+    }
+
+    /// 先頭・末尾のスペースは維持すること
+    #[test]
+    fn normalize_keeps_leading_and_trailing_spaces() {
+        assert_eq!(normalize_ocr_text(" あ "), " あ ");
+    }
 }

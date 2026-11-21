@@ -22,7 +22,7 @@
 
 - [Rust / Cargo](https://www.rust-lang.org/tools/install) (edition 2024、Rust 1.96 以上。`rust-toolchain.toml` でピン留め)
 - [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) (サプライチェーン監査。`cargo install cargo-deny --locked`)
-- [Node.js](https://nodejs.org/) (設定 UI の JavaScript ロジックテスト・ESLint / Prettier。`check.ps1` 実行時は必須。通常の `cargo test` では未インストール時に JS テストをスキップする)
+- [Node.js](https://nodejs.org/) (設定 / セレクター UI の JavaScript ロジックテスト・ESLint / Prettier。`check.ps1` 実行時は必須。通常の `cargo test` では未インストール時に JS テストをスキップする)
 
 対応 OS は **Windows** のみ。
 
@@ -92,6 +92,12 @@ cargo test --test settings_flow
 cargo test --test clips_flow
 cargo test --test worker_recovery_flow
 
+# UI 純粋ロジック (Node.js。未インストール時はスキップ)
+cargo test --test settings_shared_logic
+cargo test --test settings_panels_logic
+cargo test --test selector_logic
+cargo test --test regex_preview_logic
+
 # ライブラリ API のドキュメントを生成
 cargo doc --no-deps --open
 ```
@@ -118,18 +124,62 @@ assert_eq!(output, "hello world");
 | `ocr_flow.rs` | OCR 結果のクリップボード書き込みと再加工抑制 |
 | `record_flow.rs` | 連続記録キュー (FIFO、貼り付け排出、履歴との独立性) |
 | `clips_flow.rs` | 登録クリップの保存・コピーと再加工抑制 |
-| `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・パイプラインとデフォルトモード |
+| `settings_flow.rs` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/一時停止 |
 | `notification_flow.rs` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform_flow.rs` | ホットキー解釈・OS 登録・自動起動状態照会 |
 | `regex_preview_logic.rs` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
 | `settings_ui_logic.rs` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
 | `settings_shared_logic.rs` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
+| `settings_panels_logic.rs` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
+| `selector_logic.rs` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
 | `oneshot_flow.rs` | ワンショット相当のパイプライン加工と正規表現 CLI オプション |
 | `library_api.rs` | クレートルート re-export と core 連携 |
+
+OCR / 画面キャプチャの直接テストは統合テストではなく、次のモジュール内ユニットテストで行う。
+
+| モジュール | 検証内容 |
+| :--------- | :------- |
+| `platform/screen_capture/capture.rs` | 空矩形拒否、BGRA→RGBA 変換、仮想画面境界、左上小領域の実キャプチャ |
+| `platform/ocr/recognize.rs` | 空画像拒否、RGBA→BGRA 変換、`SoftwareBitmap` 生成、単色画像でのパイプライン完走 (エンジン未導入時は初期化失敗を許容) |
+| `platform/ocr/prepare.rs` / `normalize.rs` | 小画像拡大・最近傍補間・日本語スペース除去 |
 
 `clip-refiner-core/tests/property_transforms.rs` では `proptest` による URL・エスケープ・正規表現置換のプロパティテストを実行する。
 
 UI ロジックテストは Node.js 未インストール時にスキップする (`note:` を出力)。`check.ps1` は Node.js を検証し `CLIP_REFINER_REQUIRE_NODE=1` で必須化する。意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する。
+
+設定 / セレクター WebView の回帰検知は次の 3 層で行う (フル E2E 自動化は行わない)。
+
+| 層 | 手段 | カバー範囲 |
+| :--- | :--- | :--- |
+| JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、正規表現プレビュー、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
+| Rust IPC / 組み立て | `settings_flow` / `settings/window.rs` / `selector/{window,quick,clip}.rs` ユニット | `apply` パッチ適用、HTML/JS インライン展開、シェル DOM・タブ定義、セレクターアセット埋め込み |
+| 手動スモーク | 下記チェックリスト | 実 WebView の描画・入力・IPC 往復 |
+
+### 設定 WebView 手動スモーク
+
+リリース前、または設定 UI / IPC / スナップショット契約を触った変更のあと、`target/release/ClipRefiner.exe` (またはデバッグビルド) で次を確認する。所要の目安は 10〜15 分。
+
+1. トレイ → **設定** を開き、サイドバーに 8 タブ (一般 / お気に入り / 正規表現 / 履歴・連続記録 / 登録クリップ / 監視 / 通知 / ショートカット) が表示される
+2. **一般**: ログイン時起動を ON/OFF し、再表示で状態が保持される
+3. **監視**: 一時停止トグル、Event 切替で周期が無効化される、パイプラインの追加・削除・並べ替えが保存される
+4. **正規表現**: 無効パターンでエラー表示、有効パターンでプレビューが更新され、タブ離脱または閉じる操作で保存される
+5. **履歴・連続記録**: 件数変更、履歴クリア / 連続記録クリア (確認ダイアログ)
+6. **登録クリップ**: 登録 → 一覧更新、コピー / 削除
+7. **お気に入り**: 追加・削除・並べ替えがクイックセレクターへ反映される
+8. **通知**: マスター OFF + 個別 ON を保存し、再表示で保持される
+9. **ショートカット**: 固定ホットキーとお気に入りスロットを編集できる。`Alt+Shift+S` 形式で入力し blur / Enter で保存。不正値はデフォルトへ補正され、お気に入りスロットは空欄で無効化できる
+10. ヘッダーの **config.toml** で既定エディタが開き、**閉じる** で未保存の debounce が flush される
+11. 外部で `config.toml` を編集し、設定ウィンドウ再表示で「設定ファイルが外部で更新されました」が出る
+
+### セレクター WebView 手動スモーク
+
+セレクター UI / ホットキー / お気に入り反映を触った変更のあと、次を確認する。所要の目安は 5 分。
+
+1. `Alt+Shift+S` (またはトレイ) でクイックセレクターが開き、お気に入りが先頭に並ぶ
+2. 検索でモードが絞り込み、矢印キー / Enter で選択・適用できる。Esc で閉じる
+3. 設定の「お気に入り」変更後、クイックセレクターを開き直すと並びが反映される
+4. `Alt+Shift+T` で登録クリップセレクターが開き、検索・選択・「クリップボードを登録」が動作する
+5. 画像クリップがある場合、サムネイル表示とホバープレビューが崩れていない
 
 ### テスト用ヘルパー (`test_helpers`)
 
@@ -290,7 +340,7 @@ UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refine
 
 | ツール | 役割 |
 | :----- | :--- |
-| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出) |
+| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。純粋ロジック (`*_logic.js` / `selector-common.js` など) は Node の `module` を許可し、IIFE 連結・HTML 順読み込みの DOM 側ファイルは `no-undef` 等を緩和 |
 | [Prettier](https://prettier.io/) | JavaScript の整形 (タブ幅 4、シングルクォート) |
 
 初回または `package.json` 更新後:
@@ -504,7 +554,16 @@ clip-refiner/
 
 `clip-refiner` の `platform/` は Win32 / WinRT 依存の機能を `windows` クレート経由で集約する。`clip-refiner-core` の `platform/` は暗号化キー保護やクリップボード画像取得など、ライブラリ利用時にも必要な最小限の OS 連携のみを置く。
 
-セレクター UI (`src/ui/`) は WebView 上で動作する。`selector-common.js` に共通ロジックを集約し、クイックセレクタ・登録クリップセレクタはそれぞれ `quick_selector.js`・`clip_selector.js` に UI ロジックを分割している。Rust 側 (`tray/selector/`) で CSS / JS をインライン展開して `WebView` に渡す。
+セレクター UI (`src/ui/`) は WebView 上で動作する。責務は次のとおり。
+
+| ファイル | 責務 |
+| :------- | :--- |
+| `selector-common.js` | エスケープ・検索正規化・ハイライト・選択移動など共有ユーティリティ (DOM 非依存) |
+| `quick_selector_logic.js` / `clip_selector_logic.js` | 各セレクターの一覧組み立て・フィルタ・行 HTML など (DOM 非依存) |
+| `quick_selector.js` / `clip_selector.js` | DOM 操作・IPC・キーボードイベント |
+| `selector.css` / `clip_selector.css` | スタイル |
+
+純粋ロジックは Node.js 上の `selector_logic.rs` でも検証する (`module.exports` で require 可能)。Rust 側 (`tray/selector/`) で CSS / JS をインライン展開して `WebView` に渡す (`embed_quick_selector_assets` / `embed_clip_selector_assets`)。
 
 ### `tray/` の責務分担
 
@@ -523,7 +582,7 @@ clip-refiner/
 | `clipboard_monitor/` | 監視ループの判断・世代管理 |
 | `notify/` | デスクトップ通知本文の組み立て (`NotificationSettings` 連動) |
 | `history_store/` | 暗号化クリップボード履歴・連続記録のメモリストア (`EncryptedHistoryStore`) |
-| `paste_watcher/` | 連続記録 ON 時の `Ctrl+V` フック |
+| `paste_watcher/` | 連続記録キューがあるときだけ `Ctrl+V` を `RegisterHotKey` で捕捉し貼り付け |
 | `ocr/` | 画面 OCR キャプチャ連携 |
 | `app/` | `App` 構造体と起動時初期化 |
 | `dispatch.rs` | ワーカー・イベントループへの送信ヘルパー |
@@ -540,7 +599,20 @@ clip-refiner/
 | `notification` | 通知設定 |
 | `app_control` | 終了・一時停止・設定ウィンドウ・監視再開 |
 
-設定ウィンドウ (`src/ui/settings/`) は `main.js` (エントリ)、`panels.js` (タブ描画)、`events.js` (入力イベント)、`shared.js` (状態同期・debounce)、`shared_logic.js` (件数クランプ・パイプライン正規化・通知パッチ組み立てなどの純粋ロジック)、`settings_patch.js` (パッチ組み立て)、`regex_preview.js` (プレビュー表示) に分割している。`shared_logic.js` は Node.js 上の `settings_shared_logic.rs` でも検証する。Rust 側 (`tray/settings/window.rs`) で順序通りにインライン結合する。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム) に分割されている。
+設定ウィンドウ (`src/ui/settings/`) は次のファイルに分割している。
+
+| ファイル | 責務 |
+| :------- | :--- |
+| `main.js` | エントリ (初期化・IPC 受信) |
+| `panels.js` | タブ描画 (DOM) |
+| `events.js` | 入力イベント (DOM) |
+| `shared.js` | 状態同期・debounce (DOM) |
+| `shared_logic.js` | 件数クランプ・パイプライン正規化・通知パッチ組み立て・スナップショット再描画判定 (DOM 非依存) |
+| `panels_logic.js` | サイドバー / クリップ行 / パイプライン操作・クリック委譲 (DOM 非依存) |
+| `settings_patch.js` | パッチ組み立て (DOM 非依存) |
+| `regex_preview.js` | プレビュー表示ロジック (DOM 非依存部分を含む) |
+
+`shared_logic.js` は Node.js 上の `settings_shared_logic.rs`、`panels_logic.js` は `settings_panels_logic.rs` でも検証する。Rust 側 (`tray/settings/window.rs`) で `assemble_settings_js` が上記順にインライン結合し、組み立て結果にシェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー) に分割されている。
 
 | モジュール (`tray/settings/`) | 責務 |
 | :---------------------------- | :--- |
@@ -575,6 +647,12 @@ flowchart TB
         GHK["GlobalHotKeyEvent::receiver()"]
     end
 
+    subgraph paste_thread ["貼り付け監視スレッド"]
+        PHK["RegisterHotKey(Ctrl+V) 動的登録"]
+        Paste["キュー先頭 discharge + SendInput"]
+        PHK --> Paste
+    end
+
     subgraph worker ["クリップボードワーカースレッド"]
         WL["recv_timeout ループ"]
         Mon["監視ループ (Polling / Event)"]
@@ -591,8 +669,10 @@ flowchart TB
     WL -->|"AppEvent (EventLoopProxy)"| App
     Cmd <--> CB
     Mon <--> CB
+    Paste --> CB
     App <--> State
     WL <--> State
+    PHK <--> State
 ```
 
 ### 各コンポーネント
@@ -601,6 +681,7 @@ flowchart TB
 | :------------- | :------- | :--- |
 | **Event Loop** (`tray/runner.rs`) | メイン | ウィンドウイベント、トレイメニュー、WebView IPC (セレクター・設定ウィンドウ)、`AppEvent` の受信と `App::handle_event` への振り分け |
 | **Hotkey Listener** (`tray/hotkey.rs`) | 専用 | `global-hotkey` のイベントをブロッキング受信し、`EventLoopProxy` 経由で `AppEvent::Hotkey` をメインスレッドへ送る |
+| **Paste Watcher** (`tray/paste_watcher/`) | 専用 | 連続記録キューがあるときだけ `Ctrl+V` を `RegisterHotKey` で捕捉し、クリップボード差し替え後に `SendInput` で貼り付けを通す。全キーの低レベルフックは使わない |
 | **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き、監視ループ、設定ファイルの外部変更ポーリング。`recv_timeout` でコマンド受信と監視チックを交互に処理 |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、加工済み状態・履歴・Undo 用テキスト (`Mutex`)。UI とワーカーの両方から参照 |
 
@@ -609,7 +690,7 @@ flowchart TB
 - **UI → ワーカー**: `ClipboardCommand` を `mpsc` チャネルで送信 (手動加工、履歴復元、登録クリップコピーなど)
 - **ワーカー → UI**: `EventLoopProxy<AppEvent>` でユーザーイベントを送る (例: 設定再読み込み完了)
 - **ホットキー → UI**: 専用スレッドが `AppEvent::Hotkey` を送り、メインスレッドの `HotkeyHandler` が処理
-- **クリップボード**: `arboard::Clipboard` はワーカースレッド内の 1 インスタンスのみが触る (競合回避)
+- **クリップボード**: 通常の読み書きはワーカースレッド内の 1 インスタンス。連続記録の `Ctrl+V` 経路のみ貼り付け監視スレッドが独立した `arboard::Clipboard` で同期書き込みする
 
 加工ロジック自体 (`refiner/`) はスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap.rs`) から同期的に呼ばれる。
 
@@ -701,8 +782,9 @@ git checkout -b release/v0.12.2
 
 1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **設定** 節に移行内容を書く
 2. ユーザ向けの大きな変更があれば [README.md](README.md) / [CONFIG.md](CONFIG.md) も合わせて更新する
-3. `git push -u origin release/v{version}` でリモートへ反映する
-4. Gitea 上で `v{version}` タグを付与する
+3. 設定 UI / IPC を触ったリリースでは [設定 WebView 手動スモーク](#設定-webview-手動スモーク) を実施する。セレクター UI を触った場合は [セレクター WebView 手動スモーク](#セレクター-webview-手動スモーク) も実施する
+4. `git push -u origin release/v{version}` でリモートへ反映する
+5. Gitea 上で `v{version}` タグを付与する
 
 ---
 

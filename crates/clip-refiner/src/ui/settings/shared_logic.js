@@ -23,6 +23,30 @@ var SettingsSharedLogic = (function () {
         ['notify-result', 'notifyResult'],
     ];
 
+    /** @type {ReadonlyArray<readonly [string, string]>} 固定ホットキーの DOM ID と設定キー */
+    const HOTKEY_FIXED_FIELD_MAP = [
+        ['hotkey-quick-selector', 'quickSelector'],
+        ['hotkey-clip-selector', 'clipSelector'],
+        ['hotkey-ocr', 'ocr'],
+        ['hotkey-notification', 'notification'],
+        ['hotkey-pause', 'pause'],
+        ['hotkey-continuous-record', 'continuousRecord'],
+        ['hotkey-undo', 'undo'],
+        ['hotkey-quit', 'quit'],
+    ];
+
+    /** @type {ReadonlyArray<readonly [string, string]>} 固定ホットキーの設定キーと表示ラベル */
+    const HOTKEY_FIXED_LABELS = [
+        ['quickSelector', 'クイックセレクター'],
+        ['clipSelector', '登録クリップセレクター'],
+        ['ocr', '画面 OCR'],
+        ['notification', '成功通知の切替'],
+        ['pause', '一時停止 / 再開'],
+        ['continuousRecord', '連続記録の切替'],
+        ['undo', '加工の取り消し'],
+        ['quit', '終了'],
+    ];
+
     /**
      * 件数入力を min/max へクランプする
      *
@@ -112,6 +136,99 @@ var SettingsSharedLogic = (function () {
     }
 
     /**
+     * ホットキー文字列がクライアント側で妥当か判定する
+     *
+     * 空文字はお気に入りスロットの無効化のみ許可する
+     *
+     * @param {string} binding
+     * @param {{ allowEmpty?: boolean }} [options]
+     * @returns {{ valid: boolean, message: string }}
+     */
+    function validateHotkeyBinding(binding, options) {
+        const opts = options || {};
+        const trimmed = String(binding || '').trim();
+        if (!trimmed) {
+            if (opts.allowEmpty) {
+                return { valid: true, message: '' };
+            }
+            return { valid: false, message: 'ホットキーを入力してください' };
+        }
+
+        const parts = trimmed
+            .split('+')
+            .map((part) => part.trim())
+            .filter(Boolean);
+        if (parts.length === 0) {
+            return { valid: false, message: 'ホットキーを入力してください' };
+        }
+
+        const modifiers = new Set(['alt', 'shift', 'ctrl', 'control', 'meta', 'super', 'win']);
+        let keyPart = null;
+        for (const part of parts) {
+            const lower = part.toLowerCase();
+            if (modifiers.has(lower)) {
+                continue;
+            }
+            if (keyPart !== null) {
+                return { valid: false, message: 'キーは1つだけ指定してください' };
+            }
+            keyPart = part;
+        }
+        if (keyPart === null) {
+            return { valid: false, message: 'キーが指定されていません' };
+        }
+
+        const upper = keyPart.toUpperCase();
+        const isLetter = /^[A-Z]$/.test(upper);
+        const isDigit = /^[0-9]$/.test(upper);
+        const isFunction = /^F([1-9]|1[0-2])$/i.test(keyPart);
+        if (!isLetter && !isDigit && !isFunction) {
+            return {
+                valid: false,
+                message: '未対応のキーです (A-Z / 0-9 / F1-F12)',
+            };
+        }
+        return { valid: true, message: '' };
+    }
+
+    /**
+     * DOM / 状態から IPC 用のホットキーパッチを組み立てる
+     *
+     * @param {Record<string, string>} fixedFieldStates - DOM ID をキーとした固定ホットキー
+     * @param {string[]} favoriteSlotBindings - お気に入りスロットのバインディング
+     * @returns {Record<string, unknown>}
+     */
+    function buildHotkeysPatch(fixedFieldStates, favoriteSlotBindings) {
+        const hotkeys = {
+            favoriteModeSlots: Array.isArray(favoriteSlotBindings)
+                ? favoriteSlotBindings.map((binding) => String(binding || '').trim())
+                : [],
+        };
+        for (const [elementId, key] of HOTKEY_FIXED_FIELD_MAP) {
+            if (Object.prototype.hasOwnProperty.call(fixedFieldStates, elementId)) {
+                hotkeys[key] = String(fixedFieldStates[elementId] || '').trim();
+            }
+        }
+        return hotkeys;
+    }
+
+    /**
+     * 設定スナップショット JSON に必須のホットキーフィールドが含まれるか検証する
+     *
+     * @param {Record<string, unknown>} snapshot
+     * @returns {boolean}
+     */
+    function snapshotHasHotkeyFields(snapshot) {
+        const hotkeys = snapshot.hotkeys;
+        if (!hotkeys || typeof hotkeys !== 'object') {
+            return false;
+        }
+        const required = HOTKEY_FIXED_FIELD_MAP.map(([, key]) => key);
+        required.push('favoriteModeSlots');
+        return required.every((key) => Object.prototype.hasOwnProperty.call(hotkeys, key));
+    }
+
+    /**
      * 設定スナップショット JSON に必須の通知フィールドが含まれるか検証する
      *
      * @param {Record<string, unknown>} snapshot
@@ -140,14 +257,88 @@ var SettingsSharedLogic = (function () {
         );
     }
 
+    /**
+     * スナップショット受信時にフル再描画が必要かどうか
+     *
+     * @param {{ force?: boolean, externalSync?: boolean }} options
+     * @param {boolean} wasEditing - 受信時にフォーム編集中だったか
+     * @param {string} activeTab - 現在のタブ ID
+     * @param {boolean} clipRegisterPending - 登録クリップ処理中か
+     * @returns {boolean}
+     */
+    function shouldFullRenderOnLoad(options, wasEditing, activeTab, clipRegisterPending) {
+        const opts = options || {};
+        if (opts.force || opts.externalSync) {
+            return true;
+        }
+        if (clipRegisterPending && activeTab === 'clips') {
+            return true;
+        }
+        if (!wasEditing) {
+            return true;
+        }
+        // ショートカットタブは入力中フォーカスを維持するためフル再描画しない
+        return activeTab === 'favorites';
+    }
+
+    /**
+     * 設定シェル HTML に必須の DOM ID が含まれるか検証する
+     *
+     * @param {string} html
+     * @returns {boolean}
+     */
+    function settingsShellHasRequiredIds(html) {
+        const required = [
+            'id="app"',
+            'id="sidebar"',
+            'id="content"',
+            'id="open-config-btn"',
+            'id="close-btn"',
+            'id="apply-feedback"',
+            'id="confirm-dialog"',
+        ];
+        return required.every((marker) => html.includes(marker));
+    }
+
+    /** @type {ReadonlyArray<string>} 設定ウィンドウのタブ ID */
+    const SETTINGS_TAB_IDS = [
+        'general',
+        'favorites',
+        'regex',
+        'history',
+        'clips',
+        'monitor',
+        'notifications',
+        'shortcuts',
+    ];
+
+    /**
+     * 組み立て済み設定 JS に全タブ ID が含まれるか検証する
+     *
+     * @param {string} js
+     * @returns {boolean}
+     */
+    function settingsJsDefinesAllTabs(js) {
+        return SETTINGS_TAB_IDS.every((tabId) => js.includes("id: '" + tabId + "'"));
+    }
+
     return {
         NOTIFICATION_FIELD_MAP,
+        HOTKEY_FIXED_FIELD_MAP,
+        HOTKEY_FIXED_LABELS,
+        SETTINGS_TAB_IDS,
         clampLimitValue,
         escapeHtml,
         modeProducesImage,
         normalizePipeline,
         buildNotificationSettingsPatch,
+        validateHotkeyBinding,
+        buildHotkeysPatch,
         snapshotHasNotificationFields,
+        snapshotHasHotkeyFields,
+        shouldFullRenderOnLoad,
+        settingsShellHasRequiredIds,
+        settingsJsDefinesAllTabs,
     };
 })();
 

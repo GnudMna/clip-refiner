@@ -44,11 +44,7 @@ impl App {
         let clipboard_worker = ClipboardWorkerHandle::spawn(&state);
         let selectors = SelectorUi::new(event_loop, proxy, Arc::clone(&clipboard_worker))?;
         let settings = init_settings_window(event_loop, proxy, &state)?;
-        let paste_watcher = PasteWatcher::start(
-            proxy.clone(),
-            Arc::clone(&state),
-            Arc::clone(&clipboard_worker),
-        );
+        let paste_watcher = PasteWatcher::start(Arc::clone(&state));
         let hotkey_listener = HotkeyHandler::start_event_listener(proxy.clone());
         menu.refresh_history(&state)?;
         menu.refresh_continuous_record(&state)?;

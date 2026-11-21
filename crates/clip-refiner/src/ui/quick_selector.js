@@ -14,120 +14,56 @@ const {
     focusSearchInput,
 } = window.SelectorCommon;
 
-/**
- * @typedef {Object} QuickSelectorMode
- * @property {string} id
- * @property {string} label
- * @property {string} category
- * @property {string} [value]
- * @property {boolean} [favorite]
- * @property {number} [favoriteIndex]
- * @property {'favorites'|'category'} [listSection]
- */
+const {
+    FAVORITES_CATEGORY,
+    favoriteIds,
+    buildDisplayList,
+    sectionCategory,
+    nextIndexAfterFilter,
+    shouldShowReorderButtons,
+    canMoveSelectedFavorite,
+    buildItemInnerHtml,
+    selectMessage,
+    toggleFavoriteMessage,
+    moveFavoriteMessage,
+} = window.QuickSelectorLogic;
 
-/** @type {QuickSelectorMode[]} */
+/** @type {import('./quick_selector_logic').QuickSelectorMode[]} */
 let modes = JSON.parse(document.getElementById('modes-data').textContent);
 /** @type {HTMLInputElement} */
 const input = document.getElementById('input');
 /** @type {HTMLElement} */
 const results = document.getElementById('results');
-const FAVORITES_CATEGORY = 'お気に入り';
 
 /** @type {string|null} */
 let currentModeId = null;
-/** @type {QuickSelectorMode[]} */
-let filtered = buildDisplayList('');
+/** @type {import('./quick_selector_logic').QuickSelectorMode[]} */
+let filtered = buildDisplayList(modes, '');
 const selection = createSelection(results, () => filtered.length);
 
 /**
  * モード一覧を差し替える
  *
- * @param {QuickSelectorMode[]} nextModes
+ * @param {import('./quick_selector_logic').QuickSelectorMode[]} nextModes
  */
 function loadModes(nextModes) {
     modes = nextModes;
-    filtered = buildDisplayList('');
-}
-
-/**
- * ID からモードを取得する
- *
- * @param {string} id
- * @returns {QuickSelectorMode|undefined}
- */
-function modeById(id) {
-    return modes.find((mode) => mode.id === id);
-}
-
-/**
- * お気に入りモード ID を表示順で返す
- *
- * @returns {string[]}
- */
-function favoriteIds() {
-    return modes
-        .filter((mode) => mode.favorite)
-        .sort((a, b) => {
-            const left = a.favoriteIndex ?? Number.MAX_SAFE_INTEGER;
-            const right = b.favoriteIndex ?? Number.MAX_SAFE_INTEGER;
-            return left - right;
-        })
-        .map((mode) => mode.id);
-}
-
-/**
- * 検索クエリに応じた表示用モード一覧を組み立てる
- *
- * @param {string} query - 正規化済みクエリ
- * @returns {QuickSelectorMode[]}
- */
-function buildDisplayList(query) {
-    if (query) {
-        return modes.filter((mode) => modeMatches(mode, query));
-    }
-
-    const display = [];
-    for (const id of favoriteIds()) {
-        const mode = modeById(id);
-        if (mode) {
-            display.push({ ...mode, listSection: 'favorites' });
-        }
-    }
-    for (const mode of modes) {
-        display.push({ ...mode, listSection: 'category' });
-    }
-    return display;
-}
-
-/**
- * 検索クエリにモードが一致するかどうか
- *
- * @param {QuickSelectorMode} mode
- * @param {string} query
- * @returns {boolean}
- */
-function modeMatches(mode, query) {
-    if (!query) {
-        return true;
-    }
-
-    const fields = [mode.label, mode.category, mode.value, mode.id];
-    return fields.some((field) => field && field.toLowerCase().includes(query));
+    filtered = buildDisplayList(modes, '');
 }
 
 /**
  * お気に入り行用の並べ替えボタンを生成する
  *
- * @param {QuickSelectorMode} mode
+ * @param {import('./quick_selector_logic').QuickSelectorMode} mode
  * @param {string} query
  * @returns {HTMLDivElement|null}
  */
 function createReorderButtons(mode, query) {
-    if (query || mode.listSection !== 'favorites' || !mode.favorite) {
+    if (!shouldShowReorderButtons(mode, query)) {
         return null;
     }
 
-    const ids = favoriteIds();
+    const ids = favoriteIds(modes);
     const index = ids.indexOf(mode.id);
     if (index === -1) {
         return null;
@@ -166,7 +102,7 @@ function createReorderButtons(mode, query) {
 /**
  * お気に入りトグルボタンを生成する
  *
- * @param {QuickSelectorMode} mode
+ * @param {import('./quick_selector_logic').QuickSelectorMode} mode
  * @returns {HTMLButtonElement}
  */
 function createFavoriteButton(mode) {
@@ -184,27 +120,9 @@ function createFavoriteButton(mode) {
 }
 
 /**
- * モード行の内部 HTML を組み立てる (highlightText 経由でエスケープ済み)
- *
- * @param {QuickSelectorMode} mode
- * @param {string} query
- * @param {boolean} isCurrent
- * @returns {string}
- */
-function buildItemInnerHtml(mode, query, isCurrent) {
-    return `
-        <div class="mode-info">
-            <span class="label">${highlightText(mode.label, query)}</span>
-            ${isCurrent ? '<span class="current-badge">選択中</span>' : ''}
-        </div>
-        ${query && mode.value ? `<span class="value-hint">${highlightText(mode.value, query)}</span>` : ''}
-    `;
-}
-
-/**
  * モード 1 行分の DOM 要素を生成する
  *
- * @param {QuickSelectorMode} mode
+ * @param {import('./quick_selector_logic').QuickSelectorMode} mode
  * @param {number} index
  * @param {string} query
  * @returns {HTMLDivElement}
@@ -215,7 +133,7 @@ function createItem(mode, index, query) {
     div.className =
         'item' + (index === selection.index ? ' selected' : '') + (isCurrent ? ' current' : '');
 
-    div.innerHTML = buildItemInnerHtml(mode, query, isCurrent);
+    div.innerHTML = buildItemInnerHtml(mode, query, isCurrent, highlightText);
 
     const reorderButtons = createReorderButtons(mode, query);
     if (reorderButtons) {
@@ -226,23 +144,6 @@ function createItem(mode, index, query) {
     div.onmouseenter = () => selection.setSelectedIndex(index, false);
     div.onclick = () => select(mode.id);
     return div;
-}
-
-/**
- * カテゴリ見出し用のラベルを返す
- *
- * @param {QuickSelectorMode} mode
- * @param {string} query
- * @returns {string|null}
- */
-function sectionCategory(mode, query) {
-    if (query) {
-        return null;
-    }
-    if (mode.listSection === 'favorites') {
-        return FAVORITES_CATEGORY;
-    }
-    return mode.category || '';
 }
 
 /**
@@ -317,10 +218,8 @@ function filter() {
     const query = normalizeQuery(input.value);
     const previousId = filtered[selection.index]?.id;
 
-    filtered = buildDisplayList(query);
-
-    const nextIndex = previousId ? filtered.findIndex((mode) => mode.id === previousId) : -1;
-    selection.index = nextIndex !== -1 ? nextIndex : 0;
+    filtered = buildDisplayList(modes, query);
+    selection.index = nextIndexAfterFilter(filtered, previousId);
     renderList(true);
 }
 
@@ -330,7 +229,7 @@ function filter() {
  * @param {string} id
  */
 function select(id) {
-    postIpc('select:' + id);
+    postIpc(selectMessage(id));
 }
 
 /**
@@ -339,7 +238,7 @@ function select(id) {
  * @param {string} id
  */
 function toggleFavorite(id) {
-    postIpc('toggle-favorite:' + id);
+    postIpc(toggleFavoriteMessage(id));
 }
 
 /**
@@ -349,7 +248,7 @@ function toggleFavorite(id) {
  * @param {'up'|'down'} direction
  */
 function moveFavorite(id, direction) {
-    postIpc('move-favorite:' + id + ':' + direction);
+    postIpc(moveFavoriteMessage(id, direction));
 }
 
 /**
@@ -359,12 +258,8 @@ function moveFavorite(id, direction) {
  * @returns {boolean} 移動した場合は `true`
  */
 function moveSelectedFavorite(delta) {
-    if (normalizeQuery(input.value)) {
-        return false;
-    }
-
     const mode = filtered[selection.index];
-    if (!mode || mode.listSection !== 'favorites' || !mode.favorite) {
+    if (!canMoveSelectedFavorite(normalizeQuery(input.value), mode)) {
         return false;
     }
 
@@ -437,7 +332,7 @@ window.onkeydown = (e) => {
  * UI 表示時にフォーカスを当てる
  *
  * @param {string|null} modeId
- * @param {QuickSelectorMode[]} [modesJson]
+ * @param {import('./quick_selector_logic').QuickSelectorMode[]} [modesJson]
  */
 window.focusInput = (modeId, modesJson) => {
     if (modesJson) {
@@ -450,7 +345,7 @@ window.focusInput = (modeId, modesJson) => {
  * お気に入り更新後に一覧を再描画する
  *
  * @param {string|null} modeId
- * @param {QuickSelectorMode[]} [modesJson]
+ * @param {import('./quick_selector_logic').QuickSelectorMode[]} [modesJson]
  */
 window.refreshModes = (modeId, modesJson) => {
     const previousId = filtered[selection.index]?.id;
@@ -458,9 +353,8 @@ window.refreshModes = (modeId, modesJson) => {
         loadModes(modesJson);
     }
     currentModeId = modeId;
-    filtered = buildDisplayList(normalizeQuery(input.value));
-    const nextIndex = previousId ? filtered.findIndex((mode) => mode.id === previousId) : -1;
-    selection.index = nextIndex !== -1 ? nextIndex : 0;
+    filtered = buildDisplayList(modes, normalizeQuery(input.value));
+    selection.index = nextIndexAfterFilter(filtered, previousId);
     renderList(true);
 };
 

@@ -703,6 +703,43 @@ function syncServerFields() {
     syncContinuousRecordUi();
     syncMonitorIntervalSection();
     updateClipRegisterButton();
+    if (activeTab === 'shortcuts') {
+        syncHotkeyInputsFromState();
+    }
+}
+
+/** ショートカット入力欄を `state.hotkeys` へ同期する (フォーカス中はスキップ) */
+function syncHotkeyInputsFromState() {
+    const hotkeys = state.hotkeys || {};
+    const active = document.activeElement;
+
+    for (const [elementId, key] of SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP) {
+        const element = document.getElementById(elementId);
+        if (!element || element === active) {
+            continue;
+        }
+        const next = hotkeys[key] || '';
+        if (element.value !== next) {
+            element.value = next;
+        }
+        element.classList.remove('is-invalid');
+    }
+
+    const favoriteModes = state.favoriteModes || [];
+    const slots = Array.isArray(hotkeys.favoriteModeSlots) ? hotkeys.favoriteModeSlots : [];
+    for (let index = 0; index < favoriteModes.length; index += 1) {
+        const element = document.getElementById('hotkey-favorite-slot-' + index);
+        if (!element || element === active) {
+            continue;
+        }
+        const placeholder = index < 9 ? 'Alt+Shift+' + (index + 1) : 'Alt+Shift+F' + (index - 8);
+        const custom = index < slots.length ? slots[index] : undefined;
+        const next = custom === undefined ? placeholder : custom;
+        if (element.value !== next) {
+            element.value = next;
+        }
+        element.classList.remove('is-invalid');
+    }
 }
 
 /**

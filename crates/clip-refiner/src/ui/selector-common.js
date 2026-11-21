@@ -3,7 +3,7 @@
  *
  * @namespace SelectorCommon
  */
-(function () {
+var SelectorCommon = (function () {
     'use strict';
 
     /**
@@ -27,7 +27,9 @@
      * @returns {string}
      */
     function normalizeQuery(query) {
-        return query.toLowerCase().trim();
+        return String(query || '')
+            .toLowerCase()
+            .trim();
     }
 
     /**
@@ -57,6 +59,26 @@
             '</mark>' +
             escapeHtml(text.slice(end))
         );
+    }
+
+    /**
+     * 選択インデックスを行数の範囲に収める
+     *
+     * @param {number} index
+     * @param {number} count
+     * @returns {number}
+     */
+    function clampIndex(index, count) {
+        if (count === 0) {
+            return 0;
+        }
+        if (index >= count) {
+            return count - 1;
+        }
+        if (index < 0) {
+            return 0;
+        }
+        return index;
     }
 
     /**
@@ -97,17 +119,7 @@
 
         /** 選択インデックスを行数の範囲に収める */
         function clampSelectedIndex() {
-            const count = getRowCount();
-            if (count === 0) {
-                selectedIndex = 0;
-                return;
-            }
-            if (selectedIndex >= count) {
-                selectedIndex = count - 1;
-            }
-            if (selectedIndex < 0) {
-                selectedIndex = 0;
-            }
+            selectedIndex = clampIndex(selectedIndex, getRowCount());
         }
 
         /** 選択行の `.selected` クラスを更新する */
@@ -255,29 +267,11 @@
         input.select();
     }
 
-    /**
-     * @typedef {Object} SelectorCommonExports
-     * @property {typeof escapeHtml} escapeHtml
-     * @property {typeof normalizeQuery} normalizeQuery
-     * @property {typeof highlightText} highlightText
-     * @property {typeof postIpc} postIpc
-     * @property {typeof close} close
-     * @property {typeof createSelection} createSelection
-     * @property {typeof handleArrowKeys} handleArrowKeys
-     * @property {typeof handleHomeEndKeys} handleHomeEndKeys
-     * @property {typeof handleEscapeKey} handleEscapeKey
-     * @property {typeof focusSearchInput} focusSearchInput
-     */
-
-    /**
-     * セレクター共有ユーティリティの公開 API
-     *
-     * @type {SelectorCommonExports}
-     */
-    window.SelectorCommon = {
+    return {
         escapeHtml,
         normalizeQuery,
         highlightText,
+        clampIndex,
         postIpc,
         close,
         createSelection,
@@ -287,3 +281,11 @@
         focusSearchInput,
     };
 })();
+
+if (typeof window !== 'undefined') {
+    window.SelectorCommon = SelectorCommon;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = SelectorCommon;
+}

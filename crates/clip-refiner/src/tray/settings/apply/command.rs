@@ -22,7 +22,7 @@ use crate::user_error::{UserNotification, titles};
 /// 共通の `AppEvent` ハンドラへ委譲する
 pub(crate) enum SettingsWindowCommand {
     /// 部分更新パッチを適用する
-    Apply(SettingsPatch),
+    Apply(Box<SettingsPatch>),
     /// 履歴を全削除する
     ClearHistory,
     /// 連続記録を全削除する

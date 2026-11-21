@@ -1,4 +1,4 @@
-use crate::config::{AppConfig, MonitorMode, NotificationSettings, RegexSettings};
+use crate::config::{AppConfig, HotkeySettings, MonitorMode, NotificationSettings, RegexSettings};
 use crate::platform::autostart;
 use crate::refiner::RefineMode;
 
@@ -58,6 +58,7 @@ define_settings_model! {
     continuous_record_enabled: bool,
     continuous_record_limit: usize,
     regex: RegexSettings,
+    hotkeys: HotkeySettings,
     launch_at_login: bool,
     is_paused: bool,
 }
@@ -82,6 +83,7 @@ impl SettingsWritable {
             continuous_record_enabled: config.continuous_record_enabled,
             continuous_record_limit: config.continuous_record_limit,
             regex: config.regex.clone(),
+            hotkeys: config.hotkeys.clone(),
             launch_at_login: autostart::is_enabled(),
             is_paused: config.is_paused,
         }
@@ -91,7 +93,7 @@ impl SettingsWritable {
 impl SettingsPatch {
     /// 後から届いた部分更新を既存パッチへマージする
     ///
-    /// ネスト項目 (`notification_settings` / `regex`) は JSON 単位で深くマージする
+    /// ネスト項目 (`notification_settings` / `regex` / `hotkeys`) は JSON 単位で深くマージする
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn merge_from(&mut self, other: &Self) {
         let Ok(mut base_json) = serde_json::to_value(&*self) else {

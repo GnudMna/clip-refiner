@@ -39,6 +39,8 @@ pub enum AppEvent {
     ClipboardWorkerReady,
     /// お気に入り変換モード用ホットキーの再登録要求
     ReloadFavoriteHotkeys,
+    /// グローバルホットキー全体の再登録要求
+    ReloadHotkeys,
     /// 設定ウィンドウを表示する
     ShowSettingsWindow,
     /// 設定ウィンドウを非表示にする

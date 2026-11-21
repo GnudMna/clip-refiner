@@ -40,7 +40,7 @@ pub(crate) fn try_paste_continuous_record_front<C: TextClipboard>(
 
 /// 連続記録キュー先頭を取り出し、独立したクリップボード接続へ書き込む
 ///
-/// `Ctrl+V` 検知時に貼り付けより先に同期実行するための経路
+/// `Ctrl+V` ホットキー捕捉時に、`SendInput` による貼り付けより先に同期実行する経路
 ///
 /// # Returns
 /// * `bool` - 先頭を取り出してクリップボードへ書き込めた場合は `true`

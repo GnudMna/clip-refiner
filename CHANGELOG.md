@@ -6,6 +6,25 @@
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-07-10
+
+
+### Added
+
+- 正規表現マッチに実行時間上限 (2 秒) を追加。超過時は加工を中断して元テキストを維持し、設定 UI プレビューではタイムアウトとして表示
+- 設定 / セレクター WebView の回帰検知を強化: スナップショット再描画判定の純粋ロジック化、組み立て HTML/JS のシェル・タブ検証、IPC パッチ統合テスト拡充、`DEVELOPMENT.md` に設定・セレクターの手動スモークチェックリスト
+- OCR / 画面キャプチャの直接テストを追加: 空入力検証、BGRA↔RGBA 変換、`SoftwareBitmap` 生成、仮想画面小領域キャプチャ、OCR パイプライン完走 (エンジン未導入時は初期化失敗を許容)
+- 設定ウィンドウの「ショートカット」タブでホットキーを編集可能に (固定割り当て・お気に入りスロット。保存時に不正・重複を正規化し OS へ再登録)
+- セレクター UI の Node.js ロジックテスト `selector_logic` (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js`)
+- 設定 UI の Node.js ロジックテスト `settings_panels_logic` (`panels_logic.js`: サイドバー / クリップ行 / パイプライン操作・クリック委譲)
+
+### Changed
+
+- 連続記録の `Ctrl+V` 検知を低レベルキーボードフック (`WH_KEYBOARD_LL`) から、キューがあるときだけ登録する `RegisterHotKey` + `SendInput` に変更。全キー入力の常時フックを廃止
+- WebView2 初期化を再試行し、ユーザーデータロック時はプロセス固有ディレクトリへフォールバック。終了直後の再起動で `E_INVALIDARG` になりにくくした
+- セレクター UI の DOM 非依存ロジックを `quick_selector_logic.js` / `clip_selector_logic.js` へ抽出し、`quick_selector.js` / `clip_selector.js` は DOM 操作に限定
+- 設定 UI のパネル / イベント純粋ロジックを `panels_logic.js` へ抽出し、`panels.js` / `events.js` は DOM 操作に限定
+
 ## [0.12.3] - 2026-07-08
 
 
@@ -362,7 +381,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.4...develop
+[0.12.4]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.3...v0.12.4
 [0.12.3]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.2...v0.12.3
 [0.12.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.1...v0.12.2
 [0.12.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v0.12.0...v0.12.1

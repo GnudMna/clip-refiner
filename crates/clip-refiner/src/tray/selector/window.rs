@@ -2,11 +2,14 @@
 //!
 //! クイックセレクターと登録クリップセレクターで共有するウィンドウ生成・表示制御を提供する
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::webview_script;
 use crate::tray::state::AppEvent;
 
+use anyhow::Context;
 use tao::event_loop::EventLoopWindowTarget;
 use tao::window::{Window, WindowBuilder, WindowId};
 use wry::{WebContext, WebView, WebViewBuilder};
@@ -49,7 +52,9 @@ pub(crate) fn position_window_on_monitor(window: &Window, align: WindowVerticalA
 const SELECTOR_CSS_IMPORT: &str = r#"@import url("selector.css");"#;
 const CLIP_SELECTOR_CSS_IMPORT: &str = r#"@import url("clip_selector.css");"#;
 const SELECTOR_COMMON_JS_TAG: &str = r#"<script src="selector-common.js"></script>"#;
+const QUICK_SELECTOR_LOGIC_JS_TAG: &str = r#"<script src="quick_selector_logic.js"></script>"#;
 const QUICK_SELECTOR_JS_TAG: &str = r#"<script src="quick_selector.js"></script>"#;
+const CLIP_SELECTOR_LOGIC_JS_TAG: &str = r#"<script src="clip_selector_logic.js"></script>"#;
 const CLIP_SELECTOR_JS_TAG: &str = r#"<script src="clip_selector.js"></script>"#;
 
 /// セレクター HTML 内の共通アセット (CSS / JS) をインライン展開する
@@ -65,19 +70,30 @@ pub(crate) fn embed_selector_assets(html: &str) -> String {
 
 /// クイックセレクター用 HTML 内のアセットをインライン展開する
 pub(crate) fn embed_quick_selector_assets(html: &str) -> String {
+    let logic_js = include_str!("../../ui/quick_selector_logic.js");
     let quick_js = include_str!("../../ui/quick_selector.js");
-    embed_selector_assets(html).replace(
-        QUICK_SELECTOR_JS_TAG,
-        &format!("<script>\n{quick_js}\n</script>"),
-    )
+    embed_selector_assets(html)
+        .replace(
+            QUICK_SELECTOR_LOGIC_JS_TAG,
+            &format!("<script>\n{logic_js}\n</script>"),
+        )
+        .replace(
+            QUICK_SELECTOR_JS_TAG,
+            &format!("<script>\n{quick_js}\n</script>"),
+        )
 }
 
 /// 登録クリップセレクター用 HTML 内のアセットをインライン展開する
 pub(crate) fn embed_clip_selector_assets(html: &str) -> String {
     let clip_css = include_str!("../../ui/clip_selector.css");
+    let logic_js = include_str!("../../ui/clip_selector_logic.js");
     let clip_js = include_str!("../../ui/clip_selector.js");
     embed_selector_assets(html)
         .replace(CLIP_SELECTOR_CSS_IMPORT, clip_css)
+        .replace(
+            CLIP_SELECTOR_LOGIC_JS_TAG,
+            &format!("<script>\n{logic_js}\n</script>"),
+        )
         .replace(
             CLIP_SELECTOR_JS_TAG,
             &format!("<script>\n{clip_js}\n</script>"),
@@ -118,8 +134,11 @@ pub(crate) struct WebSelectorWindow {
 impl WebSelectorWindow {
     /// 非表示のベースウィンドウと `WebView` を生成する
     ///
+    /// 直前プロセスの `WebView2` ユーザーデータロックで失敗した場合に備え、
+    /// 同一ディレクトリ再試行のあとプロセス固有ディレクトリへフォールバックする
+    ///
     /// # Arguments
-    /// * `window` - ベースとなる `tao` ウィンドウ
+    /// * `window` - ホストとなる `tao` ウィンドウ
     /// * `webview_data_dir_suffix` - `WebView2` データディレクトリ名のサフィックス
     /// * `html` - 初期表示 HTML
     /// * `ipc_handler` - JavaScript からの IPC コールバック
@@ -130,23 +149,78 @@ impl WebSelectorWindow {
     pub fn build(
         window: Window,
         webview_data_dir_suffix: &str,
-        html: String,
-        ipc_handler: impl Fn(wry::http::Request<String>) + 'static,
+        html: &str,
+        ipc_handler: impl Fn(wry::http::Request<String>) + Send + Sync + 'static,
         options: WebViewWindowOptions,
     ) -> anyhow::Result<Self> {
         let window = Arc::new(window);
-        let data_dir = std::env::temp_dir().join(webview_data_dir_suffix);
-        let mut context = WebContext::new(Some(data_dir));
+        let base_dir = std::env::temp_dir().join(webview_data_dir_suffix);
+        let fallback_dir = base_dir.join(format!("pid-{}", std::process::id()));
+        let ipc_handler: Arc<dyn Fn(wry::http::Request<String>) + Send + Sync + 'static> =
+            Arc::new(ipc_handler);
 
+        let mut last_error = None;
+        for (attempt, data_dir) in [&base_dir, &base_dir, &fallback_dir]
+            .into_iter()
+            .enumerate()
+        {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(120));
+            }
+            match Self::build_once(Arc::clone(&window), data_dir, html, &ipc_handler, options) {
+                Ok(built) => return Ok(built),
+                Err(err) => {
+                    crate::log_warn!(
+                        "WebView 初期化に失敗 (attempt={}, dir={}): {:#}",
+                        attempt + 1,
+                        data_dir.display(),
+                        err
+                    );
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("WebView 初期化に失敗")))
+            .with_context(|| format!("WebView2 の初期化に失敗 ({webview_data_dir_suffix})"))
+    }
+
+    /// 指定データディレクトリで `WebView` を1回構築する
+    fn build_once(
+        window: Arc<Window>,
+        data_dir: &Path,
+        html: &str,
+        ipc_handler: &Arc<dyn Fn(wry::http::Request<String>) + Send + Sync + 'static>,
+        options: WebViewWindowOptions,
+    ) -> anyhow::Result<Self> {
+        if let Some(parent) = data_dir.parent() {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "WebView2 データ親ディレクトリの作成に失敗: {}",
+                    parent.display()
+                )
+            })?;
+        }
+        std::fs::create_dir_all(data_dir).with_context(|| {
+            format!(
+                "WebView2 データディレクトリの作成に失敗: {}",
+                data_dir.display()
+            )
+        })?;
+
+        let mut context = WebContext::new(Some(PathBuf::from(data_dir)));
+        let handler = Arc::clone(ipc_handler);
         let mut builder = WebViewBuilder::new_with_web_context(&mut context)
             .with_html(html)
-            .with_ipc_handler(ipc_handler);
+            .with_ipc_handler(move |req| handler(req));
         if options.transparent {
             builder = builder
                 .with_transparent(true)
                 .with_background_color((0, 0, 0, 0));
         }
-        let webview = builder.build(&window)?;
+        let webview = builder
+            .build(window.as_ref())
+            .with_context(|| format!("WebView の構築に失敗: {}", data_dir.display()))?;
 
         Ok(Self {
             webview,
@@ -257,9 +331,11 @@ mod tests {
     #[test]
     fn embed_quick_selector_assets_inlines_quick_js() {
         let html = embed_quick_selector_assets(
-            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script><script src="quick_selector.js"></script>"#,
+            r#"<style>@import url("selector.css");</style><script src="selector-common.js"></script><script src="quick_selector_logic.js"></script><script src="quick_selector.js"></script>"#,
         );
+        assert!(!html.contains(QUICK_SELECTOR_LOGIC_JS_TAG));
         assert!(!html.contains(QUICK_SELECTOR_JS_TAG));
+        assert!(html.contains("window.QuickSelectorLogic"));
         assert!(html.contains("window.refreshModes"));
         assert!(html.contains("FAVORITES_CATEGORY"));
     }
@@ -268,10 +344,12 @@ mod tests {
     #[test]
     fn embed_clip_selector_assets_inlines_clip_assets() {
         let html = embed_clip_selector_assets(
-            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style><script src="selector-common.js"></script><script src="clip_selector.js"></script>"#,
+            r#"<style>@import url("selector.css");@import url("clip_selector.css");</style><script src="selector-common.js"></script><script src="clip_selector_logic.js"></script><script src="clip_selector.js"></script>"#,
         );
         assert!(!html.contains(CLIP_SELECTOR_CSS_IMPORT));
+        assert!(!html.contains(CLIP_SELECTOR_LOGIC_JS_TAG));
         assert!(!html.contains(CLIP_SELECTOR_JS_TAG));
+        assert!(html.contains("window.ClipSelectorLogic"));
         assert!(html.contains("#image-hover-preview"));
         assert!(html.contains("window.refreshItems"));
     }

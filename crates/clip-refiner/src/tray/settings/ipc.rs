@@ -26,7 +26,7 @@ enum SettingsIpcMessage {
     /// 設定の一部を適用する
     Apply {
         /// 部分更新パッチ
-        patch: SettingsPatch,
+        patch: Box<SettingsPatch>,
     },
     /// 履歴を全削除する
     ClearHistory,
@@ -119,7 +119,7 @@ pub(crate) enum SettingsIpcAction {
     /// 設定ファイルを既定アプリで開く
     OpenConfigFile,
     /// 設定の一部を適用する
-    Apply(SettingsPatch),
+    Apply(Box<SettingsPatch>),
     /// 履歴を全削除する
     ClearHistory,
     /// 連続記録を全削除する

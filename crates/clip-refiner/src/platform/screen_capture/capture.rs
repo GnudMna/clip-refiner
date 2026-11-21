@@ -26,9 +26,7 @@ pub(crate) fn virtual_screen_bounds() -> (i32, i32, u32, u32) {
 
 /// 指定矩形の画面領域を RGBA 画像として取得する
 pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
-    if rect.width == 0 || rect.height == 0 {
-        bail!("キャプチャ領域が空");
-    }
+    validate_capture_rect(rect)?;
 
     let width = i32::try_from(rect.width).context("キャプチャ幅が大きすぎる")?;
     let height = i32::try_from(rect.height).context("キャプチャ高さが大きすぎる")?;
@@ -113,15 +111,122 @@ pub(crate) fn capture_screen_region(rect: ScreenRect) -> Result<RgbaImage> {
             bail!("DIB データの取得に失敗");
         }
 
-        let rgba = bgra
-            .chunks_exact(4)
-            .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], pixel[3]])
-            .collect();
-
         Ok(RgbaImage {
             width: rect.width,
             height: rect.height,
-            rgba,
+            rgba: bgra_to_rgba(&bgra),
         })
+    }
+}
+
+// ======================================================================
+// プライベート関数
+// ======================================================================
+/// キャプチャ矩形が空でないことを検証する
+fn validate_capture_rect(rect: ScreenRect) -> Result<()> {
+    if rect.width == 0 || rect.height == 0 {
+        bail!("キャプチャ領域が空");
+    }
+    Ok(())
+}
+
+/// GDI の BGRA ピクセル列を RGBA へ変換する
+fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
+    bgra.chunks_exact(4)
+        .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], pixel[3]])
+        .collect()
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 幅または高さが 0 の矩形は拒否すること
+    #[test]
+    fn validate_capture_rect_rejects_empty_region() {
+        assert!(
+            validate_capture_rect(ScreenRect {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 10,
+            })
+            .is_err()
+        );
+        assert!(
+            validate_capture_rect(ScreenRect {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 0,
+            })
+            .is_err()
+        );
+    }
+
+    /// 有効な矩形は検証を通ること
+    #[test]
+    fn validate_capture_rect_accepts_non_empty_region() {
+        assert!(
+            validate_capture_rect(ScreenRect {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+            })
+            .is_ok()
+        );
+    }
+
+    /// BGRA から RGBA へチャンネルを入れ替えること
+    #[test]
+    fn bgra_to_rgba_swaps_red_and_blue() {
+        let bgra = [10, 20, 30, 40, 50, 60, 70, 80];
+        assert_eq!(bgra_to_rgba(&bgra), vec![30, 20, 10, 40, 70, 60, 50, 80]);
+    }
+
+    /// 公開 API も空領域を拒否すること
+    #[test]
+    fn capture_screen_region_rejects_empty_rect() {
+        let err = capture_screen_region(ScreenRect {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 1,
+        })
+        .expect_err("空領域は失敗する");
+        assert!(err.to_string().contains("空"));
+    }
+
+    /// 仮想デスクトップ境界が正のサイズを返すこと
+    #[test]
+    fn virtual_screen_bounds_returns_positive_size() {
+        let (_x, _y, width, height) = virtual_screen_bounds();
+        assert!(width > 0, "仮想画面幅が 0");
+        assert!(height > 0, "仮想画面高さが 0");
+    }
+
+    /// 仮想画面左上の小領域をキャプチャできること
+    #[test]
+    fn capture_screen_region_captures_tiny_virtual_origin() {
+        let (x, y, width, height) = virtual_screen_bounds();
+        assert!(width > 0 && height > 0);
+
+        let rect = ScreenRect {
+            x,
+            y,
+            width: 2.min(width),
+            height: 2.min(height),
+        };
+        let image = capture_screen_region(rect).expect("小領域キャプチャに成功する");
+        assert_eq!(image.width, rect.width);
+        assert_eq!(image.height, rect.height);
+        assert_eq!(
+            image.rgba.len(),
+            usize::try_from(rect.width * rect.height * 4).expect("サイズ変換")
+        );
     }
 }

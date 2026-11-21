@@ -1,5 +1,6 @@
 mod continuous_record;
 mod history;
+mod hotkeys;
 mod monitor;
 mod notification;
 mod outcome;
@@ -14,6 +15,7 @@ use super::refresh::{SettingsRefreshScope, refresh_settings_window_scoped};
 
 use continuous_record::apply_continuous_record_patch;
 use history::apply_history_patch;
+use hotkeys::apply_hotkeys_patch;
 use monitor::apply_monitor_patch;
 use notification::apply_notification_patch;
 use outcome::PatchApplyOutcome;
@@ -79,6 +81,7 @@ pub(crate) fn apply_settings_patch_without_ui(
         &mut config_dirty,
     );
     let regex_feedback = apply_regex_patch(patch, state, &mut config_dirty);
+    let hotkeys_changed = apply_hotkeys_patch(patch, state, &mut config_dirty);
     apply_refine_patch(
         patch,
         state,
@@ -101,20 +104,24 @@ pub(crate) fn apply_settings_patch_without_ui(
     let feedback = regex_feedback.or(system_outcome.feedback);
 
     SettingsPatchApplyResult {
-        refresh: refresh_plan_after_patch(patch, system_outcome.force_refresh),
+        refresh: refresh_plan_after_patch(patch, system_outcome.force_refresh, hotkeys_changed),
         feedback,
     }
 }
 
 /// パッチ適用後に UI へ再同期が必要か判定する
 ///
-/// UI 発の変更でサーバー側正規化 (`normalize`) が走る項目のみ再同期する
+/// UI 発の変更でサーバー側正規化 (`normalize` / `fix_invalid`) が走る項目のみ再同期する
 pub(super) fn refresh_plan_after_patch(
     patch: &SettingsPatch,
     force: bool,
+    hotkeys_changed: bool,
 ) -> Option<(SettingsRefreshScope, bool)> {
     if force {
         return Some((SettingsRefreshScope::Full, true));
+    }
+    if hotkeys_changed || patch.hotkeys.is_some() {
+        return Some((SettingsRefreshScope::FavoritesAndShortcuts, false));
     }
     if patch.pipeline.is_some()
         || patch.history_limit.is_some()
@@ -206,7 +213,7 @@ mod tests {
             notification_settings: Some(NotificationSettings::default()),
             ..SettingsPatch::default()
         };
-        assert!(refresh_plan_after_patch(&patch, false).is_none());
+        assert!(refresh_plan_after_patch(&patch, false, false).is_none());
     }
 
     /// パイプライン変更では正規化結果を UI へ反映すること
@@ -217,7 +224,7 @@ mod tests {
             ..SettingsPatch::default()
         };
         assert_eq!(
-            refresh_plan_after_patch(&patch, false),
+            refresh_plan_after_patch(&patch, false, false),
             Some((SettingsRefreshScope::Full, false))
         );
     }
@@ -230,8 +237,21 @@ mod tests {
             ..SettingsPatch::default()
         };
         assert_eq!(
-            refresh_plan_after_patch(&patch, false),
+            refresh_plan_after_patch(&patch, false, false),
             Some((SettingsRefreshScope::Full, false))
+        );
+    }
+
+    /// ホットキー変更ではお気に入り・ショートカットを再同期すること
+    #[test]
+    fn refresh_plan_syncs_hotkeys_patch() {
+        let patch = SettingsPatch {
+            hotkeys: Some(crate::config::HotkeySettings::default()),
+            ..SettingsPatch::default()
+        };
+        assert_eq!(
+            refresh_plan_after_patch(&patch, false, true),
+            Some((SettingsRefreshScope::FavoritesAndShortcuts, false))
         );
     }
 
@@ -240,7 +260,7 @@ mod tests {
     fn refresh_plan_forces_on_autostart_failure() {
         let patch = SettingsPatch::default();
         assert_eq!(
-            refresh_plan_after_patch(&patch, true),
+            refresh_plan_after_patch(&patch, true, false),
             Some((SettingsRefreshScope::Full, true))
         );
     }

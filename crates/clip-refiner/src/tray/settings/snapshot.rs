@@ -73,7 +73,7 @@ pub struct SettingsSnapshot {
     pub modes: serde_json::Value,
     /// 登録クリップ一覧
     pub clips: serde_json::Value,
-    /// グローバルホットキー一覧 (読み取り専用プレビュー)
+    /// グローバルホットキー一覧 (表示用プレビュー)
     pub shortcuts: Vec<crate::tray::hotkey::settings::ShortcutEntry>,
     /// UI 向けの件数・サイズ上限
     pub limits: SettingsLimits,
@@ -138,6 +138,7 @@ impl SettingsSnapshot {
     pub fn favorites_and_shortcuts_json(config: &AppConfig) -> String {
         serde_json::json!({
             "favoriteModes": config.favorite_modes,
+            "hotkeys": config.hotkeys,
             "shortcuts": shortcut_list_entries(&config.hotkeys, &config.favorite_modes),
         })
         .to_string()
@@ -193,8 +194,11 @@ mod tests {
         assert_eq!(json["regex"]["caseInsensitive"], true);
         assert_eq!(json["limits"]["historyMax"], consts::MAX_HISTORY_LIMIT);
         assert_eq!(json["regexPreviewSample"], REGEX_PREVIEW_SAMPLE);
+        assert_eq!(json["hotkeys"]["quickSelector"], "Alt+Shift+S");
+        assert!(json["hotkeys"]["favoriteModeSlots"].is_array());
         assert!(json["notificationSettings"].get("notify_mode").is_none());
         assert!(json["regex"].get("case_insensitive").is_none());
+        assert!(json["hotkeys"].get("quick_selector").is_none());
     }
 
     /// `clips_json` が登録クリップ一覧を JSON 配列として返すようにすること
@@ -226,5 +230,7 @@ mod tests {
 
         assert_eq!(json["favoriteModes"], serde_json::json!(["Trim"]));
         assert!(json["shortcuts"].is_array());
+        assert!(json["hotkeys"].is_object());
+        assert_eq!(json["hotkeys"]["quickSelector"], "Alt+Shift+S");
     }
 }

@@ -33,20 +33,7 @@ function syncSidebarActiveTab() {
 
 /** サイドバーナビゲーションの内部 HTML を組み立てる */
 function buildSidebarNavInnerHtml() {
-    return TABS.map((tab) => {
-        const active = tab.id === activeTab ? ' active' : '';
-        return (
-            '<button type="button" class="nav-btn' +
-            active +
-            '" data-tab="' +
-            tab.id +
-            '"' +
-            (tab.id === activeTab ? ' aria-current="page"' : '') +
-            '>' +
-            escapeHtml(tab.label) +
-            '</button>'
-        );
-    }).join('');
+    return SettingsPanelsLogic.buildSidebarNavInnerHtml(TABS, activeTab, escapeHtml);
 }
 
 /**
@@ -345,30 +332,12 @@ function renderFavoritesPanel() {
     } else {
         listHtml = wrappedTable(
             '<table class="list-table"><thead><tr><th>モード</th><th>操作</th></tr></thead><tbody>' +
-                favorites
-                    .map((modeId) => {
-                        return (
-                            '<tr><td>' +
-                            escapeHtml(modeLabel(modeId)) +
-                            '</td><td class="list-actions">' +
-                            '<button type="button" class="icon-btn favorite-up" data-mode="' +
-                            escapeHtml(modeId) +
-                            '" title="上へ">↑</button>' +
-                            '<button type="button" class="icon-btn favorite-down" data-mode="' +
-                            escapeHtml(modeId) +
-                            '" title="下へ">↓</button>' +
-                            '<button type="button" class="icon-btn favorite-remove" data-mode="' +
-                            escapeHtml(modeId) +
-                            '" title="削除">×</button>' +
-                            '</td></tr>'
-                        );
-                    })
-                    .join('') +
+                SettingsPanelsLogic.buildFavoriteRowsHtml(favorites, modeLabel, escapeHtml) +
                 '</tbody></table>'
         );
     }
 
-    const availableModes = state.modes.filter((mode) => !favorites.includes(mode.id));
+    const availableModes = SettingsPanelsLogic.availableFavoriteModes(state.modes, favorites);
     const body = card(
         'お気に入り変換モード',
         listHtml +
@@ -390,7 +359,7 @@ function renderFavoritesPanel() {
             '</div>' +
             '<p class="hint">最大 ' +
             maxFavoriteModes() +
-            ' 件。お気に入り用ホットキーは「ショートカット」タブで確認</p>'
+            ' 件。お気に入り用ホットキーは「ショートカット」タブで編集</p>'
     );
 
     return panelWrap('favorites', body);
@@ -398,36 +367,82 @@ function renderFavoritesPanel() {
 
 /** @returns {string} ショートカットタブのパネル HTML */
 function renderShortcutsPanel() {
-    const shortcuts = state.shortcuts || [];
-    let listHtml = '';
-    if (shortcuts.length === 0) {
-        listHtml = '<div class="empty-hint">ショートカットはありません</div>';
-    } else {
-        listHtml = wrappedTable(
-            '<table class="list-table shortcut-table"><thead><tr><th>キー</th><th>動作</th></tr></thead><tbody>' +
-                shortcuts
-                    .map((entry) => {
-                        return (
-                            '<tr><td><kbd class="shortcut-key">' +
-                            escapeHtml(entry.binding) +
-                            '</kbd></td><td>' +
-                            escapeHtml(entry.label) +
-                            '</td></tr>'
-                        );
-                    })
-                    .join('') +
-                '</tbody></table>'
+    const hotkeys = state.hotkeys || {};
+    const favoriteModes = state.favoriteModes || [];
+    const fixedRows = SettingsSharedLogic.HOTKEY_FIXED_LABELS.map(([key, label], index) => {
+        const elementId = SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP[index][0];
+        const value = hotkeys[key] || '';
+        return (
+            '<tr><td><label class="shortcut-label" for="' +
+            elementId +
+            '">' +
+            escapeHtml(label) +
+            '</label></td><td>' +
+            '<input type="text" class="shortcut-input" id="' +
+            elementId +
+            '" data-hotkey-kind="fixed" data-hotkey-key="' +
+            key +
+            '" value="' +
+            escapeHtml(value) +
+            '" spellcheck="false" autocomplete="off" placeholder="Alt+Shift+S">' +
+            '</td></tr>'
         );
+    }).join('');
+
+    let favoriteRows = '';
+    if (favoriteModes.length === 0) {
+        favoriteRows =
+            '<tr><td colspan="2"><div class="empty-hint">お気に入り変換モードが未登録です</div></td></tr>';
+    } else {
+        favoriteRows = favoriteModes
+            .map((modeId, index) => {
+                const label = modeLabel(modeId);
+                const display = SettingsPanelsLogic.favoriteSlotDisplay(
+                    hotkeys.favoriteModeSlots,
+                    index
+                );
+                const elementId = 'hotkey-favorite-slot-' + index;
+                return (
+                    '<tr><td><label class="shortcut-label" for="' +
+                    elementId +
+                    '">' +
+                    escapeHtml(label) +
+                    ' (お気に入り)</label>' +
+                    '<p class="field-hint">空欄で無効</p></td><td>' +
+                    '<input type="text" class="shortcut-input" id="' +
+                    elementId +
+                    '" data-hotkey-kind="favorite" data-hotkey-index="' +
+                    index +
+                    '" value="' +
+                    escapeHtml(display.value) +
+                    '" spellcheck="false" autocomplete="off" placeholder="' +
+                    escapeHtml(display.placeholder) +
+                    '">' +
+                    '</td></tr>'
+                );
+            })
+            .join('');
     }
 
     const body =
         '<div class="info-banner" role="note">' +
-        '<div><strong>このタブでは変更できません。</strong> ' +
-        'グローバルホットキーは <code>config.toml</code> の <code>[hotkeys]</code> で編集する。' +
-        '保存後は数秒以内に自動反映される。</div></div>' +
+        '<div>形式は <code>Alt+Shift+S</code>。修飾キーは Alt / Shift / Ctrl / Win。' +
+        'キーは A-Z / 0-9 / F1-F12。不正・重複は保存時に自動補正する。</div></div>' +
         card(
-            'グローバルホットキー',
-            listHtml +
+            '固定ホットキー',
+            wrappedTable(
+                '<table class="list-table shortcut-table"><thead><tr><th>動作</th><th>キー</th></tr></thead><tbody>' +
+                    fixedRows +
+                    '</tbody></table>'
+            )
+        ) +
+        card(
+            'お気に入りホットキー',
+            wrappedTable(
+                '<table class="list-table shortcut-table"><thead><tr><th>動作</th><th>キー</th></tr></thead><tbody>' +
+                    favoriteRows +
+                    '</tbody></table>'
+            ) +
                 '<div class="card-actions">' +
                 '<button type="button" class="ghost-btn" id="shortcuts-open-config-btn">config.toml を開く</button>' +
                 '</div>'
@@ -462,44 +477,7 @@ function renderGeneralPanel() {
  * @returns {string}
  */
 function renderClipRow(clip) {
-    const label = clip.label || clip.preview || '(無題)';
-    const kindBadge =
-        clip.kind === 'image'
-            ? '<span class="clip-kind clip-kind--image">画像</span>'
-            : '<span class="clip-kind clip-kind--text">テキスト</span>';
-    let thumbHtml = '';
-    if (clip.kind === 'image') {
-        if (clip.thumbnail) {
-            thumbHtml =
-                '<img class="clip-thumbnail" src="' + escapeHtml(clip.thumbnail) + '" alt="">';
-        } else {
-            thumbHtml =
-                '<span class="clip-thumbnail clip-thumbnail--placeholder" aria-hidden="true">🖼</span>';
-        }
-    }
-    const previewHtml =
-        clip.preview && clip.preview !== label
-            ? '<span class="clip-preview">' + escapeHtml(clip.preview) + '</span>'
-            : '';
-    return (
-        '<tr><td><div class="clip-cell">' +
-        thumbHtml +
-        '<div class="clip-meta">' +
-        '<div class="clip-label-row"><span class="clip-label">' +
-        escapeHtml(label) +
-        '</span>' +
-        kindBadge +
-        '</div>' +
-        previewHtml +
-        '</div></div></td><td class="list-actions">' +
-        '<button type="button" class="ghost-btn clip-copy" data-index="' +
-        escapeHtml(clip.id) +
-        '">コピー</button>' +
-        '<button type="button" class="icon-btn clip-delete" data-index="' +
-        escapeHtml(clip.id) +
-        '" title="削除">×</button>' +
-        '</td></tr>'
-    );
+    return SettingsPanelsLogic.renderClipRow(clip, escapeHtml);
 }
 
 /** @returns {string} 登録クリップタブのパネル HTML */
@@ -516,19 +494,17 @@ function renderClipsPanel() {
         );
     }
 
-    const registerBtnClass = clipRegisterPending ? 'ghost-btn is-loading' : 'ghost-btn';
-    const registerBtnLabel = clipRegisterPending ? '登録中...' : 'クリップボードから登録';
-    const registerBtnDisabled = clipRegisterPending ? ' disabled' : '';
+    const registerBtn = SettingsPanelsLogic.clipRegisterButtonState(clipRegisterPending);
 
     const body = card(
         '登録クリップ',
         '' +
             '<div class="toolbar"><button type="button" class="' +
-            registerBtnClass +
+            registerBtn.className +
             '" id="clip-register-btn"' +
-            registerBtnDisabled +
+            (registerBtn.disabled ? ' disabled' : '') +
             '>' +
-            escapeHtml(registerBtnLabel) +
+            escapeHtml(registerBtn.label) +
             '</button></div>' +
             listHtml +
             '<p class="hint">最大 ' +

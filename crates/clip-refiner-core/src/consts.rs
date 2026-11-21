@@ -52,6 +52,11 @@ pub const MAX_CLIPBOARD_TEXT_BYTES: usize = 2 * 1024 * 1024;
 /// 正規表現パターンの最大バイト数 (8 KiB)
 pub const MAX_REGEX_PATTERN_BYTES: usize = 8 * 1024;
 
+/// 正規表現マッチの最大実行時間 (ミリ秒)
+///
+/// 超過時は加工を中断し、元のテキストを維持する
+pub const REGEX_MATCH_TIMEOUT_MS: u64 = 2_000;
+
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;
 

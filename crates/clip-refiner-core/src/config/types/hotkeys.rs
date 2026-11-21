@@ -12,10 +12,17 @@ use serde::{Deserialize, Serialize};
 /// グローバルホットキーの割り当て
 ///
 /// 各フィールドは `Alt+Shift+S` 形式の文字列で指定する
+///
+/// TOML は `snake_case`、設定 UI の JSON は `camelCase` でやり取りする
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HotkeySettings {
     /// クイックセレクターの表示・非表示
-    #[serde(default = "default_hotkey_quick_selector", alias = "selector")]
+    #[serde(
+        default = "default_hotkey_quick_selector",
+        rename(serialize = "quickSelector", deserialize = "quick_selector"),
+        alias = "quickSelector",
+        alias = "selector"
+    )]
     pub quick_selector: String,
     /// 成功通知のON/OFF切替
     #[serde(default = "default_hotkey_notification")]
@@ -30,16 +37,28 @@ pub struct HotkeySettings {
     #[serde(default = "default_hotkey_undo")]
     pub undo: String,
     /// 登録クリップセレクターの表示・非表示
-    #[serde(default = "default_hotkey_clip_selector")]
+    #[serde(
+        default = "default_hotkey_clip_selector",
+        rename(serialize = "clipSelector", deserialize = "clip_selector"),
+        alias = "clipSelector"
+    )]
     pub clip_selector: String,
     /// 画面範囲選択 OCR の開始
     #[serde(default = "default_hotkey_ocr")]
     pub ocr: String,
     /// 連続記録の有効・無効切替
-    #[serde(default = "default_hotkey_continuous_record")]
+    #[serde(
+        default = "default_hotkey_continuous_record",
+        rename(serialize = "continuousRecord", deserialize = "continuous_record"),
+        alias = "continuousRecord"
+    )]
     pub continuous_record: String,
     /// お気に入り変換モード用ホットキー (登録順インデックスに対応。空文字で無効)
-    #[serde(default)]
+    #[serde(
+        default,
+        rename(serialize = "favoriteModeSlots", deserialize = "favorite_mode_slots"),
+        alias = "favoriteModeSlots"
+    )]
     pub favorite_mode_slots: Vec<String>,
 }
 

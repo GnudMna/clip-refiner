@@ -1,9 +1,13 @@
 use std::borrow::Cow;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use crate::config::RegexSettings;
-use crate::consts::MAX_REGEX_PATTERN_BYTES;
+use crate::consts::{MAX_REGEX_PATTERN_BYTES, REGEX_MATCH_TIMEOUT_MS};
 
 use regex::{Regex, RegexBuilder};
+use tracing::warn;
 
 // ======================================================================
 // コンパイルキャッシュ
@@ -64,6 +68,56 @@ fn compile_pattern(settings: &RegexSettings) -> Option<Regex> {
 }
 
 // ======================================================================
+// マッチ実行タイムアウト
+// ======================================================================
+/// 正規表現マッチ操作のタイムアウト
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RegexMatchTimeout;
+
+/// 正規表現マッチを制限時間内で実行する
+///
+/// 制限時間を超えた場合は `Err(RegexMatchTimeout)` を返し、実行中のスレッドは
+/// 完了までバックグラウンドで残る (打ち切り不可のため)
+fn run_with_match_timeout<T, F>(op: F) -> Result<T, RegexMatchTimeout>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    run_with_match_timeout_duration(Duration::from_millis(REGEX_MATCH_TIMEOUT_MS), op)
+}
+
+/// 指定した制限時間で正規表現マッチを実行する
+fn run_with_match_timeout_duration<T, F>(timeout: Duration, op: F) -> Result<T, RegexMatchTimeout>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel();
+    thread::Builder::new()
+        .name("clip-refiner-regex".into())
+        .spawn(move || {
+            let _ = tx.send(op());
+        })
+        .map_err(|_| RegexMatchTimeout)?;
+
+    match rx.recv_timeout(timeout) {
+        Ok(value) => Ok(value),
+        Err(mpsc::RecvTimeoutError::Timeout | mpsc::RecvTimeoutError::Disconnected) => {
+            Err(RegexMatchTimeout)
+        }
+    }
+}
+
+/// タイムアウト時に警告を出し、元テキストを返す
+fn on_match_timeout(text: &str) -> Cow<'_, str> {
+    warn!(
+        timeout_ms = REGEX_MATCH_TIMEOUT_MS,
+        "正規表現の実行がタイムアウトしたため元のテキストを維持する"
+    );
+    Cow::Borrowed(text)
+}
+
+// ======================================================================
 // プレビュー
 // ======================================================================
 /// 設定 UI 向けプレビュー用サンプル文字列
@@ -83,6 +137,7 @@ pub struct RegexPreviewResult {
 /// サンプル文字列へ正規表現置換を適用してプレビュー結果を返す
 ///
 /// 実行時の `regex_replace` と同じ `regex` クレートで評価する
+/// マッチ実行が制限時間を超えた場合は無効として扱う
 ///
 /// # Arguments
 /// * `sample` - プレビュー対象のサンプル文字列
@@ -113,13 +168,24 @@ pub fn preview_regex_replace(sample: &str, settings: &RegexSettings) -> RegexPre
         .build()
     {
         Ok(re) => {
-            let result = re
-                .replace_all(sample, settings.replacement.as_str())
-                .into_owned();
-            RegexPreviewResult {
-                valid: true,
-                message: "パターンは有効です".to_string(),
-                result: Some(result),
+            let sample_owned = sample.to_owned();
+            let replacement = settings.replacement.clone();
+            match run_with_match_timeout(move || {
+                re.replace_all(&sample_owned, replacement.as_str())
+                    .into_owned()
+            }) {
+                Ok(result) => RegexPreviewResult {
+                    valid: true,
+                    message: "パターンは有効です".to_string(),
+                    result: Some(result),
+                },
+                Err(RegexMatchTimeout) => RegexPreviewResult {
+                    valid: false,
+                    message: format!(
+                        "パターンの実行がタイムアウトしました (上限 {REGEX_MATCH_TIMEOUT_MS} ms)"
+                    ),
+                    result: None,
+                },
             }
         }
         Err(err) => RegexPreviewResult {
@@ -135,7 +201,7 @@ pub fn preview_regex_replace(sample: &str, settings: &RegexSettings) -> RegexPre
 // ======================================================================
 /// 正規表現に一致する部分を置換文字列へ変換する
 ///
-/// パターンが無効な場合は元のテキストを返す
+/// パターンが無効な場合、またはマッチ実行が制限時間を超えた場合は元のテキストを返す
 ///
 /// # Arguments
 /// * `text` - 加工対象のテキスト
@@ -148,15 +214,19 @@ pub(crate) fn regex_replace<'a>(
     settings: &RegexSettings,
     cache: &mut RegexPatternCache,
 ) -> Cow<'a, str> {
-    let Some(re) = cache.get_or_compile(settings) else {
+    let Some(re) = cache.get_or_compile(settings).cloned() else {
         return Cow::Borrowed(text);
     };
 
-    let result = re.replace_all(text, settings.replacement.as_str());
-    if result == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(result.into_owned())
+    let owned_text = text.to_owned();
+    let replacement = settings.replacement.clone();
+    match run_with_match_timeout(move || {
+        re.replace_all(&owned_text, replacement.as_str())
+            .into_owned()
+    }) {
+        Ok(result) if result == text => Cow::Borrowed(text),
+        Ok(result) => Cow::Owned(result),
+        Err(RegexMatchTimeout) => on_match_timeout(text),
     }
 }
 
@@ -165,7 +235,8 @@ pub(crate) fn regex_replace<'a>(
 // ======================================================================
 /// 正規表現に一致する部分を行単位で抽出する
 ///
-/// 一致がない場合、またはパターンが無効な場合は元のテキストを返す
+/// 一致がない場合、パターンが無効な場合、またはマッチ実行が制限時間を超えた場合は
+/// 元のテキストを返す
 ///
 /// # Arguments
 /// * `text` - 加工対象のテキスト
@@ -178,20 +249,23 @@ pub(crate) fn regex_extract<'a>(
     settings: &RegexSettings,
     cache: &mut RegexPatternCache,
 ) -> Cow<'a, str> {
-    let Some(re) = cache.get_or_compile(settings) else {
+    let Some(re) = cache.get_or_compile(settings).cloned() else {
         return Cow::Borrowed(text);
     };
 
-    let matches: Vec<&str> = re.find_iter(text).map(|m| m.as_str()).collect();
-    if matches.is_empty() {
-        return Cow::Borrowed(text);
-    }
-
-    let joined = matches.join("\n");
-    if joined == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(joined)
+    let owned_text = text.to_owned();
+    match run_with_match_timeout(move || {
+        let matches: Vec<&str> = re.find_iter(&owned_text).map(|m| m.as_str()).collect();
+        if matches.is_empty() {
+            None
+        } else {
+            Some(matches.join("\n"))
+        }
+    }) {
+        Ok(None) => Cow::Borrowed(text),
+        Ok(Some(joined)) if joined == text => Cow::Borrowed(text),
+        Ok(Some(joined)) => Cow::Owned(joined),
+        Err(RegexMatchTimeout) => on_match_timeout(text),
     }
 }
 
@@ -200,7 +274,7 @@ pub(crate) fn regex_extract<'a>(
 // ======================================================================
 /// 正規表現に一致する部分を削除する
 ///
-/// パターンが無効な場合は元のテキストを返す
+/// パターンが無効な場合、またはマッチ実行が制限時間を超えた場合は元のテキストを返す
 ///
 /// # Arguments
 /// * `text` - 加工対象のテキスト
@@ -213,15 +287,15 @@ pub(crate) fn regex_delete<'a>(
     settings: &RegexSettings,
     cache: &mut RegexPatternCache,
 ) -> Cow<'a, str> {
-    let Some(re) = cache.get_or_compile(settings) else {
+    let Some(re) = cache.get_or_compile(settings).cloned() else {
         return Cow::Borrowed(text);
     };
 
-    let result = re.replace_all(text, "");
-    if result == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(result.into_owned())
+    let owned_text = text.to_owned();
+    match run_with_match_timeout(move || re.replace_all(&owned_text, "").into_owned()) {
+        Ok(result) if result == text => Cow::Borrowed(text),
+        Ok(result) => Cow::Owned(result),
+        Err(RegexMatchTimeout) => on_match_timeout(text),
     }
 }
 
@@ -230,7 +304,7 @@ pub(crate) fn regex_delete<'a>(
 // ======================================================================
 /// 正規表現でテキストを分割し、改行で結合する
 ///
-/// パターンが無効な場合は元のテキストを返す
+/// パターンが無効な場合、またはマッチ実行が制限時間を超えた場合は元のテキストを返す
 ///
 /// # Arguments
 /// * `text` - 加工対象のテキスト
@@ -243,16 +317,18 @@ pub(crate) fn regex_split<'a>(
     settings: &RegexSettings,
     cache: &mut RegexPatternCache,
 ) -> Cow<'a, str> {
-    let Some(re) = cache.get_or_compile(settings) else {
+    let Some(re) = cache.get_or_compile(settings).cloned() else {
         return Cow::Borrowed(text);
     };
 
-    let parts: Vec<&str> = re.split(text).collect();
-    let joined = parts.join("\n");
-    if joined == text {
-        Cow::Borrowed(text)
-    } else {
-        Cow::Owned(joined)
+    let owned_text = text.to_owned();
+    match run_with_match_timeout(move || {
+        let parts: Vec<&str> = re.split(&owned_text).collect();
+        parts.join("\n")
+    }) {
+        Ok(joined) if joined == text => Cow::Borrowed(text),
+        Ok(joined) => Cow::Owned(joined),
+        Err(RegexMatchTimeout) => on_match_timeout(text),
     }
 }
 
@@ -423,5 +499,38 @@ mod tests {
         );
         assert!(!invalid.valid);
         assert!(invalid.result.is_none());
+    }
+
+    /// 制限時間内に終わらないマッチはタイムアウトすること
+    #[test]
+    fn test_run_with_match_timeout_expires() {
+        let result = run_with_match_timeout_duration(Duration::from_millis(30), || {
+            thread::sleep(Duration::from_millis(300));
+            "done"
+        });
+        assert_eq!(result, Err(RegexMatchTimeout));
+    }
+
+    /// 制限時間内に終わるマッチは結果を返すこと
+    #[test]
+    fn test_run_with_match_timeout_completes() {
+        let result = run_with_match_timeout_duration(Duration::from_millis(500), || {
+            thread::sleep(Duration::from_millis(10));
+            42
+        });
+        assert_eq!(result, Ok(42));
+    }
+
+    /// タイムアウト時は置換せず元テキストを返すこと
+    #[test]
+    fn test_regex_replace_timeout_keeps_original() {
+        // ヘルパー経由で短い制限時間を検証し、本番パスは on_match_timeout と同じ挙動
+        let text = "keep-me";
+        let timed_out = run_with_match_timeout_duration(Duration::from_millis(20), || {
+            thread::sleep(Duration::from_millis(200));
+            "replaced".to_string()
+        });
+        assert!(timed_out.is_err());
+        assert!(matches!(on_match_timeout(text), Cow::Borrowed("keep-me")));
     }
 }

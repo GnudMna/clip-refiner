@@ -9,33 +9,18 @@
  */
 function handlePipelineAction(button) {
     const index = Number(button.dataset.index);
-    if (Number.isNaN(index)) {
-        return;
-    }
-
+    let action = 'remove';
     if (button.classList.contains('pipeline-up')) {
-        const pipeline = [...state.pipeline];
-        if (index <= 0) {
-            return;
-        }
-        [pipeline[index - 1], pipeline[index]] = [pipeline[index], pipeline[index - 1]];
-        applyPipelineChange(pipeline);
-        return;
+        action = 'up';
+    } else if (button.classList.contains('pipeline-down')) {
+        action = 'down';
     }
 
-    if (button.classList.contains('pipeline-down')) {
-        const pipeline = [...state.pipeline];
-        if (index >= pipeline.length - 1) {
-            return;
-        }
-        [pipeline[index + 1], pipeline[index]] = [pipeline[index], pipeline[index + 1]];
-        applyPipelineChange(pipeline);
+    const next = SettingsPanelsLogic.applyPipelineAction(state.pipeline || [], index, action);
+    if (!next) {
         return;
     }
-
-    if (button.classList.contains('pipeline-remove')) {
-        applyPipelineChange(state.pipeline.filter((_, i) => i !== index));
-    }
+    applyPipelineChange(next);
 }
 
 /**
@@ -49,51 +34,43 @@ function handleContentClick(event) {
         return;
     }
 
-    if (
-        button.classList.contains('pipeline-up') ||
-        button.classList.contains('pipeline-down') ||
-        button.classList.contains('pipeline-remove')
-    ) {
+    const resolved = SettingsPanelsLogic.resolveContentClickAction(button);
+    if (!resolved) {
+        return;
+    }
+
+    if (resolved.type === 'pipeline') {
         handlePipelineAction(button);
         return;
     }
 
-    if (button.classList.contains('favorite-remove')) {
-        postIpcEnvelope({ type: 'favorite-toggle', mode: button.dataset.mode });
+    if (resolved.type === 'favorite-toggle') {
+        postIpcEnvelope({ type: 'favorite-toggle', mode: resolved.mode });
         return;
     }
 
-    if (button.classList.contains('favorite-up')) {
+    if (resolved.type === 'favorite-move') {
         postIpcEnvelope({
             type: 'favorite-move',
-            mode: button.dataset.mode,
-            direction: 'up',
+            mode: resolved.mode,
+            direction: resolved.direction,
         });
         return;
     }
 
-    if (button.classList.contains('favorite-down')) {
-        postIpcEnvelope({
-            type: 'favorite-move',
-            mode: button.dataset.mode,
-            direction: 'down',
-        });
+    if (resolved.type === 'clip-copy') {
+        postIpcEnvelope({ type: 'clip-copy', index: resolved.index });
         return;
     }
 
-    if (button.classList.contains('clip-copy')) {
-        postIpcEnvelope({ type: 'clip-copy', index: Number(button.dataset.index) });
-        return;
-    }
-
-    if (button.classList.contains('clip-delete')) {
+    if (resolved.type === 'clip-delete') {
         showConfirmDialog({
             message: 'この登録クリップを削除しますか？',
             confirmLabel: '削除する',
             onConfirm: () => {
                 postIpcEnvelope({
                     type: 'clip-delete',
-                    index: Number(button.dataset.index),
+                    index: resolved.index,
                 });
             },
         });
@@ -142,15 +119,15 @@ function bindMonitorEvents() {
     document.getElementById('pipeline-add-btn')?.addEventListener('click', () => {
         const select = document.getElementById('pipeline-add-mode');
         const modeId = select.value;
-        if (!modeId) {
+        const next = SettingsPanelsLogic.appendPipelineMode(
+            state.pipeline || [],
+            modeId,
+            maxPipelineLength()
+        );
+        if (!next) {
             return;
         }
-        const pipeline = [...(state.pipeline || [])];
-        if (pipeline.length >= maxPipelineLength()) {
-            return;
-        }
-        pipeline.push(modeId);
-        applyPipelineChange(pipeline);
+        applyPipelineChange(next);
     });
 
     document.getElementById('pipeline-clear-btn')?.addEventListener('click', () => {
@@ -260,6 +237,74 @@ function bindRegexEvents() {
 /** ショートカットタブのイベントをバインドする */
 function bindShortcutsEvents() {
     document.getElementById('shortcuts-open-config-btn')?.addEventListener('click', openConfigFile);
+
+    /** DOM からホットキーパッチを組み立てて適用する */
+    function applyHotkeysFromDom() {
+        const fixedFieldStates = {};
+        let valid = true;
+        for (const [elementId] of SettingsSharedLogic.HOTKEY_FIXED_FIELD_MAP) {
+            const element = document.getElementById(elementId);
+            if (!element) {
+                continue;
+            }
+            const value = element.value.trim();
+            fixedFieldStates[elementId] = value;
+            const validation = SettingsSharedLogic.validateHotkeyBinding(value);
+            element.closest('.field')?.classList.toggle('field-invalid', !validation.valid);
+            element.classList.toggle('is-invalid', !validation.valid);
+            if (!validation.valid) {
+                valid = false;
+                showApplyFeedback({
+                    ok: false,
+                    field: 'hotkeys',
+                    message: validation.message,
+                });
+            }
+        }
+
+        const favoriteModes = state.favoriteModes || [];
+        const favoriteSlotBindings = [];
+        for (let index = 0; index < favoriteModes.length; index += 1) {
+            const element = document.getElementById('hotkey-favorite-slot-' + index);
+            const value = element ? element.value.trim() : '';
+            favoriteSlotBindings.push(value);
+            if (element) {
+                const validation = SettingsSharedLogic.validateHotkeyBinding(value, {
+                    allowEmpty: true,
+                });
+                element.classList.toggle('is-invalid', !validation.valid);
+                if (!validation.valid) {
+                    valid = false;
+                    showApplyFeedback({
+                        ok: false,
+                        field: 'hotkeys',
+                        message: validation.message,
+                    });
+                }
+            }
+        }
+
+        if (!valid) {
+            return;
+        }
+
+        const hotkeys = SettingsSharedLogic.buildHotkeysPatch(
+            fixedFieldStates,
+            favoriteSlotBindings
+        );
+        state.hotkeys = Object.assign({}, state.hotkeys || {}, hotkeys);
+        scheduleApply({ hotkeys });
+    }
+
+    document.querySelectorAll('.shortcut-input').forEach((input) => {
+        input.addEventListener('blur', applyHotkeysFromDom);
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
+            }
+        });
+    });
 }
 
 /** お気に入りタブのイベントをバインドする */

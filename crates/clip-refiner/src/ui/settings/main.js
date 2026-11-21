@@ -61,26 +61,6 @@ function render(forcePanel = false) {
 }
 
 /**
- * スナップショット受信時にフル再描画が必要かどうか
- *
- * @param {{ force?: boolean, externalSync?: boolean }} options
- * @param {boolean} wasEditing - 受信時にフォーム編集中だったか
- * @returns {boolean}
- */
-function shouldFullRenderOnLoad(options, wasEditing) {
-    if (options.force || options.externalSync) {
-        return true;
-    }
-    if (clipRegisterPending && activeTab === 'clips') {
-        return true;
-    }
-    if (!wasEditing) {
-        return true;
-    }
-    return activeTab === 'favorites' || activeTab === 'shortcuts';
-}
-
-/**
  * Rust から設定スナップショットを受信して UI を更新する
  *
  * @param {Record<string, unknown>} snapshot
@@ -113,7 +93,9 @@ window.loadSettings = function loadSettings(snapshot, options) {
         return;
     }
 
-    if (shouldFullRenderOnLoad(opts, wasEditing)) {
+    if (
+        SettingsSharedLogic.shouldFullRenderOnLoad(opts, wasEditing, activeTab, clipRegisterPending)
+    ) {
         clipRegisterPending = false;
         invalidateAllPanels();
         render(true);
@@ -144,18 +126,32 @@ window.updateClips = function updateClips(clips) {
 /**
  * お気に入りとショートカット一覧の差分更新
  *
- * @param {{ favoriteModes?: string[], shortcuts?: Array<{ binding: string, label: string }> }} payload
+ * @param {{ favoriteModes?: string[], hotkeys?: Record<string, unknown>, shortcuts?: Array<{ binding: string, label: string }> }} payload
  */
 window.updateFavoritesAndShortcuts = function updateFavoritesAndShortcuts(payload) {
     if (!state) {
         return;
     }
-    state.favoriteModes = payload.favoriteModes || [];
+    const previousFavoriteCount = (state.favoriteModes || []).length;
+    const nextFavoriteModes = payload.favoriteModes || [];
+    const wasEditingShortcuts =
+        activeTab === 'shortcuts' && document.activeElement?.classList?.contains('shortcut-input');
+
+    state.favoriteModes = nextFavoriteModes;
+    if (payload.hotkeys) {
+        state.hotkeys = payload.hotkeys;
+    }
     state.shortcuts = payload.shortcuts || [];
+
     if (activeTab === 'favorites') {
         refreshActivePanel();
     } else if (activeTab === 'shortcuts') {
-        refreshActivePanel();
+        // お気に入り件数変化時は入力欄の行数が変わるため再描画する
+        if (wasEditingShortcuts && previousFavoriteCount === nextFavoriteModes.length) {
+            syncHotkeyInputsFromState();
+        } else {
+            refreshActivePanel();
+        }
     }
 };
 

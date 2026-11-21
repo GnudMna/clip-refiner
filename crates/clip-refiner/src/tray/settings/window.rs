@@ -52,6 +52,7 @@ fn assemble_settings_js() -> String {
         include_str!("../../ui/settings/regex_preview.js"),
         include_str!("../../ui/settings/settings_patch.js"),
         include_str!("../../ui/settings/shared_logic.js"),
+        include_str!("../../ui/settings/panels_logic.js"),
         include_str!("../../ui/settings/shared.js"),
         include_str!("../../ui/settings/panels.js"),
         include_str!("../../ui/settings/events.js"),
@@ -109,7 +110,7 @@ impl SettingsWindow {
         let inner = WebSelectorWindow::build(
             window,
             &data_dir,
-            html,
+            &html,
             move |req| {
                 let msg = req.body();
                 if let Some(action) = parse_settings_ipc_message(msg) {
@@ -264,7 +265,7 @@ impl SettingsWindow {
                 if let Some(json) = state.take_pending_settings_patch() {
                     match serde_json::from_str::<SettingsPatch>(&json) {
                         Ok(patch) => handle_settings_window_command(
-                            SettingsWindowCommand::Apply(patch),
+                            SettingsWindowCommand::Apply(Box::new(patch)),
                             state,
                             menu,
                             self,
@@ -375,7 +376,7 @@ pub(crate) fn open_settings_window(state: &Arc<AppState>, settings: &SettingsWin
 // ======================================================================
 #[cfg(test)]
 mod tests {
-    use super::assemble_settings_js;
+    use super::{assemble_settings_html, assemble_settings_js};
 
     /// 設定 UI JavaScript に正規表現プレビューの stale 判定ロジックが含まれるようにすること
     #[test]
@@ -391,7 +392,60 @@ mod tests {
     fn assembled_settings_js_includes_shared_logic() {
         let js = assemble_settings_js();
         assert!(js.contains("SettingsSharedLogic"));
+        assert!(js.contains("SettingsPanelsLogic"));
         assert!(js.contains("buildNotificationSettingsPatch"));
         assert!(js.contains("normalizePipeline"));
+        assert!(js.contains("shouldFullRenderOnLoad"));
+        assert!(js.contains("applyPipelineAction"));
+        assert!(js.contains("resolveContentClickAction"));
+    }
+
+    /// 組み立て HTML にシェル必須 DOM と全タブ定義が含まれるようにすること
+    #[test]
+    fn assembled_settings_html_includes_shell_and_tabs() {
+        let html = assemble_settings_html();
+        for marker in [
+            r#"id="app""#,
+            r#"id="sidebar""#,
+            r#"id="content""#,
+            r#"id="open-config-btn""#,
+            r#"id="close-btn""#,
+            r#"id="apply-feedback""#,
+            r#"id="confirm-dialog""#,
+        ] {
+            assert!(
+                html.contains(marker),
+                "組み立て HTML に {marker} が含まれること"
+            );
+        }
+
+        let js = assemble_settings_js();
+        for tab_id in [
+            "general",
+            "favorites",
+            "regex",
+            "history",
+            "clips",
+            "monitor",
+            "notifications",
+            "shortcuts",
+        ] {
+            let marker = format!("id: '{tab_id}'");
+            assert!(
+                js.contains(&marker),
+                "組み立て JS にタブ {tab_id} が含まれること"
+            );
+        }
+    }
+
+    /// CSS / JS がインライン展開され外部参照が残らないようにすること
+    #[test]
+    fn assembled_settings_html_inlines_assets() {
+        let html = assemble_settings_html();
+        assert!(!html.contains(r#"@import url("settings.css")"#));
+        assert!(!html.contains(r#"<script src="settings.js"></script>"#));
+        assert!(!html.contains("__APP_ICON_SRC__"));
+        assert!(html.contains("<script>"));
+        assert!(html.contains("SettingsSharedLogic"));
     }
 }

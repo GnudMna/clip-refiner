@@ -47,6 +47,8 @@ module.exports = [
                             'buildPipelineInnerHtml',
                             'buildSidebarNavInnerHtml',
                             'buildItemInnerHtml',
+                            'buildFavoriteRowsHtml',
+                            'renderClipRow',
                             'resolvePanelInnerHtml',
                         ],
                     },
@@ -62,6 +64,8 @@ module.exports = [
                             'buildPipelineInnerHtml',
                             'buildSidebarNavInnerHtml',
                             'buildItemInnerHtml',
+                            'buildFavoriteRowsHtml',
+                            'renderClipRow',
                             'resolvePanelInnerHtml',
                         ],
                     },
@@ -87,12 +91,27 @@ module.exports = [
         files: [
             'crates/clip-refiner/src/ui/settings/settings_patch.js',
             'crates/clip-refiner/src/ui/settings/shared_logic.js',
+            'crates/clip-refiner/src/ui/settings/panels_logic.js',
             'crates/clip-refiner/src/ui/settings/regex_preview.js',
+            'crates/clip-refiner/src/ui/selector-common.js',
+            'crates/clip-refiner/src/ui/quick_selector_logic.js',
+            'crates/clip-refiner/src/ui/clip_selector_logic.js',
         ],
         languageOptions: {
             globals: {
                 module: 'readonly',
             },
+        },
+    },
+    {
+        // セレクター UI は HTML で順に読み込むため、ファイル間の共有バインディングは ESLint 単体では解決できない
+        files: [
+            'crates/clip-refiner/src/ui/quick_selector.js',
+            'crates/clip-refiner/src/ui/clip_selector.js',
+        ],
+        rules: {
+            'no-undef': 'off',
+            'no-unused-vars': 'off',
         },
     },
     {

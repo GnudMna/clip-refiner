@@ -90,7 +90,7 @@ impl ClipSelectorWindow {
         let inner = WebSelectorWindow::build(
             window,
             &data_dir,
-            html,
+            &html,
             move |req| {
                 let msg = req.body();
                 match parse_clip_selector_ipc_message(msg) {
@@ -250,7 +250,9 @@ mod tests {
         assert!(!html.contains(r#"@import url("selector.css");"#));
         assert!(!html.contains(r#"@import url("clip_selector.css");"#));
         assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(!html.contains(r#"<script src="clip_selector_logic.js"></script>"#));
         assert!(!html.contains(r#"<script src="clip_selector.js"></script>"#));
+        assert!(html.contains("window.ClipSelectorLogic"));
         assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("#image-hover-preview"));
         assert!(html.contains("focusInput"));

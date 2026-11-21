@@ -62,6 +62,7 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         | AppEvent::ClipboardWorkerStopped
         | AppEvent::ClipboardWorkerReady => handle_clipboard_worker_lifecycle(ctx, event),
         AppEvent::ReloadFavoriteHotkeys => reload_favorite_hotkeys(ctx),
+        AppEvent::ReloadHotkeys => reload_hotkeys(ctx),
         AppEvent::RefreshSettingsWindow => refresh_settings_window(ctx.state, ctx.settings),
         AppEvent::ShowSettingsWindow
         | AppEvent::HideSettingsWindow
@@ -197,6 +198,24 @@ fn reload_favorite_hotkeys(ctx: &mut AppEventContext<'_>) {
         Ok(failures) => notify_registration_failures(&failures),
         Err(err) => {
             crate::log_warn!("お気に入りホットキーの再登録に失敗: {}", err);
+        }
+    }
+    refresh_settings_favorites_and_shortcuts(ctx.state, ctx.settings);
+}
+
+/// グローバルホットキー全体を再登録する
+fn reload_hotkeys(ctx: &mut AppEventContext<'_>) {
+    let (hotkeys, favorite_modes) = ctx
+        .state
+        .with_config(|c| (c.hotkeys.clone(), c.favorite_modes.clone()));
+    match ctx.hotkey_handler.reload(&hotkeys, &favorite_modes) {
+        Ok(failures) => notify_registration_failures(&failures),
+        Err(err) => {
+            crate::log_warn!("ホットキーの再登録に失敗: {}", err);
+            crate::platform::show_notification(
+                "ホットキー",
+                &format!("ホットキーの再登録に失敗しました: {err}"),
+            );
         }
     }
     refresh_settings_favorites_and_shortcuts(ctx.state, ctx.settings);

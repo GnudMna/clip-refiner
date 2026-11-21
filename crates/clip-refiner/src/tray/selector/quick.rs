@@ -105,7 +105,7 @@ impl QuickSelectorWindow {
         let inner = WebSelectorWindow::build(
             window,
             &data_dir,
-            html,
+            &html,
             move |req| {
                 let msg = req.body();
                 match parse_quick_selector_ipc_message(msg) {
@@ -295,7 +295,9 @@ mod tests {
         assert!(html.contains(r#"[{"id":"trim"}]"#));
         assert!(!html.contains(r#"@import url("selector.css");"#));
         assert!(!html.contains(r#"<script src="selector-common.js"></script>"#));
+        assert!(!html.contains(r#"<script src="quick_selector_logic.js"></script>"#));
         assert!(!html.contains(r#"<script src="quick_selector.js"></script>"#));
+        assert!(html.contains("window.QuickSelectorLogic"));
         assert!(html.contains("window.SelectorCommon"));
         assert!(html.contains("focusInput"));
         assert!(html.contains("クイックセレクター"));

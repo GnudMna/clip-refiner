@@ -17,9 +17,7 @@ use windows::core::{HSTRING, Interface};
 // ======================================================================
 /// RGBA 画像からテキストを認識する (`Windows.Media.Ocr`)
 pub(crate) fn recognize_text(image: &RgbaImage) -> Result<String> {
-    if image.width == 0 || image.height == 0 {
-        bail!("OCR 対象画像が空");
-    }
+    validate_ocr_image(image)?;
 
     let prepared = prepare_ocr_image(image);
     let bitmap = create_ocr_bitmap(&prepared)?;
@@ -43,6 +41,14 @@ pub(crate) fn recognize_text(image: &RgbaImage) -> Result<String> {
 // ======================================================================
 // プライベート関数
 // ======================================================================
+/// OCR 対象画像が空でないことを検証する
+fn validate_ocr_image(image: &RgbaImage) -> Result<()> {
+    if image.width == 0 || image.height == 0 {
+        bail!("OCR 対象画像が空");
+    }
+    Ok(())
+}
+
 /// 日本語優先で OCR エンジンを生成する
 fn create_ocr_engine() -> Result<OcrEngine> {
     for tag in ["ja-JP", "ja"] {
@@ -94,11 +100,127 @@ fn write_rgba_as_bgra(bitmap: &SoftwareBitmap, rgba: &[u8]) -> Result<()> {
     }
 
     let slice = unsafe { slice::from_raw_parts_mut(data, capacity) };
-    for (dest, src) in slice.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
-        dest[0] = src[2];
-        dest[1] = src[1];
-        dest[2] = src[0];
-        dest[3] = src[3];
-    }
+    copy_rgba_to_bgra(rgba, slice);
     Ok(())
+}
+
+/// RGBA ピクセル列を BGRA バッファへ書き込む
+///
+/// `dest` は `rgba` 以上の長さであること
+fn copy_rgba_to_bgra(rgba: &[u8], dest: &mut [u8]) {
+    for (pixel_dest, src) in dest.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
+        pixel_dest[0] = src[2];
+        pixel_dest[1] = src[1];
+        pixel_dest[2] = src[0];
+        pixel_dest[3] = src[3];
+    }
+}
+
+// ======================================================================
+// テスト
+// ======================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 幅または高さが 0 の画像は拒否すること
+    #[test]
+    fn validate_ocr_image_rejects_empty() {
+        assert!(
+            validate_ocr_image(&RgbaImage {
+                width: 0,
+                height: 10,
+                rgba: vec![],
+            })
+            .is_err()
+        );
+        assert!(
+            validate_ocr_image(&RgbaImage {
+                width: 10,
+                height: 0,
+                rgba: vec![],
+            })
+            .is_err()
+        );
+    }
+
+    /// 有効な画像は検証を通ること
+    #[test]
+    fn validate_ocr_image_accepts_non_empty() {
+        assert!(
+            validate_ocr_image(&RgbaImage {
+                width: 1,
+                height: 1,
+                rgba: vec![0, 0, 0, 255],
+            })
+            .is_ok()
+        );
+    }
+
+    /// RGBA から BGRA へチャンネルを入れ替えること
+    #[test]
+    fn copy_rgba_to_bgra_swaps_red_and_blue() {
+        let rgba = [10, 20, 30, 40, 50, 60, 70, 80];
+        let mut dest = [0u8; 8];
+        copy_rgba_to_bgra(&rgba, &mut dest);
+        assert_eq!(dest, [30, 20, 10, 40, 70, 60, 50, 80]);
+    }
+
+    /// 公開 API も空画像を拒否すること
+    #[test]
+    fn recognize_text_rejects_empty_image() {
+        let err = recognize_text(&RgbaImage {
+            width: 0,
+            height: 1,
+            rgba: vec![],
+        })
+        .expect_err("空画像は失敗する");
+        assert!(err.to_string().contains("空"));
+    }
+
+    /// 小さな RGBA 画像から `SoftwareBitmap` を生成できること
+    #[test]
+    fn create_ocr_bitmap_accepts_tiny_rgba_image() {
+        let image = RgbaImage {
+            width: 2,
+            height: 2,
+            rgba: vec![
+                255, 0, 0, 255, // R
+                0, 255, 0, 255, // G
+                0, 0, 255, 255, // B
+                255, 255, 255, 255, // W
+            ],
+        };
+        let bitmap = create_ocr_bitmap(&image).expect("SoftwareBitmap を生成できる");
+        assert_eq!(bitmap.PixelWidth().expect("幅"), 2);
+        assert_eq!(bitmap.PixelHeight().expect("高さ"), 2);
+    }
+
+    /// 単色画像でも OCR パイプラインが完走すること
+    ///
+    /// 言語パック未導入環境ではエンジン初期化失敗を許容する
+    #[test]
+    fn recognize_text_runs_on_solid_image_when_engine_available() {
+        let image = RgbaImage {
+            width: 64,
+            height: 32,
+            rgba: vec![255; 64 * 32 * 4],
+        };
+
+        match recognize_text(&image) {
+            Ok(text) => {
+                // 単色なので検出なしが通常。失敗せず完走すればよい
+                let _ = text;
+            }
+            Err(err) => {
+                let message = format!("{err:#}");
+                assert!(
+                    message.contains("OCR エンジン")
+                        || message.contains("言語")
+                        || message.contains("言語パック"),
+                    "想定外の失敗: {message}"
+                );
+            }
+        }
+    }
 }

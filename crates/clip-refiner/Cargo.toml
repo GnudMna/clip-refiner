@@ -125,12 +125,20 @@ path = "tests/settings_shared_logic.rs"
 required-features = ["app"]
 
 [[test]]
+name = "settings_panels_logic"
+path = "tests/settings_panels_logic.rs"
+
+[[test]]
+name = "selector_logic"
+path = "tests/selector_logic.rs"
+
+[[test]]
 name = "platform_flow"
 path = "tests/platform_flow.rs"
 required-features = ["app"]
 
 [dependencies]
-clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.3" }
+clip-refiner-core = { path = "../clip-refiner-core", version = "0.12.4" }
 anyhow = { version = "1.0.103", optional = true }
 arboard = { version = "3.6.1", optional = true }
 base64 = { version = "0.22.1", optional = true }

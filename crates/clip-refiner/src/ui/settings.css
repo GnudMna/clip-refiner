@@ -766,8 +766,36 @@ body {
 }
 
 .shortcut-table td:first-child {
-    width: 38%;
-    white-space: nowrap;
+    width: 42%;
+    vertical-align: top;
+}
+
+.shortcut-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.shortcut-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--text-color);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 13px;
+    outline: none;
+}
+
+.shortcut-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.shortcut-input.is-invalid {
+    border-color: rgba(255, 107, 107, 0.75);
 }
 
 .card-actions {

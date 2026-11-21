@@ -66,6 +66,57 @@ function test_build_notification_settings_patch() {
     });
 }
 
+/** ホットキー文字列のクライアント検証ができること */
+function test_validate_hotkey_binding() {
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift+S').valid, true);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Ctrl+F12').valid, true);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('').valid, false);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('', { allowEmpty: true }).valid, true);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Shift').valid, false);
+    assert.equal(SettingsSharedLogic.validateHotkeyBinding('Alt+Enter').valid, false);
+}
+
+/** ホットキー DOM 状態から IPC パッチを組み立てられること */
+function test_build_hotkeys_patch() {
+    const patch = SettingsSharedLogic.buildHotkeysPatch(
+        {
+            'hotkey-quick-selector': 'Ctrl+Shift+S',
+            'hotkey-pause': 'Alt+Shift+P',
+        },
+        ['', 'Alt+Shift+2']
+    );
+
+    assert.equal(patch.quickSelector, 'Ctrl+Shift+S');
+    assert.equal(patch.pause, 'Alt+Shift+P');
+    assert.deepEqual(patch.favoriteModeSlots, ['', 'Alt+Shift+2']);
+}
+
+/** スナップショット JSON のホットキー必須フィールドを検証できること */
+function test_snapshot_has_hotkey_fields() {
+    assert.equal(
+        SettingsSharedLogic.snapshotHasHotkeyFields({
+            hotkeys: {
+                quickSelector: 'Alt+Shift+S',
+                clipSelector: 'Alt+Shift+T',
+                ocr: 'Alt+Shift+O',
+                notification: 'Alt+Shift+N',
+                pause: 'Alt+Shift+P',
+                continuousRecord: 'Alt+Shift+C',
+                undo: 'Alt+Shift+Z',
+                quit: 'Alt+Shift+Q',
+                favoriteModeSlots: [],
+            },
+        }),
+        true
+    );
+    assert.equal(
+        SettingsSharedLogic.snapshotHasHotkeyFields({
+            hotkeys: { quickSelector: 'Alt+Shift+S' },
+        }),
+        false
+    );
+}
+
 /** マスター OFF 時でも個別トグルをパッチへ含められること */
 function test_notification_patch_allows_sub_toggles_when_master_off() {
     const patch = SettingsSharedLogic.buildNotificationSettingsPatch({
@@ -105,14 +156,72 @@ function test_snapshot_has_notification_fields() {
     );
 }
 
+/** force / externalSync 時はフル再描画すること */
+function test_should_full_render_on_force_or_external_sync() {
+    assert.equal(
+        SettingsSharedLogic.shouldFullRenderOnLoad({ force: true }, true, 'regex', false),
+        true
+    );
+    assert.equal(
+        SettingsSharedLogic.shouldFullRenderOnLoad({ externalSync: true }, true, 'regex', false),
+        true
+    );
+}
+
+/** 編集中でもお気に入りはフル再描画し、ショートカットはフォーカス維持のため省略すること */
+function test_should_full_render_while_editing_favorites_or_shortcuts() {
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'favorites', false), true);
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'shortcuts', false), false);
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'regex', false), false);
+}
+
+/** 登録クリップ処理中は clips タブでフル再描画すること */
+function test_should_full_render_when_clip_register_pending_on_clips_tab() {
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'clips', true), true);
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, true, 'regex', true), false);
+}
+
+/** 未編集時はフル再描画すること */
+function test_should_full_render_when_not_editing() {
+    assert.equal(SettingsSharedLogic.shouldFullRenderOnLoad({}, false, 'regex', false), true);
+}
+
+/** 設定シェル HTML の必須 DOM ID を検証できること */
+function test_settings_shell_has_required_ids() {
+    const html =
+        '<div id="app"><nav id="sidebar"></nav><main id="content"></main>' +
+        '<button id="open-config-btn"></button><button id="close-btn"></button>' +
+        '<div id="apply-feedback"></div><div id="confirm-dialog"></div></div>';
+    assert.equal(SettingsSharedLogic.settingsShellHasRequiredIds(html), true);
+    assert.equal(SettingsSharedLogic.settingsShellHasRequiredIds('<div id="app"></div>'), false);
+}
+
+/** 組み立て JS に全タブ定義が含まれることを検証できること */
+function test_settings_js_defines_all_tabs() {
+    const js = SettingsSharedLogic.SETTINGS_TAB_IDS.map((tabId) => "id: '" + tabId + "'").join(
+        '\n'
+    );
+    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs(js), true);
+    assert.equal(SettingsSharedLogic.settingsJsDefinesAllTabs("id: 'general'"), false);
+}
+
 const tests = [
     test_clamp_limit_value,
     test_escape_html,
     test_normalize_pipeline_moves_image_mode_to_tail,
     test_normalize_pipeline_truncates_to_max_length,
     test_build_notification_settings_patch,
+    test_validate_hotkey_binding,
+    test_build_hotkeys_patch,
     test_notification_patch_allows_sub_toggles_when_master_off,
     test_snapshot_has_notification_fields,
+    test_snapshot_has_hotkey_fields,
+    test_should_full_render_on_force_or_external_sync,
+    test_should_full_render_while_editing_favorites_or_shortcuts,
+    test_should_full_render_when_clip_register_pending_on_clips_tab,
+    test_should_full_render_when_not_editing,
+    test_settings_shell_has_required_ids,
+    test_settings_js_defines_all_tabs,
 ];
 
 for (const test of tests) {

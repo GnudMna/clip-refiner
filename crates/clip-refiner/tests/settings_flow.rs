@@ -1,6 +1,7 @@
 //! 設定ウィンドウ IPC とパッチ適用の統合テスト
 
 use clip_refiner::AppConfig;
+use clip_refiner::MonitorMode;
 use clip_refiner::RefineMode;
 use clip_refiner::consts;
 use clip_refiner::test_helpers::SettingsTestContext;
@@ -121,6 +122,89 @@ fn dequeue_and_apply_merged_patch() {
     ctx.enqueue_apply_ipc(r#"{"type":"apply","patch":{"isPaused":true}}"#);
 
     assert!(ctx.apply_pending_patch());
+    assert!(ctx.state().with_config(|c| c.is_paused));
+    assert!(ctx.menu().pause_item.is_checked());
+}
+
+/// Event 監視への切替と同時の周期パッチでは周期をスキップすること
+#[test]
+fn apply_ipc_skips_interval_when_switching_to_event() {
+    let ctx = SettingsTestContext::new();
+    let default_interval = ctx.state().with_config(|c| c.interval_ms);
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"monitorMode":"Event","intervalMs":500}}"#,));
+
+    assert_eq!(
+        ctx.state().with_config(|c| c.monitor_mode),
+        MonitorMode::Event
+    );
+    assert_eq!(ctx.state().with_config(|c| c.interval_ms), default_interval);
+}
+
+/// 有効な正規表現パッチが設定へ反映されるようにすること
+#[test]
+fn apply_ipc_updates_regex_settings() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(
+        r#"{"type":"apply","patch":{"regex":{"pattern":"\\d+","replacement":"N","caseInsensitive":true,"multiline":false}}}"#,
+    ));
+
+    let regex = ctx.state().with_config(|c| c.regex.clone());
+    assert_eq!(regex.pattern, r"\d+");
+    assert_eq!(regex.replacement, "N");
+    assert!(regex.case_insensitive);
+    assert!(!regex.multiline);
+}
+
+/// ホットキーパッチが設定へ反映され不正値が正規化されるようにすること
+#[test]
+fn apply_ipc_updates_hotkeys_and_fixes_invalid() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(
+        r#"{"type":"apply","patch":{"hotkeys":{"quickSelector":"Ctrl+Shift+S","pause":"Bad+Key","favoriteModeSlots":[""]}}}"#,
+    ));
+
+    let hotkeys = ctx.state().with_config(|c| c.hotkeys.clone());
+    assert_eq!(hotkeys.quick_selector, "Ctrl+Shift+S");
+    assert_eq!(hotkeys.pause, consts::DEFAULT_HOTKEY_PAUSE);
+    assert_eq!(hotkeys.favorite_mode_slots, vec![String::new()]);
+}
+
+/// 無効な正規表現パッチは設定を更新しないこと
+#[test]
+fn apply_ipc_rejects_invalid_regex() {
+    let ctx = SettingsTestContext::new();
+    let before = ctx.state().with_config(|c| c.regex.clone());
+
+    assert!(ctx.apply_ipc(
+        r#"{"type":"apply","patch":{"regex":{"pattern":"[unclosed","replacement":"","caseInsensitive":false,"multiline":false}}}"#,
+    ));
+
+    let after = ctx.state().with_config(|c| c.regex.clone());
+    assert_eq!(after.pattern, before.pattern);
+    assert_eq!(after.replacement, before.replacement);
+}
+
+/// 連続記録の有効化が設定とトレイメニューへ反映されるようにすること
+#[test]
+fn apply_ipc_enables_continuous_record() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"continuousRecordEnabled":true}}"#));
+
+    assert!(ctx.state().with_config(|c| c.continuous_record_enabled));
+    assert!(ctx.menu().continuous_record.enabled_item.is_checked());
+}
+
+/// 一時停止パッチが設定とトレイメニューへ反映されるようにすること
+#[test]
+fn apply_ipc_pauses_monitoring() {
+    let ctx = SettingsTestContext::new();
+
+    assert!(ctx.apply_ipc(r#"{"type":"apply","patch":{"isPaused":true}}"#));
+
     assert!(ctx.state().with_config(|c| c.is_paused));
     assert!(ctx.menu().pause_item.is_checked());
 }

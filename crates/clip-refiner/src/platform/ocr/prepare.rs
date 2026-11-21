@@ -110,4 +110,31 @@ mod tests {
             ]
         );
     }
+
+    /// 倍率が 1 以下なら元画像を返すこと
+    #[test]
+    fn upscale_nearest_keeps_image_when_scale_is_one() {
+        let image = RgbaImage {
+            width: 1,
+            height: 1,
+            rgba: vec![9, 8, 7, 6],
+        };
+        let same = upscale_nearest(&image, 1);
+        assert_eq!(same.width, 1);
+        assert_eq!(same.height, 1);
+        assert_eq!(same.rgba, image.rgba);
+    }
+
+    /// 極小画像の拡大倍率を上限でクランプすること
+    #[test]
+    fn prepare_ocr_image_clamps_upscale_to_max() {
+        let image = RgbaImage {
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 4],
+        };
+        let prepared = prepare_ocr_image(&image);
+        assert_eq!(prepared.width, MAX_UPSCALE);
+        assert_eq!(prepared.height, MAX_UPSCALE);
+    }
 }
