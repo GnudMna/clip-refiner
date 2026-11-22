@@ -619,12 +619,12 @@ function renderAboutPanel() {
                 '<p class="hint">使い方・設定の詳細をブラウザで開く</p>' +
                 '<div class="card-actions"><button type="button" class="ghost-btn" id="open-user-docs-btn">ドキュメントを開く</button></div>'
         ) +
-            // 表記は LICENSE の 1〜2 行目と同じ。ずれは tests/flow/license_ui.rs が検出する
+            // 表記は LICENSE の冒頭 2 行 (空行を除く) と同じ。ずれは tests/flow/license_ui.rs が検出する
             card(
                 'ライセンス',
                 '' +
                     '<p class="hint">Copyright (c) 2026 Yuto Hirata</p>' +
-                    '<p class="hint">All Rights Reserved.</p>' +
+                    '<p class="hint">MIT License</p>' +
                     '<div class="card-actions"><button type="button" class="ghost-btn" id="open-license-btn">LICENSE を開く</button></div>'
             ) +
             card(

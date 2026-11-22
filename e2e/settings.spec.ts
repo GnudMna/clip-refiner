@@ -241,7 +241,7 @@ test.describe('設定 WebView', () => {
     test('情報タブにこのアプリケーションのライセンスが表示される', async ({ page }) => {
         await page.locator('#sidebar .nav-btn[data-tab="about"]').click();
         await expect(page.locator('#panel-about')).toContainText('Copyright (c) 2026 Yuto Hirata');
-        await expect(page.locator('#panel-about')).toContainText('All Rights Reserved.');
+        await expect(page.locator('#panel-about')).toContainText('MIT License');
         await expect(page.locator('#open-license-btn')).toBeVisible();
     });
 

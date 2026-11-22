@@ -82,13 +82,25 @@ impl ConfigSyncState {
 
     /// ディスク上の設定ファイルと同期済みの内容指紋を記録する
     ///
+    /// 記録時点のディスクを読み直すため、直前の読み込み・保存との間に入った外部編集も
+    /// 同期済みとして扱う。読み込みや保存の結果の指紋が分かる場合は `record_synced` を使う
+    ///
     /// # Arguments
     /// * `self` - 自身
+    #[cfg(test)]
     pub fn record_disk_sync(&self) {
         if let Ok(fingerprint) = disk_config_content_fingerprint() {
-            *self.fingerprint.lock_ignore_poison() = fingerprint;
-            *self.failed_fingerprint.lock_ignore_poison() = None;
+            self.record_synced(fingerprint);
         }
+    }
+
+    /// 実際にメモリへ反映した本文、または書き込んだ本文の指紋を同期済みとして記録する
+    ///
+    /// # Arguments
+    /// * `fingerprint` - 反映・書き込みした本文の指紋。取得できなかった場合は `None`
+    pub fn record_synced(&self, fingerprint: Option<ConfigFileFingerprint>) {
+        *self.fingerprint.lock_ignore_poison() = fingerprint;
+        *self.failed_fingerprint.lock_ignore_poison() = None;
     }
 
     /// 再読み込みに失敗した本文の指紋を記録する

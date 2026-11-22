@@ -1,4 +1,5 @@
 [toolchain]
 channel = "1.96"
-components = ["rustfmt", "clippy"]
-profile = "default"
+# rust-src は rust-analyzer が標準ライブラリを解析するために使う
+components = ["rustfmt", "clippy", "rust-src"]
+profile = "minimal"

@@ -16,8 +16,9 @@ param(
     [string]$Target,
 
     # `--release` は PowerShell のパラメータとして解釈されないため、ここで受けて -Release に読み替える
+    # 既定値が無いと残りの引数が無いときに $null になり、パイプで $null が 1 件流れて不明な引数と判定される
     [Parameter(ValueFromRemainingArguments)]
-    [string[]]$ExtraArgs
+    [string[]]$ExtraArgs = @()
 )
 
 Set-StrictMode -Version Latest

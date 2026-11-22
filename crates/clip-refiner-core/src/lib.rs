@@ -28,6 +28,9 @@
 //! assert_eq!(result.as_deref(), Some("あ"));
 //! ```
 
+// doctest は Clippy の対象外で警告も表示されないため、警告をエラーにして検出する
+#![doc(test(attr(deny(warnings))))]
+
 #[cfg(all(
     not(target_os = "windows"),
     any(feature = "clipboard", feature = "config")

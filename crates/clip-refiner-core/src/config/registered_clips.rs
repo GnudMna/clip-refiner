@@ -27,8 +27,12 @@ fn clips_err(msg: impl Into<String>) -> ConfigError {
 // ======================================================================
 // 定数
 // ======================================================================
-const REGISTERED_CLIPS_FILE: &str = "registered-clips.dat";
+pub(super) const REGISTERED_CLIPS_FILE: &str = "registered-clips.dat";
 const REGISTERED_CLIPS_BACKUP_FILE: &str = "registered-clips.dat.bak";
+/// 世代退避ファイル名 (`registered-clips.dat.<UNIX ミリ秒>.bak`) の接頭辞
+const REGISTERED_CLIPS_BACKUP_PREFIX: &str = "registered-clips.dat.";
+/// 古い世代の退避ファイルを残す最大数
+const MAX_BACKUP_GENERATIONS: usize = 5;
 
 /// 読み込みに失敗したまま、メモリ上の一覧と食い違っている可能性がある `registered-clips.dat` のパス
 ///
@@ -365,11 +369,30 @@ fn quarantine_unloaded_clips_file(path: &Path) {
 /// 読み込めなかった登録クリップファイルを `registered-clips.dat.bak` へ退避する
 ///
 /// 存在しないファイルは退避不要なので成功扱いにする
+/// 既存の `.bak` と内容が同じなら何もしない。異なる場合は既存の `.bak` を
+/// `registered-clips.dat.<UNIX ミリ秒>.bak` へ改名して残し、新しい内容を `.bak` に置く
+/// 改名した世代は新しい順に `MAX_BACKUP_GENERATIONS` 件まで残す
 fn backup_registered_clips_file(path: &Path) -> Result<()> {
     if !path.is_file() {
         return Ok(());
     }
     let backup_path = backup_path_of(path);
+    if backup_path.exists() {
+        if !backup_path.is_file() {
+            return Err(clips_err(format!(
+                "登録クリップファイルの退避先がファイルではありません: {}",
+                backup_path.display()
+            )));
+        }
+        let same = matches!(
+            (fs::read(path), fs::read(&backup_path)),
+            (Ok(a), Ok(b)) if a == b
+        );
+        if same {
+            return Ok(());
+        }
+        archive_existing_backup(&backup_path)?;
+    }
     fs::copy(path, &backup_path).map_err(|e| {
         tracing::warn!("登録クリップファイルの退避に失敗: {:?}", e);
         clips_err(format!(
@@ -384,6 +407,57 @@ fn backup_registered_clips_file(path: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// 既存の `.bak` を日時 (UNIX ミリ秒) 付きの名前へ改名し、古い世代を間引く
+fn archive_existing_backup(backup_path: &Path) -> Result<()> {
+    let mut millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    // 同一ミリ秒の衝突では既存の世代を上書きしないよう、空きが出るまで進める
+    let archived = loop {
+        let candidate =
+            backup_path.with_file_name(format!("{REGISTERED_CLIPS_BACKUP_PREFIX}{millis}.bak"));
+        if !candidate.exists() {
+            break candidate;
+        }
+        millis += 1;
+    };
+    fs::rename(backup_path, &archived).map_err(|e| {
+        clips_err(format!(
+            "既存の退避ファイルの世代保存に失敗: {}: {e}",
+            archived.display()
+        ))
+    })?;
+    prune_old_backups(backup_path);
+    Ok(())
+}
+
+/// 世代付き退避ファイルを新しい順に `MAX_BACKUP_GENERATIONS` 件だけ残す
+fn prune_old_backups(backup_path: &Path) {
+    let Some(dir) = backup_path.parent() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut generations: Vec<(u128, PathBuf)> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().into_string().ok()?;
+            let digits = name
+                .strip_prefix(REGISTERED_CLIPS_BACKUP_PREFIX)?
+                .strip_suffix(".bak")?;
+            let millis = digits.parse::<u128>().ok()?;
+            Some((millis, entry.path()))
+        })
+        .collect();
+    generations.sort_by_key(|g| std::cmp::Reverse(g.0));
+    for (_, old) in generations.into_iter().skip(MAX_BACKUP_GENERATIONS) {
+        if let Err(e) = fs::remove_file(&old) {
+            tracing::warn!("古い登録クリップ退避ファイルの削除に失敗: {:?}", e);
+        }
+    }
 }
 
 fn unloaded_clips_files() -> MutexGuard<'static, Option<HashSet<PathBuf>>> {
@@ -613,6 +687,50 @@ mod tests {
 
             save_registered_clips(&[]).expect("save empty");
             assert!(!path.exists(), "復旧後の空保存で削除されること");
+        });
+    }
+
+    /// 内容の異なる退避が重なっても、以前の `.bak` を日時付きの名前で残すこと
+    #[test]
+    fn backup_keeps_previous_generation() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            fs::write(&path, b"first").expect("write");
+            backup_registered_clips_file(&path).expect("backup 1");
+            // 同じ内容の再退避では世代を増やさない
+            backup_registered_clips_file(&path).expect("backup same");
+
+            fs::write(&path, b"second").expect("write");
+            backup_registered_clips_file(&path).expect("backup 2");
+
+            assert_eq!(fs::read(backup_path_of(&path)).expect("bak"), b"second");
+            let archived: Vec<_> = fs::read_dir(path.parent().expect("dir"))
+                .expect("read_dir")
+                .filter_map(std::result::Result::ok)
+                .filter(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    name != REGISTERED_CLIPS_BACKUP_FILE
+                        && name.starts_with(REGISTERED_CLIPS_BACKUP_PREFIX)
+                        && Path::new(&name)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("bak"))
+                })
+                .collect();
+            assert_eq!(archived.len(), 1);
+            assert_eq!(fs::read(archived[0].path()).expect("archived"), b"first");
+        });
+    }
+
+    /// 登録クリップファイルが残っていて鍵が無い場合は、新しい鍵を作らずエラーにすること
+    #[test]
+    fn missing_key_with_existing_clips_file_does_not_create_key() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            fs::write(&path, b"existing").expect("write");
+
+            assert!(ensure_clip_store_key().is_err());
+            assert!(!path.with_file_name("registered-clips.key").exists());
+            assert_eq!(fs::read(&path).expect("kept"), b"existing");
         });
     }
 

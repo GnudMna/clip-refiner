@@ -19,7 +19,7 @@ pub fn add_commas(text: &str) -> Cow<'_, str> {
 /// 1 行分の数値に3桁区切りのカンマを付与する
 ///
 /// 入力された文字列が数値として妥当な場合、整数部分に3桁ごとのカンマを挿入する
-/// 負の数や小数を含む数値にも対応している
+/// 先頭に符号 (`-` / `+`) を持つ数や小数を含む数値にも対応している
 /// 整数部が先頭ゼロで始まる値 (`00123456` など) は数値として扱わず元のまま返す
 ///
 /// # Arguments
@@ -47,8 +47,12 @@ fn add_commas_single(text: &str) -> Cow<'_, str> {
     let integer_part = parts[0];
     let decimal_part = if parts.len() > 1 { parts[1] } else { "" };
 
-    let is_negative = integer_part.starts_with('-');
-    let abs_integer = if is_negative {
+    // 先頭の符号 (`-` / `+`) は整数部の変換前に分離し、変換後に戻す
+    let sign = match integer_part.chars().next() {
+        Some(c @ ('-' | '+')) => Some(c),
+        _ => None,
+    };
+    let abs_integer = if sign.is_some() {
         &integer_part[1..]
     } else {
         integer_part
@@ -70,8 +74,8 @@ fn add_commas_single(text: &str) -> Cow<'_, str> {
     }
 
     let mut formatted_int: String = result.chars().rev().collect();
-    if is_negative {
-        formatted_int.insert(0, '-');
+    if let Some(sign) = sign {
+        formatted_int.insert(0, sign);
     }
 
     let final_result = if !decimal_part.is_empty() {
@@ -166,7 +170,7 @@ enum NumericPrev {
 
 /// 入力が数値として妥当な形式か判定する
 ///
-/// 数字、カンマ、小数点、および先頭のマイナス記号のみで構成されているかチェックする
+/// 数字、カンマ、小数点、および先頭の符号 (`-` / `+`) のみで構成されているかチェックする
 /// 以下の場合は不当とみなす
 /// - 先頭カンマ (`,123`)
 /// - 末尾カンマ (`123,`)
@@ -184,8 +188,8 @@ enum NumericPrev {
 fn is_numeric_input(text: &str) -> bool {
     let mut chars = text.chars().peekable();
 
-    // マイナス記号のチェック
-    if let Some('-') = chars.peek() {
+    // 先頭の符号 (`-` / `+`) のチェック
+    if let Some('-' | '+') = chars.peek() {
         chars.next();
     }
 
@@ -299,6 +303,24 @@ mod tests {
     fn test_add_commas_negative() {
         assert_eq!(add_commas("-1234.56"), "-1,234.56");
         assert_eq!(add_commas("-.5"), "-.5");
+    }
+
+    /// 先頭の `+` を保ったままカンマ追加できるようにすること
+    #[test]
+    fn test_add_commas_plus_sign() {
+        assert_eq!(add_commas("+1234"), "+1,234");
+        assert_eq!(add_commas("+1234567.89"), "+1,234,567.89");
+        assert_eq!(add_commas("+1,234"), "+1,234");
+        // 符号のみ・符号の後に数字がない入力は変換しない
+        assert_eq!(add_commas("+"), "+");
+        assert_eq!(add_commas("+.5"), "+.5");
+        assert_eq!(add_commas("+0123"), "+0123");
+    }
+
+    /// 先頭の `+` を保ったままカンマ除去できるようにすること
+    #[test]
+    fn test_remove_commas_plus_sign() {
+        assert_eq!(remove_commas("+1,234,567"), "+1234567");
     }
 
     /// 数字・カンマ・ピリオド・マイナス記号以外を含む入力や複数の小数点を数値とみなさないようにすること

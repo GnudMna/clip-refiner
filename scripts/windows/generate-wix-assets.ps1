@@ -212,20 +212,30 @@ function ConvertTo-RtfUnicodeText {
     return $builder.ToString()
 }
 
-# LICENSE の 1 行を 1 段落にする。同意画面は幅が狭いため、LICENSE は固定幅で改行せず 1 段落 1 行で書き、長い罫線も使わない
+# 空行で区切られた LICENSE の連続行を 1 段落にまとめる。同意画面は幅が狭いため、固定幅の改行を残さず画面幅で折り返させる
+# (LICENSE は原文どおり固定幅で改行してよい。長い罫線は使わない)
 function ConvertTo-RtfParagraphs {
     param([string[]]$Lines)
 
-    $result = [System.Text.StringBuilder]::new()
+    $paragraphs = [System.Collections.Generic.List[string]]::new()
+    $current = [System.Collections.Generic.List[string]]::new()
     foreach ($line in $Lines) {
-        if ($result.Length -gt 0) {
-            # 直後が英字だと \parAll 等の制御語と誤認識されるため区切りに空白を入れる
-            [void]$result.Append('\par ')
+        $trimmed = $line.Trim()
+        if ($trimmed.Length -eq 0) {
+            if ($current.Count -gt 0) {
+                $paragraphs.Add($current -join ' ')
+                $current.Clear()
+            }
+            continue
         }
-        [void]$result.Append((ConvertTo-RtfUnicodeText $line))
+        $current.Add($trimmed)
+    }
+    if ($current.Count -gt 0) {
+        $paragraphs.Add($current -join ' ')
     }
 
-    return $result.ToString()
+    # 段落の間に空行を 1 つ挟む。直後が英字だと \parAll 等の制御語と誤認識されるため区切りに空白を入れる
+    return ($paragraphs | ForEach-Object { ConvertTo-RtfUnicodeText $_ }) -join '\par \par '
 }
 
 function New-EulaRtf {

@@ -163,9 +163,11 @@ function Sync-WorkspaceCargoLock {
 
     Push-Location -LiteralPath $ProjectRoot
     try {
-        cargo check --workspace -q
+        # ワークスペース自身のエントリだけを更新する (依存のバージョンは動かさず、再コンパイルも起こさない)
+        # 注意: `cargo metadata --no-deps` は依存を解決しないため Cargo.lock を書き換えない
+        $null = cargo update --workspace
         if ($LASTEXITCODE -ne 0) {
-            throw "エラー: cargo check --workspace が終了コード $LASTEXITCODE で失敗しました"
+            throw "エラー: cargo update --workspace が終了コード $LASTEXITCODE で失敗しました"
         }
     } finally {
         Pop-Location

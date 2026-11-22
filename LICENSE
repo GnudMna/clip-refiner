@@ -1,46 +1,21 @@
+MIT License
+
 Copyright (c) 2026 Yuto Hirata
-All Rights Reserved.
 
-[日本語]
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. 利用の許可
-本ソフトウェアを使用 (インストール・実行を含みます) するには、事前に著作者の許可を得なければなりません。許可を得ていない者は、本ソフトウェアを使用してはなりません。著作者の許可を得た者は、その許可の範囲内で、著作者が配布する本ソフトウェアの実行ファイルを、コンピュータにインストールして使用することができます。
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. 禁止事項
-前項で許可する範囲を除き、著作者の許可なく、次の行為を禁止します。
-- 本ソフトウェアの複製・改変・再配布・商用利用
-- 本ソフトウェアのリバースエンジニアリング・逆コンパイル・逆アセンブル (適用される法令で明示的に認められる範囲を除きます)
-
-3. 第三者のソフトウェア
-本ソフトウェアに含まれる第三者のソフトウェアには本条件は適用されず、THIRD_PARTY_NOTICES に記載された各ライセンスが適用されます。
-
-4. 無保証・免責
-本ソフトウェアは現状のまま提供され、適用される法令で認められる範囲で、商品性、特定目的への適合性および権利の非侵害を含め、明示・黙示を問わず一切の保証をしません。適用される法令で認められる範囲で、本ソフトウェアの使用または使用できないことにより生じたいかなる損害 (データの消失・破損を含みます) についても、著作者は責任を負いません。
-
-5. 許諾の終了
-本条件のいずれかに違反した場合、本条件による許諾は通知なく自動的に終了します。許諾が終了した場合、本ソフトウェアの使用を中止し、すべての複製物を削除しなければなりません。
-
-6. 言語
-本条件の日本語版と英語版の間に相違がある場合は、日本語版が優先します。
-
-[English]
-
-1. Permission to Use
-You must obtain the author's prior permission to use this software (including installing and running it). You must not use this software without such permission. A person who has obtained the author's permission may, within the scope of that permission, install and use the executable files of this software distributed by the author on their computer.
-
-2. Restrictions
-Except as permitted in Section 1, the following are prohibited without the author's permission:
-- Copying, modifying, redistributing, or making commercial use of this software
-- Reverse engineering, decompiling, or disassembling this software, except to the extent expressly permitted by applicable law
-
-3. Third-Party Software
-These terms do not apply to third-party software included in this software. Such software is governed by its respective licenses listed in THIRD_PARTY_NOTICES.
-
-4. Disclaimer of Warranty and Limitation of Liability
-To the extent permitted by applicable law, this software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. To the extent permitted by applicable law, in no event shall the author be liable for any damages (including loss or corruption of data) arising from the use of or inability to use this software.
-
-5. Termination
-The permission granted under these terms terminates automatically and without notice if you violate any of these terms. Upon termination, you must stop using this software and delete all copies of it.
-
-6. Language
-In the event of any discrepancy between the Japanese and English versions of these terms, the Japanese version shall prevail.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

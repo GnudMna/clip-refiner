@@ -166,8 +166,20 @@
         <Property Id='ARPPRODUCTICON' Value='ProductICO' />
         <Property Id='ARPCOMMENTS' Value='クリップボードのテキストをリアルタイムで監視し、指定した形式に自動加工するツール'/>
 
+        <!-- 完了画面の「起動する」チェックボックス (既定でオン)。更新時にアプリが終了したままにならないようにする -->
+        <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT' Value='ClipRefiner を起動する'/>
+        <Property Id='WIXUI_EXITDIALOGOPTIONALCHECKBOX' Value='1'/>
+        <CustomAction
+            Id='LaunchApplication'
+            FileKey='exe0'
+            ExeCommand=''
+            Execute='immediate'
+            Impersonate='yes'
+            Return='asyncNoWait'/>
+
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>
+            <Publish Dialog='ExitDialog' Control='Finish' Event='DoAction' Value='LaunchApplication' Order='999'>WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed</Publish>
         </UI>
 
         <WixVariable Id='WixUILicenseRtf' Value='wix\Eula.rtf'/>

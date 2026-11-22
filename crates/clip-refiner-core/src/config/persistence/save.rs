@@ -92,6 +92,25 @@ impl AppConfig {
     /// # Errors
     /// [`AppConfig::save`] と同様
     pub fn save_with_outcome(&self) -> Result<RegisteredClipsSaveOutcome, ConfigError> {
+        self.save_with_fingerprint().map(|(outcome, _)| outcome)
+    }
+
+    /// 現在の設定をファイルへ保存し、登録クリップの保存結果と書き込んだ本文の指紋を返す
+    ///
+    /// 保存後にディスクを読み直すと、保存直後の外部編集を同期済みとして記録してしまう
+    /// 書き込んだ本文そのものの指紋を使えば、その編集を次の変更検知で拾える
+    ///
+    /// # Arguments
+    /// * `self` - 保存対象の設定
+    ///
+    /// # Returns
+    /// * `Result<(RegisteredClipsSaveOutcome, ConfigFileFingerprint), ConfigError>` - 登録クリップの保存結果と書き込んだ本文の指紋
+    ///
+    /// # Errors
+    /// [`AppConfig::save`] と同様
+    pub fn save_with_fingerprint(
+        &self,
+    ) -> Result<(RegisteredClipsSaveOutcome, ConfigFileFingerprint), ConfigError> {
         let config_path = get_config_file_path().map_err(|e| {
             tracing::error!("設定ファイルパスの取得に失敗: {}", e);
             e
@@ -122,7 +141,10 @@ impl AppConfig {
             tracing::warn!("設定ファイルのパーミッション設定に失敗: {:?}", e);
         }
 
-        Ok(clips_outcome)
+        Ok((
+            clips_outcome,
+            ConfigFileFingerprint(*blake3::hash(content.as_bytes()).as_bytes()),
+        ))
     }
 }
 

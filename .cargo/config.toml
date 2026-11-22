@@ -1,0 +1,4 @@
+# CRT を静的リンクし、VC++ 再頒布可能パッケージ (vcruntime140.dll など) なしで exe を動かす
+# 環境変数 RUSTFLAGS などがあるとこの rustflags は使われない (静的リンクが外れると build.rs が警告する)
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

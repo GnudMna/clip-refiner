@@ -1,11 +1,13 @@
 #[cfg(any(test, debug_assertions, feature = "test-helpers"))]
 use std::cell::RefCell;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use super::atomic_io::write_bytes_atomically;
 use super::paths::get_config_dir;
 use super::permissions::restrict_private_file_permissions;
+use super::registered_clips::REGISTERED_CLIPS_FILE;
 use crate::error::ConfigError;
 use crate::native::dpapi;
 use crate::security::{CIPHER_KEY_LEN, generate_cipher_key};
@@ -29,6 +31,7 @@ thread_local! {
 /// 登録クリップ暗号化鍵を取得する
 ///
 /// 鍵ファイルが無い場合は新規生成して保存する
+/// ただし `registered-clips.dat` が残っている場合は、読めなくなるため生成せずエラーにする
 ///
 /// # Returns
 /// * `Result<[u8; CIPHER_KEY_LEN]>` - 暗号化鍵。取得または生成に失敗した場合は `Err`
@@ -92,6 +95,15 @@ fn load_or_create_key() -> Result<[u8; CIPHER_KEY_LEN]> {
         return read_key_file(&path);
     }
 
+    // 登録クリップが残っているのに別の鍵を作ると、元のデータを二度と復号できなくなる
+    let clips_path = path.with_file_name(REGISTERED_CLIPS_FILE);
+    if clips_path.exists() {
+        return Err(ConfigError::RegisteredClips(format!(
+            "登録クリップ暗号化鍵が見つかりません。鍵ファイルを元に戻してください: {}",
+            path.display()
+        )));
+    }
+
     let key = generate_cipher_key()?;
     write_key_file(&path, &key)?;
     Ok(key)
@@ -105,13 +117,14 @@ fn read_key_file(path: &PathBuf) -> Result<[u8; CIPHER_KEY_LEN]> {
     Ok(key)
 }
 
-fn write_key_file(path: &PathBuf, key: &[u8; CIPHER_KEY_LEN]) -> Result<()> {
+fn write_key_file(path: &Path, key: &[u8; CIPHER_KEY_LEN]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(ConfigError::CreateDir)?;
     }
 
     let protected = dpapi::protect(key)?;
-    fs::write(path, protected).map_err(ConfigError::Write)?;
+    // 書き込み途中の中断で壊れた鍵ファイルが残らないよう、一時ファイル経由で置き換える
+    write_bytes_atomically(path, &protected).map_err(ConfigError::Write)?;
     if let Err(e) = restrict_private_file_permissions(path) {
         tracing::warn!("登録クリップ暗号化鍵のパーミッション設定に失敗: {:?}", e);
     }

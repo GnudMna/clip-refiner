@@ -6,14 +6,14 @@
 use std::env;
 use std::fmt::Write;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[path = "src/platform/update/bridge_key_obfuscate.rs"]
 mod bridge_key_obfuscate;
 
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use bridge_key_obfuscate::{OBFUSCATE_MASK_LEN, xor_obfuscate};
 
@@ -38,6 +38,15 @@ const NONCE_LEN: usize = 12;
 /// 埋め込みキーの最大バイト長
 const MAX_BRIDGE_KEY_BYTES: usize = 1024;
 
+/// bridge ダウンロードキーを保存したファイルのパスを渡す環境変数
+const BRIDGE_KEY_FILE_ENV: &str = "CLIP_REFINER_KEY_FILE";
+
+/// 廃止した、キーを直接渡す環境変数
+const LEGACY_BRIDGE_KEY_ENV: &str = "CLIP_REFINER_KEY";
+
+/// UTF-8 の BOM
+const UTF8_BOM: &[u8] = &[0xef, 0xbb, 0xbf];
+
 /// 更新署名の公開鍵 (minisign 形式 `*.pub`) を置くディレクトリ
 const UPDATE_SIGNING_KEYS_DIR: &str = "../../keys/update-signing";
 
@@ -48,12 +57,30 @@ fn main() {
     println!("cargo:rerun-if-changed={ICON_PATH}");
     println!("cargo:rerun-if-changed=../../assets/icon.png");
     println!("cargo:rerun-if-changed=src/platform/update/bridge_key_obfuscate.rs");
-    println!("cargo:rerun-if-env-changed=CLIP_REFINER_KEY");
+    println!("cargo:rerun-if-env-changed={BRIDGE_KEY_FILE_ENV}");
     println!("cargo:rerun-if-changed={UPDATE_SIGNING_KEYS_DIR}");
 
+    warn_if_crt_not_static();
     embed_bridge_key();
     embed_update_signing_keys();
     embed_windows_resources();
+}
+
+// ======================================================================
+// CRT の静的リンク
+// ======================================================================
+/// MSVC ターゲットで CRT が静的リンクされない場合に警告する
+///
+/// 環境変数 `RUSTFLAGS` などがあると `.cargo/config.toml` の rustflags は使われず、
+/// 気付かないまま VC++ 再頒布可能パッケージに依存する exe になるため
+fn warn_if_crt_not_static() {
+    let crt_static = env::var("CARGO_CFG_TARGET_FEATURE")
+        .is_ok_and(|features| features.split(',').any(|feature| feature == "crt-static"));
+    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") && !crt_static {
+        println!(
+            "cargo:warning=CRT が静的リンクされません。環境変数 RUSTFLAGS などがあると .cargo/config.toml の rustflags は使われないため、必要なら -C target-feature=+crt-static を加えてください"
+        );
+    }
 }
 
 // ======================================================================
@@ -141,30 +168,76 @@ fn read_minisign_public_key(path: &Path) -> String {
 // ======================================================================
 // bridge ダウンロードキー
 // ======================================================================
-/// `CLIP_REFINER_KEY` を暗号化して `OUT_DIR` へ書き出す
+/// `CLIP_REFINER_KEY_FILE` が指すファイルのキーを暗号化して `OUT_DIR` へ書き出す
 ///
-/// 平文は `option_env!` 経由でバイナリへ入れない
+/// キーを環境変数で受け取ると `rerun-if-env-changed` の値が Cargo の fingerprint に平文で残るため、
+/// ファイルのパスだけを受け取る。未設定なら空の埋め込みにする。平文は `option_env!` 経由でバイナリへ入れない
 fn embed_bridge_key() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR");
     let dest = Path::new(&out_dir).join("bridge_key_blob.rs");
 
-    match env::var("CLIP_REFINER_KEY") {
-        Ok(mut key) if !key.is_empty() => {
-            let source = encrypt_bridge_key(&key);
-            fs::write(&dest, source).unwrap_or_else(|err| {
-                panic!("bridge キー埋め込みファイルの書き込みに失敗: {err}");
-            });
-            key.zeroize();
+    let source = match env::var_os(BRIDGE_KEY_FILE_ENV) {
+        Some(path) if !path.is_empty() => {
+            let path = PathBuf::from(path);
+            println!("cargo:rerun-if-changed={}", path.display());
+            let key = read_bridge_key_file(&path);
+            encrypt_bridge_key(&key)
         }
-        Ok(_) | Err(env::VarError::NotPresent) => {
-            fs::write(&dest, empty_bridge_key_source()).unwrap_or_else(|err| {
-                panic!("bridge キー埋め込みファイルの書き込みに失敗: {err}");
-            });
+        _ => {
+            // 値を fingerprint に残さないよう、廃止した変数は rerun-if-env-changed で監視しない
+            if env::var_os(LEGACY_BRIDGE_KEY_ENV).is_some() {
+                println!(
+                    "cargo:warning=環境変数 {LEGACY_BRIDGE_KEY_ENV} は廃止しました。キーは埋め込まれません。キーをファイルに保存し、{BRIDGE_KEY_FILE_ENV} にそのパスを設定してください"
+                );
+            }
+            empty_bridge_key_source()
         }
-        Err(env::VarError::NotUnicode(_)) => {
-            panic!("エラー: 環境変数 CLIP_REFINER_KEY が Unicode ではありません");
-        }
-    }
+    };
+    fs::write(&dest, source).unwrap_or_else(|err| {
+        panic!("bridge キー埋め込みファイルの書き込みに失敗: {err}");
+    });
+}
+
+/// キーファイルを読み、BOM と前後の空白・改行を除いたキーを返す
+///
+/// ファイルが読めない、UTF-16・UTF-8 以外、または空の場合はビルドを止める
+///
+/// # Arguments
+/// * `path` - キーファイル
+///
+/// # Returns
+/// * `Zeroizing<String>` - 破棄時にゼロ化するキー
+fn read_bridge_key_file(path: &Path) -> Zeroizing<String> {
+    let mut bytes = fs::read(path).unwrap_or_else(|err| {
+        panic!(
+            "エラー: {BRIDGE_KEY_FILE_ENV} のキーファイルを読めません: {}: {err}",
+            path.display()
+        );
+    });
+    assert!(
+        !bytes.starts_with(&[0xff, 0xfe]) && !bytes.starts_with(&[0xfe, 0xff]),
+        "エラー: キーファイルが UTF-16 です。UTF-8 で保存してください: {}",
+        path.display()
+    );
+
+    let body = bytes.strip_prefix(UTF8_BOM).unwrap_or(&bytes);
+    let key = std::str::from_utf8(body)
+        .map(|text| Zeroizing::new(text.trim().to_owned()))
+        .ok();
+    bytes.zeroize();
+
+    let key = key.unwrap_or_else(|| {
+        panic!(
+            "エラー: キーファイルが UTF-8 ではありません: {}",
+            path.display()
+        )
+    });
+    assert!(
+        !key.is_empty(),
+        "エラー: キーファイルが空です: {}",
+        path.display()
+    );
+    key
 }
 
 /// キー未設定時の生成ソースを返す
@@ -187,7 +260,7 @@ fn empty_bridge_key_source() -> String {
 /// 平文キーを ChaCha20-Poly1305 で暗号化し、生成ソースを返す
 ///
 /// # Arguments
-/// * `plaintext` - `CLIP_REFINER_KEY` の値
+/// * `plaintext` - bridge ダウンロードキー
 ///
 /// # Returns
 /// * `String` - 暗号化 blob を含む Rust ソース
@@ -195,7 +268,7 @@ fn encrypt_bridge_key(plaintext: &str) -> String {
     let plain_bytes = plaintext.as_bytes();
     assert!(
         plain_bytes.len() <= MAX_BRIDGE_KEY_BYTES,
-        "エラー: CLIP_REFINER_KEY が長すぎます (最大 {MAX_BRIDGE_KEY_BYTES} バイト)"
+        "エラー: bridge ダウンロードキーが長すぎます (最大 {MAX_BRIDGE_KEY_BYTES} バイト)"
     );
 
     let mut wrap_key = [0u8; OBFUSCATE_MASK_LEN];
@@ -250,10 +323,10 @@ fn verify_roundtrip(
     xor_obfuscate(&mut blob_check, mask);
     xor_obfuscate(&mut wrap_check, mask);
     let decrypted = aead_decrypt(&wrap_check, &blob_check)
-        .expect("CLIP_REFINER_KEY の暗号化往復に失敗しました");
+        .expect("bridge ダウンロードキーの暗号化往復に失敗しました");
     assert_eq!(
         decrypted, plaintext,
-        "CLIP_REFINER_KEY の暗号化往復結果が一致しません"
+        "bridge ダウンロードキーの暗号化往復結果が一致しません"
     );
     wrap_check.zeroize();
     blob_check.zeroize();

@@ -29,6 +29,26 @@
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-22
+
+### Changed
+
+- ライセンスを MIT License に変更
+  - 著作者の事前の許可なく、使用・複製・改変・再配布・商用利用ができる。著作権表示と許諾表示の同梱が条件
+- Visual C++ 再頒布可能パッケージが入っていない環境でも起動できるように変更
+- 読み込めなかった `registered-clips.dat` の退避コピーを、上書きせず日時付きで最大 5 世代残すように変更
+- MSI インストーラーの完了画面に「ClipRefiner を起動する」チェックボックスを追加
+  - 既定でオン。更新後にアプリが終了したままになるのを防ぐ
+
+### Fixed
+
+- `registered-clips.dat` が残っているのに鍵ファイルが無いとき、新しい鍵を作らずエラーにするように修正
+  - 新しい鍵で保存し直して元の登録クリップを復号できなくなるのを防ぐ
+- 登録クリップの鍵ファイルを書き込む途中でアプリが終了すると、壊れた鍵が残り登録クリップを復号できなくなる問題を修正
+- 常駐中に `config.toml` を外部で編集すると、再読み込みや設定の保存と重なったときに編集が反映されない、または上書きされる問題を修正
+  - 外部編集を読み込む前に設定の保存が重なったときは、保存せずに外部編集を読み込む
+- カンマ追加で、先頭に `+` が付いた数値 (`+1234` など) にカンマが付かない問題を修正
+
 ## [3.1.1] - 2026-11-17
 
 ### Breaking changes
@@ -1170,7 +1190,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.1...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.0...develop
+[4.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.1...v4.0.0
 [3.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.0...v3.1.1
 [3.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.2...v3.1.0
 [3.0.2]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.1...v3.0.2

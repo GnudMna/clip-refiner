@@ -94,7 +94,8 @@ pub fn apply_config_reload(
         previous.continuous_record_enabled && !loaded.continuous_record_enabled;
 
     state.with_config_mut(|config| *config = loaded);
-    state.config_sync().record_disk_sync();
+    // 読み込み後のディスクではなく読み込み前の指紋を記録し、間に入った外部保存を次の検知で拾う
+    state.config_sync().record_synced(attempted);
 
     // 状態へ反映済みのため、メニュー更新の失敗では中断せず、ホットキーと監視世代の更新まで進める
     // 中断すると設定とホットキー・監視の実体がずれる。失敗は最後にまとめて返す

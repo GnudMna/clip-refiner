@@ -47,7 +47,7 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError`, `ParseFailure` | 加工結果と失敗理由。JSON / YAML のパース失敗は `ClipboardProcessError::ParseFailed(ParseFailure)` で変更なしと区別する |
 | 設定 | `RegexSettings`, `RegexPreset`, `RegexStep` | 正規表現加工用 (feature 不要) |
 | 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `MonitorMode`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |
-| 設定 | `AppConfig::load` (`ConfigLoadOutcome` / `ConfigLoadFallback`)、`AppConfig::save`, `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告。移行手順が無い `version` は `unsupported_version_kept` / `format_unsupported_config_version_message` で既存項目を維持して警告する。feature `config` |
+| 設定 | `AppConfig::load` (`ConfigLoadOutcome` / `ConfigLoadFallback`)、`AppConfig::save` (`save_with_outcome` / `save_with_fingerprint`), `AppConfig::reload_from_disk` (`ConfigDiskReload`) | 設定ファイル I/O。`save_with_fingerprint` は書き込んだ本文の指紋も返し、保存直後の外部編集の検知に使う。未知キーは `unknown_keys` / `format_unknown_config_keys_message` で警告。移行手順が無い `version` は `unsupported_version_kept` / `format_unsupported_config_version_message` で既存項目を維持して警告する。feature `config` |
 | 設定 | `get_config_dir`, `is_portable_mode`, `open_config_file`, `disk_config_modified_time`, `disk_config_content_fingerprint` (`ConfigFileFingerprint`) | 設定ディレクトリ・ファイル操作。内容指紋は外部編集検知用。feature `config` |
 | 設定 | `format_hotkey_fixes_message`, `HotkeyFix`, `HotkeyFixKind` | ホットキーの不正・重複補正の内容と、それを UI 向け文言にする関数。feature `config` |
 | 設定 | `FavoriteToggleResult`, `FavoriteMoveDirection` | お気に入り変換モードの切り替え結果 (追加・削除・上限) と、お気に入り・登録クリップの並べ替えの方向。feature `config` |

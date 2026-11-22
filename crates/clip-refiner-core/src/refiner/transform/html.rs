@@ -1,7 +1,6 @@
-use std::rc::Rc;
-
+use htmd::HtmlToMarkdown;
+use htmd::node::{Node, Tree};
 use htmd::options::{BrStyle, BulletListMarker, HrStyle, Options};
-use htmd::{HtmlToMarkdown, Node};
 
 use crate::consts::MAX_HTML_NESTING_DEPTH;
 
@@ -67,8 +66,13 @@ pub(crate) fn html_to_markdown(html: &str) -> HtmlToMarkdownResult {
         return HtmlToMarkdownResult::TooDeep;
     }
 
-    let markdown = converter.tree_to_markdown(&tree);
-    HtmlToMarkdownResult::Converted(markdown.trim().to_string())
+    match converter.convert(&tree) {
+        Ok(markdown) => HtmlToMarkdownResult::Converted(markdown.trim().to_string()),
+        Err(e) => {
+            tracing::debug!("HTML の変換に失敗 (html_to_markdown): {}", e);
+            HtmlToMarkdownResult::NotHtml
+        }
+    }
 }
 
 /// HTML タグらしき `<名前` / `</名前` / `<!` を含むか判定する
@@ -105,14 +109,16 @@ fn markdown_options() -> Options {
 /// DOM の深さが `limit` を超えるか判定する
 ///
 /// スタック枯渇を避けるため、明示的なスタックで反復的に走査する
-fn exceeds_nesting_depth(root: &Rc<Node>, limit: usize) -> bool {
-    let mut stack = vec![(Rc::clone(root), 0_usize)];
+fn exceeds_nesting_depth(tree: &Tree, limit: usize) -> bool {
+    let mut stack: Vec<(Node<'_>, usize)> = vec![(tree.root(), 0)];
     while let Some((node, depth)) = stack.pop() {
         if depth > limit {
             return true;
         }
-        for child in node.children.borrow().iter() {
-            stack.push((Rc::clone(child), depth + 1));
+        let mut child = node.first_child();
+        while let Some(current) = child {
+            child = current.next_sibling();
+            stack.push((current, depth + 1));
         }
     }
     false

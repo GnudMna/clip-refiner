@@ -15,6 +15,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:CargoTestFeatures = 'test-helpers'
 
+# fmt 以外は --locked で実行し、Cargo.lock の更新漏れをエラーにする
+
 # リンカーがライブラリを開けない一過性の失敗 (LNK1104) のときだけ 1 回再実行する
 #
 # 並列リンク中に `msvcrt.lib` などを開けず失敗することがある (ウイルス対策ソフトのスキャンによるロックと推定)。
@@ -75,10 +77,10 @@ function Invoke-CargoClippy {
     [CmdletBinding()]
     param()
 
-    cargo clippy --all-targets --features $script:CargoTestFeatures -- -D warnings
+    cargo clippy --locked --all-targets --features $script:CargoTestFeatures -- -D warnings
     Assert-LastExitCode -CommandLabel 'cargo clippy'
 
-    cargo clippy -p clip-refiner-core --no-default-features --all-targets -- -D warnings
+    cargo clippy --locked -p clip-refiner-core --no-default-features --all-targets -- -D warnings
     Assert-LastExitCode -CommandLabel 'cargo clippy -p clip-refiner-core --no-default-features'
 }
 
@@ -90,10 +92,10 @@ function Invoke-CargoDoc {
     $previous = $env:RUSTDOCFLAGS
     $env:RUSTDOCFLAGS = '-D warnings'
     try {
-        cargo doc --workspace --no-deps --features $script:CargoTestFeatures
+        cargo doc --locked --workspace --no-deps --features $script:CargoTestFeatures
         Assert-LastExitCode -CommandLabel 'cargo doc'
 
-        cargo doc -p clip-refiner-core --no-default-features --no-deps
+        cargo doc --locked -p clip-refiner-core --no-default-features --no-deps
         Assert-LastExitCode -CommandLabel 'cargo doc -p clip-refiner-core --no-default-features'
     }
     finally {
@@ -109,11 +111,11 @@ function Invoke-CargoTest {
     )
 
     Invoke-CargoWithLinkRetry -CommandLabel 'cargo test' -CargoArgs @(
-        'test', '--all-targets', '--features', $script:CargoTestFeatures
+        'test', '--locked', '--all-targets', '--features', $script:CargoTestFeatures
     )
 
     Invoke-CargoWithLinkRetry -CommandLabel 'cargo test -p clip-refiner-core --no-default-features' -CargoArgs @(
-        'test', '-p', 'clip-refiner-core', '--no-default-features', '--all-targets'
+        'test', '--locked', '-p', 'clip-refiner-core', '--no-default-features', '--all-targets'
     )
 
     if ($IncludeDocTests) {
@@ -127,7 +129,7 @@ function Invoke-CargoDocTest {
     param()
 
     Invoke-CargoWithLinkRetry -CommandLabel 'cargo test --doc' -CargoArgs @(
-        'test', '--doc', '--features', $script:CargoTestFeatures
+        'test', '--locked', '--doc', '--features', $script:CargoTestFeatures
     )
 }
 
@@ -186,7 +188,7 @@ function Invoke-CargoBuild {
     param()
 
     Invoke-CargoWithLinkRetry -CommandLabel 'cargo build --all-targets' -CargoArgs @(
-        'build', '--all-targets', '--features', $script:CargoTestFeatures
+        'build', '--locked', '--all-targets', '--features', $script:CargoTestFeatures
     )
 }
 
@@ -234,6 +236,7 @@ function Invoke-CargoLlvmCov {
 
     $llvmCovArgs = @(
         'llvm-cov',
+        '--locked',
         '--all-targets',
         '--features', $script:CargoTestFeatures,
         '--ignore-filename-regex', $ignoreFilenameRegex

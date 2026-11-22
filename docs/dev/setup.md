@@ -8,7 +8,7 @@
 
 | 用途 | 必要なもの |
 | :--- | :--- |
-| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード |
+| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy、rust-analyzer 用の rust-src を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード |
 | `scripts/windows/*.ps1` | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
 | UI の静的解析・JS ロジックテスト | [Node.js](https://nodejs.org/) と npm |
 | WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
@@ -52,7 +52,12 @@ cargo install cargo-llvm-cov --locked
 cargo build --locked -p clip-refiner --release
 ```
 
-`--locked` は `Cargo.lock` とずれた依存解決を許さないための指定。`build.ps1` / `build-msi.ps1` / `build-portable.ps1` のビルドも `--locked` で実行する (`cargo wix` は `--locked` を渡せないため、`build-msi.ps1` は先に `cargo build --locked` でビルドして `--no-build` で渡す)。
+`--locked` は `Cargo.lock` とずれた依存解決を許さないための指定。`check.ps1` などが実行する clippy / rustdoc / テストと、`build.ps1` / `build-msi.ps1` / `build-portable.ps1` のビルドも `--locked` で実行する (`cargo wix` は `--locked` を渡せないため、`build-msi.ps1` は先に `cargo build --locked` でビルドして `--no-build` で渡す)。
+
+MSVC ターゲットでは `.cargo/config.toml` の `-C target-feature=+crt-static` で CRT を静的リンクし、VC++ 再頒布可能パッケージ (`vcruntime140.dll` など) が無い環境でも exe が動くようにする。
+
+- 環境変数 `RUSTFLAGS` (または `CARGO_ENCODED_RUSTFLAGS`) を設定すると、この指定は使われない。設定する場合は `-C target-feature=+crt-static` も含める。静的リンクが外れると `build.rs` がビルド時に警告する
+- この指定は `build.rustflags` より優先されるため、`~/.cargo/config.toml` などの `build.rustflags` はこのリポジトリでは使われない
 
 PowerShell スクリプトでターゲットを明示する場合:
 
@@ -142,7 +147,7 @@ cargo install cargo-about --locked --features cli
 
 ## 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
 
-`LICENSE` は ClipRefiner 本体 (All Rights Reserved) の利用条件のみを示す。配布バイナリに含まれる OSS 依存の帰属・ライセンス全文は **`THIRD_PARTY_NOTICES`** にまとめる。
+`LICENSE` は ClipRefiner 本体 (MIT License) の利用条件のみを示す。配布バイナリに含まれる OSS 依存の帰属・ライセンス全文は **`THIRD_PARTY_NOTICES`** にまとめる。
 
 | 項目 | 内容 |
 | :--- | :--- |
@@ -198,7 +203,7 @@ mdBook の出力には mdBook 自身と他のプロジェクトの素材が含�
 | `RUST_BACKTRACE` | `1` のときパニック記録にバックトレースを含める ([ログ](architecture.md#ログ)) |
 | `CARGO_TARGET_DIR` | ビルド出力先。`build-portable.ps1` / `check.ps1` / E2E はこの配下の `ClipRefiner.exe` を探す |
 | `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`。debug ビルドは `%APPDATA%\ClipRefiner-Dev` ([開発版と製品版の分離](#開発版-debug-ビルド-と製品版の分離))) |
-| `CLIP_REFINER_KEY` | **ビルド時**に埋め込む gh-release-bridge ダウンロードキー。`build.rs` が ChaCha20-Poly1305 で暗号化し XOR 難読化してからバイナリへ入れる (`option_env!` による平文埋め込みはしない)。Worker Secret `CLIP_REFINER_KEY` と同値。未設定なら無認証 GET (開発向け)。`release.ps1` では必須。クライアント共有シークレットのため漏洩前提で運用する |
+| `CLIP_REFINER_KEY_FILE` | **ビルド時**に埋め込む gh-release-bridge ダウンロードキー (Worker Secret `CLIP_REFINER_KEY` と同値) を保存したファイルのパス。リポジトリ外に UTF-8 で置く (先頭の BOM と前後の空白・改行は除く。UTF-16 は不可)。`build.rs` が ChaCha20-Poly1305 で暗号化し XOR 難読化してからバイナリへ入れる (`option_env!` による平文埋め込みはしない)。未設定なら無認証 GET (開発向け)。`release.ps1` では必須。クライアント共有シークレットのため漏洩前提で運用する。以前の `CLIP_REFINER_KEY` (キーを直接渡す) は、Cargo が値を `target` の fingerprint へ平文で残すため廃止した。設定されていても埋め込まず、`release.ps1` は失敗する |
 | `CLIP_REFINER_SIGNING_KEY` | `release.ps1` が更新アセットへ署名するときの minisign 秘密鍵ファイルのパス。リポジトリ外に置く ([更新署名鍵](release.md#更新署名鍵)) |
 | `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |
 | `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき JS ロジックテストをスキップ |

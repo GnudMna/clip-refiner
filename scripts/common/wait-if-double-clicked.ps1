@@ -144,12 +144,14 @@ function Invoke-ScriptMain {
         }
     } catch {
         $exitCode = 1
-        Write-Host ''
+
+        # Write-Error は $ErrorActionPreference = 'Stop' 下で再スローされるため、stderr へ直接書く
+        [Console]::Error.WriteLine('')
 
         if ($_.Exception.Message) {
-            Write-Host $_.Exception.Message
+            [Console]::Error.WriteLine($_.Exception.Message)
         } else {
-            Write-Host $_
+            [Console]::Error.WriteLine([string]$_)
         }
     } finally {
         Set-Location -LiteralPath $originalLocation.Path

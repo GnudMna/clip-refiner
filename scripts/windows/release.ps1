@@ -8,7 +8,8 @@
 # Requires    : PowerShell 7.0+, Git
 #
 # 前提:
-#   - 環境変数 CLIP_REFINER_KEY を設定すること (gh-release-bridge ダウンロードキー。ビルド時埋め込み)
+#   - 環境変数 CLIP_REFINER_KEY_FILE に gh-release-bridge ダウンロードキーを保存したファイルのパスを設定すること (ビルド時埋め込み)
+#     (廃止した CLIP_REFINER_KEY は設定しないこと)
 #   - 環境変数 CLIP_REFINER_SIGNING_KEY に更新署名用 minisign 秘密鍵のパスを設定すること
 #     (keys/update-signing/*.pub に対応する公開鍵があり、minisign コマンドが使えること)
 #   - release/v{version} ブランチ上で実行すること (ブランチ名と更新バージョンが一致必須)
@@ -71,9 +72,19 @@ Invoke-ScriptMain {
     }
 
     # gh-release-bridge の保護範囲 DL 用キー (ビルド時にバイナリへ埋め込まれる)
-    $bridgeDownloadKey = [Environment]::GetEnvironmentVariable('CLIP_REFINER_KEY')
-    if ([string]::IsNullOrWhiteSpace($bridgeDownloadKey)) {
-        throw 'エラー: 環境変数 CLIP_REFINER_KEY が未設定または空です (gh-release-bridge のダウンロードキー。ビルド時に埋め込まれます)'
+    # キーの中身は build.rs が検証するので、ここではファイルの有無と空でないことだけ確かめる
+    if ($null -ne [Environment]::GetEnvironmentVariable('CLIP_REFINER_KEY')) {
+        throw 'エラー: 環境変数 CLIP_REFINER_KEY は廃止しました。キーをファイルに保存して CLIP_REFINER_KEY_FILE にそのパスを設定し、CLIP_REFINER_KEY は削除してください'
+    }
+    $bridgeKeyFile = [Environment]::GetEnvironmentVariable('CLIP_REFINER_KEY_FILE')
+    if ([string]::IsNullOrWhiteSpace($bridgeKeyFile)) {
+        throw 'エラー: 環境変数 CLIP_REFINER_KEY_FILE が未設定です (gh-release-bridge のダウンロードキーを保存したファイルのパス。ビルド時に埋め込まれます)'
+    }
+    if (-not (Test-Path -LiteralPath $bridgeKeyFile -PathType Leaf)) {
+        throw "エラー: CLIP_REFINER_KEY_FILE のキーファイルが見つかりません: $bridgeKeyFile"
+    }
+    if ((Get-Item -LiteralPath $bridgeKeyFile).Length -eq 0) {
+        throw "エラー: CLIP_REFINER_KEY_FILE のキーファイルが空です: $bridgeKeyFile"
     }
 
     # 署名なしのアセットはアプリが適用しないため、ビルド前に署名の準備を確認する

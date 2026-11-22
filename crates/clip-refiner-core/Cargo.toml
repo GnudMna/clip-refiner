@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 description = "ClipRefiner の加工ロジックと設定型 (GUI 非依存)"
 readme = "README.md"
-license-file = "../../LICENSE"
+license.workspace = true
 publish = false
 
 [lib]

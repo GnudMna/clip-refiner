@@ -57,6 +57,7 @@ clip-refiner/
 │           │   └── transform/   # 変換処理の本体 (`regex/` はキャッシュ / マッチタイムアウト / 実行パス / プレビュー)
 │           ├── security/    # 入力サイズ上限・表示マスキング・AEAD 暗号・鍵付き指紋・ゼロ化する文字列
 │           └── test_helpers/ # コア単体テスト用
+├── .cargo/config.toml   # MSVC ターゲットで CRT を静的リンクする rustflags
 ├── .claude/             # Claude Code 向けの共有設定 (settings.json)・規約 (rules/)・スキル (skills/)
 ├── assets/
 ├── keys/

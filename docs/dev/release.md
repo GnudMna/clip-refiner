@@ -23,7 +23,7 @@ git switch -c release/v1.1.0 origin/develop
 
 **自動で行うこと:**
 
-1. 環境変数 `CLIP_REFINER_KEY` が非空であることを検証 (未設定なら失敗。ビルド時に暗号化して成果物へ埋め込まれる)
+1. 環境変数 `CLIP_REFINER_KEY_FILE` が指すキーファイルがあり空でないことと、廃止した `CLIP_REFINER_KEY` が設定されていないことを検証 (満たさなければ失敗。キーはビルド時に暗号化して成果物へ埋め込まれる)
 2. 現在のブランチが `release/v{version}` であることを検証 (不一致なら失敗)
 3. ルート `Cargo.toml` の `[workspace.package] version` を更新 (`clip-refiner-core` は `workspace.dependencies` の path 参照のため版の二重更新は不要)
 4. `Cargo.lock` の workspace パッケージ version を同期
@@ -51,7 +51,7 @@ git switch -c release/v1.1.0 origin/develop
 
 **前提:**
 
-- 環境変数 `CLIP_REFINER_KEY` を設定しておく (gh-release-bridge の Worker Secret と同値。`-DryRun` でも検証する)
+- gh-release-bridge の Worker Secret `CLIP_REFINER_KEY` と同じ値を UTF-8 のファイルに保存し、環境変数 `CLIP_REFINER_KEY_FILE` にそのパスを設定しておく (リポジトリの外に置く。`-DryRun` でも検証する。[環境変数](setup.md#環境変数))
 - MSI / ポータブル ZIP を作る場合は `minisign` をインストールし、環境変数 `CLIP_REFINER_SIGNING_KEY` に秘密鍵のパスを設定しておく ([更新署名鍵](#更新署名鍵)。`-DryRun` でも検証する)
 - `release/v{version}` ブランチ上で実行すること (例: `release/v1.1.0` で `-Version 1.1.0`)
 - リリース前に [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)

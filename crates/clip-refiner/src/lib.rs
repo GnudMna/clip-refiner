@@ -27,6 +27,9 @@
 //! 加工・設定の公開 API は `clip-refiner-core` 側の semver に従う
 //! 破壊的変更は CHANGELOG の **Breaking changes** 節に記載する
 
+// doctest は Clippy の対象外で警告も表示されないため、警告をエラーにして検出する
+#![doc(test(attr(deny(warnings))))]
+
 #[cfg(not(target_os = "windows"))]
 compile_error!("ClipRefiner は Windows 専用です");
 

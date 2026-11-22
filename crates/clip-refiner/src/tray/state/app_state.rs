@@ -3,7 +3,7 @@ use std::sync::{RwLock, RwLockWriteGuard, atomic::AtomicU64};
 use tao::event_loop::EventLoopProxy;
 
 use super::super::dispatch;
-use super::app_event::{AppEvent, MenuRefreshEvent};
+use super::app_event::{AppEvent, ConfigEvent, MenuRefreshEvent};
 use super::clipboard_session::ClipboardSessionState;
 use super::config_sync::ConfigSyncState;
 use super::lock_ext::RwLockExt;
@@ -111,12 +111,21 @@ impl AppState {
         }
         // 複製から書き込み完了までを直列化し、古い複製が新しい内容を上書きするのを防ぐ
         let _save_guard = self.config_sync.lock_save();
+        // ウォッチャーの再読み込み前に保存が走っても、外部編集をメモリ上の値で上書きしない
+        // 保存は見送り、ディスクの内容を再読み込みさせる
+        if self.config_sync.has_external_change() {
+            crate::log_warn!(
+                "設定ファイルが外部で変更されているため、保存を見送って再読み込みする"
+            );
+            dispatch::send_app_event(&self.proxy, ConfigEvent::Reload.into());
+            return;
+        }
         self.config_sync.begin_own_write();
         let snapshot = self.with_config(AppConfig::clone);
-        let save_result = snapshot.save_with_outcome();
+        let save_result = snapshot.save_with_fingerprint();
         match save_result {
-            Ok(outcome) => {
-                self.config_sync.record_disk_sync();
+            Ok((outcome, fingerprint)) => {
+                self.config_sync.record_synced(Some(fingerprint));
                 if outcome == RegisteredClipsSaveOutcome::SkippedKeyUnavailable
                     && self.config_sync.claim_key_unavailable_notice()
                 {
