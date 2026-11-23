@@ -199,8 +199,10 @@ impl OneshotRegexOverride {
             return;
         }
 
-        if let Some(name) = &self.preset_name {
-            let _ = ctx.regex.select_preset_by_name(name);
+        if let Some(name) = &self.preset_name
+            && !ctx.regex.select_preset_by_name(name)
+        {
+            crate::log_warn!("ワンショット要求のプリセットが見つかりません: {name}");
         }
 
         let has_step_override = self.pattern.is_some()

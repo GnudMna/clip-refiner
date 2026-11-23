@@ -62,6 +62,49 @@ pub(crate) fn markdown_to_rich_text_html(text: &str) -> String {
 // ======================================================================
 // Excel → Markdown 変換
 // ======================================================================
+/// 表のセルを Markdown 用にエスケープする
+///
+/// 改行は `<br>` に置換する。`|` は `\|` にし、直前に連続するバックスラッシュは
+/// GFM で `\\` が先に読まれるため重ねてエスケープする (`a\|b` → `a\\\|b`)
+fn escape_table_cell(cell: &str) -> String {
+    let mut result = String::with_capacity(cell.len());
+    // 直前に連続するバックスラッシュの数
+    let mut backslashes = 0;
+    let mut chars = cell.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\r' => {
+                // `\r\n` は 1 つの改行として扱う
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                result.push_str("<br>");
+                backslashes = 0;
+            }
+            '\n' => {
+                result.push_str("<br>");
+                backslashes = 0;
+            }
+            '|' => {
+                result.extend(std::iter::repeat_n('\\', backslashes));
+                result.push_str("\\|");
+                backslashes = 0;
+            }
+            '\\' => {
+                result.push('\\');
+                backslashes += 1;
+            }
+            _ => {
+                result.push(ch);
+                backslashes = 0;
+            }
+        }
+    }
+
+    result
+}
+
 /// Excel(TSV)形式のテキストをMarkdownの表形式へ変換する
 ///
 /// タブ区切り(TSV)のテキストを解析し、Markdownのテーブル形式に変換する
@@ -92,10 +135,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
     markdown.push('|');
     for i in 0..max_cols {
         let cell = header_row.get(i).map_or("", |c| c.trim());
-        let processed = cell
-            .replace("\r\n", "<br>")
-            .replace(['\r', '\n'], "<br>")
-            .replace('|', "\\|");
+        let processed = escape_table_cell(cell);
         let _ = write!(markdown, " {processed} |");
     }
     markdown.push('\n');
@@ -112,10 +152,7 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
         markdown.push('|');
         for i in 0..max_cols {
             let cell = record.get(i).map_or("", |c| c.trim());
-            let processed = cell
-                .replace("\r\n", "<br>")
-                .replace(['\r', '\n'], "<br>")
-                .replace('|', "\\|");
+            let processed = escape_table_cell(cell);
             let _ = write!(markdown, " {processed} |");
         }
         markdown.push('\n');
@@ -232,38 +269,52 @@ fn read_quoted_field(text: &str, start: usize) -> Option<(String, usize)> {
 /// # Returns
 /// * `Cow<'_, str>` - 変換後のTSV文字列。表が無い場合 (`|` を含むだけの文など) は元の文字列を返す
 pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut output: Vec<Cow<'_, str>> = Vec::with_capacity(lines.len());
+    let lines: Vec<(&str, &str)> = text.split_inclusive('\n').map(split_line_ending).collect();
+    let mut output = String::with_capacity(text.len());
     let mut found_table = false;
     let mut i = 0;
 
-    while let Some(&line) = lines.get(i) {
-        let Some(header) = table_header(line, lines.get(i + 1).copied()) else {
-            output.push(Cow::Borrowed(line));
+    while let Some(&(line, ending)) = lines.get(i) {
+        let Some(header) = table_header(line, lines.get(i + 1).map(|&(next, _)| next)) else {
+            output.push_str(line);
+            output.push_str(ending);
             i += 1;
             continue;
         };
 
         // 見出し行と区切り行の後は `|` を含む行をデータ行として読む
         let mut rows = vec![header];
+        let mut last_ending = lines.get(i + 1).map_or("", |&(_, e)| e);
         i += 2;
-        while let Some(row) = lines.get(i).filter(|row| row.contains('|')) {
+        while let Some(&(row, row_ending)) = lines.get(i).filter(|(row, _)| row.contains('|')) {
             rows.push(split_table_row(row));
+            last_ending = row_ending;
             i += 1;
         }
 
-        let Some(tsv) = table_rows_to_tsv(&rows) else {
+        // 行の区切りは見出し行の改行コード、表の直後の改行は最終行のものをそのまま残す
+        let Some(tsv) = table_rows_to_tsv(&rows, ending) else {
             return Cow::Borrowed(text);
         };
-        output.push(Cow::Owned(tsv));
+        output.push_str(&tsv);
+        output.push_str(last_ending);
         found_table = true;
     }
 
     if found_table {
-        Cow::Owned(output.join("\n"))
+        Cow::Owned(output)
     } else {
         Cow::Borrowed(text)
     }
+}
+
+/// 1 行を本文と末尾の改行 (`\n` / `\r\n` / なし) に分ける
+fn split_line_ending(line: &str) -> (&str, &str) {
+    let Some(content) = line.strip_suffix('\n') else {
+        return (line, "");
+    };
+    let content = content.strip_suffix('\r').unwrap_or(content);
+    (content, &line[content.len()..])
 }
 
 /// 表の見出し行なら、そのセルを返す
@@ -281,15 +332,17 @@ fn table_header(line: &str, next: Option<&str>) -> Option<Vec<String>> {
 
 /// 表の行 (区切り行を除く) を TSV に組み立てる
 ///
-/// 列数は表の中で最も多い行に合わせ、足りないセルは空にする。書き込みに失敗した場合は `None` を返す
-fn table_rows_to_tsv(rows: &[Vec<String>]) -> Option<String> {
+/// 列数は表の中で最も多い行に合わせ、足りないセルは空にする。行の区切りには `eol` を使い、末尾には付けない
+/// 書き込みに失敗した場合は `None` を返す
+fn table_rows_to_tsv(rows: &[Vec<String>], eol: &str) -> Option<String> {
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
-    let mut writer = csv::WriterBuilder::new()
-        .delimiter(b'\t')
-        .has_headers(false)
-        .from_writer(Vec::new());
+    let mut records = Vec::with_capacity(rows.len());
 
     for row in rows {
+        let mut writer = csv::WriterBuilder::new()
+            .delimiter(b'\t')
+            .has_headers(false)
+            .from_writer(Vec::new());
         let cells: Vec<String> = (0..max_cols)
             .map(|i| {
                 row.get(i)
@@ -303,21 +356,21 @@ fn table_rows_to_tsv(rows: &[Vec<String>]) -> Option<String> {
             );
             return None;
         }
+        let bytes = match writer.into_inner() {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::debug!(
+                    "TSV ライターのフラッシュに失敗 (markdown_table_to_excel): {}",
+                    e
+                );
+                return None;
+            }
+        };
+        let record = String::from_utf8(bytes).ok()?;
+        records.push(record.strip_suffix('\n').unwrap_or(&record).to_string());
     }
 
-    let bytes = match writer.into_inner() {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            tracing::debug!(
-                "TSV ライターのフラッシュに失敗 (markdown_table_to_excel): {}",
-                e
-            );
-            return None;
-        }
-    };
-
-    let tsv = String::from_utf8(bytes).ok()?;
-    Some(tsv.trim_end_matches('\n').to_string())
+    Some(records.join(eol))
 }
 
 /// パイプ区切りのテーブル行をセルに分割する
@@ -337,9 +390,16 @@ fn split_table_row(line: &str) -> Vec<String> {
 
     while let Some(&ch) = chars.get(i) {
         let next = chars.get(i + 1).copied();
-        if ch == '\\' && next == Some('|') {
-            current.push('|');
-            i += 2;
+        if ch == '\\' && backslash_run_before_pipe(&chars[i..]).is_some() {
+            // `|` 直前のバックスラッシュ列: 奇数個なら `|` はエスケープ済み、偶数個なら区切り
+            let run = backslash_run_before_pipe(&chars[i..]).unwrap_or(0);
+            current.extend(std::iter::repeat_n('\\', run / 2));
+            if run % 2 == 1 {
+                current.push('|');
+                i += run + 1;
+            } else {
+                i += run;
+            }
         } else if ch == '\\' && next == Some('`') && code_ticks == 0 {
             // エスケープしたバッククォートはインラインコードを開かない
             current.push_str("\\`");
@@ -367,6 +427,12 @@ fn split_table_row(line: &str) -> Vec<String> {
     cells.push(current);
 
     cells
+}
+
+/// 先頭から連続するバックスラッシュの直後が `|` なら、その連続数を返す
+fn backslash_run_before_pipe(chars: &[char]) -> Option<usize> {
+    let run = chars.iter().take_while(|&&ch| ch == '\\').count();
+    (chars.get(run) == Some(&'|')).then_some(run)
 }
 
 /// 先頭から連続するバッククォートの数を返す
@@ -515,6 +581,19 @@ mod tests {
         let input = "A|B\tC";
         let output = excel_to_markdown_table(input);
         assert!(output.contains("A\\|B"));
+    }
+
+    /// `excel_to_markdown_table`: `|` 直前のバックスラッシュも重ねてエスケープし、往復で元に戻ること
+    #[test]
+    fn test_excel_to_markdown_table_escapes_backslash_before_pipe() {
+        let input = "a\\|b\tc\\\\|d\ne\\f\tg";
+        let output = excel_to_markdown_table(input);
+        // `\|` は `\\\|`、`\\|` は `\\\\\|` になり、`|` に続かない `\` はそのまま
+        assert!(output.contains("a\\\\\\|b"));
+        assert!(output.contains("c\\\\\\\\\\|d"));
+        assert!(output.contains("e\\f"));
+        // 往復で元のセル値に戻る
+        assert_eq!(markdown_table_to_excel(&output), input);
     }
 
     /// `excel_to_markdown_table`: 空入力は元の文字列を返すようにすること
@@ -681,6 +760,22 @@ mod tests {
         // `|` を含まない区切り行 (見出しの下線や水平線)
         let input = "a | b\n---\nc";
         assert_eq!(markdown_table_to_excel(input), input);
+    }
+
+    /// `markdown_table_to_excel`: 改行コードと末尾の改行を保つこと
+    #[test]
+    fn test_markdown_table_to_excel_keeps_line_endings() {
+        assert_eq!(
+            markdown_table_to_excel("text\r\n\r\n| a | b |\r\n|---|---|\r\n| 1 | 2 |\r\nafter\r\n"),
+            "text\r\n\r\na\tb\r\n1\t2\r\nafter\r\n"
+        );
+        // 表で終わる入力の末尾の改行
+        assert_eq!(markdown_table_to_excel("| a |\n|---|\n| 1 |\n"), "a\n1\n");
+        // 混在した改行はそのまま残す
+        assert_eq!(
+            markdown_table_to_excel("x\r\n| a |\n|---|\n| 1 |\ny"),
+            "x\r\na\n1\ny"
+        );
     }
 
     /// `markdown_table_to_excel`: 空入力は元の文字列を返すようにすること

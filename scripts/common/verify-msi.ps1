@@ -414,6 +414,12 @@ function Assert-MsiDatabaseContents {
                 throw "エラー: MSI の Feature テーブルに $requiredFeature が含まれていません"
             }
         }
+
+        # MIT License は同意を要しないため、ライセンス同意画面を出さない (wix/main.wxs の独自 UI)
+        $licenseDialogs = @(Invoke-MsiQuery -Database $database -Sql "SELECT Dialog FROM Dialog WHERE Dialog = 'LicenseAgreementDlg'")
+        if ($licenseDialogs.Count -gt 0) {
+            throw 'エラー: MSI にライセンス同意画面 (LicenseAgreementDlg) が含まれています'
+        }
     } finally {
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($database) | Out-Null
     }
@@ -570,6 +576,7 @@ function Invoke-MsiPackageVerification {
     Write-Host '  ProductName / ProductVersion / UpgradeCode / Manufacturer'
     Write-Host '  必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES, docs\index.html)'
     Write-Host '  必須 Feature (Binaries, Environment, Autostart)'
+    Write-Host '  ライセンス同意画面が無いこと'
     Write-Host '  per-user インストール (ALLUSERS)'
     if ($TargetTriple) {
         Write-Host "  Platform テンプレート ($TargetTriple)"

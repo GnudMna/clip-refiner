@@ -20,6 +20,7 @@ use super::serialize::docs::{
 };
 use super::types::{AppConfig, HotkeySettings, NotificationSettings};
 use crate::consts;
+use crate::security::{format_kib, format_mib};
 
 // ======================================================================
 // ワークスペースファイル
@@ -311,14 +312,6 @@ fn processing_limit_needles() -> Vec<String> {
             consts::MAX_INTERVAL_MS
         ),
     ]
-}
-
-fn format_mib(bytes: usize) -> String {
-    format!("{} MiB", bytes / (1024 * 1024))
-}
-
-fn format_kib(bytes: usize) -> String {
-    format!("{} KiB", bytes / 1024)
 }
 
 /// 既定ホットキー (README / configuration.md の本文にも現れる)

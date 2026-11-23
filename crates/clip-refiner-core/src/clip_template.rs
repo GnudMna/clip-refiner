@@ -10,6 +10,7 @@ use jiff::fmt::strtime;
 use thiserror::Error;
 
 use crate::consts::MAX_CLIPBOARD_TEXT_BYTES;
+use crate::security::format_mib;
 
 // ======================================================================
 // 定数
@@ -48,7 +49,10 @@ pub enum ClipTemplateError {
     #[error("テンプレートの日時書式が不正です: {0}")]
     InvalidFormat(String),
     /// 展開結果がクリップボード本文の上限を超える
-    #[error("テンプレートの展開結果がサイズ上限 (2 MiB) を超えています")]
+    #[error(
+        "テンプレートの展開結果がサイズ上限 ({}) を超えています",
+        format_mib(MAX_CLIPBOARD_TEXT_BYTES)
+    )]
     TooLarge,
     /// `{uuid}` 用の乱数を取得できない
     #[error("UUID の生成に失敗しました")]

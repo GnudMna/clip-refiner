@@ -38,7 +38,7 @@ rustup component add llvm-tools-preview
 cargo install cargo-llvm-cov --locked
 ```
 
-任意で Git フックを有効化すると、コミット時に整形、プッシュ時に品質チェック一式を実行できる。
+任意で Git フックを有効化すると、コミット時に整形の検証、プッシュ時に WebView E2E を除く品質チェックを実行できる ([Git フック](testing.md#git-フック))。
 
 ```powershell
 ./scripts/windows/install-hooks.ps1
@@ -80,6 +80,8 @@ debug ビルド (`cargo build` / `cargo run`) は、インストール済みの�
 ポータブルマーカーと `CLIP_REFINER_CONFIG_DIR` は、どちらのビルドでも上表より優先する。多重起動の判定とワンショット IPC のパイプ名は共通のため、製品版の常駐中に開発版を常駐起動すると、2 つ目として通知して終了する。開発版を試すときは製品版をトレイから終了しておく。
 
 ## Windows パッケージ作成
+
+配布物は MSI とポータブル ZIP の 2 種類。どちらも `THIRD_PARTY_NOTICES` と利用者向けドキュメントを生成して同梱する。リリース時は `release.ps1` が両方を作るため、個別に作るのは動作確認のときだけでよい ([リリース](release.md))。
 
 ### Windows MSI
 
@@ -145,7 +147,7 @@ cargo install cargo-about --locked --features cli
 
 再実行時に既存配布フォルダ内の `ClipRefiner.exe` が起動中だと置き換えに失敗する。トレイから終了してから再実行すること。PowerShell 7 (`pwsh`) で実行すること (Windows PowerShell 5.1 では `#requires` により失敗する)。実行ファイルの探索は `$ProjectRoot\target` (または `CARGO_TARGET_DIR`) を使い、`cargo metadata` の JSON は日本語パス化け回避のため使わない。
 
-## 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
+### 第三者ライセンス表示 (`THIRD_PARTY_NOTICES`)
 
 `LICENSE` は ClipRefiner 本体 (MIT License) の利用条件のみを示す。配布バイナリに含まれる OSS 依存の帰属・ライセンス全文は **`THIRD_PARTY_NOTICES`** にまとめる。
 
@@ -164,7 +166,7 @@ cargo install cargo-about --locked --features cli
 | **Windows MSI** | `%LOCALAPPDATA%\ClipRefiner\THIRD_PARTY_NOTICES` (`build-msi.ps1` が生成後に同梱) |
 | **ポータブル ZIP** | 配布フォルダ直下の `THIRD_PARTY_NOTICES` (`build-portable.ps1` が生成後に同梱) |
 
-## 利用者向けドキュメントの同梱
+### 利用者向けドキュメントの同梱
 
 `docs/user/` を原稿とする mdBook の本を HTML にし、MSI / ポータブル ZIP の `docs\` に同梱する。MSI はスタートメニューに「ClipRefiner ドキュメント」(`docs\index.html`) を追加する。
 
@@ -179,7 +181,7 @@ cargo install cargo-about --locked --features cli
 
 執筆中のプレビューは `mdbook serve docs/user --open` で行える。このとき変更履歴ページは `CHANGELOG.md` をそのまま取り込むため、ページ内の相対リンクは辿れない (配布物では書き換わる)。
 
-### 同梱する第三者素材とライセンス
+#### 同梱する第三者素材とライセンス
 
 mdBook の出力には mdBook 自身と他のプロジェクトの素材が含まれる。cargo-about は Rust の依存だけを扱うため、これらの表示は [`scripts/templates/user-docs-notices.txt`](../../scripts/templates/user-docs-notices.txt) に書き、`generate-third-party-notices.ps1` が `THIRD_PARTY_NOTICES` の末尾に追記する。
 

@@ -7,7 +7,6 @@
 # 出力 (WiX 必須サイズ):
 #   wix/Banner.bmp  - 493 x 58  (上部バナー。左白 + 右装飾)
 #   wix/Dialog.bmp  - 493 x 312 (ようこそ画面。左装飾 + 右白背景)
-#   wix/Eula.rtf    - ライセンス同意画面 (LICENSE から生成)
 # ========================================================================
 
 #requires -Version 7.0
@@ -189,80 +188,6 @@ function New-DialogBitmap {
     }
 }
 
-function ConvertTo-RtfUnicodeText {
-    param([string]$Text)
-
-    $builder = [System.Text.StringBuilder]::new()
-    foreach ($char in $Text.ToCharArray()) {
-        $code = [int][char]$char
-        switch ($char) {
-            '\' { [void]$builder.Append('\\') }
-            '{' { [void]$builder.Append('\{') }
-            '}' { [void]$builder.Append('\}') }
-            default {
-                if ($code -gt 127) {
-                    [void]$builder.Append("\u${code}?")
-                } else {
-                    [void]$builder.Append($char)
-                }
-            }
-        }
-    }
-
-    return $builder.ToString()
-}
-
-# 空行で区切られた LICENSE の連続行を 1 段落にまとめる。同意画面は幅が狭いため、固定幅の改行を残さず画面幅で折り返させる
-# (LICENSE は原文どおり固定幅で改行してよい。長い罫線は使わない)
-function ConvertTo-RtfParagraphs {
-    param([string[]]$Lines)
-
-    $paragraphs = [System.Collections.Generic.List[string]]::new()
-    $current = [System.Collections.Generic.List[string]]::new()
-    foreach ($line in $Lines) {
-        $trimmed = $line.Trim()
-        if ($trimmed.Length -eq 0) {
-            if ($current.Count -gt 0) {
-                $paragraphs.Add($current -join ' ')
-                $current.Clear()
-            }
-            continue
-        }
-        $current.Add($trimmed)
-    }
-    if ($current.Count -gt 0) {
-        $paragraphs.Add($current -join ' ')
-    }
-
-    # 段落の間に空行を 1 つ挟む。直後が英字だと \parAll 等の制御語と誤認識されるため区切りに空白を入れる
-    return ($paragraphs | ForEach-Object { ConvertTo-RtfUnicodeText $_ }) -join '\par \par '
-}
-
-function New-EulaRtf {
-    param(
-        [string]$LicensePath,
-        [string]$OutputPath
-    )
-
-    $lines = Get-Content -LiteralPath $LicensePath -Encoding utf8
-    $body = ConvertTo-RtfParagraphs -Lines $lines
-
-    $rtf = @"
-{\rtf1\ansi\ansicpg932\deff0\deflang1041
-{\fonttbl{\f0\fnil\fcharset128 MS UI Gothic;}{\f1\fswiss\fcharset0 Segoe UI;}}
-\viewkind4\uc1\pard\sa200\sl276\slmult1
-{\pard\qc\b\f1\fs28 ClipRefiner \u20351?\u29992?\u35377?\u35531?\u22865?\u32004?\b0\par}
-{\pard\qc\f1\fs20 License Agreement\par}
-\pard\par
-\f0\fs22
-$body
-\par
-}
-"@
-
-    [System.IO.File]::WriteAllText($OutputPath, $rtf, [System.Text.Encoding]::ASCII)
-}
-
 Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\cd-project-root.ps1')
 
@@ -275,20 +200,12 @@ Invoke-ScriptMain {
 
     $bannerPath = Join-Path $wixDir 'Banner.bmp'
     $dialogPath = Join-Path $wixDir 'Dialog.bmp'
-    $eulaPath = Join-Path $wixDir 'Eula.rtf'
-    $licensePath = Join-Path $ProjectRoot 'LICENSE'
-
-    if (-not (Test-Path -LiteralPath $licensePath)) {
-        throw "LICENSE が見つかりません: $licensePath"
-    }
 
     Write-Host 'WiX インストーラー用アセットを生成しています...'
     New-BannerBitmap -OutputPath $bannerPath
     New-DialogBitmap -OutputPath $dialogPath
-    New-EulaRtf -LicensePath $licensePath -OutputPath $eulaPath
 
     Write-Host "  $bannerPath"
     Write-Host "  $dialogPath"
-    Write-Host "  $eulaPath"
     Write-Host '完了'
 }

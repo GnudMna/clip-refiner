@@ -1,6 +1,8 @@
 # アーキテクチャ
 
-リポジトリとクレートの構成、モジュールの責務、スレッドモデルをまとめる。
+リポジトリとクレートの構成、モジュールの責務、スレッドモデル、ログをまとめる。
+
+本書のパス (構成図・表の 1 列目・バッククォートで囲んだパス) は `cargo test` (`tests/flow/architecture_doc.rs`) が実在を検証する。個々のファイルの責務はモジュールコメントに任せ、本書はディレクトリと命名規則の単位で書く。
 
 ## プロジェクト構成
 
@@ -87,7 +89,9 @@ OS 連携と IPC の置き場所は次のとおり。
 - **`native/` (`clip-refiner-core`):** feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く。`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける
 - **`ipc/`:** 常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなる。パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護し、名前に `.<ログオンセッション ID>` を付けてセッションごとに分ける (多重起動防止の mutex がセッション単位のため。利用者向けは [ワンショット IPC](../user/security.md#ワンショット-ipc))
 
-本書のパス (構成図・表の 1 列目・バッククォートで囲んだパス) は `cargo test` (`tests/flow/architecture_doc.rs`) が実在を検証する。個々のファイルの責務はモジュールコメントに任せ、本書はディレクトリと命名規則の単位で書く。
+## モジュールの責務
+
+ディレクトリ単位の責務と、モジュールをまたぐ処理の流れをまとめる。
 
 ### WebView UI (`src/ui/`)
 
@@ -157,6 +161,27 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 確認・適用の失敗は `UpdateError` (`error.rs`) に集約する。トレイ / 設定 UI 側 (`tray/features/update.rs`) は `Display` 文字列を Outcome へ載せ、デスクトップ通知は `UserNotification` (`user_error.rs`) 経由で送る。
 
 統合テストは `flow/update.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
+
+### デスクトップ通知
+
+通知の呼び出しは 2 層に分ける。
+
+| 層 | モジュール | 責務 |
+| :--- | :--- | :--- |
+| **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
+| **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダ (MSI は `bin` の親) から開く (`THIRD_PARTY_NOTICES` は拡張子が無いためメモ帳を明示起動)。設定ウィンドウの「情報」タブから呼ぶ |
+| **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
+| **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
+| **tray** | `tray/notify/message.rs` | 加工完了・自動変換の切替など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
+| **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
+| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
+
+- エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)
+- 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
+- アプリ更新の失敗・案内は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
+- 起動時は `bootstrap/` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
+
+`NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [通知](../user/configuration.md#通知-notification_settings) を参照。
 
 ### スクリプト構成
 
@@ -277,27 +302,6 @@ flowchart TB
   - `native/clipboard_file` (`CF_HDROP`): 画像のビットマップを書いた直後に、PNG を一時フォルダへ書き出してそのパスを追加する。既存の形式は消さない。`arboard` の書き込みが終わってから開く
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
-
-### デスクトップ通知
-
-通知の呼び出しは 2 層に分ける。
-
-| 層 | モジュール | 責務 |
-| :--- | :--- | :--- |
-| **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
-| **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダ (MSI は `bin` の親) から開く (`THIRD_PARTY_NOTICES` は拡張子が無いためメモ帳を明示起動)。設定ウィンドウの「情報」タブから呼ぶ |
-| **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
-| **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
-| **tray** | `tray/notify/message.rs` | 加工完了・自動変換の切替など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
-| **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
-| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
-
-- エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)
-- 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
-- アプリ更新の失敗・案内は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
-- 起動時は `bootstrap/` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
-
-`NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [通知](../user/configuration.md#通知-notification_settings) を参照。
 
 ## ログ
 

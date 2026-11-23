@@ -5,9 +5,11 @@
 
 use crate::clip_template::ClipTemplateError;
 use crate::config::AddRegisteredClipError;
+use crate::consts;
 use crate::platform;
 use crate::platform::update::UpdateError;
 use crate::refiner::ClipboardProcessError;
+use crate::security::format_mib;
 
 // ======================================================================
 // 通知
@@ -226,9 +228,12 @@ pub fn registered_clip_template_failure(err: &ClipTemplateError) -> UserNotifica
 /// * `UserNotification` - 記録スキップの案内
 #[must_use]
 pub fn continuous_record_text_too_large() -> UserNotification {
-    UserNotification::static_message(
+    UserNotification::new(
         titles::CONTINUOUS_RECORD,
-        "テキストが処理上限 (2 MiB) を超えているため記録しませんでした",
+        format!(
+            "テキストが処理上限 ({}) を超えているため記録しませんでした",
+            format_mib(consts::MAX_CLIPBOARD_TEXT_BYTES)
+        ),
     )
 }
 

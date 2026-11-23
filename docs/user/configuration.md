@@ -4,7 +4,7 @@
 
 現行の設定スキーマは `version = 5` 。スキーマの変更と移行内容は [変更履歴](changelog.md) の該当バージョンにある **Settings** / **Breaking changes** 節に記載する。
 
-**目次:** [設定ファイルの場所](#設定ファイルの場所) · [最小構成例](#最小構成例) · [処理の制限](#処理の制限) · [設定項目](#設定項目) · [ホットキー形式](#ホットキー形式) · [通知](#通知-notification_settings) · [一時停止の廃止](#一時停止の廃止-v5) · [加工パイプライン](#加工パイプライン-pipeline) · [監視方式](#監視方式-monitor_mode) · [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) · [ログ](#ログ)
+**目次:** [設定ファイルの場所](#設定ファイルの場所) · [最小構成例](#最小構成例) · [処理の制限](#処理の制限) · [設定項目](#設定項目) · [ホットキー形式](#ホットキー形式) · [通知](#通知-notification_settings) · [加工パイプライン](#加工パイプライン-pipeline) · [監視方式](#監視方式-monitor_mode) · [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) · [ログ](#ログ) · [旧設定からの移行](#旧設定からの移行)
 
 ## 設定ファイルの場所
 
@@ -160,6 +160,8 @@ notify_result = false
 | `pipeline` | array | (空) | 監視時に順に適用する変換モードの連鎖 (PascalCase の配列、最大 10 段。空の場合は `mode` のみ。例: `["UrlDecode", "Trim"]`) |
 | `favorite_modes` | array | (空) | お気に入り変換モード (PascalCase の配列、最大 20 件。例: `["UrlDecode", "Trim"]`) |
 
+**自動変換と連続記録モードの排他:** `auto_refine_enabled` と `continuous_record_enabled` は同時に有効にならない。一方を有効にすると、もう一方は自動で無効になり、通知する (後から有効にした方が優先)。`config.toml` で両方 `true` の場合は、連続記録モードを優先して自動変換を無効にする。v4 以前から移行する設定も同様に扱う。
+
 ### 監視
 
 | キー | 型 | デフォルト | 説明 |
@@ -228,9 +230,7 @@ notify_result = false
 
 ### 登録クリップ
 
-| キー | 型 | デフォルト | 説明 |
-| :--- | :--- | :--- | :--- |
-| (登録クリップ) | — | — | `config.toml` には含まれない。設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存。最大 100 件 |
+登録クリップは `config.toml` には含まれず、設定ディレクトリ内の `registered-clips.dat` (暗号化) と `registered-images/` に保存する ([設定ファイルの場所](#設定ファイルの場所))。件数などの上限は [処理の制限](#処理の制限) を参照。
 
 ## ホットキー形式
 
@@ -249,13 +249,7 @@ notify_result = false
 
 不正な値や重複は読み込み時・設定 UI 保存時にデフォルトへ置き換える (お気に入りスロットの空文字は意図的な無効化として維持)。設定ウィンドウの「ショートカット」タブから保存した場合は、補正した割り当て名を適用フィードバックで表示する。
 
-**既定値の変更と既存設定:**
-
-| 項目 | 現行の既定 | 備考 |
-| :--- | :--- | :--- |
-| `hotkeys.ocr` | `Alt+Shift+G` | 旧既定は `Alt+Shift+O`。`config.toml` に保存済みの値がある場合はそちらを維持する (キー欠落時のみ新既定を適用) |
-| `hotkeys.continuous_record_paste` | `Alt+Shift+X` | 旧キー名 `paste_queue` は別名として読み込む。保存時は `continuous_record_paste` のみ出力する。連続記録モードの貼り付けは `Ctrl+V` 捕捉ではなくこのホットキー |
-| `hotkeys.auto_refine` | `Alt+Shift+P` | v4 以前の `hotkeys.pause` (一時停止・再開) を引き継ぐ。旧キー名は別名として読み込み、保存時は `auto_refine` のみ出力する |
+既定値やキー名が変わったホットキーの扱いは [ホットキーの既定値とキー名の変更](#ホットキーの既定値とキー名の変更) を参照。
 
 ## 通知 (`notification_settings`)
 
@@ -298,28 +292,7 @@ notify_continuous_record = true
 notify_result = false
 ```
 
-**旧設定からの移行:** v0.12.1 以前の `notify_mode` / `notify_actions` は読み込み時に新項目へ自動移行し、次回保存時に TOML から除去される。変更経緯は [変更履歴](changelog.md) の v0.12.2 を参照。
-
-| 旧キー | 移行先 |
-| :--- | :--- |
-| `notify_mode = false` かつ `notify_result` 未指定 | `notify_process = false` |
-| `notify_actions = false` | `notify_history_restore` / `notify_ocr` / `notify_registered_clip` / `notify_favorites` / `notify_continuous_record` を `false` |
-
-v5 で一時停止を廃止したため、`notify_pause` は `notify_auto_refine` へ引き継ぐ (旧キー名も別名として読み込む)。移行の詳細は [一時停止の廃止](#一時停止の廃止-v5) を参照。
-
-## 一時停止の廃止 (v5)
-
-設定スキーマ v5 で、監視の一時停止 (`is_paused`) を廃止し、コピー時の自動変換 (`auto_refine_enabled`) に一本化した。トレイの「一時停止」項目は無くなり、`Alt+Shift+P` は自動変換の有効・無効切替になる。
-
-| v4 以前 | v5 |
-| :--- | :--- |
-| `is_paused = true` | `auto_refine_enabled = false` へ移行し、`is_paused` は保存時に除去する |
-| `hotkeys.pause` | `hotkeys.auto_refine` へ引き継ぐ (旧キー名も別名として読み込む) |
-| `notify_pause` | `notify_auto_refine` へ引き継ぐ (旧キー名も別名として読み込む) |
-
-旧キー名と新キー名が同じテーブルに両方ある場合は、新キー名の値を使い、旧キー名は無視する。
-
-**自動変換と連続記録モードの排他:** `auto_refine_enabled` と `continuous_record_enabled` は同時に有効にならない。一方を有効にすると、もう一方は自動で無効になり、通知する (後から有効にした方が優先)。`config.toml` で両方 `true` の場合は、連続記録モードを優先して自動変換を無効にする。v4 以前から移行する設定も同様に扱う。
+旧バージョンの通知キー (`notify_mode` / `notify_actions` / `notify_pause`) の扱いは [旧設定からの移行](#旧設定からの移行) を参照。
 
 ## 加工パイプライン (`pipeline`)
 
@@ -385,3 +358,34 @@ selector_webview_retention = "Keep"
 | **ポータブル** | `<実行ファイルのフォルダ>\data\logs\` |
 
 アプリが異常終了 (パニック) した場合も、発生スレッド・メッセージ・発生位置をログファイルへ記録する。
+
+## 旧設定からの移行
+
+旧バージョンの `config.toml` は読み込み時に現行の項目へ自動で移行する。旧キー名は別名として読み込み、保存時は現行のキー名だけを出力する。旧キー名と新キー名が同じテーブルに両方ある場合は、新キー名の値を使い、旧キー名は無視する。
+
+### 一時停止の廃止 (v5)
+
+設定スキーマ v5 で、監視の一時停止 (`is_paused`) を廃止し、コピー時の自動変換 (`auto_refine_enabled`) に一本化した。トレイの「一時停止」項目は無くなり、`Alt+Shift+P` は自動変換の有効・無効切替になる。
+
+| v4 以前 | v5 |
+| :--- | :--- |
+| `is_paused = true` | `auto_refine_enabled = false` へ移行し、`is_paused` は保存時に除去する |
+| `hotkeys.pause` | `hotkeys.auto_refine` へ引き継ぐ |
+| `notify_pause` | `notify_auto_refine` へ引き継ぐ |
+
+### 通知の旧キー (v0.12.1 以前)
+
+`notify_mode` / `notify_actions` は読み込み時に新項目へ移行し、次回保存時に TOML から除去する。変更経緯は [変更履歴](changelog.md) の v0.12.2 を参照。
+
+| 旧キー | 移行先 |
+| :--- | :--- |
+| `notify_mode = false` かつ `notify_result` 未指定 | `notify_process = false` |
+| `notify_actions = false` | `notify_history_restore` / `notify_ocr` / `notify_registered_clip` / `notify_favorites` / `notify_continuous_record` を `false` |
+
+### ホットキーの既定値とキー名の変更
+
+| 項目 | 現行の既定 | 備考 |
+| :--- | :--- | :--- |
+| `hotkeys.ocr` | `Alt+Shift+G` | 旧既定は `Alt+Shift+O`。`config.toml` に保存済みの値がある場合はそちらを維持する (キー欠落時のみ新既定を適用) |
+| `hotkeys.continuous_record_paste` | `Alt+Shift+X` | 旧キー名 `paste_queue` を引き継ぐ。連続記録モードの貼り付けは `Ctrl+V` 捕捉ではなくこのホットキー |
+| `hotkeys.auto_refine` | `Alt+Shift+P` | v4 以前の `hotkeys.pause` (一時停止・再開) を引き継ぐ ([一時停止の廃止](#一時停止の廃止-v5)) |

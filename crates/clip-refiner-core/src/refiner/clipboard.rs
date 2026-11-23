@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use super::base64_clipboard::{write_base64_image, write_image_as_base64};
@@ -7,7 +8,8 @@ use super::parse_failure::ParseFailure;
 use super::pipeline::{apply_text_pipeline, split_pipeline};
 use super::text_clipboard::{ClipboardIoError, HtmlClipboard, ImageClipboard, TextClipboard};
 use super::transform::markdown::markdown_to_rich_text_html;
-use crate::security::{is_within_clipboard_limit, is_within_parser_limit};
+use crate::consts::{MAX_CLIPBOARD_TEXT_BYTES, MAX_PARSER_INPUT_BYTES};
+use crate::security::{format_mib, is_within_clipboard_limit, is_within_parser_limit};
 
 // ======================================================================
 // 定数
@@ -77,28 +79,32 @@ impl ClipboardProcessError {
     /// * `self` - この `ClipboardProcessError`
     ///
     /// # Returns
-    /// * `&str` - 各エラー種別に対応する表示用文字列
+    /// * `Cow<'_, str>` - 各エラー種別に対応する表示用文字列。上限値を含むものは定数から組み立てる
     #[must_use]
-    pub fn user_message(&self) -> &str {
+    pub fn user_message(&self) -> Cow<'_, str> {
         match self {
-            Self::NoText => "クリップボードにテキストがありません",
-            Self::TextTooLarge => "テキストが処理上限 (2 MiB) を超えているため加工しませんでした",
-            Self::RegexTimedOut => {
-                "正規表現の実行が制限時間 (2 秒) を超えたため、元のテキストを維持しました"
-            }
-            Self::ParserInputTooLarge => {
-                "テキストがパーサー上限 (1 MiB) を超えているため加工しませんでした"
-            }
+            Self::NoText => Cow::Borrowed("クリップボードにテキストがありません"),
+            Self::TextTooLarge => Cow::Owned(format!(
+                "テキストが処理上限 ({}) を超えているため加工しませんでした",
+                format_mib(MAX_CLIPBOARD_TEXT_BYTES)
+            )),
+            Self::RegexTimedOut => Cow::Borrowed(
+                "正規表現の実行が制限時間 (2 秒) を超えたため、元のテキストを維持しました",
+            ),
+            Self::ParserInputTooLarge => Cow::Owned(format!(
+                "テキストがパーサー上限 ({}) を超えているため加工しませんでした",
+                format_mib(MAX_PARSER_INPUT_BYTES)
+            )),
             Self::HtmlNestingTooDeep => {
-                "HTML の入れ子が上限 (256 階層) を超えているため加工しませんでした"
+                Cow::Borrowed("HTML の入れ子が上限 (256 階層) を超えているため加工しませんでした")
             }
-            Self::ParseFailed(failure) => failure.user_message(),
-            Self::ReadFailed(_) => "クリップボードの読み取りに失敗しました",
-            Self::WriteFailed(_) => "クリップボードへの書き込みに失敗しました",
-            Self::NoImage => "クリップボードに Excel の描画画像がありません",
-            Self::ImageTooLarge => {
-                "画像が処理上限 (8192 px / 4096×4096 ピクセル) を超えているため変換しませんでした"
-            }
+            Self::ParseFailed(failure) => Cow::Borrowed(failure.user_message()),
+            Self::ReadFailed(_) => Cow::Borrowed("クリップボードの読み取りに失敗しました"),
+            Self::WriteFailed(_) => Cow::Borrowed("クリップボードへの書き込みに失敗しました"),
+            Self::NoImage => Cow::Borrowed("クリップボードに Excel の描画画像がありません"),
+            Self::ImageTooLarge => Cow::Borrowed(
+                "画像が処理上限 (8192 px / 4096×4096 ピクセル) を超えているため変換しませんでした",
+            ),
         }
     }
 

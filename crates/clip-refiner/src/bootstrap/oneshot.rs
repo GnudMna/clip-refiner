@@ -41,7 +41,10 @@ pub(super) fn run_once(args: &Args) -> Result<()> {
         eprintln!("警告: {message}");
     }
     let config = load_outcome.config;
-    let ctx = build_refinement_context(&config, args);
+    let ctx = build_refinement_context(&config, args).inspect_err(|err| {
+        log_error!("{err}");
+        eprintln!("エラー: {err}");
+    })?;
 
     if crate::ipc::is_resident_running() {
         match crate::ipc::process_via_resident(&pipeline, &ctx) {
@@ -120,11 +123,15 @@ fn run_once_local(pipeline: &[RefineMode], ctx: &RefineContext) -> Result<()> {
 }
 
 /// 設定と CLI 引数から加工コンテキストを組み立てる
-fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
+///
+/// `--regex-preset` に一致するプリセットが無い場合はエラーにする
+fn build_refinement_context(config: &AppConfig, args: &Args) -> Result<RefineContext> {
     let mut ctx = RefineContext::from_config(config);
 
-    if let Some(name) = &args.regex_preset {
-        let _ = ctx.regex.select_preset_by_name(name);
+    if let Some(name) = &args.regex_preset
+        && !ctx.regex.select_preset_by_name(name)
+    {
+        anyhow::bail!("--regex-preset に一致するプリセットがありません: {name}");
     }
 
     let has_step_override = args.regex_pattern.is_some()
@@ -140,7 +147,7 @@ fn build_refinement_context(config: &AppConfig, args: &Args) -> RefineContext {
         );
     }
 
-    ctx
+    Ok(ctx)
 }
 
 /// ワンショット実行用の加工パイプラインを解決する
@@ -208,7 +215,7 @@ mod tests {
             ..sample_args_for_test()
         };
 
-        let ctx = build_refinement_context(&config, &args);
+        let ctx = build_refinement_context(&config, &args).expect("context");
 
         let step = &ctx.regex.active_steps()[0];
         assert_eq!(step.pattern, "foo");
@@ -251,9 +258,21 @@ mod tests {
             ..sample_args_for_test()
         };
 
-        let ctx = build_refinement_context(&config, &args);
+        let ctx = build_refinement_context(&config, &args).expect("context");
         assert_eq!(ctx.regex.active_preset_id, "b");
         assert_eq!(ctx.regex.active_steps()[0].pattern, "2");
+    }
+
+    /// `--regex-preset` に存在しない名前を渡したときエラーになること
+    #[test]
+    fn build_refinement_context_rejects_unknown_regex_preset() {
+        let args = Args {
+            regex_preset: Some("存在しない".to_string()),
+            ..sample_args_for_test()
+        };
+
+        let err = build_refinement_context(&AppConfig::default(), &args).expect_err("error");
+        assert!(err.to_string().contains("存在しない"));
     }
 
     /// CLI 上書きが無いとき有効プリセットの全ステップを維持すること
@@ -283,7 +302,7 @@ mod tests {
             },
             ..AppConfig::default()
         };
-        let ctx = build_refinement_context(&config, &sample_args_for_test());
+        let ctx = build_refinement_context(&config, &sample_args_for_test()).expect("context");
 
         assert_eq!(ctx.regex.active_steps().len(), 2);
         assert_eq!(ctx.regex.active_steps()[0].pattern, "1");

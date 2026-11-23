@@ -9,8 +9,8 @@
 #   - cargo install cargo-about --locked --features cli
 #   - cargo install mdbook --locked --version <scripts/common/build-user-docs.ps1 の固定版>
 #   - winget install WiXToolset.WiXToolset  (WiX v3。コード署名は不要)
-#   - wix/main.wxs, wix/Banner.bmp, wix/Dialog.bmp, wix/Eula.rtf が存在すること
-#     (画像・Eula.rtf は scripts/windows/generate-wix-assets.ps1 で再生成可能)
+#   - wix/main.wxs, wix/Banner.bmp, wix/Dialog.bmp が存在すること
+#     (画像は scripts/windows/generate-wix-assets.ps1 で再生成可能)
 #   - Cargo.toml の culture = "ja-JP" でインストーラー UI を日本語化
 #
 # 出力:

@@ -21,32 +21,6 @@
 
 ---
 
-## ドキュメント
-
-### 利用者向け
-
-| ドキュメント | 内容 |
-| :--- | :--- |
-| [使い方](docs/user/usage.md) | 監視モード・ワンショット・トレイ・設定ウィンドウ・セレクター・履歴・連続記録モード・OCR・更新・自動起動 |
-| [設定リファレンス](docs/user/configuration.md) | `config.toml` の場所・設定項目と既定値・処理の制限・ホットキー形式・通知・パイプライン・ログ |
-| [変換モード](docs/user/modes.md) | 全 55 モードの一覧と使用例 |
-| [セキュリティ](docs/user/security.md) | 信頼境界・履歴の保護・監視除外・表示マスキング・登録クリップ・ワンショット IPC・更新の検証 |
-| [トラブルシューティング](docs/user/troubleshooting.md) | 症状別の確認事項 |
-| [CHANGELOG.md](CHANGELOG.md) | バージョンごとの変更履歴 |
-
-### 開発者向け
-
-| ドキュメント | 内容 |
-| :--- | :--- |
-| [開発環境とビルド](docs/dev/setup.md) | 前提条件・初回セットアップ・ビルド・MSI / ポータブル ZIP 作成・環境変数 |
-| [テストと品質チェック](docs/dev/testing.md) | テスト構成・E2E・テスト用ヘルパー・`check.ps1`・カバレッジ・Git フック・リンター・`cargo-deny` |
-| [アーキテクチャ](docs/dev/architecture.md) | プロジェクト構成・モジュールの責務・スレッドモデル・ログ |
-| [リリース](docs/dev/release.md) | `release.ps1`・更新署名鍵 |
-| [開発への参加](docs/dev/contributing.md) | Git 運用・コーディング規約・ドキュメント同期 |
-| [clip-refiner-core](crates/clip-refiner-core/README.md) | 加工ロジックをライブラリとして使う |
-
----
-
 ## 主な機能
 
 | 機能 | 概要 |
@@ -142,6 +116,32 @@
 | **ポータブル** (`portable` マーカーあり) | `<実行ファイルのフォルダ>\data\config.toml` |
 
 日常的な変更はトレイ「設定を開く」の [設定ウィンドウ](docs/user/usage.md#設定ウィンドウ) から行うのが簡単。設定項目・既定値・処理上限は [設定リファレンス](docs/user/configuration.md)、動作しないときは [トラブルシューティング](docs/user/troubleshooting.md) を参照。
+
+---
+
+## ドキュメント
+
+### 利用者向け
+
+| ドキュメント | 内容 |
+| :--- | :--- |
+| [使い方](docs/user/usage.md) | 監視モード・ワンショット・トレイ・設定ウィンドウ・セレクター・履歴・連続記録モード・OCR・更新・自動起動 |
+| [設定リファレンス](docs/user/configuration.md) | `config.toml` の場所・設定項目と既定値・処理の制限・ホットキー形式・通知・パイプライン・ログ |
+| [変換モード](docs/user/modes.md) | 全 55 モードの一覧と使用例 |
+| [セキュリティ](docs/user/security.md) | 信頼境界・履歴の保護・監視除外・表示マスキング・登録クリップ・ワンショット IPC・更新の検証 |
+| [トラブルシューティング](docs/user/troubleshooting.md) | 症状別の確認事項 |
+| [CHANGELOG.md](CHANGELOG.md) | バージョンごとの変更履歴 |
+
+### 開発者向け
+
+| ドキュメント | 内容 |
+| :--- | :--- |
+| [開発環境とビルド](docs/dev/setup.md) | 前提条件・初回セットアップ・ビルド・MSI / ポータブル ZIP 作成 (第三者ライセンス表示・ドキュメント同梱)・環境変数 |
+| [テストと品質チェック](docs/dev/testing.md) | テストの実行と構成・テスト用ヘルパー・E2E・プロパティテスト・ファジング・ベンチマーク・`check.ps1`・Git フック・カバレッジ・リンター・`cargo-deny` |
+| [アーキテクチャ](docs/dev/architecture.md) | プロジェクト構成・モジュールの責務 (WebView UI・トレイ・更新・通知・スクリプト)・スレッドモデル・ログ |
+| [リリース](docs/dev/release.md) | 準備・`release.ps1`・リリース後の作業・更新署名鍵 |
+| [開発への参加](docs/dev/contributing.md) | Git 運用・コーディング規約・ドキュメント同期 |
+| [clip-refiner-core](crates/clip-refiner-core/README.md) | 加工ロジックをライブラリとして使う |
 
 ---
 

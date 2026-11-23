@@ -47,9 +47,11 @@
 | | `to-japanese-datetime` | 日時→和文日時 | 日時を和文形式 (`2023年11月15日 07時13分20秒`) へ変換 (ローカルタイムゾーン) |
 | **桁区切りカンマ** | `add-comma` / `remove-comma` | カンマ追加 / カンマ除去 | 数値への 3 桁カンマ区切り付与・削除 (複数行対応。先頭の符号 `-` / `+` と小数に対応。`00123456` のように先頭がゼロの整数は ID・電話番号などとみなし、カンマ追加では変換しない) |
 | **識別子の書式** | `to-camel-case` / `to-snake-case` / `to-pascal-case` / `to-kebab-case` / `to-screaming-snake-case` | camelCaseへ変換 / snake_caseへ変換 / PascalCaseへ変換 / kebab-caseへ変換 / SCREAMING_SNAKE_CASEへ変換 | 識別子のケース変換 (行頭のインデントは維持) |
-| **全角・半角** | `to-halfwidth` / `to-fullwidth` | 半角へ変換 / 全角へ変換 | 英数字・記号・スペース・カタカナの全角 ↔ 半角変換 |
+| **全角・半角** | `to-halfwidth` / `to-fullwidth` | 半角へ変換 / 全角へ変換 | 英数字・記号・スペース・カタカナの全角 ↔ 半角変換 ([全角・半角変換の対象](#全角半角変換の対象)) |
 
-全角・半角変換の対象は英数字・記号 (`!` 〜 `~` ↔ `！` 〜 `～`)、スペース (半角スペース ↔ 全角スペース)、カタカナと約物 (`。` `「` `」` `、` `・` `ー` `゛` `゜`) である。半角へ変換すると濁音・半濁音は清音と `ﾞ` / `ﾟ` の 2 文字に分かれ、全角へ変換すると半角カナ直後の `ﾞ` / `ﾟ` を 1 文字に合成する。ひらがな・漢字や、半角に対応する文字が無いカタカナ (`ヵ` `ヶ` `ヰ` `ヱ` `ヮ`) は変換しない。
+## モードごとの仕様
+
+一覧の説明だけでは足りないモードの、対象・判定の条件・変換しない入力をまとめる。具体的な入出力は [変換モードの使用例](#変換モードの使用例) を参照。
 
 ### ファイルパスの判定
 
@@ -65,7 +67,7 @@
 
 ### 改行コード
 
-行単位で処理するモード (`sort-lines-*` / `remove-empty-lines` / `remove-duplicate-lines` / `trim-lines` / 識別子のケース変換) は、CRLF と LF が混在するテキストでも行ごとの改行コードを変えない。並び替えでは改行コードの並びを位置ごとに保つ。
+行単位で処理するモード (`sort-lines-*` / `remove-empty-lines` / `remove-duplicate-lines` / `trim-lines` / 識別子のケース変換) は、CRLF と LF が混在するテキストでも行ごとの改行コードを変えない。並び替えでは改行コードの並びを位置ごとに保つ。`markdown-to-excel` も表以外の行の改行コードと末尾の改行を変えない ([Excel と Markdown の表](#excel-と-markdown-の表))。
 
 ### エスケープの対象
 
@@ -90,6 +92,13 @@
 - **`html-to-markdown`:** ブラウザや Word からコピーした内容に HTML 形式があれば、テキストより HTML 形式を優先して Markdown へ変換し、テキストとして書き戻す (HTML 形式は消える)。HTML 形式が無い場合はテキストを HTML ソースとして変換する。タグを含まないテキストは変換しない。見出し・段落・強調・リンク・画像・リスト・引用・コードブロック・表に対応し、`script` / `style` などの非表示要素は出力しない。要素の入れ子が 256 階層を超える HTML は変換しない
 - **パイプライン:** `html-to-markdown` は先頭に置いたときだけ HTML 形式を読み、`markdown-to-rich-text` はテキスト加工の最終段に置いたときだけ HTML 形式を書き込む。それ以外の位置ではテキスト同士の変換として働く (`markdown-to-rich-text` は `markdown-to-html` と同じ HTML ソースを返す)。例: `--pipeline excel-to-markdown markdown-to-rich-text` で Excel の表を罫線付きの表として貼り付けられる
 
+### Excel と Markdown の表
+
+`excel-to-markdown` と `markdown-to-excel` は、互いの出力を入力に戻すと元の値になるようにセルを変換する。
+
+- **`excel-to-markdown`:** 1 行目を見出しにし、列数はいちばん多い行に合わせる (足りないセルは空)。セルの前後の空白は除く。セル内の改行は `<br>`、`|` は `\|` にする。`|` の直前のバックスラッシュも重ねてエスケープするため、`a\|b` のようなセルも GitHub などで列がずれない。改行・タブ・`"` を含むセルを Excel が `"` で囲んだコピーも、囲みを外して読む
+- **`markdown-to-excel`:** 見出し行の直後に区切り行 (`|---|`) が続く塊だけを表とみなし、`|` を含まない行で表が終わる。表以外の行はそのまま残し、改行コードと末尾の改行も変えない。セル内の `<br>` (`<br/>`・`<br />` を含む) は改行に、`\|` は `|` に戻す。インラインコード (`` `a|b` ``) 内の `|` は列の区切りとみなさない。改行・タブ・`"` を含むセルは、Excel に貼り付けられるよう `"` で囲む
+
 ### Base64 と画像
 
 `base64-encode` と `base64-decode` は、文字列に加えて PNG / JPEG / BMP の画像を扱える。
@@ -112,6 +121,10 @@
 
 正規表現モードは `[regex]` セクションの**有効プリセット**のステップを上から順に適用する。トレイで選んだ操作 (`regex-replace` / `regex-extract` / `regex-delete` / `regex-split`) が全ステップに同じ操作として適用される。パイプライン内の正規表現モードも同じ有効プリセットを参照する。
 
+### 全角・半角変換の対象
+
+対象は英数字・記号 (`!` 〜 `~` ↔ `！` 〜 `～`)、スペース (半角スペース ↔ 全角スペース)、カタカナと約物 (`。` `「` `」` `、` `・` `ー` `゛` `゜`) である。半角へ変換すると濁音・半濁音は清音と `ﾞ` / `ﾟ` の 2 文字に分かれ、全角へ変換すると半角カナ直後の `ﾞ` / `ﾟ` を 1 文字に合成する。ひらがな・漢字や、半角に対応する文字が無いカタカナ (`ヵ` `ヶ` `ヰ` `ヱ` `ヮ`) は変換しない。
+
 ## 変換モードの使用例
 
 <details>
@@ -126,6 +139,25 @@
 </details>
 
 <details>
+<summary><strong>UTM パラメータの削除</strong> (<code>remove-utm</code>)</summary>
+<br>
+
+| | |
+| :--- | :--- |
+| **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
+| **出力** | `https://example.com/page?id=123` |
+
+削除するのは `utm_` で始まるパラメータと、広告のクリック ID (`fbclid` `gclid` `dclid` `gbraid` `wbraid` `msclkid` `yclid` `twclid` `ttclid` `igshid`)。キーの大文字・小文字は区別しない (`UTM_Source` も削除する)。`%75tm_source` のようにパーセントエンコードされたキーもデコードして判定する。
+
+フラグメント (`#` 以降) は残す。SPA のルーティングなどでフラグメントの中に `?` で始まるクエリがある場合は、そこからも削除する (`https://example.com/?id=1#/page?utm_source=x` → `https://example.com/?id=1#/page`)。
+
+HTML ソースやメールからコピーした、区切りが `&amp;` にエスケープされた URL も扱える (`?utm_source=x&amp;id=1` → `?id=1`)。残すパラメータの間の `&amp;` はそのまま維持する。
+
+URL を含む文章や URL の一覧も扱える。URL 以外の文字列はそのまま残す。`?` の前の単語に `/` が含まれるか、`www.` で始まるか、`example.com` / `example.com:8080` のようなホスト名 (`.` 区切りで、末尾が英字 2 文字以上) の場合だけ URL とみなすため、`What?utm_source=1` のような文章や `?utm_source=a` だけの文字列は変更しない。クエリの終わりは、空白 (改行を含む)・日本語などの ASCII 以外の文字・`)` `>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点 (`.` `,` `;` `:` `!` `?`) は含めない。
+
+</details>
+
+<details>
 <summary><strong>Base64 エンコード・デコード</strong> (<code>base64-encode</code> / <code>base64-decode</code>)</summary>
 <br>
 
@@ -135,6 +167,71 @@
 | `base64-decode` | `Q2xpcFJlZmluZXI=` | `ClipRefiner` |
 
 デコードできない入力 (Base64 として不正、またはデコード結果が画像でも UTF-8 の文字列でもない) は変更しない。デコード結果が画像のときの扱いは [Base64 と画像](#base64-と画像) を参照。
+
+</details>
+
+<details>
+<summary><strong>ファイルパス</strong> (<code>extract-basename</code> / <code>add-path-quotes</code>)</summary>
+<br>
+
+| モード | 入力 | 出力 |
+| :--- | :--- | :--- |
+| `extract-basename` | `C:\Users\sample\Documents\report.txt` | `report.txt` |
+| `add-path-quotes` | `C:\Program Files\App\app.exe` | `"C:\Program Files\App\app.exe"` |
+
+</details>
+
+<details>
+<summary><strong>行の並べ替え・重複削除</strong> (<code>sort-lines-asc</code> / <code>remove-duplicate-lines</code>)</summary>
+<br>
+
+| モード | 入力 | 出力 |
+| :--- | :--- | :--- |
+| `sort-lines-asc` | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
+| `sort-lines-asc` | `10` / `9` / `2` | `10` / `2` / `9` |
+| `sort-lines-natural-asc` | `10` / `9` / `2` | `2` / `9` / `10` |
+| `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b` | `a` / `b` / `c` |
+
+(`/` は行の区切りを表す)
+
+</details>
+
+<details>
+<summary><strong>空白・空行の除去</strong> (<code>trim-lines</code> / <code>remove-empty-lines</code>)</summary>
+<br>
+
+<!-- 入力例は前後の空白を見せるため、コード内の空白を許す -->
+<!-- markdownlint-disable MD038 -->
+| モード | 入力 | 出力 |
+| :--- | :--- | :--- |
+| `trim-lines` | `  foo  ` / `    bar   ` | `foo` / `bar` |
+| `remove-empty-lines` | `a` / (空行) / `b` / (空行 2 行) / `c` | `a` / `b` / `c` |
+<!-- markdownlint-enable MD038 -->
+
+(`/` は行の区切りを表す)
+
+</details>
+
+<details>
+<summary><strong>正規表現置換</strong> (<code>regex-replace</code>)</summary>
+<br>
+
+**設定 (`config.toml`):**
+
+```toml
+[regex]
+active_preset_id = "default"
+presets = [
+  { id = "default", name = "デフォルト", steps = [
+    { pattern = "(\\d{4})-(\\d{2})-(\\d{2})", replacement = "$1/$2/$3", case_insensitive = false, multiline = false },
+  ]},
+]
+```
+
+| | |
+| :--- | :--- |
+| **入力** | `会議日: 2024-01-15、締切: 2024-02-28` |
+| **出力** | `会議日: 2024/01/15、締切: 2024/02/28` |
 
 </details>
 
@@ -246,88 +343,6 @@ items:
 </details>
 
 <details>
-<summary><strong>行の並べ替え・重複削除</strong> (<code>sort-lines-asc</code> / <code>remove-duplicate-lines</code>)</summary>
-<br>
-
-| モード | 入力 | 出力 |
-| :--- | :--- | :--- |
-| `sort-lines-asc` | `banana` / `apple` / `cherry` | `apple` / `banana` / `cherry` |
-| `sort-lines-asc` | `10` / `9` / `2` | `10` / `2` / `9` |
-| `sort-lines-natural-asc` | `10` / `9` / `2` | `2` / `9` / `10` |
-| `remove-duplicate-lines` | `a` / `b` / `a` / `c` / `b` | `a` / `b` / `c` |
-
-(`/` は行の区切りを表す)
-
-</details>
-
-<details>
-<summary><strong>ファイルパス</strong> (<code>extract-basename</code> / <code>add-path-quotes</code>)</summary>
-<br>
-
-| モード | 入力 | 出力 |
-| :--- | :--- | :--- |
-| `extract-basename` | `C:\Users\sample\Documents\report.txt` | `report.txt` |
-| `add-path-quotes` | `C:\Program Files\App\app.exe` | `"C:\Program Files\App\app.exe"` |
-
-</details>
-
-<details>
-<summary><strong>空白・空行の除去</strong> (<code>trim-lines</code> / <code>remove-empty-lines</code>)</summary>
-<br>
-
-<!-- 入力例は前後の空白を見せるため、コード内の空白を許す -->
-<!-- markdownlint-disable MD038 -->
-| モード | 入力 | 出力 |
-| :--- | :--- | :--- |
-| `trim-lines` | `  foo  ` / `    bar   ` | `foo` / `bar` |
-| `remove-empty-lines` | `a` / (空行) / `b` / (空行 2 行) / `c` | `a` / `b` / `c` |
-<!-- markdownlint-enable MD038 -->
-
-(`/` は行の区切りを表す)
-
-</details>
-
-<details>
-<summary><strong>UTM パラメータの削除</strong> (<code>remove-utm</code>)</summary>
-<br>
-
-| | |
-| :--- | :--- |
-| **入力** | `https://example.com/page?id=123&utm_source=twitter&utm_medium=social` |
-| **出力** | `https://example.com/page?id=123` |
-
-削除するのは `utm_` で始まるパラメータと、広告のクリック ID (`fbclid` `gclid` `dclid` `gbraid` `wbraid` `msclkid` `yclid` `twclid` `ttclid` `igshid`)。キーの大文字・小文字は区別しない (`UTM_Source` も削除する)。
-
-HTML ソースやメールからコピーした、区切りが `&amp;` にエスケープされた URL も扱える (`?utm_source=x&amp;id=1` → `?id=1`)。残すパラメータの間の `&amp;` はそのまま維持する。
-
-URL を含む文章や URL の一覧も扱える。URL 以外の文字列はそのまま残す。`?` の前の単語に `/` が含まれるか `www.` で始まる場合だけ URL とみなすため、`What?utm_source=1` のような文章や `?utm_source=a` だけの文字列は変更しない。クエリの終わりは、空白 (改行を含む)・日本語などの ASCII 以外の文字・`)` `>` `<` `"` `'` `` ` `` のいずれかが現れた位置とし、末尾の句読点 (`.` `,` `;` `:` `!` `?`) は含めない。
-
-</details>
-
-<details>
-<summary><strong>Excel から Markdown へ</strong> (<code>excel-to-markdown</code>)</summary>
-<br>
-
-**入力 (TSV):**
-
-```text
-ID	Name	Price
-1	Apple	150
-2	Banana	100
-```
-
-**出力:**
-
-```markdown
-| ID  | Name   | Price |
-| --- | ------ | ----- |
-| 1   | Apple  | 150   |
-| 2   | Banana | 100   |
-```
-
-</details>
-
-<details>
 <summary><strong>Web ページから Markdown へ</strong> (<code>html-to-markdown</code>)</summary>
 <br>
 
@@ -353,25 +368,27 @@ ID	Name	Price
 </details>
 
 <details>
-<summary><strong>正規表現置換</strong> (<code>regex-replace</code>)</summary>
+<summary><strong>Excel と Markdown の表</strong> (<code>excel-to-markdown</code> / <code>markdown-to-excel</code>)</summary>
 <br>
 
-**設定 (`config.toml`):**
+**入力 (Excel からコピーした TSV):**
 
-```toml
-[regex]
-active_preset_id = "default"
-presets = [
-  { id = "default", name = "デフォルト", steps = [
-    { pattern = "(\\d{4})-(\\d{2})-(\\d{2})", replacement = "$1/$2/$3", case_insensitive = false, multiline = false },
-  ]},
-]
+```text
+ID	Name	Price
+1	Apple	150
+2	Banana	100
 ```
 
-| | |
-| :--- | :--- |
-| **入力** | `会議日: 2024-01-15、締切: 2024-02-28` |
-| **出力** | `会議日: 2024/01/15、締切: 2024/02/28` |
+**`excel-to-markdown` の出力:**
+
+```markdown
+| ID | Name | Price |
+|---|---|---|
+| 1 | Apple | 150 |
+| 2 | Banana | 100 |
+```
+
+`markdown-to-excel` はこの表を元の TSV へ戻す。セルの改行・`|` の扱いは [Excel と Markdown の表](#excel-と-markdown-の表) を参照。
 
 </details>
 
@@ -420,6 +437,17 @@ presets = [
 </details>
 
 <details>
+<summary><strong>カンマ区切り付与</strong> (<code>add-comma</code>)</summary>
+<br>
+
+| | |
+| :--- | :--- |
+| **入力** | `1234567` |
+| **出力** | `1,234,567` |
+
+</details>
+
+<details>
 <summary><strong>ケース変換</strong> (<code>to-snake-case</code>)</summary>
 <br>
 
@@ -438,16 +466,5 @@ presets = [
 | :--- | :--- |
 | **入力** | `ＡＢＣ　１２３　データ` |
 | **出力** | `ABC 123 ﾃﾞｰﾀ` |
-
-</details>
-
-<details>
-<summary><strong>カンマ区切り付与</strong> (<code>add-comma</code>)</summary>
-<br>
-
-| | |
-| :--- | :--- |
-| **入力** | `1234567` |
-| **出力** | `1,234,567` |
 
 </details>

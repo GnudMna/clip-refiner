@@ -1,24 +1,45 @@
 # リリース
 
-バージョンごとの利用者向け変更内容は [CHANGELOG.md](../../CHANGELOG.md) に記載する ([Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式)。
+リリースの準備から公開までの手順をまとめる。バージョンごとの利用者向け変更内容は [CHANGELOG.md](../../CHANGELOG.md) に記載する ([Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式)。
+
+手順の全体は次のとおり。
+
+1. [準備](#準備): ツールと鍵をそろえ、CHANGELOG とドキュメントを仕上げる
+2. [リリーススクリプト](#リリーススクリプト-releaseps1): `release/v{version}` ブランチで `release.ps1` を実行し、バージョン更新・品質チェック・コミット・MSI / ポータブル ZIP の作成と署名を一括で行う
+3. [リリース後の作業](#リリース後の作業): ブランチの反映・タグ付け・アセットの公開と配信の確認
+
+## 準備
+
+### 環境
+
+- gh-release-bridge の Worker Secret `CLIP_REFINER_KEY` と同じ値を UTF-8 のファイルに保存し、環境変数 `CLIP_REFINER_KEY_FILE` にそのパスを設定しておく (リポジトリの外に置く。`-DryRun` でも検証する。[環境変数](setup.md#環境変数))
+- MSI / ポータブル ZIP を作る場合は `minisign` をインストールし、環境変数 `CLIP_REFINER_SIGNING_KEY` に秘密鍵のパスを設定しておく ([更新署名鍵](#更新署名鍵)。`-DryRun` でも検証する)
+- MSI / ポータブル作成には [Windows パッケージ作成](setup.md#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、mdBook、WiX Toolset v3。ポータブルのみなら `cargo-about` と mdBook で可)
+
+### 変更内容の仕上げ
+
+1. [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと `release.ps1` が失敗する)
+2. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **Settings** 節に移行内容を書く
+3. 利用者向けの大きな変更があれば [README.md](../../README.md) / `docs/user/` の該当文書も合わせて更新する。設定スキーマ番号・既定値・上限のずれは `crates/clip-refiner-core/src/config/spec.rs` のテストが検出する ([ドキュメント同期](contributing.md#ドキュメント同期))
+4. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](testing.md#手動確認が残る範囲) に該当する変更だけ実機確認する
 
 ## リリーススクリプト (`release.ps1`)
 
-`scripts/windows/release.ps1` で、バージョン更新から MSI / ポータブル ZIP 作成までを一括実行できる。
+`scripts/windows/release.ps1` で、バージョン更新から MSI / ポータブル ZIP 作成までを一括実行できる。`release/v{version}` ブランチ上で実行し (例: `release/v1.1.0` で `-Version 1.1.0`)、既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可) を求める。
 
 ```powershell
 # 最新の origin/develop からリリースブランチを作成して checkout (バージョンとブランチ名が一致必須)
 git fetch origin develop
 git switch -c release/v1.1.0 origin/develop
 
+# 変更内容の確認のみ (ファイル・Git・MSI・ポータブル ZIP は触らない)
+./scripts/windows/release.ps1 -Version 1.1.0 -DryRun
+
 # 明示的なバージョン指定
 ./scripts/windows/release.ps1 -Version 1.1.0
 
 # パッチリリース (1.0.0 -> 1.0.1)。事前に release/v1.0.1 ブランチへ checkout すること
 ./scripts/windows/release.ps1 -Bump Patch
-
-# 変更内容の確認のみ (ファイル・Git・MSI・ポータブル ZIP は触らない)
-./scripts/windows/release.ps1 -Version 1.1.0 -DryRun
 ```
 
 **自動で行うこと:**
@@ -49,29 +70,13 @@ git switch -c release/v1.1.0 origin/develop
 | `-AllowDirty` | 未コミット変更があっても続行 |
 | `-Target Host\|x64` | 配布 CPU (省略時はホスト) |
 
-**前提:**
-
-- gh-release-bridge の Worker Secret `CLIP_REFINER_KEY` と同じ値を UTF-8 のファイルに保存し、環境変数 `CLIP_REFINER_KEY_FILE` にそのパスを設定しておく (リポジトリの外に置く。`-DryRun` でも検証する。[環境変数](setup.md#環境変数))
-- MSI / ポータブル ZIP を作る場合は `minisign` をインストールし、環境変数 `CLIP_REFINER_SIGNING_KEY` に秘密鍵のパスを設定しておく ([更新署名鍵](#更新署名鍵)。`-DryRun` でも検証する)
-- `release/v{version}` ブランチ上で実行すること (例: `release/v1.1.0` で `-Version 1.1.0`)
-- リリース前に [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節へ変更内容を記載しておく (空だと失敗する)
-- 既定では作業ツリーがクリーンであること (`-AllowDirty` で上書き可)
-- MSI / ポータブル作成には [Windows パッケージ作成](setup.md#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、mdBook、WiX Toolset v3。ポータブルのみなら `cargo-about` と mdBook で可)
-
-**手動で残る作業:**
-
-`release.ps1` の実行前:
-
-1. 設定スキーマ (`consts::CONFIG_VERSION`) を変更したリリースでは、CHANGELOG の **Settings** 節に移行内容を書く
-2. 利用者向けの大きな変更があれば [README.md](../../README.md) / `docs/user/` の該当文書も合わせて更新する。設定スキーマ番号・既定値・上限のずれは `crates/clip-refiner-core/src/config/spec.rs` のテストが検出する ([ドキュメント同期](contributing.md#ドキュメント同期))
-3. トレイ実クリック・実ホットキー競合・トースト見た目など、[手動確認が残る範囲](testing.md#手動確認が残る範囲) に該当する変更だけ実機確認する
-
-`release.ps1` の実行後:
+## リリース後の作業
 
 1. `git push -u origin release/v{version}` でリモートへ反映する
-2. Gitea 上で `v{version}` タグを付与する
-3. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードする
-4. [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) で次を確認する。アプリは digest と署名のどちらかが欠けたアセットを適用しない ([アプリ更新の検証](../user/security.md#アプリ更新の検証))
+2. `release/v{version}` から `main` と `develop` へ、それぞれ Pull Request を作ってマージする。`main` と競合する場合は、先に `main` を release ブランチへマージしてから Pull Request を作る
+3. Gitea 上で `v{version}` タグを付与する
+4. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードする
+5. [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) で次を確認する。アプリは digest と署名のどちらかが欠けたアセットを適用しない ([アプリ更新の検証](../user/security.md#アプリ更新の検証))
    - version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返す
    - 署名ファイルをアセットと同じ URL 形式 (`/{owner}/{repo}/{tag}/{asset}.minisig`) で取得できる
 

@@ -75,15 +75,19 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     while let Some(offset) = input[search..].find('?') {
         let start = search + offset;
         let end = query_end(input, start + 1);
+        // クエリは `#` の手前まで。フラグメント内の `?` は次の探索で別のクエリとして扱う
+        let query_stop = input[start + 1..end]
+            .find('#')
+            .map_or(end, |hash| start + 1 + hash);
         if is_url_like(&input[..start])
-            && let Some(cleaned) = remove_utm_from_query(&input[start + 1..end])
+            && let Some(cleaned) = remove_utm_from_query(&input[start + 1..query_stop])
         {
             let output = output.get_or_insert_with(|| String::with_capacity(input.len()));
             output.push_str(&input[copied..start]);
             output.push_str(&cleaned);
-            copied = end;
+            copied = query_stop;
         }
-        search = end;
+        search = query_stop;
     }
 
     match output {
@@ -136,6 +140,28 @@ fn is_url_like(before: &str) -> bool {
         || ascii_tail
             .get(..4)
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("www."))
+        || is_bare_host(ascii_tail)
+}
+
+/// スキームも `/` も `www.` もないホスト名 (`example.com` / `example.com:8080`) か判定する
+///
+/// 2 つ以上のラベルを `.` で連結し、最後のラベル (TLD) は英字 2 文字以上とする
+fn is_bare_host(word: &str) -> bool {
+    let host = match word.rsplit_once(':') {
+        Some((host, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => host,
+        _ => word,
+    };
+    let labels: Vec<&str> = host.split('.').collect();
+    labels.len() >= 2
+        && labels.iter().all(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
+        && labels
+            .last()
+            .is_some_and(|tld| tld.len() >= 2 && tld.bytes().all(|b| b.is_ascii_alphabetic()))
 }
 
 /// クエリ文字列(フラグメントを含む)の終了位置を返す
@@ -195,7 +221,11 @@ fn query_len(rest: &str) -> usize {
 }
 
 /// クエリパラメータのキーが計測用パラメータかを判定する (大文字・小文字を区別しない)
+///
+/// `%75tm_source` のようにパーセントエンコードされたキーはデコードしてから判定する
 fn is_tracking_param(key: &str) -> bool {
+    let key = percent_decode_str(key).decode_utf8_lossy();
+    let key = key.as_ref();
     key.get(..4)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("utm_"))
         || CLICK_ID_PARAMS
@@ -206,18 +236,12 @@ fn is_tracking_param(key: &str) -> bool {
 /// `?` の直後のクエリ文字列からUTMパラメータを除去する
 ///
 /// # Arguments
-/// * `query_and_fragment` - `?` の直後から始まるクエリ文字列 (`#` 以降のフラグメントを含む)
+/// * `query` - `?` の直後から `#` の手前までのクエリ文字列
 ///
 /// # Returns
-/// * `Option<String>` - 除去した場合は、`?` を含めた置き換え後の文字列 (パラメータがすべて除去された場合は `?` を含めない)
+/// * `Option<String>` - 除去した場合は、`?` を含めた置き換え後の文字列 (パラメータがすべて除去された場合は空文字列)
 ///   除去するものがなければ `None`
-fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
-    // クエリ文字列とフラグメント(#以降)を分離する
-    let (query, fragment) = match query_and_fragment.split_once('#') {
-        Some((q, f)) => (q, Some(f)),
-        None => (query_and_fragment, None),
-    };
-
+fn remove_utm_from_query(query: &str) -> Option<String> {
     let params = split_params(query);
     let is_tracking = |param: &str| is_tracking_param(param.split('=').next().unwrap_or(""));
     if !params.iter().any(|(_, param)| is_tracking(param)) {
@@ -232,11 +256,9 @@ fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
         .filter(|(_, param)| !param.is_empty() && !is_tracking(param))
         .collect();
 
-    // フラグメントを復元する
-    let fragment_str = fragment.map(|f| format!("#{f}")).unwrap_or_default();
     if filtered_params.is_empty() {
         // すべて削除された場合は `?` も消す
-        Some(fragment_str)
+        Some(String::new())
     } else {
         // 一部削除された場合は、残したパラメータの直前にあった区切りで連結する (先頭のパラメータには区切りを付けない)
         let mut cleaned = String::from("?");
@@ -246,7 +268,6 @@ fn remove_utm_from_query(query_and_fragment: &str) -> Option<String> {
             }
             cleaned.push_str(param);
         }
-        cleaned.push_str(&fragment_str);
         Some(cleaned)
     }
 }
@@ -630,6 +651,46 @@ mod tests {
         ));
     }
 
+    /// スキームも `/` も `www.` もないホスト名のURLでも除去し、通常の文章は変更しないこと
+    #[test]
+    fn test_remove_utm_params_bare_host() {
+        assert_eq!(
+            remove_utm_params("example.com?utm_source=x&id=1"),
+            "example.com?id=1"
+        );
+        assert_eq!(
+            remove_utm_params("see example.com:8080?utm_source=x"),
+            "see example.com:8080"
+        );
+        assert_eq!(
+            remove_utm_params("詳細はa-b.co.jp?fbclid=1を参照"),
+            "詳細はa-b.co.jpを参照"
+        );
+        for input in [
+            "Really?utm_source=1",
+            "v1.2?utm_source=1",
+            "e.g.?utm_source=1",
+        ] {
+            assert!(
+                matches!(remove_utm_params(input), Cow::Borrowed(_)),
+                "{input}"
+            );
+        }
+    }
+
+    /// パーセントエンコードされたキーも計測用パラメータとして除去すること
+    #[test]
+    fn test_remove_utm_params_percent_encoded_key() {
+        assert_eq!(
+            remove_utm_params("https://a.com/?%75tm_source=x&id=1&%66bclid=y"),
+            "https://a.com/?id=1"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm%5Fsource=x"),
+            "https://a.com/"
+        );
+    }
+
     /// 変更するURLがない文章は元の参照をそのまま返すようにすること
     #[test]
     fn test_remove_utm_params_unchanged_text_is_borrowed() {
@@ -660,5 +721,28 @@ mod tests {
             remove_utm_params("https://example.com/#section"),
             "https://example.com/#section"
         );
+    }
+
+    /// フラグメント内の `?` 以降のクエリも、通常のクエリの有無に関わらず除去すること
+    #[test]
+    fn test_remove_utm_params_query_in_fragment() {
+        assert_eq!(
+            remove_utm_params("https://a.com/#/p?utm_source=x"),
+            "https://a.com/#/p"
+        );
+        // 通常のクエリがあっても、フラグメント内のクエリを見落とさないこと
+        assert_eq!(
+            remove_utm_params("https://a.com/?a=1#/p?utm_source=x"),
+            "https://a.com/?a=1#/p"
+        );
+        assert_eq!(
+            remove_utm_params("https://a.com/?utm_medium=y#/p?id=1&fbclid=x"),
+            "https://a.com/#/p?id=1"
+        );
+        // 除去するものがなければ変更しないこと
+        assert!(matches!(
+            remove_utm_params("https://a.com/?a=1#/p?b=2"),
+            Cow::Borrowed(_)
+        ));
     }
 }

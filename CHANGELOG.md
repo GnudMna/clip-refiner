@@ -29,6 +29,23 @@
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-11-23
+
+### Changed
+
+- MSI インストーラーのライセンス同意画面を削除
+  - MIT License は同意を必要としないため。ライセンス文書はこれまでどおりインストール先に同梱する
+- `--regex-preset` に存在しない名前を渡したとき、有効プリセットで加工せずエラーにするように変更
+  - 名前の打ち間違いに気づけるようにするため
+
+### Fixed
+
+- Excel→Markdown 変換で、セル内の `\|` (バックスラッシュと `|`) が GitHub などで列ずれを起こす問題を修正
+  - `|` の直前のバックスラッシュも重ねてエスケープし、Markdown→Excel でも元の値に戻す
+- Markdown→Excel 変換で、CRLF の改行が LF に変わり、末尾の改行が消える問題を修正
+- UTM 除去で、通常のクエリがある URL のフラグメント内 (`#/p?utm_source=x` など) の計測用パラメータが残る問題を修正
+- UTM 除去で、`example.com?utm_source=x` のようにスキームも `/` も `www.` もないホスト名の URL と、`%75tm_source` のようにパーセントエンコードされたキーが対象外だった問題を修正
+
 ## [4.0.0] - 2026-11-22
 
 ### Changed
@@ -1190,7 +1207,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.1...develop
+[4.0.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.0...v4.0.1
 [4.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.1...v4.0.0
 [3.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.0...v3.1.1
 [3.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.0.2...v3.1.0
