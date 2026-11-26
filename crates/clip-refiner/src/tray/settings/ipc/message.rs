@@ -109,10 +109,8 @@ enum SettingsIpcMessage {
         #[serde(default)]
         sample: String,
     },
-    /// アプリ更新を確認する
+    /// 更新プログラムを起動し、アプリ更新を確認する
     CheckUpdate,
-    /// 確認済みの更新をダウンロードして適用する
-    ApplyUpdate,
 }
 
 /// IPC で受け取る登録クリップの指定 (表示時のインデックスと識別トークン)
@@ -243,10 +241,8 @@ pub(crate) enum SettingsIpcAction {
     FavoriteMove(RefineMode, FavoriteMoveDirection),
     /// 正規表現置換のプレビューを要求する
     RegexPreview(u64, RegexSettings, String),
-    /// アプリ更新を確認する
+    /// 更新プログラムを起動し、アプリ更新を確認する
     CheckUpdate,
-    /// 確認済みの更新をダウンロードして適用する
-    ApplyUpdate,
 }
 
 impl From<SettingsIpcMessage> for SettingsIpcAction {
@@ -282,7 +278,6 @@ impl From<SettingsIpcMessage> for SettingsIpcAction {
                 sample,
             } => Self::RegexPreview(request_id, settings, sample),
             SettingsIpcMessage::CheckUpdate => Self::CheckUpdate,
-            SettingsIpcMessage::ApplyUpdate => Self::ApplyUpdate,
         }
     }
 }

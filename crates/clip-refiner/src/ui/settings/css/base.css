@@ -34,7 +34,7 @@ body {
 }
 
 body {
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg-color);
     color: var(--text-color);
     overflow: hidden;

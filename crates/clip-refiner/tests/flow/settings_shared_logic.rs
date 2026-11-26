@@ -6,10 +6,10 @@ use clip_refiner::test_helpers::{SettingsTestContext, run_js_test_script};
 // テスト
 // ======================================================================
 
-/// `shared_logic.js` の純粋ロジックが Node.js 上で期待どおり動作すること
+/// `shared_logic.ts` の純粋ロジックが Node.js 上で期待どおり動作すること
 #[test]
 fn settings_shared_logic_js_tests() {
-    run_js_test_script("settings_shared_logic.js");
+    run_js_test_script("settings_shared_logic.ts");
 }
 
 /// 通知パッチの Rust 側マージがマスター OFF 時も個別トグルを保持すること

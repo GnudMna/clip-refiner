@@ -69,14 +69,14 @@ git branch -m <prefix>/<kebab-case>
 | :--- | :--- |
 | `comments.md` | Rust のコメントの文体 (常体・句点・半角括弧)、セクション区切り、`///` の構成、`// SAFETY:`、テストの記述 |
 | `imports.md` | Rust の `use` 文のグループ順 (`std` → 外部クレート → `self` / `super` / `crate` / 子モジュール)・空行・グループ内の並び |
-| `javascript.md` | WebView UI の JavaScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント)、E2E の TypeScript |
+| `typescript.md` | WebView UI の TypeScript (バンドルの再生成・`innerHTML` のサニタイズ・純粋ロジックの分離・コメント)、テスト・scripts・E2E |
 | `docs.md` | ドキュメント (`CLAUDE.md`・`.claude/rules/` を含む) の文体、`docs/user/` の制約、CHANGELOG の書き方 |
 
 定型作業は `.claude/skills/` のスキルにまとめている。`check` は `check.ps1` を実行して失敗を直し、`changelog` は利用者に影響する変更を `CHANGELOG.md` の `[Unreleased]` に追記する。
 
-JavaScript / TypeScript の整形・静的検査・型チェックは ESLint / Prettier / `tsc` の設定に従う ([JavaScript リンター](testing.md#javascript-リンター-eslint--prettier))。Markdown の書式は markdownlint で検証する ([Markdown リンター](testing.md#markdown-リンター-markdownlint))。
+TypeScript の整形・静的検査・型チェックは ESLint / Prettier / `tsc` の設定に従う ([TypeScript リンター](testing.md#typescript-リンター-eslint--prettier))。Markdown の書式は markdownlint で検証する ([Markdown リンター](testing.md#markdown-リンター-markdownlint))。
 
-`.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。UI の JavaScript を編集すると PostToolUse フックが `npm run build:ui` を実行する。読み取り系の Git コマンドと `git fetch` は許可する。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
+`.claude/settings.json` は共有の権限設定で、`.env` の読み書きと `*.bundle.js`・`keys/` の直接編集を拒否し、`git push` は確認を挟む。UI の TypeScript を編集すると PostToolUse フックが `npm run build:ui` を実行する。読み取り系の Git コマンドと `git fetch` は許可する。個人用の上書きは `.claude/settings.local.json` に置く (Git 管理外)。
 
 ## ドキュメントの配置
 
@@ -113,8 +113,8 @@ JavaScript / TypeScript の整形・静的検査・型チェックは ESLint / P
 | 既定ホットキー | README のホットキー表、`docs/user/configuration.md` の `[hotkeys]` |
 | 利用者向けの挙動 | README / `docs/user/` の該当節、[CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` |
 | README のクイックスタート | `docs/user/introduction.md` の「はじめて使う」 |
-| UI の JavaScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`tests/flow/ui_bundle.rs` が検出) |
-| WebView と受け渡す JSON の Rust 型 (設定スナップショット・`SettingsPatch`・IPC メッセージ・更新確認の応答など) | `crates/clip-refiner/src/ui/ipc.d.ts` の型宣言 (Rust 側とのずれは `cargo test` の `tray::settings::webview_contract_tests`、UI 側の使い方とのずれは `npm run typecheck` が検出する)。IPC メッセージや更新応答の種類を足したら、同テストのサンプルにも足す |
+| UI の TypeScript (`src/ui/`) | 再生成した `*.bundle.js` (`npm run build:ui`。`tests/flow/ui_bundle.rs` が検出) |
+| WebView と受け渡す JSON の Rust 型 (設定スナップショット・`SettingsPatch`・IPC メッセージなど) | `crates/clip-refiner/src/ui/ipc.ts` の型宣言 (Rust 側とのずれは `cargo test` の `tray::settings::webview_contract_tests`、UI 側の使い方とのずれは `npm run typecheck` が検出する)。IPC メッセージの種類を足したら、同テストのサンプルにも足す |
 | ディレクトリ・ファイルの移動 / 改名 / 削除 | [アーキテクチャ](architecture.md) の構成図と表 (`tests/flow/architecture_doc.rs` が実在しないパスを検出) |
 
-公開 API の破壊的変更は CHANGELOG の **Breaking changes** / **Changed** / **Removed** へ書き、設定スキーマ変更は **Settings** 節にも移行方法を記載する。
+アプリケーションとして提供しているため、ライブラリ (`clip-refiner-core` など) の公開 API の変更は CHANGELOG に書かない ([CHANGELOG.md](../../CHANGELOG.md) 冒頭の規約)。設定スキーマ変更は **Settings** 節に移行方法を記載する。

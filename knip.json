@@ -1,0 +1,31 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": [
+        "crates/clip-refiner/src/ui/settings/main.ts",
+        "crates/clip-refiner/src/ui/selector/quick_selector.ts",
+        "crates/clip-refiner/src/ui/selector/clip_selector.ts",
+        "crates/clip-refiner/tests/ui/*.ts",
+        "scripts/common/*.ts",
+        "e2e/specs/*.ts"
+    ],
+    "project": ["crates/clip-refiner/src/ui/**/*.ts", "crates/clip-refiner/tests/ui/*.ts", "scripts/**/*.ts", "e2e/**/*.ts"],
+    // cycles は既定で無効なため、既定の検査項目に足して明示する
+    "include": [
+        "files",
+        "subpaths",
+        "dependencies",
+        "unlisted",
+        "binaries",
+        "unresolved",
+        "exports",
+        "types",
+        "enumMembers",
+        "namespaceMembers",
+        "duplicates",
+        "catalog",
+        "catalogReferences",
+        "cycles"
+    ],
+    // markdownlint-cli2 が同梱するライブラリを直接読む (カスタムルール用)
+    "ignoreDependencies": ["markdownlint"]
+}

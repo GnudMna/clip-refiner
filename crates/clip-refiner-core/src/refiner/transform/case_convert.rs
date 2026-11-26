@@ -54,6 +54,22 @@ fn capitalize_word(word: &str) -> String {
     result
 }
 
+/// 先頭の `_` / `-` を維持して単語列を組み立てる
+///
+/// `_private` や `--flag` の接頭辞は区切りではなく識別子の一部として残す
+fn convert_identifier<F>(line: &str, build: F) -> String
+where
+    F: Fn(Vec<String>) -> String,
+{
+    let body = line.trim_start_matches(['_', '-']);
+    let prefix = &line[..line.len() - body.len()];
+    let words = split_identifier(body);
+    if words.is_empty() {
+        return line.to_string();
+    }
+    format!("{prefix}{}", build(words))
+}
+
 // ======================================================================
 // 行単位変換
 // ======================================================================
@@ -95,15 +111,13 @@ where
 /// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_camel_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
-        let words = split_identifier(line);
-        if words.is_empty() {
-            return line.to_string();
-        }
-        let mut result = words[0].clone();
-        for word in words.iter().skip(1) {
-            result.push_str(&capitalize_word(word));
-        }
-        result
+        convert_identifier(line, |words| {
+            let mut result = words[0].clone();
+            for word in words.iter().skip(1) {
+                result.push_str(&capitalize_word(word));
+            }
+            result
+        })
     })
 }
 
@@ -116,11 +130,7 @@ pub fn to_camel_case(text: &str) -> Cow<'_, str> {
 /// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_snake_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
-        let words = split_identifier(line);
-        if words.is_empty() {
-            return line.to_string();
-        }
-        words.join("_")
+        convert_identifier(line, |words| words.join("_"))
     })
 }
 
@@ -133,11 +143,9 @@ pub fn to_snake_case(text: &str) -> Cow<'_, str> {
 /// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_pascal_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
-        let words = split_identifier(line);
-        if words.is_empty() {
-            return line.to_string();
-        }
-        words.iter().map(|word| capitalize_word(word)).collect()
+        convert_identifier(line, |words| {
+            words.iter().map(|word| capitalize_word(word)).collect()
+        })
     })
 }
 
@@ -150,11 +158,7 @@ pub fn to_pascal_case(text: &str) -> Cow<'_, str> {
 /// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_kebab_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
-        let words = split_identifier(line);
-        if words.is_empty() {
-            return line.to_string();
-        }
-        words.join("-")
+        convert_identifier(line, |words| words.join("-"))
     })
 }
 
@@ -167,15 +171,13 @@ pub fn to_kebab_case(text: &str) -> Cow<'_, str> {
 /// * `Cow<'_, str>` - 変換後の文字列。変更がない場合は元の文字列を借用
 pub fn to_screaming_snake_case(text: &str) -> Cow<'_, str> {
     convert_lines(text, |line| {
-        let words = split_identifier(line);
-        if words.is_empty() {
-            return line.to_string();
-        }
-        words
-            .iter()
-            .map(|word| word.to_uppercase())
-            .collect::<Vec<_>>()
-            .join("_")
+        convert_identifier(line, |words| {
+            words
+                .iter()
+                .map(|word| word.to_uppercase())
+                .collect::<Vec<_>>()
+                .join("_")
+        })
     })
 }
 
@@ -314,5 +316,18 @@ mod tests {
     fn test_no_change_returns_borrowed() {
         let input = "foo_bar";
         assert!(matches!(to_snake_case(input), Cow::Borrowed(_)));
+    }
+
+    /// 先頭の `_` / `-` を識別子の一部として維持すること
+    #[test]
+    fn test_leading_separators_are_preserved() {
+        assert_eq!(to_snake_case("_privateFoo"), "_private_foo");
+        assert_eq!(to_camel_case("__private_foo"), "__privateFoo");
+        assert_eq!(to_kebab_case("--dry_run"), "--dry-run");
+        assert_eq!(to_snake_case("--dryRun"), "--dry_run");
+        assert_eq!(to_pascal_case("_foo_bar"), "_FooBar");
+        assert_eq!(to_screaming_snake_case("_fooBar"), "_FOO_BAR");
+        // 区切りのみの入力は変換しない
+        assert!(matches!(to_snake_case("___"), Cow::Borrowed(_)));
     }
 }

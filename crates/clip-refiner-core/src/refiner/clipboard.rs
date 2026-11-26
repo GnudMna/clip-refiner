@@ -342,11 +342,14 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlCli
 
     let (text_modes, image_tail) = split_pipeline(pipeline);
 
-    let Some(&first_mode) = text_modes.first() else {
-        let Some(image_mode) = image_tail else {
-            return Err(ClipboardProcessError::NoText);
-        };
+    // 最終的に画像で置き換わるため、前段のテキストは書き戻さない
+    // 先に書くと `EmptyClipboard` で Excel の描画ビットマップが消え、画像を読めなくなる
+    if let Some(image_mode) = image_tail {
         return process_image_clipboard(clipboard, image_mode, ctx);
+    }
+
+    let Some(&first_mode) = text_modes.first() else {
+        return Err(ClipboardProcessError::NoText);
     };
 
     let html_source = if first_mode.reads_html() {
@@ -357,8 +360,7 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlCli
     let text_result = clipboard.get_text();
 
     // テキストが無く画像だけがあるときは、画像を Base64 テキストへ変換する
-    if image_tail.is_none()
-        && html_source.is_none()
+    if html_source.is_none()
         && text_result.as_ref().map_or(true, String::is_empty)
         && let Some(outcome) = write_image_as_base64(clipboard, &text_modes, ctx)?
     {
@@ -374,9 +376,7 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlCli
     let source = html_source.as_deref().unwrap_or(&text);
 
     // Base64 デコードの結果が画像なら、テキストではなく画像として書き込む
-    if image_tail.is_none()
-        && let Some(outcome) = write_base64_image(clipboard, source, &text_modes, ctx)?
-    {
+    if let Some(outcome) = write_base64_image(clipboard, source, &text_modes, ctx)? {
         return Ok(outcome);
     }
 
@@ -400,20 +400,8 @@ pub fn process_clipboard_pipeline_io<C: TextClipboard + ImageClipboard + HtmlCli
     };
 
     match text_outcome {
-        ClipboardProcessOutcome::Processed(result) => {
-            if let Some(image_mode) = image_tail {
-                return process_image_clipboard(clipboard, image_mode, ctx);
-            }
-            Ok(ClipboardProcessOutcome::Processed(result))
-        }
-        ClipboardProcessOutcome::Unchanged => {
-            if let Some(image_mode) = image_tail {
-                process_image_clipboard(clipboard, image_mode, ctx)
-            } else {
-                Ok(ClipboardProcessOutcome::Unchanged)
-            }
-        }
         ClipboardProcessOutcome::ImageProcessed { .. } => Ok(ClipboardProcessOutcome::Unchanged),
+        outcome => Ok(outcome),
     }
 }
 

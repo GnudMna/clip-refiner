@@ -1,0 +1,12 @@
+{
+    "extends": "../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "../node_modules/.cache/tsc/scripts",
+        "tsBuildInfoFile": "../node_modules/.cache/tsc/scripts.tsbuildinfo",
+        // リポジトリ直下の ESLint 設定も検査するため、基準をリポジトリ直下にする
+        "rootDir": "..",
+        "lib": ["es2024"],
+        "types": ["node"]
+    },
+    "include": ["**/*.ts", "../eslint.config.ts"]
+}

@@ -99,8 +99,5 @@ pub(crate) fn dispatch_settings_ipc(
         SettingsIpcAction::CheckUpdate => {
             dispatch::send_app_event(proxy, SettingsEvent::CheckUpdate.into());
         }
-        SettingsIpcAction::ApplyUpdate => {
-            dispatch::send_app_event(proxy, SettingsEvent::ApplyUpdate.into());
-        }
     }
 }

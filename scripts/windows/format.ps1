@@ -22,9 +22,9 @@ Invoke-ScriptMain {
     Invoke-CargoFmt
     Write-Host ''
 
-    Write-Host 'Prettier による JavaScript 整形を実行しています...'
+    Write-Host 'Prettier による TypeScript 整形を実行しています...'
     Write-Host ''
-    Invoke-JavaScriptFormat
+    Invoke-TypeScriptFormat
     Write-Host ''
 
     Write-Host 'markdownlint による Markdown の自動修正を実行しています...'

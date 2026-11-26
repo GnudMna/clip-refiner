@@ -27,7 +27,6 @@ use super::ipc::{dispatch_settings_ipc, parse_settings_ipc_message};
 use super::regex_preview::RegexPreviewResponse;
 use super::snapshot::SettingsSnapshot;
 use crate::consts;
-use crate::platform::update::{UpdateApplyUiResponse, UpdateCheckUiResponse};
 use crate::tray::menu::create_window_icon;
 use crate::tray::selector::{
     WebSelectorWindow, WebViewWindowOptions, json_parse_call_script, settings_load_script,
@@ -275,34 +274,6 @@ impl SettingsWindow {
         }
     }
 
-    /// 更新確認結果を JavaScript へ通知する
-    pub(crate) fn notify_update_check(&self, response: &UpdateCheckUiResponse) {
-        if !self.is_visible() {
-            return;
-        }
-        let Ok(json) = serde_json::to_string(response) else {
-            return;
-        };
-        let script = json_parse_call_script("onUpdateCheck", &json);
-        if let Some(inner) = self.inner.borrow().as_ref() {
-            inner.evaluate_script(&script);
-        }
-    }
-
-    /// 更新適用結果を JavaScript へ通知する
-    pub(crate) fn notify_update_apply(&self, response: &UpdateApplyUiResponse) {
-        if !self.is_visible() {
-            return;
-        }
-        let Ok(json) = serde_json::to_string(response) else {
-            return;
-        };
-        let script = json_parse_call_script("onUpdateApply", &json);
-        if let Some(inner) = self.inner.borrow().as_ref() {
-            inner.evaluate_script(&script);
-        }
-    }
-
     /// 設定ウィンドウを非表示にし、`WebView` を破棄する
     ///
     /// # Arguments
@@ -367,7 +338,7 @@ impl SettingsWindow {
 /// * `text` - 現在の本文
 ///
 /// # Returns
-/// * `serde_json::Value` - JavaScript の `ClipEditorPayload` (`ui/ipc.d.ts`)
+/// * `serde_json::Value` - JavaScript の `ClipEditorPayload` (`ui/ipc.ts`)
 pub(super) fn clip_editor_payload(
     index: usize,
     token: u64,
@@ -389,7 +360,7 @@ pub(super) fn clip_editor_payload(
 /// * `message` - 失敗時に表示する理由
 ///
 /// # Returns
-/// * `serde_json::Value` - JavaScript の `ClipEditResult` (`ui/ipc.d.ts`)
+/// * `serde_json::Value` - JavaScript の `ClipEditResult` (`ui/ipc.ts`)
 pub(super) fn clip_edit_result_payload(ok: bool, message: &str) -> serde_json::Value {
     serde_json::json!({ "ok": ok, "message": message })
 }

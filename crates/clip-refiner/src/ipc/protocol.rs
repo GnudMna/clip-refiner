@@ -5,13 +5,17 @@ use std::io::{self, BufRead, Read};
 use serde::{Deserialize, Serialize};
 
 use crate::config::RegexStep;
-use crate::refiner::{ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode};
+use crate::refiner::{
+    ClipboardProcessError, ClipboardProcessOutcome, RefineCategory, RefineContext, RefineMode,
+};
 
 // ======================================================================
 // 定数
 // ======================================================================
 /// IPC メッセージ本文の最大バイト数
-pub(crate) const MAX_IPC_MESSAGE_BYTES: usize = 64 * 1024;
+///
+/// 正規表現プリセットの最大構成 (パターン 8 KiB × 10 ステップ + 置換文字列と JSON エスケープ) が収まる値
+pub(crate) const MAX_IPC_MESSAGE_BYTES: usize = 256 * 1024;
 
 // ======================================================================
 // 行の読み取り
@@ -317,7 +321,15 @@ pub fn build_request(
     OneshotIpcRequest::ProcessClipboard {
         request_id: request_id.into(),
         pipeline: pipeline.to_vec(),
-        regex: OneshotRegexOverride::from_context(ctx),
+        regex: if pipeline
+            .iter()
+            .any(|mode| mode.category() == RefineCategory::Regex)
+        {
+            OneshotRegexOverride::from_context(ctx)
+        } else {
+            // 正規表現を使わない加工では設定を送らず、要求の肥大化を避ける
+            OneshotRegexOverride::default()
+        },
     }
 }
 
@@ -455,11 +467,40 @@ mod tests {
             case_insensitive: true,
             multiline: false,
         }));
-        let request = build_request(&[RefineMode::Trim, RefineMode::UrlDecode], &ctx, "req-1");
+        let request = build_request(&[RefineMode::Trim, RefineMode::RegexReplace], &ctx, "req-1");
         let json = serde_json::to_string(&request).expect("serialize");
         let parsed = parse_request(&json).expect("parse");
         assert_eq!(parsed, request);
         assert!(json.contains("\"steps\""));
+    }
+
+    /// 正規表現モードを含まない要求には正規表現設定を載せないこと
+    ///
+    /// 最大構成の設定を持っていても、正規表現と無関係な加工が上限超過で失敗しない
+    #[test]
+    fn request_omits_regex_settings_without_regex_mode() {
+        let step = RegexStep {
+            pattern: "x".repeat(crate::consts::MAX_REGEX_PATTERN_BYTES),
+            ..RegexStep::default()
+        };
+        let preset = RegexPreset {
+            id: "big".into(),
+            name: "big".into(),
+            steps: vec![step; crate::consts::MAX_REGEX_STEPS_PER_PRESET],
+        };
+        let ctx = RefineContext::with_regex(RegexSettings {
+            active_preset_id: "big".into(),
+            presets: vec![preset],
+        });
+
+        let request = build_request(&[RefineMode::Trim], &ctx, "req-1");
+        let json = serde_json::to_string(&request).expect("serialize");
+        assert!(!json.contains("\"steps\""));
+
+        // 正規表現モードを含む最大構成の要求も上限に収まる
+        let request = build_request(&[RefineMode::RegexReplace], &ctx, "req-2");
+        let json = serde_json::to_string(&request).expect("serialize");
+        assert!(json.len() <= MAX_IPC_MESSAGE_BYTES);
     }
 
     /// 応答 JSON を往復できるようにすること

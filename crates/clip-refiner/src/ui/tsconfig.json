@@ -1,11 +1,10 @@
 {
     "extends": "../../../../tsconfig.base.json",
     "compilerOptions": {
-        "lib": ["es2022", "dom", "dom.iterable"],
-        "types": [],
-        "allowJs": true,
-        "checkJs": true
+        "outDir": "../../../../node_modules/.cache/tsc/ui",
+        "tsBuildInfoFile": "../../../../node_modules/.cache/tsc/ui.tsbuildinfo",
+        "lib": ["es2024", "dom", "dom.iterable"],
+        "types": []
     },
-    "include": ["**/*.js", "**/*.d.ts"],
-    "exclude": ["**/*.bundle.js"]
+    "include": ["**/*.ts"]
 }

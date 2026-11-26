@@ -1,0 +1,11 @@
+{
+    // `npm run typecheck` (`tsc -b`) の入口。各プロジェクトを project references として束ね、
+    // 変更のあったプロジェクトだけを再検査する (ビルド情報は node_modules/.cache/tsc/ に置く)
+    "files": [],
+    "references": [
+        { "path": "crates/clip-refiner/src/ui" },
+        { "path": "crates/clip-refiner/tests/ui" },
+        { "path": "scripts" },
+        { "path": "e2e" }
+    ]
+}

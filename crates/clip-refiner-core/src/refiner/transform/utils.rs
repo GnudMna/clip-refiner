@@ -169,7 +169,7 @@ mod tests {
         // 最終行が改行で終わっていなければ、改行コードは空
         assert_eq!(split_line_endings("a\nb"), [("a", "\n"), ("b", "")]);
         assert_eq!(split_line_endings("\n"), [("", "\n")]);
-        assert!(split_line_endings("").is_empty());
+        assert_eq!(split_line_endings("").len(), 0);
     }
 
     /// 元が改行終わり、または最終行が空行のときだけ末尾に改行を足して結合すること

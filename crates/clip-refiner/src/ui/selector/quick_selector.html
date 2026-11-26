@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy" content="__WEBVIEW_CSP__" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            @import url("selector.css");
+        </style>
+    </head>
+
+    <body>
+        <div id="container">
+            <div id="search-box">
+                <div class="selector-heading">クイックセレクター</div>
+                <input
+                    type="text"
+                    id="input"
+                    placeholder="モード名・カテゴリ・CLI名で検索..."
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+            </div>
+            <div id="results"></div>
+            <div id="footer">
+                <span class="hint"><kbd>↑↓</kbd>移動</span>
+                <span class="hint"><kbd>Enter</kbd>今回だけ変換</span>
+                <span class="hint"><kbd>Ctrl+Enter</kbd>自動変換に設定</span>
+                <span class="hint"><kbd>←→</kbd>カテゴリ開閉</span>
+                <span class="hint"><kbd>Ctrl+D</kbd>お気に入り</span>
+                <span class="hint"><kbd>Ctrl+Shift+↑↓</kbd>順序</span>
+                <span class="hint"><kbd>Esc</kbd>閉じる</span>
+            </div>
+        </div>
+
+        <!-- Rust がモード JSON へ置換する目印のため、整形で改行を入れさせない -->
+        <!-- prettier-ignore -->
+        <script type="application/json" id="modes-data">[]</script>
+        <script src="quick_selector.js"></script>
+    </body>
+</html>

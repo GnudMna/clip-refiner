@@ -3,11 +3,11 @@ use std::fmt::Write;
 use toml_edit::{DocumentMut, Table};
 
 use super::super::docs::{
-    DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED, DOC_MODE,
-    DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION, DOC_VERSION, SECTION_BASIC,
-    SECTION_CONTINUOUS_RECORD, SECTION_HISTORY, SECTION_MONITOR, SECTION_SELECTOR_WEBVIEW,
-    doc_continuous_record_limit, doc_favorite_modes, doc_history_limit, doc_interval_ms,
-    doc_pipeline, doc_selector_webview_idle_minutes,
+    DOC_AUTO_REFINE_ENABLED, DOC_CONTINUOUS_RECORD_ENABLED, DOC_HISTORY_ENABLED,
+    DOC_KEEP_CLIPBOARD_EXCLUSION, DOC_MODE, DOC_MONITOR_MODE, DOC_SELECTOR_WEBVIEW_RETENTION,
+    DOC_VERSION, SECTION_BASIC, SECTION_CONTINUOUS_RECORD, SECTION_HISTORY, SECTION_MONITOR,
+    SECTION_SELECTOR_WEBVIEW, doc_continuous_record_limit, doc_favorite_modes, doc_history_limit,
+    doc_interval_ms, doc_pipeline, doc_selector_webview_idle_minutes,
 };
 use super::super::document::set_table_value;
 use super::super::format::{write_field, write_section};
@@ -80,6 +80,13 @@ fn write_root_table(root: &mut Table, config: &AppConfig) -> Result<()> {
     )?;
     set_table_value(
         root,
+        "keep_clipboard_exclusion",
+        DOC_KEEP_CLIPBOARD_EXCLUSION,
+        "",
+        &config.keep_clipboard_exclusion,
+    )?;
+    set_table_value(
+        root,
         "continuous_record_enabled",
         DOC_CONTINUOUS_RECORD_ENABLED,
         "",
@@ -126,6 +133,13 @@ pub(crate) fn append_template<W: Write>(out: &mut W, config: &AppConfig) -> Resu
         &doc_favorite_modes(),
         "favorite_modes",
         &config.favorite_modes,
+    )?;
+    write_field(
+        out,
+        "",
+        DOC_KEEP_CLIPBOARD_EXCLUSION,
+        "keep_clipboard_exclusion",
+        &config.keep_clipboard_exclusion,
     )?;
 
     write_section(out, SECTION_MONITOR)?;

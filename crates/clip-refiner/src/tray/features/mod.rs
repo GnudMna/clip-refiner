@@ -30,10 +30,7 @@ pub(crate) use refine::{
     select_auto_refine_mode, set_auto_refine_enabled, set_refine_mode, toggle_favorite_mode,
 };
 pub(crate) use regex::handle_regex_preset_event;
-pub(crate) use update::{
-    handle_update_apply_finished, handle_update_check_finished, start_update_apply,
-    start_update_check,
-};
+pub(crate) use update::start_updater;
 
 pub use monitor::update_monitor_mode;
 #[cfg(test)]

@@ -1,17 +1,18 @@
 [workspace]
-members = ["crates/clip-refiner", "crates/clip-refiner-core"]
+members = ["crates/clip-refiner", "crates/clip-refiner-core", "crates/clip-refiner-updater"]
 resolver = "2"
 
 [workspace.package]
-version = "4.0.1"
+version = "4.1.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.100"
 authors = ["Yuto Hirata"]
 license = "MIT"
 
 # メンバは `workspace = true` で参照する。optional / 追加 features は各 Cargo.toml で指定する
 [workspace.dependencies]
 clip-refiner-core = { path = "crates/clip-refiner-core" }
+clip-refiner-updater = { path = "crates/clip-refiner-updater" }
 
 anyhow = "1.0.104"
 arboard = "3.7.0"

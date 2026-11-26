@@ -3,3 +3,8 @@ target/
 THIRD_PARTY_NOTICES
 wix/
 crates/clip-refiner/src/ui/**/*.bundle.js
+# 整形の対象は TypeScript / CSS / HTML のみ (Markdown は markdownlint、JSON・テンプレートは対象外)
+*.md
+*.json
+*.jsonc
+*.hbs

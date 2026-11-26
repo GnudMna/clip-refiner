@@ -14,6 +14,9 @@ pub(crate) const DOC_MONITOR_MODE: &str = "監視方式 (\"Polling\" または \
 pub(crate) const DOC_SELECTOR_WEBVIEW_RETENTION: &str =
     "セレクター WebView の保持方針 (\"Keep\" / \"DisposeOnHide\" / \"DisposeAfterIdle\")";
 pub(crate) const DOC_HISTORY_ENABLED: &str = "加工履歴の有効・無効";
+
+pub(crate) const DOC_KEEP_CLIPBOARD_EXCLUSION: &str =
+    "手動加工・登録クリップのコピーで、履歴・クラウド同期から除外する形式を付ける";
 pub(crate) const DOC_CONTINUOUS_RECORD_ENABLED: &str =
     "連続記録モード (監視時は加工せず元テキストを記録)";
 pub(crate) const DOC_NS_ENABLED: &str = "デスクトップ通知の有効・無効 (エラー通知は常に表示)";

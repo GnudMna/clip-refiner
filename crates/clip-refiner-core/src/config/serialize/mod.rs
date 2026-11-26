@@ -208,7 +208,7 @@ favoriteModeSlots = ["Alt+Shift+7"]
         let content = config_to_toml(&config, Some(existing)).expect("TOML の生成に失敗");
         let decoded: AppConfig = toml::from_str(&content).expect("保存後 TOML の解析に失敗");
 
-        assert!(decoded.hotkeys.favorite_mode_slots.is_empty());
+        assert_eq!(decoded.hotkeys.favorite_mode_slots.len(), 0);
     }
 
     /// コメント付き TOML に各項目の説明が含まれるようにすること

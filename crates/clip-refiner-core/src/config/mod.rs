@@ -329,7 +329,7 @@ interval_ms = 500
         assert_eq!(prepared.version, consts::CONFIG_VERSION);
         assert_eq!(prepared.mode, RefineMode::Trim);
         assert_eq!(prepared.interval_ms, 500);
-        assert!(prepared.favorite_modes.is_empty());
+        assert_eq!(prepared.favorite_modes.len(), 0);
     }
 
     /// v0 TOML を保存すると現行スキーマで書き出されるようにすること
@@ -453,7 +453,7 @@ history_enabled = true
         };
         hotkeys.fix_duplicates();
         assert_eq!(hotkeys.favorite_mode_slots[0], "Alt+Shift+F10");
-        assert!(hotkeys.favorite_mode_slots[1].is_empty());
+        assert_eq!(hotkeys.favorite_mode_slots[1].len(), 0);
     }
 
     /// `add_registered_clip` が登録・検証・上限チェックを行い、平文を常駐させないようにすること
@@ -465,9 +465,9 @@ history_enabled = true
             let mut config = AppConfig::default();
             assert_eq!(config.add_registered_clip("  hello  "), Ok(()));
             assert_eq!(config.clips.len(), 1);
-            assert!(!config.clips[0].text_ciphertext.is_empty());
-            assert!(!config.clips[0].label.is_empty());
-            assert!(!config.clips[0].preview.is_empty());
+            assert_ne!(config.clips[0].text_ciphertext.len(), 0);
+            assert_ne!(config.clips[0].label.len(), 0);
+            assert_ne!(config.clips[0].preview.len(), 0);
             let resolved = config.resolve_registered_clip(0).expect("resolve");
             match resolved {
                 super::ResolvedClip::Text(text) => assert_eq!(text.as_str(), "  hello  "),

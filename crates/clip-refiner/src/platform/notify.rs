@@ -211,7 +211,7 @@ mod tests {
     /// 埋め込み ICO が空でないようにすること
     #[test]
     fn registry_icon_bytes_not_empty() {
-        assert!(!REGISTRY_ICON_BYTES.is_empty());
+        assert_ne!(REGISTRY_ICON_BYTES.len(), 0);
     }
 
     /// `\\?\` プレフィックスを除去できるようにすること

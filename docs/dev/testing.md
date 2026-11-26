@@ -27,7 +27,7 @@ cargo test -p clip-refiner-core --no-default-features --all-targets
 cargo doc -p clip-refiner-core --no-deps --open
 ```
 
-UI の JavaScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run build:ui` でバンドルを再生成し、`*.bundle.js` も同じコミットに含める。再生成を忘れると `cargo test` の `ui_bundle` (`tests/flow/ui_bundle.rs`) が失敗する ([JavaScript リンター](#javascript-リンター-eslint--prettier))。
+UI の TypeScript (`crates/clip-refiner/src/ui/`) を変更したら `npm run build:ui` でバンドルを再生成し、`*.bundle.js` も同じコミットに含める。再生成を忘れると `cargo test` の `ui_bundle` (`tests/flow/ui_bundle.rs`) が失敗する ([TypeScript リンター](#typescript-リンター-eslint--prettier))。
 
 UI ロジックテストと Rust ↔ JS の型テスト (`webview_contract_tests`) は Node.js 未インストール時 (型テストは `npm ci` 未実行で TypeScript が無いときも) にスキップする (`note:` を出力)。`check.ps1` は Node.js を検証し `CLIP_REFINER_REQUIRE_NODE=1` で必須化する。意図的にスキップする場合は `CLIP_REFINER_SKIP_NODE_TESTS=1` を設定する。
 
@@ -50,14 +50,15 @@ UI ロジックテストと Rust ↔ JS の型テスト (`webview_contract_tests
 | `settings` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/自動変換と連続記録の排他・`config.toml` 永続化往復 |
 | `notification` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform` | ホットキー解釈・OS 登録・自動起動状態照会 |
-| `update` | ローカル HTTP モック bridge による更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・キー必須 DL の成功 / 認証失敗含む。`msiexec` / 差し替えヘルパー / エクスプローラーは起動しない) |
-| `regex_preview_logic` | 設定 UI の正規表現プレビュー JS ロジック (Node.js 実行) |
-| `settings_ui_logic` | 設定 UI のパッチマージ JS ロジック (`settings_patch.js` / Node.js 実行) |
-| `settings_shared_logic` | 設定 UI 共有純粋ロジック (`shared_logic.js` / Node.js 実行) |
-| `settings_panels_logic` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.js`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
-| `selector_logic` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector-common.js` / `quick_selector_logic.js` / `clip_selector_logic.js` / Node.js 実行) |
+| `update` | ローカル HTTP モックサーバによる更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・回数制限 (403 / 429) 含む。アセットはリダイレクト経由で返す。`msiexec` は起動せず、インストール先も変更しない) |
+| `regex_preview_logic` | 設定 UI の正規表現プレビューのロジック (Node.js 実行) |
+| `settings_ui_logic` | 設定 UI のパッチマージのロジック (`settings_patch.ts` / Node.js 実行) |
+| `settings_shared_logic` | 設定 UI 共有純粋ロジック (`shared_logic.ts` / Node.js 実行) |
+| `settings_context_logic` | 設定 UI の共有状態と、それを参照する HTML 組み立て・制限値・正規表現の検証 (`ctx.ts` / `html_builders.ts` / `limits.ts` / `regex_validation.ts` / Node.js 実行) |
+| `settings_panels_logic` | 設定 UI パネル / イベント純粋ロジック (`panels_logic.ts`: サイドバー HTML・WAI-ARIA タブ移動・クリップ行・パイプライン操作・クリック委譲 / Node.js 実行) |
+| `selector_logic` | セレクター共有・クイック・登録クリップ純粋ロジック (`selector_common.ts` / `quick_selector_logic.ts` / `clip_selector_logic.ts` / Node.js 実行) |
 | `ui_bundle` | コミット済み `*.bundle.js` 先頭の入力一覧・SHA-256 をソースから再計算し、バンドルの再生成忘れを検出 (Node.js 不要) |
-| `license_ui` | 設定ウィンドウの情報タブ (`panels.js`) に載せた著作権表記とライセンス形態が `LICENSE` 冒頭と一致することを検証 (`LICENSE` だけ更新した取り残しを検出。Node.js 不要) |
+| `license_ui` | 設定ウィンドウの情報タブ (`panels.ts`) に載せた著作権表記とライセンス形態が `LICENSE` 冒頭と一致することを検証 (`LICENSE` だけ更新した取り残しを検出。Node.js 不要) |
 | `architecture_doc` | `docs/dev/architecture.md` の構成図・基準ディレクトリ付きの表・バッククォート内のパスが実在することを検証 (移動・改名後の記述の取り残しを検出) |
 | `oneshot` | ワンショット相当のパイプライン加工・常駐委譲時の監視エコー回避 |
 | `oneshot_ipc` | 実名前付きパイプ IPC の往復 (加工成功 / 変更なし / 正規表現上書き / 複数ステッププリセット / 空パイプライン / 不正 JSON / ワーカー停止 / 過大要求 / 連続委譲 / 無応答接続の並行 / 同時処理上限からの回復 / 読み取り期限による無応答・途中送信接続の切断)。パイプ ACL の同一ユーザー接続は `ipc/server.rs` ユニットでも検証 |
@@ -92,10 +93,10 @@ core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で�
 
 | 層 | 手段 | カバー範囲 |
 | :--- | :--- | :--- |
-| JS 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
-| Rust ↔ JS の型 | `tray/settings/webview_contract_tests.rs` ユニット (Node.js と `npm ci` 済みの TypeScript) | Rust の実際の型から作った JSON (設定スナップショット・差分更新・適用結果・正規表現プレビュー・更新確認 / 適用の全応答・セレクターの `focusInput` / `refreshModes` / `refreshItems` スクリプト) を `window.*` の引数として `src/ui/ipc.d.ts` で型検査 (`tsc`)。設定ウィンドウの IPC メッセージ全種類が Rust で解釈でき、かつ TypeScript の型を満たすこと。Rust の enum バリアントと TypeScript の union の網羅 |
+| UI 純粋ロジック | `settings_*_logic` / `regex_preview_logic` / `selector_logic` (Node.js) | パッチマージ、再描画判定、件数クランプ、閉じる IPC (`apply`→`close`)、Escape / ショートカット差分更新、正規表現プレビュー (タイムアウト表示含む)、パネル HTML / クリック委譲、セレクター検索・選択・行組み立て |
+| Rust ↔ JS の型 | `tray/settings/webview_contract_tests.rs` ユニット (Node.js と `npm ci` 済みの TypeScript) | Rust の実際の型から作った JSON (設定スナップショット・差分更新・適用結果・正規表現プレビュー・セレクターの `focusInput` / `refreshModes` / `refreshItems` スクリプト) を `window.*` の引数として `src/ui/ipc.ts` で型検査 (`tsc`)。設定ウィンドウの IPC メッセージ全種類が Rust で解釈でき、かつ TypeScript の型を満たすこと。Rust の enum バリアントと TypeScript の union の網羅 |
 | Rust IPC / 組み立て | `flow/settings.rs` / `settings/window/` / `settings/ipc/` / `settings/geometry.rs` / `settings/apply/patch/selector_webview.rs` / `selector/{window,lazy,quick,clip,retention}.rs` / `app_control` / `favorites` / `paths` ユニット | `apply` パッチ適用と `config.toml` 往復、HTML/JS インライン展開、シェル DOM・タブ定義、`closeWindow` 公開、ウィンドウ幾何 JSON 往復、セレクターアセット埋め込み・保持方針 (`Keep` / `DisposeOnHide` / `DisposeAfterIdle`)、トレイ「設定」メニュー、お気に入り並び→`modes_to_json_list`、`open_config_file` 起動パスキャプチャ |
-| Playwright E2E | `e2e/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 での描画・キー操作・`config.toml` への保存。ファイルごとの範囲は [WebView E2E](#webview-e2e-playwright) |
+| Playwright E2E | `e2e/specs/*.spec.ts` (`npm run test:e2e`) | 実 WebView2 での描画・キー操作・`config.toml` への保存。ファイルごとの範囲は [WebView E2E](#webview-e2e-playwright) |
 | OCR / ホットキー (Rust) | `platform/ocr_overlay/*` / `tray/ocr/capture.rs` / `tray/hotkey/tests.rs` / `flow/ocr.rs` | オーバーレイ生成・表示、マウスメッセージ注入による範囲確定/Escape キャンセル、選択プレビュー画素 (透明穴+枠色)、`OcrJobGate` 世代破棄、ホットキーによる OCR/セレクター相互排他、OCR 結果のクリップボード書き込み |
 
 OCR オーバーレイは WebView ではない (Win32 レイヤードウィンドウ)。ライフサイクル・ドラッグ確定・枠描画は上記 Rust テストで回帰検知する。キャプチャ後の OCR は `tray/ocr/capture.rs` の `OcrJobGate` で同時 1 本に直列化し、新しい範囲選択で旧世代の結果適用を破棄する。
@@ -111,15 +112,16 @@ OCR オーバーレイは WebView ではない (Win32 レイヤードウィン�
 | グローバルホットキーの実キー押下 | OS 登録は `flow/platform.rs`、合成イベントは `hotkey/tests`。他アプリとの競合は実機のみ |
 | トースト通知の見た目 | 文言組み立てはユニット済み。OS トースト描画は環境依存 |
 | 連続記録のフォアグラウンド貼り付け (`SendInput`) | 注入ロジックはユニット済み。アクティブウィンドウへの実貼り付けは実機のみ |
-| アプリ更新の `msiexec` / 差し替えヘルパー実起動 | `flow/update.rs` はモック bridge で確認〜検証〜展開まで固定。外部プロセス起動と再起動後の実フォルダ差し替えは実機のみ |
+| アプリ更新の `msiexec` の実行・更新の画面・アプリの終了と再起動 | 確認〜検証〜展開は `clip-refiner-updater/tests/update.rs`、成否の判定とボタンの受け付けは `app/flow.rs`・`app/dialog.rs` のユニットテストで固定。実際のインストールと `TaskDialog` の描画は実機のみ |
 
 ## テスト用ヘルパー (`test_helpers`)
 
-`clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy・テスト・ドキュメントテストを走らせる場合は `--features test-helpers` を付ける (`cargo test --release --all-targets --features test-helpers` も通る)。テスト専用の公開シンボル (`ipc::ClientError`、`apply_update_at_with_key` など) も同じ条件に限定し、通常のリリースビルドでは未使用警告を出さない。
+`clip_refiner::test_helpers` はデバッグビルド、`cargo test` 実行時、または `test-helpers` feature 有効時に利用可能 (feature `app` が必要)。リリースビルドで Clippy・テスト・ドキュメントテストを走らせる場合は `--features test-helpers` を付ける (`cargo test --release --all-targets --features test-helpers` も通る)。テスト専用の公開シンボル (`ipc::ClientError` など) も同じ条件に限定し、通常のリリースビルドでは未使用警告を出さない。
 
 | モジュール | 所在 | 内容 |
 | :--- | :--- | :--- |
-| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`, `update` モック bridge、oneshot IPC など) |
+| `clip_refiner::test_helpers` | `clip-refiner/src/test_helpers/` | アプリ層の統合テスト用 (`ClipboardHarness`, `TrayTestContext`, `SettingsTestContext` / `with_persistence`、oneshot IPC など) |
+| `clip_refiner_updater::test_helpers` | `clip-refiner-updater/src/test_helpers.rs` | 更新フローの統合テスト用 (GitHub 互換のモックサーバ、ポータブル ZIP のフィクスチャなど) |
 | `clip_refiner_core::test_helpers` | `clip-refiner-core/src/test_helpers/` | コア単体テスト用 (`InMemoryTextClipboard`, `with_temp_config_dir`) |
 
 アプリ側の `test_helpers` は core のヘルパーを re-export する。設定ディレクトリを触るテストは `with_temp_config_dir` で一時ディレクトリへ切り替える。
@@ -240,7 +242,7 @@ cargo build --all-targets --features test-helpers
 npm run test:e2e
 ```
 
-スキップ: `CLIP_REFINER_SKIP_E2E=1`
+スキップ: `CLIP_REFINER_SKIP_E2E=1`。`check.ps1` は対話 GUI セッションが無い (`[Environment]::UserInteractive` が偽) 場合も自動でスキップする。`CLIP_REFINER_REQUIRE_E2E=1` で自動スキップを無効にできる (`release.ps1` が設定)
 
 | ファイル | カバー範囲 |
 | :--- | :--- |
@@ -248,9 +250,9 @@ npm run test:e2e
 | `quick_selector.spec.ts` | 検索・矢印 / Enter・Escape、カテゴリ見出しの開閉と再表示時の復元、`Ctrl+Enter` による自動変換への切替 (連続記録中を含む)、お気に入り順と `Ctrl+Shift+↑/↓` 並べ替えの保存 |
 | `clip_selector.spec.ts` | 空表示・検索・矢印 / Enter・Escape、`×` による行内の削除確認と Esc での取り消し、並べ替えボタン、テンプレートバッジ、画像のサムネイルとホバープレビュー |
 
-ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。
+ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。失敗したテストは `fixtures.ts` が手動で記録した Playwright トレースを `test-results/**/trace.zip` に残す (`npx playwright show-trace`)。
 
-ハーネスは終了時に、一時設定ディレクトリと `%TEMP%` の `ClipRefiner-*-WebView2-e2e-<ポート>` (WebView2 のデータ) を削除する。強制終了で残った分は、次の実行の開始時 (`e2e/global-setup.ts`) に、作成から 10 分以上たったものだけ削除する。
+ハーネスは終了時に、一時設定ディレクトリと `%TEMP%` の `ClipRefiner-*-WebView2-e2e-<ポート>` (WebView2 のデータ) を削除する。強制終了で残った分は、次の実行の開始時 (`e2e/support/global_setup.ts`) に、作成から 10 分以上たったものだけ削除する。
 
 ## プロパティテスト (`proptest`)
 
@@ -356,9 +358,10 @@ $env:CLIP_REFINER_COVERAGE = '1'; ./scripts/windows/check.ps1
 | 3 | rustdoc (壊れた intra-doc リンクなどの警告をエラー扱い。core の feature なしを含む) | `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --features test-helpers` ほか |
 | 4 | サプライチェーン監査 | `cargo deny check` |
 | 5 | Node.js の確認 (`CLIP_REFINER_REQUIRE_NODE=1` を設定) | — |
-| 6 | UI バンドルの最新性・ESLint・Prettier・TypeScript 型チェック・markdownlint | `npm run build:ui:check` / `npm run lint` / `npm run format:check` / `npm run typecheck` / `npm run lint:md` |
-| 7 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
-| 8 | WebView E2E (`-SkipE2E` または `CLIP_REFINER_SKIP_E2E=1` でスキップ) | `cargo build --all-targets --features test-helpers` → `npm run test:e2e` |
+| 6 | npm 依存の脆弱性監査 (high 以上で失敗。low / moderate は許容) | `npm run audit:deps` |
+| 7 | UI バンドルの最新性・ESLint・Prettier・TypeScript 型チェック・未使用 export・UI のカバレッジの下限・markdownlint | `npm run build:ui:check` / `npm run lint` / `npm run format:check` / `npm run typecheck` / `npm run knip` / `npm run test:ui:coverage` / `npm run lint:md` |
+| 8 | テスト (doctest 含む。`-Coverage` 時は `cargo llvm-cov`) | `cargo test --all-targets --features test-helpers` ほか |
+| 9 | WebView E2E (`-SkipE2E` / `CLIP_REFINER_SKIP_E2E=1` / GUI セッションなしでスキップ) | `cargo build --all-targets --features test-helpers` → `npm run test:e2e` |
 
 E2E 用のビルドは対象と feature を `cargo test` と揃え、互いのビルド結果を無効にし合わないようにする (`-p clip-refiner` だけでは dev-dependencies の feature が統合されず、毎回再コンパイルになる。デバッグビルドでは `test-helpers` の有無で挙動は変わらない)。テスト・E2E 用ビルド・カバレッジの cargo は、リンカーがライブラリを開けない一過性の失敗 (`LNK1104`。並列リンク中にウイルス対策ソフトのスキャンと競合して起きると推定) のときだけ 1 回再実行する。判定のため出力を行単位で中継するので、cargo の進捗バーと色は出ない。
 
@@ -372,10 +375,13 @@ $env:RUSTDOCFLAGS = '-D warnings'; cargo doc --workspace --no-deps --features te
 $env:RUSTDOCFLAGS = '-D warnings'; cargo doc -p clip-refiner-core --no-default-features --no-deps
 cargo deny check
 npm ci
+npm run audit:deps
 npm run build:ui:check
 npm run lint
 npm run format:check
 npm run typecheck
+npm run knip
+npm run test:ui:coverage
 npm run lint:md
 cargo test --all-targets --features test-helpers
 cargo test -p clip-refiner-core --no-default-features --all-targets
@@ -394,8 +400,8 @@ cargo llvm-cov --all-targets --features test-helpers --ignore-filename-regex '(^
 
 | フック | 実行内容 | 所要時間の目安 |
 | :--- | :--- | :--- |
-| `pre-commit` | `cargo fmt --check` (`check-pre-commit.ps1`) | 数秒 |
-| `pre-push` | `check.ps1 -SkipE2E` ([品質チェック](#品質チェック) の 8 以外) | 数分 |
+| `pre-commit` | `cargo fmt --check` + `npm run format:check` (`check-pre-commit.ps1`) | 数秒 |
+| `pre-push` | `check.ps1 -SkipE2E` ([品質チェック](#品質チェック) の 9 以外) | 数分 |
 
 無効化:
 
@@ -447,20 +453,21 @@ cargo install cargo-llvm-cov --locked
 - `cargo test --all-targets --features test-helpers` 相当を LLVM 計測付きで実行する
 - 集計から `tests/`・`test_helpers/`・`*_tests.rs` / `tests.rs` を除外し、本番ソースの厚みを見やすくする
 - doctests は `cargo-llvm-cov` では不安定なためカバレッジ対象外とし、スクリプト末尾で通常の `cargo test --doc` を別実行する
-- JS ロジックテストは `CLIP_REFINER_REQUIRE_NODE=1` で必須化する (`test.ps1` と同様)
+- UI ロジックテストは `CLIP_REFINER_REQUIRE_NODE=1` で必須化する (`test.ps1` と同様)
 - HTML 出力先は `target/llvm-cov/html/index.html` (`CARGO_TARGET_DIR` 設定時はその配下。Git 管理外)
 
 薄いモジュールを探すときは、要約の低いファイルから HTML の行ハイライトへ進むとよい。しきい値での失敗 (`--fail-under-lines` 等) は設けない。
 
-### JavaScript リンター (ESLint / Prettier)
+### TypeScript リンター (ESLint / Prettier)
 
-UI / テスト用 JavaScript (`crates/clip-refiner/src/ui/`, `crates/clip-refiner/tests/`) と E2E の TypeScript (`e2e/`) は ESLint と Prettier で検証し、UI と E2E は `tsc` で型チェックする。`check.ps1` / `format.ps1` は `scripts/common/npm.ps1` 経由で実行する。
+UI (`crates/clip-refiner/src/ui/`)・UI ロジックテスト (`crates/clip-refiner/tests/ui/`)・scripts (`scripts/`)・E2E (`e2e/`) の TypeScript は ESLint と Prettier で検証し、`tsc` で型チェックし、未使用の `export` と循環 import は knip で検出する。`check.ps1` / `format.ps1` は `scripts/common/npm.ps1` 経由で実行する。
 
 | ツール | 役割 |
 | :--- | :--- |
-| [ESLint](https://eslint.org/) | 推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。E2E と `*.d.ts` は `typescript-eslint` の推奨ルール。設定 / セレクター UI と Node ロジックテストは ESM (`import`/`export`)。ルート `package.json` は `"type": "module"` |
-| [Prettier](https://prettier.io/) | JavaScript / TypeScript の整形 (タブ幅 4、シングルクォート) |
-| [TypeScript](https://www.typescriptlang.org/) (`tsc --noEmit`) | UI は `checkJs` で JSDoc の型注釈を検証する (`crates/clip-refiner/src/ui/tsconfig.json`。`strict`)。Rust と受け渡す JSON の形は `src/ui/ipc.d.ts` に宣言し、Rust の型とのずれは `cargo test` (`tray/settings/webview_contract_tests.rs`) が検出する。E2E は `strict` (`e2e/tsconfig.json`)。共通設定は `tsconfig.base.json` |
+| [ESLint](https://eslint.org/) | ESLint と `typescript-eslint` の推奨ルール + `eslint-plugin-no-unsanitized` (`innerHTML` 等の XSS リスク検出)。E2E は `typescript-eslint` の型情報つき推奨ルールも有効。設定ファイルが TypeScript のため、読み込みに `jiti` を使う。E2E・UI・Node ロジックテストは型情報を使う `no-floating-promises` / `no-misused-promises` も有効 (トップレベルの `test()` は除外し、`t.test()` の await 漏れは `no-restricted-syntax` で検出)。設定 / セレクター UI と Node ロジックテストは ESM (`import`/`export`)。ルート `package.json` は `"type": "module"` |
+| [Prettier](https://prettier.io/) | TypeScript / CSS / HTML の整形 (タブ幅 4、シングルクォート)。対象はリポジトリ全体で、除外は `.prettierignore` で管理する |
+| [TypeScript](https://www.typescriptlang.org/) (`tsc -b`) | 全プロジェクトを `strict` で検証する。UI ロジックテストと scripts の `.ts` は Node.js が型を取り除いて直接実行するため、`erasableSyntaxOnly` で除去できない構文を禁止する。Rust と受け渡す JSON の形は `src/ui/ipc.ts` に宣言し、Rust の型とのずれは `cargo test` (`tray/settings/webview_contract_tests.rs`) が検出する。共通設定は `tsconfig.base.json` で、`noUncheckedIndexedAccess` により配列の添字アクセスは `T \| undefined` として扱い、`exactOptionalPropertyTypes` により省略可能なプロパティへ `undefined` を代入できない。`noUnusedLocals` / `noUnusedParameters` / `noImplicitOverride` / `noUncheckedSideEffectImports` も有効にしている。ルートの `tsconfig.json` が 4 プロジェクト (UI・UI ロジックテスト・scripts・E2E) を project references で束ね、`tsc -b` は変更のあったプロジェクトだけを再検査する (ビルド情報は `node_modules/.cache/tsc/`。宣言ファイルのみ出力しソースの隣には出さない) |
+| [knip](https://knip.dev/) | 未使用の `export` (型を含む) と循環 import を検出する (`knip.json`。エントリは UI の 3 つのバンドル入口・Node ロジックテスト・scripts・E2E)。モジュール内でしか使わない関数や型に `export` を付けたままにしない |
 | [esbuild](https://esbuild.github.io/) | 設定 UI とセレクターの ESM を IIFE バンドル (`*.bundle.js`) にまとめる |
 
 初回または `package.json` 更新後:
@@ -478,14 +485,23 @@ npm run lint               # ESLint
 npm run lint:fix           # ESLint (自動修正)
 npm run format:check       # Prettier 整形チェック
 npm run format             # Prettier 整形適用
-npm run typecheck          # TypeScript 型チェック (UI の checkJs と E2E)
+npm run typecheck          # TypeScript 型チェック (UI・UI ロジックテスト・scripts・E2E。`tsc -b` で差分のみ再検査)
+npm run knip               # 未使用の export・循環 import の検出
+npm run audit:deps         # npm 依存の脆弱性監査 (npm audit --audit-level=high)
+npm run test:ui            # UI ロジックテストだけを Node で実行 (node:test)
+npm run test:ui:coverage   # 同上 + UI のカバレッジ計測とファイルごとの下限の強制
 ```
 
-設定ファイル: [`package.json`](../../package.json), [`eslint.config.js`](../../eslint.config.js), [`.prettierrc.json`](../../.prettierrc.json), [`tsconfig.base.json`](../../tsconfig.base.json)
+設定ファイル: [`package.json`](../../package.json), [`eslint.config.ts`](../../eslint.config.ts), [`.prettierrc.json`](../../.prettierrc.json), [`tsconfig.base.json`](../../tsconfig.base.json)
 
-設定画面とセレクターの JavaScript は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.mjs` / esbuild) で IIFE バンドル (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`) にまとめる。Rust は生成物を `include_str!` で埋め込むため、バンドルはリポジトリにコミットし、`cargo build` 単体では Node.js を要求しない。ソースだけ更新してバンドルを忘れる事故は 2 段で防ぐ。
+`npm run test:ui:coverage` (`scripts/common/check-ui-coverage.ts`) は、`src/ui/` の `.ts` ごとにカバレッジの下限 (行 90% / 分岐 80% / 関数 90%) を強制する。全体の平均では判定しないため、一部のファイルだけ低い状態も失敗になる。次の場合も失敗する。
 
-1. バンドル先頭に入力ファイル一覧 (`build-ui.mjs` 自身を含む) と SHA-256 を刻み、`cargo test` の `flow/ui_bundle.rs` が Node.js なしで再計算して照合する
+- どのテストからも import されない `.ts` がある。DOM や WebView の IPC を扱い E2E で検証するファイルと型宣言だけのファイルは、スクリプトの `unmeasuredFiles` に挙げて除外する。DOM に依存しないロジックは除外せず、`tests/ui/` にテストを書く
+- `unmeasuredFiles` に挙げたファイルが存在しない、またはテストから import されている (一覧から外す)
+
+設定画面とセレクターの UI は ESM (`import`/`export`) に分割し、`npm run build:ui` (`scripts/common/build-ui.ts` / esbuild) で IIFE バンドル (`settings.bundle.js` / `quick_selector.bundle.js` / `clip_selector.bundle.js`) にまとめる。Rust は生成物を `include_str!` で埋め込むため、バンドルはリポジトリにコミットし、`cargo build` 単体では Node.js を要求しない。ソースだけ更新してバンドルを忘れる事故は 2 段で防ぐ。
+
+1. バンドル先頭に入力ファイル一覧 (`build-ui.ts` 自身を含む) と SHA-256 を刻み、`cargo test` の `flow/ui_bundle.rs` が Node.js なしで再計算して照合する
 2. `check.ps1` の `npm run build:ui:check` が作業ツリーを書き換えずに再生成し、コミット済みバンドルとバイト比較する (手編集や esbuild の版差も検出する)
 
 UI のファイル構成と `innerHTML` の扱いは [アーキテクチャ](architecture.md#webview-ui-srcui) を参照。
@@ -495,7 +511,7 @@ UI のファイル構成と `innerHTML` の扱いは [アーキテクチャ](arc
 リポジトリ内の Markdown (`docs/`・README・CHANGELOG・`.claude/` など) は [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) で検証する。文体などの規約は [.claude/rules/docs.md](../../.claude/rules/docs.md) に置き、機械的に判定できる書式だけをここで検出する。
 
 - 標準ルールを有効にし、日本語の文に合わない行の長さ (MD013) や、README・mdBook で使う HTML (MD033) など一部を外す。外したルールと理由は [`.markdownlint-cli2.jsonc`](../../.markdownlint-cli2.jsonc) にコメントで書く
-- 表はセルを空白で埋めない (MD060 `compact`)。区切り行が `| :--- | :--- |` の形かは、カスタムルール `scripts/common/markdownlint-table-delimiter.mjs` が検証する
+- 表はセルを空白で埋めない (MD060 `compact`)。区切り行が `| :--- | :--- |` の形かは、カスタムルール `scripts/common/markdownlint-table-delimiter.ts` が検証する
 - Prettier は表の列を空白でそろえ、区切り行も列幅まで伸ばして規約と合わないため、Markdown には使わない
 - 意図して規約から外れる箇所 (前後の空白を見せるコードなど) は、`<!-- markdownlint-disable MD038 -->` / `<!-- markdownlint-enable MD038 -->` で範囲を囲み、直前のコメントに理由を書く
 
@@ -505,6 +521,10 @@ npm run lint:md:fix        # markdownlint (自動修正。format.ps1 も実行�
 ```
 
 自動修正は表の空白などを機械的に直す。コード内の空白のように意味のある違反も書き換えることがあるため、修正後は差分を確認する。
+
+### npm 依存の脆弱性監査 (`npm audit`)
+
+`check.ps1` は `npm run audit:deps` (`npm audit --audit-level=high`) を含み、high 以上の脆弱性があると失敗する。npm 依存は開発・ビルド用で本番バイナリには同梱しないため、low / moderate は失敗にしない (現状の low は `markdownlint-cli2` 経由の `katex`)。`npm audit fix --force` は `markdownlint-cli2` を旧版へ戻すため使わず、上流の更新を待つか `package.json` の版を見直す。
 
 ### サプライチェーン監査 (`cargo-deny`)
 

@@ -4,7 +4,7 @@
 
 以前の `clip-refiner` (`default-features = false`) による facade 経路は廃止済み。ライブラリ利用は依存先を `clip-refiner-core` へ切り替える。アプリ起動だけなら従来どおり `clip_refiner::run` (feature `app`) を使う。
 
-ライブラリ API は [Semantic Versioning](https://semver.org/lang/ja/) に従う。破壊的変更は [CHANGELOG.md](../../CHANGELOG.md) の該当バージョンにある **Breaking changes** / **Changed** / **Removed** 節へ明記し、設定スキーマ変更は **Settings** 節にも移行方法を記載する。アプリ (`clip-refiner`) と加工・設定 (`clip-refiner-core`) の semver はクレートごとに独立して扱う。
+ClipRefiner はアプリケーションとして提供しているため、ライブラリ API の変更は [CHANGELOG.md](../../CHANGELOG.md) に記載しない。設定スキーマ変更は **Settings** 節に移行方法を記載する。アプリ (`clip-refiner`) と加工・設定 (`clip-refiner-core`) の semver はクレートごとに独立して扱う。
 
 ## 依存の追加
 
@@ -20,7 +20,7 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | feature | 既定 | 内容 |
 | :--- | :--- | :--- |
 | (なし / `default-features = false`) | — | `RefineMode` などのテキスト変換。`RegexSettings` / `RefineContext::with_regex` |
-| `clipboard` | 有効 | `OwnedClipboard` と OS クリップボード本文 I/O (`arboard` / `CF_DIB` / `CF_HTML`)。Windows 専用 |
+| `clipboard` | 有効 | `OwnedClipboard` と OS クリップボード本文 I/O (`arboard` / `CF_DIB` / `CF_HTML` / 仮想ファイル)。Windows 専用 |
 | `config` | 有効 | `AppConfig` の `config.toml` 永続化、DPAPI、登録クリップ暗号。Windows 専用 |
 
 `clipboard` または `config` を非 Windows で有効にするとコンパイルエラーになる。公開ドキュメントは `cargo doc -p clip-refiner-core --open` で確認する。
@@ -43,7 +43,7 @@ clip-refiner-core = { path = "crates/clip-refiner-core" }
 | 加工 | `refiner::{REGEX_PREVIEW_SAMPLE, RegexPreviewResult, preview_regex_replace, validate_regex_settings}` | 正規表現置換のプレビューと設定検証 (設定 UI と同一エンジン) |
 | クリップボード | `OwnedClipboard` (feature `clipboard`), `process_clipboard`, `process_clipboard_pipeline` | OS クリップボード本文 I/O の所有者と、トレイト経由の加工 API |
 | クリップボード | `refiner::{TextClipboard, ImageClipboard, HtmlClipboard}` | 加工 API が使うクリップボード I/O のトレイト (テキスト / 画像 / HTML 形式)。テスト用の差し替えにも使う |
-| クリップボード | `refiner::remove_stale_image_files` (feature `clipboard`) | 画像のファイル貼り付け用に書き出した PNG のうち、保持時間 (1 時間) を過ぎたものを削除する。常駐の起動時に呼ぶ |
+| クリップボード | `refiner::remove_stale_image_files` (feature `clipboard`) | 以前の版が画像のファイル貼り付け用に書き出した PNG を削除する。常駐の起動時に呼ぶ |
 | 結果 | `ClipboardProcessOutcome`, `ClipboardProcessError`, `ParseFailure` | 加工結果と失敗理由。JSON / YAML のパース失敗は `ClipboardProcessError::ParseFailed(ParseFailure)` で変更なしと区別する |
 | 設定 | `RegexSettings`, `RegexPreset`, `RegexStep` | 正規表現加工用 (feature 不要) |
 | 設定 | `AppConfig`, `NotificationSettings`, `HotkeySettings`, `MonitorMode`, `SelectorWebviewRetention` など (feature `config`) | `config.toml` 対応型 |

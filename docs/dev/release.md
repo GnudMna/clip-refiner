@@ -12,7 +12,6 @@
 
 ### 環境
 
-- gh-release-bridge の Worker Secret `CLIP_REFINER_KEY` と同じ値を UTF-8 のファイルに保存し、環境変数 `CLIP_REFINER_KEY_FILE` にそのパスを設定しておく (リポジトリの外に置く。`-DryRun` でも検証する。[環境変数](setup.md#環境変数))
 - MSI / ポータブル ZIP を作る場合は `minisign` をインストールし、環境変数 `CLIP_REFINER_SIGNING_KEY` に秘密鍵のパスを設定しておく ([更新署名鍵](#更新署名鍵)。`-DryRun` でも検証する)
 - MSI / ポータブル作成には [Windows パッケージ作成](setup.md#windows-パッケージ作成) と同じ前提 (`cargo-wix`、`cargo-about`、mdBook、WiX Toolset v3。ポータブルのみなら `cargo-about` と mdBook で可)
 
@@ -44,16 +43,15 @@ git switch -c release/v1.1.0 origin/develop
 
 **自動で行うこと:**
 
-1. 環境変数 `CLIP_REFINER_KEY_FILE` が指すキーファイルがあり空でないことと、廃止した `CLIP_REFINER_KEY` が設定されていないことを検証 (満たさなければ失敗。キーはビルド時に暗号化して成果物へ埋め込まれる)
-2. 現在のブランチが `release/v{version}` であることを検証 (不一致なら失敗)
-3. ルート `Cargo.toml` の `[workspace.package] version` を更新 (`clip-refiner-core` は `workspace.dependencies` の path 参照のため版の二重更新は不要)
-4. `Cargo.lock` の workspace パッケージ version を同期
-5. [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
-6. `check.ps1` で [品質チェック](testing.md#品質チェック) (E2E を含む全項目)。pre-push は E2E を含まないため、E2E はここで必ず通す (`CLIP_REFINER_SKIP_E2E` は無効化する)
-7. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
-8. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
-9. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
-10. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
+1. 現在のブランチが `release/v{version}` であることを検証 (不一致なら失敗)
+2. ルート `Cargo.toml` の `[workspace.package] version` を更新 (`clip-refiner-core` は `workspace.dependencies` の path 参照のため版の二重更新は不要)
+3. `Cargo.lock` の workspace パッケージ version を同期
+4. [CHANGELOG.md](../../CHANGELOG.md) の `[Unreleased]` 節を `## [x.y.z] - YYYY-MM-DD` へ移し、空の `[Unreleased]` と compare リンクを更新
+5. `check.ps1` で [品質チェック](testing.md#品質チェック) (E2E を含む全項目)。pre-push は E2E を含まないため、E2E はここで必ず通す (`CLIP_REFINER_SKIP_E2E` は無効化する)
+6. `Release: v{version}` で Git コミット (`Cargo.lock` を含む)
+7. `build-msi.ps1` で MSI を作成し内容を検証 (`THIRD_PARTY_NOTICES`・利用者向けドキュメント同梱。mdBook が必要)
+8. `build-portable.ps1` でポータブル ZIP を作成する (MSI 作成済みなら `-SkipBuild` / `-SkipNotices` で成果物を再利用)
+9. 作成した MSI / ポータブル ZIP ごとに `minisign` で `<asset>.minisig` を作り、`keys/update-signing/*.pub` で検証する (秘密鍵がパスワード保護なら各アセットで入力を求められる)。署名の準備 (`minisign`・`CLIP_REFINER_SIGNING_KEY`・公開鍵) はビルド前に確認する
 
 **主なオプション:**
 
@@ -76,9 +74,10 @@ git switch -c release/v1.1.0 origin/develop
 2. `release/v{version}` から `main` と `develop` へ、それぞれ Pull Request を作ってマージする。`main` と競合する場合は、先に `main` を release ブランチへマージしてから Pull Request を作る
 3. Gitea 上で `v{version}` タグを付与する
 4. GitHub Release へ MSI (`target/wix/`) / ポータブル ZIP (`target/portable/`) と、それぞれの署名ファイル (`*.msi.minisig` / `*-portable.zip.minisig`) をアップロードする
-5. [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) で次を確認する。アプリは digest と署名のどちらかが欠けたアセットを適用しない ([アプリ更新の検証](../user/security.md#アプリ更新の検証))
-   - version API が各アセットの `digest` (`sha256:<hex>`、GitHub Release Asset の digest) を返す
-   - 署名ファイルをアセットと同じ URL 形式 (`/{owner}/{repo}/{tag}/{asset}.minisig`) で取得できる
+5. GitHub Release を公開し (ドラフト・プレリリースはアプリの更新対象にならない)、次を確認する。アプリは digest と署名のどちらかが欠けたアセットを適用しない ([アプリ更新の検証](../user/security.md#アプリ更新の検証))
+   - `https://api.github.com/repos/GnudMna/clip-refiner/releases/latest` がこの版を返し、各アセットに `digest` (`sha256:<hex>`) がある
+   - 署名ファイルをアセットと同じ URL 形式 (`https://github.com/GnudMna/clip-refiner/releases/download/{tag}/{asset}.minisig`) で取得できる
+   - 4.0.1 以前のアプリは [gh-release-bridge](https://gh-release-bridge.gnudlemna-4656.workers.dev) からしか更新できない。bridge を止めるまでは、bridge の Worker Secret `CLIP_REFINER_KEY` を変えず (配布済みのアプリに同じ値が埋め込まれている)、その値を `Authorization: Bearer` で送って、この版のアセットと署名ファイル (`/{owner}/{repo}/{tag}/{asset}` と `.minisig`) を取得できる
 
 ## 更新署名鍵
 

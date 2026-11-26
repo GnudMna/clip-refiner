@@ -8,7 +8,7 @@
 #   - 環境変数 CLIP_REFINER_SIGNING_KEY に minisign 秘密鍵ファイルのパスを設定すること
 #   - keys/update-signing/*.pub に対応する公開鍵を置き、アプリへ埋め込んでおくこと
 #
-# 信頼コメントはアプリ側 (platform/update/signature.rs) の期待値と同じ形式にする
+# 信頼コメントはアプリ側 (clip-refiner-updater/src/signature.rs) の期待値と同じ形式にする
 #   clip-refiner-update version={version} file={アセット名}
 # ========================================================================
 

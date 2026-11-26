@@ -1,6 +1,6 @@
 //! 登録クリップのワーカー経路統合テスト
 
-use clip_refiner::test_helpers::ClipboardHarness;
+use clip_refiner::test_helpers::{ClipboardHarness, with_temp_config_dir};
 use clip_refiner_core::RefineMode;
 
 // ======================================================================
@@ -32,6 +32,31 @@ fn copy_registered_clip_writes_to_clipboard() {
     assert_eq!(harness.clipboard_text(), "registered-value");
 }
 
+/// 登録クリップのコピーに除外形式を付けること
+#[test]
+fn copy_registered_clip_marks_excluded() {
+    let mut harness = ClipboardHarness::with_text("registered-value");
+
+    harness.register_clip_from_clipboard();
+    harness.reset_clipboard("other");
+    harness.copy_registered_clip(0);
+
+    assert!(harness.clipboard_is_excluded());
+}
+
+/// 設定が無効なら登録クリップのコピーに除外形式を付けないこと
+#[test]
+fn copy_registered_clip_without_setting_is_not_excluded() {
+    let mut harness = ClipboardHarness::with_text("registered-value");
+    harness.with_config_mut(|c| c.keep_clipboard_exclusion = false);
+
+    harness.register_clip_from_clipboard();
+    harness.reset_clipboard("other");
+    harness.copy_registered_clip(0);
+
+    assert!(!harness.clipboard_is_excluded());
+}
+
 /// 登録クリップコピー直後の監視では再加工しないようにすること
 #[test]
 fn copy_registered_clip_avoids_immediate_reprocess() {
@@ -44,6 +69,41 @@ fn copy_registered_clip_avoids_immediate_reprocess() {
     assert_eq!(harness.clipboard_text(), "  clip  ");
     assert!(!harness.run_monitor_update(false));
     assert_eq!(harness.clipboard_text(), "  clip  ");
+}
+
+/// 登録クリップの画像は、自動変換が画像モードでもコピー直後に再加工しないこと
+#[test]
+fn copy_registered_image_avoids_immediate_reprocess() {
+    with_temp_config_dir(|| {
+        let mut harness = ClipboardHarness::with_text("")
+            .with_source_image(1, 1, vec![1, 2, 3, 255])
+            .with_mode(RefineMode::ExcelToImage);
+        harness.register_clip_from_clipboard();
+        harness.copy_registered_clip(0);
+        assert_eq!(harness.written_image_size(), Some((1, 1)));
+
+        // 監視方式によらず加工せず、ファイルとしては載せない
+        assert!(!harness.run_monitor_update(true));
+        assert!(!harness.run_monitor_update(false));
+        assert!(!harness.image_written_as_file());
+    });
+}
+
+/// 登録クリップの画像をコピーした後でも、別のコピーの画像は加工すること
+#[test]
+fn copy_registered_image_does_not_block_next_copy() {
+    with_temp_config_dir(|| {
+        let mut harness = ClipboardHarness::with_text("")
+            .with_source_image(1, 1, vec![1, 2, 3, 255])
+            .with_mode(RefineMode::ExcelToImage);
+        harness.register_clip_from_clipboard();
+        harness.copy_registered_clip(0);
+
+        // 別のコピーで変更トークンが進む
+        harness.copy_external_image();
+        assert!(harness.run_monitor_update(true));
+        assert!(harness.image_written_as_file());
+    });
 }
 
 /// 空クリップボードは登録されないようにすること

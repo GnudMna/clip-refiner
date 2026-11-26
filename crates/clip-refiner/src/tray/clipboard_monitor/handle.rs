@@ -130,6 +130,10 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
     };
 
     if text.is_empty() {
+        // 登録クリップのコピーや手動加工など、自身が書き込んだ画像は加工しない
+        if state.clipboard_session().is_image_set(token) {
+            return ClipboardObserveResult::Observed;
+        }
         // テキストの無い画像は本文で重複を判定できないため、変更を確認できた場合のみ加工する
         if !snap.produces_image() || trigger == ClipboardTrigger::PollingUnconfirmed {
             return ClipboardObserveResult::Observed;
@@ -159,7 +163,7 @@ pub(crate) fn handle_clipboard_update<C: TextClipboard + ImageClipboard + HtmlCl
         crate::log_debug!("加工中にクリップボードが更新されたため書き戻しを見送り");
         return ClipboardObserveResult::Observed;
     }
-    let updated = record_clipboard_outcome(state, snap, &outcome, &text);
+    let updated = record_clipboard_outcome(state, snap, &outcome, &text, observed.token());
 
     match &outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
@@ -262,6 +266,7 @@ pub(crate) fn observe_continuous_record<C: TextClipboard>(
 /// * `snap` - 監視設定スナップショット
 /// * `outcome` - `process_clipboard_pipeline_io` の結果
 /// * `observed_text` - 加工前に観測したクリップボード本文
+/// * `written_token` - 書き戻し直後の変更トークン。取得できない環境では `None`
 ///
 /// # Returns
 /// * `bool` - クリップボードが加工更新された場合は `true`
@@ -270,6 +275,7 @@ pub(crate) fn record_clipboard_outcome(
     snap: &MonitorSnapshot,
     outcome: &Result<ClipboardProcessOutcome, ClipboardProcessError>,
     observed_text: &str,
+    written_token: Option<u64>,
 ) -> bool {
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
@@ -287,10 +293,8 @@ pub(crate) fn record_clipboard_outcome(
         Ok(ClipboardProcessOutcome::ImageProcessed { .. }) => {
             state
                 .clipboard_session()
-                .record_image_undo_source(observed_text);
-            state
-                .clipboard_session()
-                .record_image_processing_success(observed_text);
+                .record_image_undo_source(observed_text, written_token);
+            state.clipboard_session().record_image_written();
             true
         }
         // パース失敗は加工されなかった入力として、変更なしと同じく履歴に残す
@@ -363,7 +367,8 @@ mod tests {
             &state,
             &snap,
             &outcome,
-            "  trimmed  "
+            "  trimmed  ",
+            None
         ));
 
         let ps = state
@@ -396,7 +401,8 @@ mod tests {
             &state,
             &snap,
             &outcome,
-            "unchanged"
+            "unchanged",
+            None
         ));
 
         let ps = state
@@ -417,7 +423,7 @@ mod tests {
         let snap = test_snapshot(vec![RefineMode::Trim], false, false);
         let outcome = Ok(ClipboardProcessOutcome::Processed("x".to_string()));
 
-        record_clipboard_outcome(&state, &snap, &outcome, "x");
+        record_clipboard_outcome(&state, &snap, &outcome, "x", None);
         assert_eq!(state.clipboard_session().history_len(), 0);
     }
 
@@ -428,7 +434,7 @@ mod tests {
         let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Err(ClipboardProcessError::NoText);
 
-        assert!(!record_clipboard_outcome(&state, &snap, &outcome, ""));
+        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "", None));
 
         let ps = state
             .clipboard_session()
@@ -449,7 +455,7 @@ mod tests {
             Err(ClipboardProcessError::ParserInputTooLarge),
         ] {
             assert!(!record_clipboard_outcome(
-                &state, &snap, &outcome, "skipped"
+                &state, &snap, &outcome, "skipped", None
             ));
         }
 
@@ -463,7 +469,9 @@ mod tests {
         let snap = test_snapshot(vec![RefineMode::Trim], true, false);
         let outcome = Err(ClipboardProcessError::ReadFailed("detail".to_string()));
 
-        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "source"));
+        assert!(!record_clipboard_outcome(
+            &state, &snap, &outcome, "source", None
+        ));
 
         assert_eq!(
             state.clipboard_session().history_texts(),
@@ -480,12 +488,35 @@ mod tests {
             crate::refiner::ParseFailure::InvalidJson,
         ));
 
-        assert!(!record_clipboard_outcome(&state, &snap, &outcome, "{bad"));
+        assert!(!record_clipboard_outcome(
+            &state, &snap, &outcome, "{bad", None
+        ));
 
         assert_eq!(
             state.clipboard_session().history_texts(),
             vec!["{bad".to_string()]
         );
+    }
+
+    /// 画像だけのコピーを画像加工した場合は、空文字の取り消し用エントリを残さないこと
+    #[test]
+    fn record_outcome_image_without_text_keeps_no_undo_entry() {
+        let state = Arc::new(crate::tray::state::test_app_state());
+        let snap = test_snapshot(vec![RefineMode::ExcelToImage], true, false);
+        let outcome = Ok(ClipboardProcessOutcome::ImageProcessed {
+            width: 1,
+            height: 1,
+        });
+
+        assert!(record_clipboard_outcome(
+            &state,
+            &snap,
+            &outcome,
+            "",
+            Some(5)
+        ));
+
+        assert!(state.clipboard_session().take_undo_source().is_none());
     }
 
     /// 監視除外指定付きの内容は加工・履歴記録しないようにすること

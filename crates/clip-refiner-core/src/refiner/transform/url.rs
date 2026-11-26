@@ -74,20 +74,27 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
 
     while let Some(offset) = input[search..].find('?') {
         let start = search + offset;
-        let end = query_end(input, start + 1);
+        let (end, scanned) = query_end(input, start + 1);
         // クエリは `#` の手前まで。フラグメント内の `?` は次の探索で別のクエリとして扱う
         let query_stop = input[start + 1..end]
             .find('#')
             .map_or(end, |hash| start + 1 + hash);
-        if is_url_like(&input[..start])
-            && let Some(cleaned) = remove_utm_from_query(&input[start + 1..query_stop])
+        // `is_url_like` は単語を遡って調べるため、除去対象があるときだけ評価する
+        if let Some(cleaned) = remove_utm_from_query(&input[start + 1..query_stop])
+            && is_url_like(&input[..start])
         {
             let output = output.get_or_insert_with(|| String::with_capacity(input.len()));
             output.push_str(&input[copied..start]);
             output.push_str(&cleaned);
             copied = query_stop;
         }
-        search = query_stop;
+        search = if end == start + 1 {
+            // クエリが空なら、走査した範囲は末尾に除かれる句読点だけ。中の `?` も空クエリになるため読み飛ばす
+            // (`?` が続く入力で走査を繰り返して二乗の時間になるのを防ぐ)
+            scanned
+        } else {
+            query_stop
+        };
     }
 
     match output {
@@ -99,10 +106,23 @@ pub fn remove_utm_params(input: &str) -> Cow<'_, str> {
     }
 }
 
-/// 除去する広告クリックIDのキー (小文字)
+/// 除去する広告クリックID・計測用パラメータのキー (小文字)
 const CLICK_ID_PARAMS: &[&str] = &[
-    "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid", "ttclid",
+    "fbclid",
+    "gclid",
+    "dclid",
+    "gbraid",
+    "wbraid",
+    "msclkid",
+    "yclid",
+    "twclid",
+    "ttclid",
     "igshid",
+    "igsh",
+    "srsltid",
+    "mc_eid",
+    "gad_source",
+    "_gl",
 ];
 
 /// URL の区切りとみなす日本語・全角の句読点・括弧か判定する
@@ -171,16 +191,16 @@ fn is_bare_host(word: &str) -> bool {
 /// * `from` - `?` の直後の位置
 ///
 /// # Returns
-/// * `usize` - 終了位置 (排他)。文末の句読点は含めない
-fn query_end(input: &str, from: usize) -> usize {
+/// * `(usize, usize)` - (終了位置 (排他。文末の句読点は含めない), 句読点のトリム前の終了位置)
+fn query_end(input: &str, from: usize) -> (usize, usize) {
     let rest = &input[from..];
     let len = query_len(rest);
     let trimmed = rest[..len].trim_end_matches(['.', ',', ';', ':', '!', '?']);
     // 末尾の `&amp;` の `;` は句読点ではなく区切りの一部なので含める
     if trimmed.ends_with("&amp") && rest[trimmed.len()..len].starts_with(';') {
-        return from + trimmed.len() + 1;
+        return (from + trimmed.len() + 1, from + len);
     }
-    from + trimmed.len()
+    (from + trimmed.len(), from + len)
 }
 
 /// 区切り文字が現れるまでのクエリの長さを返す (句読点のトリム前)
@@ -493,6 +513,12 @@ mod tests {
             "https://example.com/?id=1"
         );
         assert_eq!(
+            remove_utm_params(
+                "https://example.com/?id=1&srsltid=a&mc_eid=b&gad_source=1&_gl=c&igsh=d"
+            ),
+            "https://example.com/?id=1"
+        );
+        assert_eq!(
             remove_utm_params("https://example.com/?FBCLID=abc&MsClkId=x#top"),
             "https://example.com/#top"
         );
@@ -501,6 +527,22 @@ mod tests {
             remove_utm_params("https://example.com/?fbclid_x=1&my_gclid=2"),
             "https://example.com/?fbclid_x=1&my_gclid=2"
         );
+    }
+
+    /// `?` や句読点が長く続く入力でも短時間で終わり、後続のUTMパラメータは除去すること
+    #[test]
+    fn test_remove_utm_params_many_question_marks() {
+        let marks = "?".repeat(200_000);
+        let start = std::time::Instant::now();
+        assert!(matches!(remove_utm_params(&marks), Cow::Borrowed(_)));
+        let mixed = ".?".repeat(100_000);
+        assert!(matches!(remove_utm_params(&mixed), Cow::Borrowed(_)));
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+
+        // 空クエリの読み飛ばしの後でも、次の URL は処理する
+        let input = format!("https://e.com/{marks} https://e.com/?utm_source=a&id=1");
+        let expected = format!("https://e.com/{marks} https://e.com/?id=1");
+        assert_eq!(remove_utm_params(&input), expected);
     }
 
     /// URLを含む文章でも、URL以外の文字列を失わずUTMパラメータだけを除去すること

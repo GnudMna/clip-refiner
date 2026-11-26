@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use super::InMemoryTextClipboard;
 use crate::config::{AppConfig, MonitorMode};
-use crate::refiner::text_clipboard::TextClipboard;
+use crate::refiner::text_clipboard::{ImageClipboard, TextClipboard};
 use crate::refiner::{RefineContext, RefineMode};
 use crate::security::secret_from;
 use crate::tray::clipboard_monitor::{
@@ -43,6 +43,24 @@ impl ClipboardHarness {
         }
     }
 
+    /// クリップボードの内容をパスワードマネージャー等の除外形式付きにする
+    ///
+    /// # Returns
+    /// * `Self` - 除外形式付きのクリップボードを持つ `ClipboardHarness`
+    #[must_use]
+    pub fn with_excluded_clipboard(mut self) -> Self {
+        self.clipboard = self.clipboard.excluded_from_monitoring();
+        self
+    }
+
+    /// クリップボードが除外形式付きかを返す
+    ///
+    /// # Returns
+    /// * `bool` - 除外形式付きの場合は `true`
+    pub fn clipboard_is_excluded(&mut self) -> bool {
+        self.clipboard.is_excluded_from_monitoring()
+    }
+
     /// クリップボードに HTML 形式 (`CF_HTML` の断片) を同時に置く
     ///
     /// # Arguments
@@ -55,6 +73,50 @@ impl ClipboardHarness {
         let text = self.clipboard.text().to_string();
         self.clipboard = InMemoryTextClipboard::with_text(text).with_html(html);
         self
+    }
+
+    /// クリップボードに読み取り元の画像を同時に置く
+    ///
+    /// # Arguments
+    /// * `width` - 画像幅 (ピクセル)
+    /// * `height` - 画像高さ (ピクセル)
+    /// * `rgba` - RGBA ピクセル列
+    ///
+    /// # Returns
+    /// * `Self` - 画像を置いた `self`
+    #[must_use]
+    pub fn with_source_image(mut self, width: u32, height: u32, rgba: Vec<u8>) -> Self {
+        let clipboard =
+            std::mem::replace(&mut self.clipboard, InMemoryTextClipboard::with_text(""));
+        self.clipboard = clipboard.with_source_image(width, height, rgba);
+        self
+    }
+
+    /// 直近の画像が、ファイルとしても貼り付けられる形で書き込まれたかを返す
+    ///
+    /// # Returns
+    /// * `bool` - ファイルとしても貼り付けられる場合は `true`
+    pub fn image_written_as_file(&self) -> bool {
+        self.clipboard.image_written_as_file()
+    }
+
+    /// ほかのアプリが画像をコピーし、変更トークンが進んだ状態にする
+    pub fn copy_external_image(&mut self) {
+        let (width, height, rgba) = self
+            .clipboard
+            .get_image()
+            .expect("読み取り元の画像が置かれていること");
+        self.clipboard
+            .set_image(width, height, rgba)
+            .expect("画像の書き込み");
+    }
+
+    /// 書き込み後の画像サイズを返す
+    ///
+    /// # Returns
+    /// * `Option<(u32, u32)>` - 書き込み済み画像の幅と高さ。未書き込みの場合は `None`
+    pub fn written_image_size(&self) -> Option<(u32, u32)> {
+        self.clipboard.written_image_size()
     }
 
     /// 本文の読み取り直後に別のコピーが入るよう予約する
@@ -188,6 +250,18 @@ impl ClipboardHarness {
         self.clipboard
             .set_text(text.into())
             .expect("クリップボードの置換に失敗");
+    }
+
+    /// クリップボードを、指定した本文と画像のコピーで置き換える (Excel のコピーを模倣)
+    ///
+    /// # Arguments
+    /// * `text` - コピーの本文
+    pub fn copy_excel(&mut self, text: impl Into<String>) {
+        // 変更トークンを進めたうえで、本文と画像を同時に置く
+        self.replace_clipboard(text);
+        let clipboard =
+            std::mem::replace(&mut self.clipboard, InMemoryTextClipboard::with_text(""));
+        self.clipboard = clipboard.with_source_image(1, 1, vec![1, 2, 3, 255]);
     }
 
     /// インメモリクリップボードを新しい内容で初期化する
@@ -390,6 +464,7 @@ impl ClipboardHarness {
                 pipeline,
                 refine_ctx: ctx,
                 reply: reply_tx,
+                cancelled: std::sync::Arc::default(),
             },
         );
         reply_rx.recv().expect("oneshot reply")

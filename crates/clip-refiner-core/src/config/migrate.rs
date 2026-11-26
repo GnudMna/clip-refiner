@@ -203,7 +203,7 @@ mod tests {
         };
         let result = migrate_config(config);
         assert!(result.migrated);
-        assert!(result.config.favorite_modes.is_empty());
+        assert_eq!(result.config.favorite_modes.len(), 0);
     }
 
     /// 現行より新しい version は既存項目を維持し version 番号のみ現行へ揃えるようにすること
@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(result.config.mode, RefineMode::UrlEncode);
         assert_eq!(result.config.interval_ms, 777);
         assert!(result.config.history_enabled);
-        assert!(result.config.favorite_modes.is_empty());
+        assert_eq!(result.config.favorite_modes.len(), 0);
     }
 
     /// v2 設定は v3 へ移行し、正規表現プリセットを保持すること
@@ -472,7 +472,7 @@ case_insensitive = true
         assert_eq!(result.config.mode, RefineMode::UrlEncode);
         assert_eq!(result.config.interval_ms, 777);
         assert!(result.config.history_enabled);
-        assert!(result.config.favorite_modes.is_empty());
+        assert_eq!(result.config.favorite_modes.len(), 0);
     }
 
     /// 未対応 version の案内文言が既存維持を伝えること

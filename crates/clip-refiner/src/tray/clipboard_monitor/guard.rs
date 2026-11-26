@@ -16,6 +16,7 @@ pub(crate) struct ObservedClipboard<'a, C> {
     observed_text: Option<&'a str>,
     expected_token: Option<u64>,
     superseded: bool,
+    keep_exclusion: bool,
 }
 
 impl<'a, C: TextClipboard> ObservedClipboard<'a, C> {
@@ -53,7 +54,21 @@ impl<'a, C: TextClipboard> ObservedClipboard<'a, C> {
             observed_text,
             expected_token: token,
             superseded: false,
+            keep_exclusion: false,
         }
+    }
+
+    /// 書き込みに履歴・クラウド同期・監視の除外形式を付けるようにする
+    ///
+    /// # Arguments
+    /// * `keep` - 付ける場合は `true`
+    ///
+    /// # Returns
+    /// * `Self` - 除外形式の付与を切り替えたクリップボード
+    #[must_use]
+    pub(crate) fn keeping_exclusion(mut self, keep: bool) -> Self {
+        self.keep_exclusion = keep;
+        self
     }
 
     /// 観測の途中で別のコピーが入り、書き込みを見送ったか判定する
@@ -65,6 +80,16 @@ impl<'a, C: TextClipboard> ObservedClipboard<'a, C> {
     /// * `bool` - 書き込みを見送った場合は `true`
     pub(crate) fn is_superseded(&self) -> bool {
         self.superseded
+    }
+
+    /// 照合に使う変更トークンを返す
+    ///
+    /// 書き込みに成功した後は、自身の書き込みを反映したトークンになる
+    ///
+    /// # Returns
+    /// * `Option<u64>` - 取得できない環境では `None`
+    pub(crate) fn token(&self) -> Option<u64> {
+        self.expected_token
     }
 
     /// 書き込み直前に変更トークンを照合する
@@ -102,7 +127,11 @@ impl<C: TextClipboard> TextClipboard for ObservedClipboard<'_, C> {
 
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
         self.ensure_unchanged()?;
-        self.inner.set_text(text)?;
+        if self.keep_exclusion {
+            self.inner.set_excluded_text(text)?;
+        } else {
+            self.inner.set_text(text)?;
+        }
         self.accept_own_write();
         Ok(())
     }
@@ -153,7 +182,11 @@ impl<C: TextClipboard + HtmlClipboard> HtmlClipboard for ObservedClipboard<'_, C
 
     fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError> {
         self.ensure_unchanged()?;
-        self.inner.set_html(html, alt_text)?;
+        if self.keep_exclusion {
+            self.inner.set_excluded_html(html, alt_text)?;
+        } else {
+            self.inner.set_html(html, alt_text)?;
+        }
         self.accept_own_write();
         Ok(())
     }
@@ -166,6 +199,29 @@ impl<C: TextClipboard + HtmlClipboard> HtmlClipboard for ObservedClipboard<'_, C
 mod tests {
     use super::*;
     use crate::test_helpers::InMemoryTextClipboard;
+
+    /// 除外形式を維持する設定では、書き込みに除外形式を付けること
+    #[test]
+    fn keeping_exclusion_writes_excluded_text() {
+        let mut inner = InMemoryTextClipboard::with_text("secret").excluded_from_monitoring();
+        let token = inner.change_token();
+        let mut guarded =
+            ObservedClipboard::new(&mut inner, "secret", token).keeping_exclusion(true);
+
+        assert!(guarded.set_text("processed".to_string()).is_ok());
+        assert!(inner.is_excluded_from_monitoring());
+    }
+
+    /// 除外形式を維持しない場合は、書き込みで除外形式が消えること
+    #[test]
+    fn default_write_drops_exclusion() {
+        let mut inner = InMemoryTextClipboard::with_text("secret").excluded_from_monitoring();
+        let token = inner.change_token();
+        let mut guarded = ObservedClipboard::new(&mut inner, "secret", token);
+
+        assert!(guarded.set_text("processed".to_string()).is_ok());
+        assert!(!inner.is_excluded_from_monitoring());
+    }
 
     /// 読み取り済みの本文を 1 度だけ返し、以降は実際のクリップボードを読むようにすること
     #[test]

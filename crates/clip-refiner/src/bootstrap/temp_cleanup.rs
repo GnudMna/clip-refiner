@@ -7,8 +7,9 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
+use clip_refiner_updater::UPDATE_WORK_DIR_NAME;
+
 use crate::consts;
-use crate::platform::update::UPDATE_WORK_DIR_NAME;
 
 // ======================================================================
 // 定数
@@ -29,7 +30,7 @@ const FALLBACK_DIR_PREFIX: &str = "pid-";
 // ======================================================================
 /// 保持時間を過ぎた作業ディレクトリを一時フォルダから削除する
 ///
-/// 対象は `clip-refiner-update` 直下の版ごとのフォルダと、
+/// 対象は `clip-refiner-update` 直下のフォルダ (版ごとのダウンロードと、更新プログラムの複製) と、
 /// `ClipRefiner-*-WebView2*` 直下の `pid-*` フォルダ
 /// 削除できないものは残し、次回の起動時に再試行する
 pub(super) fn remove_stale_temp_dirs() {

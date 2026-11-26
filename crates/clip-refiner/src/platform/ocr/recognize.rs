@@ -129,7 +129,9 @@ fn write_rgba_as_bgra(bitmap: &SoftwareBitmap, rgba: &[u8]) -> Result<()> {
 ///
 /// `dest` は `rgba` 以上の長さであること
 fn copy_rgba_to_bgra(rgba: &[u8], dest: &mut [u8]) {
-    for (pixel_dest, src) in dest.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
+    let (dest_pixels, _) = dest.as_chunks_mut::<4>();
+    let (src_pixels, _) = rgba.as_chunks::<4>();
+    for (pixel_dest, src) in dest_pixels.iter_mut().zip(src_pixels) {
         pixel_dest[0] = src[2];
         pixel_dest[1] = src[1];
         pixel_dest[2] = src[0];

@@ -237,10 +237,19 @@ impl TextClipboard for InMemoryTextClipboard {
         if self.fail_on_write {
             return Err(ClipboardIoError::WriteFailed("write failed".to_string()));
         }
-        // OS クリップボードと同様に、テキストの書き込みで他の形式を消す
+        // OS クリップボードと同様に、テキストの書き込みで他の形式 (除外指定を含む) を消す
         self.text = text;
+        self.excluded_from_monitoring = false;
+        self.text_unavailable = false;
         self.html = None;
+        self.source_image = None;
         self.change_token += 1;
+        Ok(())
+    }
+
+    fn set_excluded_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
+        self.set_text(text)?;
+        self.excluded_from_monitoring = true;
         Ok(())
     }
 
@@ -266,6 +275,11 @@ impl ImageClipboard for InMemoryTextClipboard {
         height: u32,
         rgba: Vec<u8>,
     ) -> Result<(), ClipboardIoError> {
+        // OS クリップボードと同様に、画像の書き込みで他の形式を消す
+        self.text.clear();
+        self.text_unavailable = true;
+        self.html = None;
+        self.source_image = Some((width, height, rgba.clone()));
         self.written_image = Some((width, height, rgba));
         self.image_written_as_file = false;
         self.change_token += 1;
@@ -294,8 +308,21 @@ impl HtmlClipboard for InMemoryTextClipboard {
             return Err(ClipboardIoError::WriteFailed("write failed".to_string()));
         }
         self.text = alt_text;
+        self.excluded_from_monitoring = false;
+        self.text_unavailable = false;
         self.html = Some(html);
+        self.source_image = None;
         self.change_token += 1;
+        Ok(())
+    }
+
+    fn set_excluded_html(
+        &mut self,
+        html: String,
+        alt_text: String,
+    ) -> Result<(), ClipboardIoError> {
+        self.set_html(html, alt_text)?;
+        self.excluded_from_monitoring = true;
         Ok(())
     }
 }

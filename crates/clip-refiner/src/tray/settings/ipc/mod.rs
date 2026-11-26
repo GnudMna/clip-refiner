@@ -506,19 +506,15 @@ mod tests {
         let Some(SettingsIpcAction::RegexPreview(_, _, sample)) = action else {
             panic!("RegexPreview アクションとして解釈されること");
         };
-        assert!(sample.is_empty());
+        assert_eq!(sample.len(), 0);
     }
 
-    /// `check-update` / `apply-update` メッセージを解釈できるようにすること
+    /// `check-update` メッセージを解釈できるようにすること
     #[test]
-    fn parse_ipc_update_messages() {
+    fn parse_ipc_check_update_message() {
         assert!(matches!(
             parse_settings_ipc_message(r#"{"type":"check-update"}"#),
             Some(SettingsIpcAction::CheckUpdate)
-        ));
-        assert!(matches!(
-            parse_settings_ipc_message(r#"{"type":"apply-update"}"#),
-            Some(SettingsIpcAction::ApplyUpdate)
         ));
     }
 

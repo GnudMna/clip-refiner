@@ -27,6 +27,11 @@ pub(super) fn apply_history_patch(
         }
     }
 
+    if let Some(keep) = patch.keep_clipboard_exclusion {
+        state.with_config_mut(|c| c.keep_clipboard_exclusion = keep);
+        *config_dirty = true;
+    }
+
     if let Some(history_limit) = patch.history_limit {
         state.with_config_mut(|c| {
             c.history_limit = history_limit;

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy" content="__WEBVIEW_CSP__" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            @import url("settings.css");
+        </style>
+    </head>
+
+    <body>
+        <div id="app">
+            <div
+                id="apply-feedback"
+                class="apply-feedback"
+                role="status"
+                aria-live="polite"
+                hidden
+            ></div>
+            <div id="layout">
+                <aside id="side">
+                    <div
+                        id="sidebar"
+                        role="tablist"
+                        aria-orientation="vertical"
+                        aria-label="設定カテゴリ"
+                    ></div>
+                    <div id="side-actions">
+                        <button type="button" id="open-config-btn" class="ghost-btn">
+                            config.toml
+                        </button>
+                        <button type="button" id="close-btn" class="primary-btn">閉じる</button>
+                    </div>
+                </aside>
+                <main id="content"></main>
+            </div>
+        </div>
+        <div id="confirm-dialog" class="confirm-dialog" hidden>
+            <div class="confirm-dialog__backdrop" data-confirm-cancel></div>
+            <div
+                class="confirm-dialog__panel"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="confirm-dialog-message"
+            >
+                <p id="confirm-dialog-message" class="confirm-dialog__message"></p>
+                <div class="confirm-dialog__actions">
+                    <button
+                        type="button"
+                        id="confirm-dialog-cancel"
+                        class="ghost-btn"
+                        data-confirm-cancel
+                    >
+                        キャンセル
+                    </button>
+                    <button type="button" id="confirm-dialog-ok" class="danger-btn">確認</button>
+                </div>
+            </div>
+        </div>
+        <div id="clip-editor" class="confirm-dialog" hidden>
+            <div class="confirm-dialog__backdrop" data-clip-editor-cancel></div>
+            <div
+                class="confirm-dialog__panel confirm-dialog__panel--wide"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="clip-editor-title"
+            >
+                <h2 id="clip-editor-title" class="confirm-dialog__title">登録クリップを編集</h2>
+                <div class="field">
+                    <label for="clip-editor-label">ラベル</label>
+                    <input
+                        type="text"
+                        id="clip-editor-label"
+                        autocomplete="off"
+                        spellcheck="false"
+                    />
+                    <p class="field-hint">空にすると本文から付け直す</p>
+                </div>
+                <div class="field">
+                    <label for="clip-editor-text">本文</label>
+                    <textarea id="clip-editor-text" spellcheck="false"></textarea>
+                </div>
+                <p
+                    id="clip-editor-error"
+                    class="field-feedback clip-editor__error"
+                    role="alert"
+                    hidden
+                ></p>
+                <div class="confirm-dialog__actions">
+                    <span class="clip-editor__shortcut">Ctrl+Enter で保存</span>
+                    <button
+                        type="button"
+                        id="clip-editor-cancel"
+                        class="ghost-btn"
+                        data-clip-editor-cancel
+                    >
+                        キャンセル
+                    </button>
+                    <button type="button" id="clip-editor-save" class="primary-btn">保存</button>
+                </div>
+            </div>
+        </div>
+        <script src="settings.js"></script>
+    </body>
+</html>

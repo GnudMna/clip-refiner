@@ -166,6 +166,6 @@ mod tests {
 
         // 有効 + 区切り + 取り消し + クリア (レコード用区切りなし)
         assert_eq!(submenu.items().len(), 4);
-        assert!(records.is_empty());
+        assert_eq!(records.len(), 0);
     }
 }

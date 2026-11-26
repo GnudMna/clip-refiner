@@ -8,7 +8,7 @@
           {
             "type": "command",
             "shell": "powershell",
-            "command": "$p = ($input | ConvertFrom-Json).tool_input.file_path.Replace([string][char]92, '/'); if ($p.Contains('crates/clip-refiner/src/ui/') -and $p.EndsWith('.js') -and -not $p.EndsWith('.bundle.js')) { $out = npm run build:ui 2>&1 | Out-String; if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine($out); exit 2 } }",
+            "command": "$p = ($input | ConvertFrom-Json).tool_input.file_path.Replace([string][char]92, '/'); if ($p.Contains('crates/clip-refiner/src/ui/') -and $p.EndsWith('.ts')) { $out = npm run build:ui 2>&1 | Out-String; if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine($out); exit 2 } }",
             "statusMessage": "UI バンドルを再生成中"
           }
         ]
@@ -28,6 +28,8 @@
       "Bash(npm run lint:*)",
       "Bash(npm run format:check:*)",
       "Bash(npm run typecheck:*)",
+      "Bash(npm run knip:*)",
+      "Bash(npm run test:ui:*)",
       "Bash(npm run test:e2e:*)",
       "Bash(pwsh ./scripts/windows/check.ps1:*)",
       "Bash(pwsh ./scripts/windows/clippy.ps1:*)",
@@ -46,6 +48,8 @@
       "PowerShell(npm run lint:*)",
       "PowerShell(npm run format:check:*)",
       "PowerShell(npm run typecheck:*)",
+      "PowerShell(npm run knip:*)",
+      "PowerShell(npm run test:ui:*)",
       "PowerShell(npm run test:e2e:*)",
       "PowerShell($env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1:*)",
       "Bash(git status:*)",

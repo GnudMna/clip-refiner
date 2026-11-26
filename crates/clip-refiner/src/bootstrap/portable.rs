@@ -1,4 +1,6 @@
 //! ポータブル更新の差し替えヘルパー
+//!
+//! 更新プログラムを持たない旧版 (4.0.1 以前) が、展開した新しい実行ファイルを起動する入口
 
 use anyhow::{Result, bail};
 
@@ -26,9 +28,11 @@ pub(super) fn run_portable_update_helper(args: &Args) -> Result<()> {
     };
 
     platform::init_notifications();
-    if let Err(err) =
-        platform::update::run_portable_replace(wait_pid, &install_dir, args.cleanup_dir.as_deref())
-    {
+    if let Err(err) = clip_refiner_updater::run_portable_replace(
+        wait_pid,
+        &install_dir,
+        args.cleanup_dir.as_deref(),
+    ) {
         bail!("{err}");
     }
     Ok(())

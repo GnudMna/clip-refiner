@@ -138,7 +138,9 @@ fn validate_capture_rect(rect: ScreenRect) -> Result<()> {
 
 /// GDI の BGRA ピクセル列を RGBA へ変換する
 fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
-    bgra.chunks_exact(4)
+    let (pixels, _) = bgra.as_chunks::<4>();
+    pixels
+        .iter()
         .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], pixel[3]])
         .collect()
 }
@@ -149,6 +151,25 @@ fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use windows::Win32::System::StationsAndDesktops::{
+        CloseDesktop, DESKTOP_CONTROL_FLAGS, DESKTOP_READOBJECTS, OpenInputDesktop,
+    };
+
+    /// 入力デスクトップを開けるか (画面をキャプチャできる GUI セッションか) を返す
+    ///
+    /// ロック中・切断された RDP・サービス / SSH セッションでは開けず、BitBlt も失敗する。
+    fn has_interactive_desktop() -> bool {
+        // SAFETY: 取得したハンドルはこの関数内で閉じる
+        unsafe {
+            match OpenInputDesktop(DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_READOBJECTS) {
+                Ok(desktop) => {
+                    let _ = CloseDesktop(desktop);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+    }
 
     /// 幅または高さが 0 の矩形は拒否すること
     #[test]
@@ -218,6 +239,10 @@ mod tests {
     /// 仮想画面左上の小領域をキャプチャできるようにすること
     #[test]
     fn capture_screen_region_captures_tiny_virtual_origin() {
+        if !has_interactive_desktop() {
+            eprintln!("note: 入力デスクトップを開けない (GUI セッションなし) ためスキップ");
+            return;
+        }
         let (x, y, width, height) = virtual_screen_bounds();
         assert!(width > 0 && height > 0);
 

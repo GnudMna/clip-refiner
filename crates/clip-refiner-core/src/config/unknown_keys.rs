@@ -16,6 +16,7 @@ const ROOT_KEYS: &[&str] = &[
     "selector_webview_retention",
     "selector_webview_idle_minutes",
     "history_enabled",
+    "keep_clipboard_exclusion",
     "continuous_record_enabled",
     "continuous_record_limit",
     "history_limit",
@@ -146,7 +147,7 @@ pub(crate) fn collect_unknown_config_keys(value: &toml::Value) -> Vec<String> {
 /// * `String` - デスクトップ通知・CLI 向けメッセージ
 #[must_use]
 pub fn format_unknown_config_keys_message(keys: &[String]) -> String {
-    debug_assert!(!keys.is_empty());
+    debug_assert_ne!(keys.len(), 0);
     let preview = format_unknown_keys_preview(keys);
     format!("認識できない設定キーがあります: {preview}。無視して読み込みました")
 }
@@ -219,7 +220,7 @@ caseInsensitive = true
         )
         .expect("parse");
 
-        assert!(collect_unknown_config_keys(&value).is_empty());
+        assert_eq!(collect_unknown_config_keys(&value).len(), 0);
     }
 
     /// ルートとネストの未知キーをドット区切りで検出すること
@@ -269,7 +270,7 @@ text = "b"
         )
         .expect("parse");
 
-        assert!(collect_unknown_config_keys(&value).is_empty());
+        assert_eq!(collect_unknown_config_keys(&value).len(), 0);
     }
 
     /// ユーザー向けメッセージが件数制限付きで組み立てられるようにすること

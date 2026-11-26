@@ -31,11 +31,7 @@ pub(crate) fn should_process_clipboard(
     }
 
     // ポーリング: 前回と同じ内容なら加工しない
-    if !event_driven && ps.matches_last_seen(text) {
-        return false;
-    }
-
-    true
+    event_driven || !ps.matches_last_seen(text)
 }
 
 /// 連続記録へ積むべきか判定する。自身の書き戻しエコーをスキップする場合は `ps` を更新する

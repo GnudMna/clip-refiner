@@ -1,5 +1,5 @@
 #!/bin/sh
-# ClipRefiner pre-commit: cargo fmt --check
+# ClipRefiner pre-commit: cargo fmt --check + Prettier
 
 if [ "$CLIP_REFINER_SKIP_HOOK" = "1" ]; then
     exit 0

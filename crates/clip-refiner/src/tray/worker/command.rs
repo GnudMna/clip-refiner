@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 
 use crate::refiner::{RefineContext, RefineMode};
@@ -23,6 +25,8 @@ pub enum ClipboardCommand {
         refine_ctx: RefineContext,
         /// 結果を返すチャネル
         reply: Sender<crate::ipc::OneshotProcessResult>,
+        /// 依頼側が応答待ちを打ち切ったときに立てるフラグ。立っていれば加工せず破棄する
+        cancelled: Arc<AtomicBool>,
     },
     /// 直近の加工を取り消し、加工前のテキストをクリップボードへ復元する
     Undo,

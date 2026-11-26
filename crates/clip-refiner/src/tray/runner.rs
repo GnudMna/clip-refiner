@@ -24,6 +24,9 @@ pub fn run_loop(e2e_window: Option<E2eWindow>) -> Result<()> {
     let proxy = event_loop.create_proxy();
 
     let mut app = App::new(&proxy)?;
+    if e2e_window.is_none() {
+        clip_refiner_updater::notify_startup_complete();
+    }
 
     if let Some(target) = e2e_window {
         let event = match target {

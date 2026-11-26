@@ -10,10 +10,10 @@
 # 検証内容:
 #   - Cargo.toml upgrade-guid と wix/main.wxs UpgradeCode の一致
 #   - ProductVersion / ProductName / UpgradeCode / Manufacturer
-#   - 必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES)
+#   - 必須ファイル (ClipRefiner.exe, ClipRefinerUpdater.exe, LICENSE, THIRD_PARTY_NOTICES)
 #   - 必須 Feature (Binaries, Environment, Autostart)
 #   - per-user インストール (ALLUSERS)
-#   - MSI Platform テンプレートと ClipRefiner.exe の PE アーキテクチャ (x64)
+#   - MSI Platform テンプレートと実行ファイルの PE アーキテクチャ (x64)
 #   - 管理インストール展開後の実ファイル内容 (既定。SkipExtract で省略)
 # ========================================================================
 

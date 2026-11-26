@@ -74,8 +74,7 @@ pub(crate) fn load_settings_window_geometry() -> SettingsWindowGeometry {
     };
     serde_json::from_str(&contents)
         .ok()
-        .map(SettingsWindowGeometry::clamped)
-        .unwrap_or_default()
+        .map_or_default(SettingsWindowGeometry::clamped)
 }
 
 /// 現在の設定ウィンドウ幾何を保存する

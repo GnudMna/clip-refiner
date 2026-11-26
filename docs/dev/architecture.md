@@ -9,16 +9,17 @@
 ```text
 clip-refiner/
 ├── Cargo.toml           # workspace ルート (virtual manifest / `workspace.dependencies`)
-├── package.json         # UI JavaScript の ESLint / Prettier / TypeScript 型チェック / Playwright E2E、Markdown の markdownlint (本番バイナリには同梱しない)
-├── eslint.config.js
-├── tsconfig.base.json   # `tsc` の共通設定 (UI の checkJs と E2E が継承する)
+├── package.json         # UI・テスト・scripts の ESLint / Prettier / TypeScript 型チェック / knip、Playwright E2E、Markdown の markdownlint (本番バイナリには同梱しない)
+├── .node-version        # 開発に使う Node.js のメジャー版 (`package.json` の `engines` と `.npmrc` の `engine-strict` で下限を強制。三者と `@types/node` のメジャー版は揃える)
+├── eslint.config.ts
+├── tsconfig.base.json   # `tsc` の共通設定 (UI・テスト・scripts・E2E が継承する)
+├── tsconfig.json        # `tsc -b` の入口 (各プロジェクトを project references で束ねる)
+├── knip.json            # 未使用 export・循環 import の検出設定
 ├── e2e/                 # Playwright + WebView2 CDP による設定 / セレクター E2E
-│   ├── fixtures.ts
-│   ├── global-setup.ts  # 開始前に前回の実行で残った一時ディレクトリを削除 (temp-cleanup.ts)
-│   ├── temp-cleanup.ts
+│   ├── specs/           # テスト本体 (`*.spec.ts`)
+│   ├── support/         # fixture・一時ディレクトリの掃除・`page.evaluate` で呼ぶ `window.*` の型
 │   ├── playwright.config.ts
-│   ├── tsconfig.json
-│   └── *.spec.ts
+│   └── tsconfig.json
 ├── fuzz/                # パーサ系変換の cargo-fuzz ターゲット (nightly。ワークスペース外)
 │   ├── fuzz_targets/
 │   └── src/lib.rs       # 共通処理 (パニック時の入力保存)
@@ -27,9 +28,8 @@ clip-refiner/
 │   │   ├── src/
 │   │   │   ├── bootstrap/   # 常駐 / ワンショット起動分岐 (args / logging / panic_hook / instance / oneshot / portable / temp_cleanup)
 │   │   │   ├── ipc/         # ワンショット ↔ 常駐の名前付きパイプ IPC (`protocol` / `client` / `server`。`ClientError` は test-helpers / debug 向け)
-│   │   │   ├── platform/    # デスクトップ常駐向け OS 連携 (通知・自動起動・OCR・WebView2・更新)
-│   │   │   │   └── update/  # 確認 (check/) / 埋め込みキー復号 (bridge_key) / digest・署名検証 (signature) / MSI・ポータブル適用
-│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC / update など)
+│   │   │   ├── platform/    # デスクトップ常駐向け OS 連携 (通知・自動起動・OCR・WebView2)
+│   │   │   ├── test_helpers/ # 統合テスト用 (`ClipboardHarness` / oneshot IPC など)
 │   │   │   ├── tray/        # 常駐 UI・ワーカー・ホットキー・設定ウィンドウ
 │   │   │   │   ├── features/    # トレイメニュー機能ドメイン (menu + event、`update.rs` 含む)
 │   │   │   │   ├── menu/        # TrayMenu 型・全体構築・同期・履歴/連続記録 rebuild
@@ -41,8 +41,12 @@ clip-refiner/
 │   │   │   ├── logger.rs    # 日次ローテーション付きファイルログ
 │   │   │   ├── user_error.rs # UpdateError 等から UserNotification を生成
 │   │   │   └── ui/          # WebView UI (セレクター・設定ウィンドウ)
-│   │   ├── tests/           # 統合テスト (`flow/` は 1 つの実行ファイル。モジュール = ファイル)
+│   │   ├── tests/           # 統合テスト (`flow/` は 1 つの実行ファイル。モジュール = ファイル) と、Node.js で実行する UI ロジックテスト (`ui/`)
 │   │   └── build.rs
+│   ├── clip-refiner-updater/ # アプリ更新のライブラリと更新プログラム (`ClipRefinerUpdater.exe`)
+│   │   ├── src/
+│   │   ├── tests/       # モックサーバによる更新フローの統合テスト
+│   │   └── build.rs     # 更新署名の公開鍵と、更新プログラムのマニフェスト・アイコンを埋め込む
 │   └── clip-refiner-core/   # 加工ロジック・設定型 (GUI 非依存)。ライブラリ利用はこちら
 │       ├── README.md    # ライブラリとしての利用
 │       ├── benches/     # 変換の処理時間ベンチマーク (criterion)
@@ -52,7 +56,7 @@ clip-refiner/
 │           ├── consts.rs    # `CONFIG_VERSION`・処理上限・既定ホットキーなどの定数
 │           ├── error.rs     # 加工・設定 I/O のエラー型
 │           ├── hotkey_binding.rs # `Alt+Shift+S` 形式のホットキー文字列の解釈 (feature 非依存)
-│           ├── native/      # DPAPI (`config`)・クリップボード画像・画像のファイル貼り付け (`CF_HDROP`)・監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
+│           ├── native/      # DPAPI (`config`)・クリップボード画像・画像のファイル貼り付け (仮想ファイル)・監視除外フォーマットの判定 (`clipboard`)。変換のみでは未コンパイル
 │           ├── refiner/     # 変換モード・パイプライン・`OwnedClipboard`
 │           │   ├── mode/        # `RefineMode` / `RefineCategory` の定義・表示名・CLI 名・メニュー順
 │           │   ├── dispatch/    # モードから変換処理への振り分け
@@ -63,10 +67,11 @@ clip-refiner/
 ├── .claude/             # Claude Code 向けの共有設定 (settings.json)・規約 (rules/)・スキル (skills/)
 ├── assets/
 ├── keys/
-│   └── update-signing/  # 更新署名の minisign 公開鍵 (`*.pub`。build.rs が埋め込む)
+│   └── update-signing/  # 更新署名の minisign 公開鍵 (`*.pub`。`clip-refiner-updater` の build.rs が埋め込む)
 ├── scripts/
-│   ├── common/          # 実装ヘルパー (cargo / npm / build-ui.mjs / wix / MSI 検証など)
+│   ├── common/          # 実装ヘルパー (cargo / npm / build-ui.ts / wix / MSI 検証など)
 │   ├── git/hooks/       # Git フック (pre-commit / pre-push)
+│   ├── types/           # 型定義を同梱しない npm パッケージの宣言
 │   ├── templates/       # THIRD_PARTY_NOTICES のテンプレートと、末尾に追記する同梱ドキュメント素材の表示
 │   └── windows/         # 開発者向けエントリポイント (check.ps1, format.ps1 など)
 ├── wix/                 # MSI 定義 (main.wxs)
@@ -85,7 +90,7 @@ clip-refiner/
 OS 連携と IPC の置き場所は次のとおり。
 
 - **`platform/` (`clip-refiner`):** デスクトップ常駐向けの Win32 / WinRT 依存機能を `windows` クレート経由で集約する。多重起動の判定は `platform/single_instance.rs` の名前付き mutex で行う
-- **`platform/update/`:** gh-release-bridge の version API 取得・アセットのダウンロードと検証・MSI / ポータブル ZIP の適用を担う (利用者向けは [アプリの更新](../user/usage.md#アプリの更新))。HTTPS 通信 (`ureq`) は TLS に OS 標準の SChannel、ルート証明書に Windows の証明書ストアを使い、独自の TLS 実装や CA バンドルは同梱しない (`platform/update/http.rs`)
+- **`clip-refiner-updater`:** GitHub API による最新リリースの取得・アセットのダウンロードと検証・MSI / ポータブル ZIP の適用と、更新の画面を担う (利用者向けは [アプリの更新](../user/usage.md#アプリの更新))。HTTPS 通信 (`ureq`) は TLS に OS 標準の SChannel、ルート証明書に Windows の証明書ストアを使い、独自の TLS 実装や CA バンドルは同梱しない (`clip-refiner-updater/src/http.rs`)
 - **`native/` (`clip-refiner-core`):** feature `config` の DPAPI と feature `clipboard` のクリップボード画像など、ライブラリ利用時にも必要な最小限のネイティブ OS API のみを置く。`default-features = false` ではコンパイルしない。`platform/` とは名前を分け、GUI 連携との混同を避ける
 - **`ipc/`:** 常駐プロセスがサーバー、`--mode` / `--pipeline` 実行側がクライアントとなる。パイプは現在ユーザー専用 DACL と `PIPE_REJECT_REMOTE_CLIENTS` で保護し、名前に `.<ログオンセッション ID>` を付けてセッションごとに分ける (多重起動防止の mutex がセッション単位のため。利用者向けは [ワンショット IPC](../user/security.md#ワンショット-ipc))
 
@@ -95,21 +100,21 @@ OS 連携と IPC の置き場所は次のとおり。
 
 ### WebView UI (`src/ui/`)
 
-セレクター (クイック / 登録クリップ) は `src/ui/` 直下、設定ウィンドウは `src/ui/settings/` に置く。ファイルの役割は命名で区別する。
+セレクター (クイック / 登録クリップ) は `ui/selector/`、設定ウィンドウは `ui/settings/` (ダイアログは `dialogs/`、正規表現タブは `regex/`)、両者が使う DOM 補助と HTML エスケープは `ui/shared/` に置く。`ui/` 直下には、Rust と共有する型の `ipc.ts` と `ui/tsconfig.json` だけを置く。ファイルの役割は命名で区別する。
 
 | 種類 | 責務 |
 | :--- | :--- |
-| `quick_selector.js` / `clip_selector.js` / `settings/main.js` | esbuild のエントリ。初期化・DOM 操作・IPC 受信・キーボードイベント |
-| `*_logic.js`・`selector-common.js`・`html_escape.js` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/flow/*_logic.rs`) からも `import` で読み込んで検証する |
-| その他の `*.js` | DOM を扱う描画・入力イベント・IPC 送信 |
+| `selector/quick_selector.ts` / `selector/clip_selector.ts` / `settings/main.ts` | esbuild のエントリ。初期化・DOM 操作・IPC 受信・キーボードイベント |
+| `*_logic.ts`・`selector/selector_common.ts`・`shared/html_escape.ts` など DOM 非依存のモジュール | 一覧組み立て・検索正規化・パッチ組み立て・再描画判定などの純粋ロジック (ESM)。Node.js 上の統合テスト (`tests/flow/*_logic.rs`) からも `import` で読み込んで検証する。`window` / `document` などの値としての参照は ESLint (`no-restricted-globals`) で禁止している |
+| その他の `*.ts` | DOM を扱う描画・入力イベント・IPC 送信 |
 | `*.bundle.js` | esbuild 生成 IIFE (編集禁止。`npm run build:ui` で再生成) |
 | `*.html` / `*.css` | シェル HTML とスタイル |
 
-設定ウィンドウの共有ミュータブル状態は `settings/ctx.js` に置き、描画関数の相互参照もここに集約して循環 import を避ける。`settings/css/*.css` は `tray/settings/window/assets.rs` が `base` → `layout` → `fields` → `regex` → `controls` → `lists` の順に連結して埋め込む (カスケード順のため並びを変えない)。
+設定ウィンドウの共有ミュータブル状態は `settings/ctx.ts` に置き、描画関数の相互参照もここに集約して循環 import を避ける (`npm run knip` が循環を検出する。制限値は `settings/limits.ts`、正規表現の検証は `settings/regex/regex_validation.ts` に分けて依存を一方向に保つ)。`settings/css/*.css` は `tray/settings/window/assets.rs` が `base` → `layout` → `fields` → `regex` → `controls` → `lists` の順に連結して埋め込む (カスケード順のため並びを変えない)。
 
-型は JSDoc で書き、`npm run typecheck` (`tsc`。`src/ui/tsconfig.json` の `checkJs`) が検証する。Rust と受け渡す JSON (設定スナップショット・パッチ・IPC メッセージ・`window` に公開する関数) の型は `ipc.d.ts` に宣言する (型チェック専用でバンドルには含めない)。Rust の serde 型と JSON の形がずれないよう、Rust 側 (`tray/settings/snapshot.rs`・`model.rs`・`ipc/message.rs`・`platform/update/types.rs` など) を変えたら `ipc.d.ts` も合わせる。ずれは `tray/settings/webview_contract_tests.rs` が `cargo test` で検出する。シェル HTML に必ずある要素は `dom.js` の `requiredById` で取得し、設定ウィンドウの描画・イベントは `settings/ctx.js` の `loadedState` で読み込み済みのスナップショットを参照する (どちらも見つからなければ例外にする)。
+型は TypeScript の型注釈で書き、`npm run typecheck` (`tsc`。`src/ui/tsconfig.json`) が検証する。Rust と受け渡す JSON (設定スナップショット・パッチ・IPC メッセージ・`window` に公開する関数) の型は `ipc.ts` に宣言する (型チェック専用でバンドルには含めない)。Rust の serde 型と JSON の形がずれないよう、Rust 側 (`tray/settings/snapshot.rs`・`model.rs`・`ipc/message.rs` など) を変えたら `ipc.ts` も合わせる。ずれは `tray/settings/webview_contract_tests.rs` が `cargo test` で検出する。シェル HTML に必ずある要素は `shared/dom.ts` の `requiredById` で取得し、設定ウィンドウの描画・イベントは `settings/ctx.ts` の `loadedState` で読み込み済みのスナップショットを参照する (どちらも見つからなければ例外にする)。
 
-`innerHTML` へ代入してよいのは `escapeHtml` / `highlightText` と、信頼済み HTML を組み立てる関数の戻り値だけとする。許可する関数は `eslint.config.js` の `no-unsanitized` 設定に列挙し、それ以外の代入は ESLint が拒否する。
+`innerHTML` へ代入してよいのは `escapeHtml` / `highlightText` と、信頼済み HTML を組み立てる関数の戻り値だけとする。許可する関数は `eslint.config.ts` の `no-unsanitized` 設定に列挙し、それ以外の代入は ESLint が拒否する。
 
 Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開して `WebView` に渡す (`embed_quick_selector_assets` / `embed_clip_selector_assets`)。設定 / セレクター `WebView` は埋め込み HTML (`NavigateToString`) のみを表示する。CSP で外部 script / connect / frame を禁止し、インライン script は埋め込んだバンドル JS の SHA-256 ハッシュだけを `script-src` で許可し (`inline_script_block` と `apply_webview_csp` が同じ本文からハッシュを作る)、ナビゲーションハンドラで `http(s)` / `file` 等のページ遷移・`window.open`・ダウンロードを拒否する。初期読み込みは `about:blank` または埋め込んだ HTML と一致する `data:text/html;base64` のみ許可する (`selector/webview_policy.rs`)。
 
@@ -147,20 +152,44 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `clips` | 登録クリップ |
 | `history` | 履歴メニュー (有効化・クリア・過去項目の選択) |
 | `record` | 連続記録 |
-| `update` | 更新確認・適用 (`platform/update/` をバックグラウンド起動。設定 UI から呼ぶ) |
+| `update` | 更新プログラムの起動と、終了の依頼の受け取り (設定 UI から呼ぶ) |
 | `app_control` | 終了・クイック変換・設定ウィンドウ・監視再開 |
 
-設定ウィンドウの JavaScript は [WebView UI](#webview-ui-srcui) を参照する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー・セレクター WebView) に分割されている。設定変更の反映はパッチ側が `AppConfig` を更新し、実際の `WebView` 破棄同期は `loop_event` の `sync_selector_retention` が担う。
+設定ウィンドウの UI は [WebView UI](#webview-ui-srcui) を参照する。Rust 側 (`tray/settings/window/assets.rs`) は `settings.bundle.js` をインライン展開し、シェル DOM ID・全タブ定義・`SettingsPanelsLogic` が含まれることをユニットテストする。読み書き項目は `tray/settings/model.rs` の `SettingsWritable` / `SettingsPatch`、初期表示は `snapshot.rs` の `SettingsSnapshot` が担う。IPC は `tray/settings/ipc/` (メッセージ / キュー / ディスパッチ)、パッチ適用は `tray/settings/apply/patch/` でドメイン別 (監視・履歴・連続記録・正規表現・加工・通知・システム・ホットキー・セレクター WebView) に分割されている。設定変更の反映はパッチ側が `AppConfig` を更新し、実際の `WebView` 破棄同期は `loop_event` の `sync_selector_retention` が担う。
 
-### アプリ更新 (`platform/update/`)
+### アプリ更新 (`clip-refiner-updater`)
 
-設定「一般」タブは `tray/features/update.rs` から確認・適用経路を呼ぶ。同時実行は `settings_pending` の更新オペレーション排他で 1 本に制限する。
+常駐アプリは更新プログラム (`ClipRefinerUpdater.exe`) を起動するだけで、確認・ダウンロード・適用・再起動・結果の表示は更新プログラムが担う。自身の実行ファイルを差し替えるアプリが、成否を最後まで見届けられないためである。
 
-`platform/update/` は、確認 (`check/`)・ダウンロードと検証・署名検証・適用・ポータブル差し替えヘルパー (`replace/`) をサブモジュールに分ける。署名の公開鍵は `build.rs` が `keys/update-signing/*.pub` から埋め込み、ダウンロード認証のキーは `bridge_key` が復号する。検証の仕様 (digest・署名・アセット名・認証) は利用者向けの [アプリ更新の検証](../user/security.md#アプリ更新の検証) を正とし、本書では繰り返さない。
+| モジュール | 責務 |
+| :--- | :--- |
+| `session.rs` | 常駐アプリ側。更新プログラムを `%TEMP%\clip-refiner-update\` へコピーして起動し、終了の依頼を待つ |
+| `app/flow.rs` | 進行と成否の判定。画面 (`Ui`) と副作用 (`Ops`) はトレイトで受け取る |
+| `app/page.rs` | 各ページの文言・ボタン・閉じ方 |
+| `app/dialog.rs` | `TaskDialog` による表示。進行は別スレッドで動かし、ページの切り替えをタイマー通知で反映する |
+| `app/ops.rs` | 実際のインストール先に対する副作用 |
+| `check/`・`prepare.rs`・`signature.rs`・`verify.rs` | 最新リリースの確認と、アセットのダウンロード・検証・展開 |
+| `msi.rs`・`replace/` | MSI の適用 (`msiexec /qn`)・ポータブルの差し替え |
+| `resident.rs`・`installed.rs` | 常駐アプリの終了待ち・起動と、版・自動起動の登録の読み書き |
 
-確認・適用の失敗は `UpdateError` (`error.rs`) に集約する。トレイ / 設定 UI 側 (`tray/features/update.rs`) は `Display` 文字列を Outcome へ載せ、デスクトップ通知は `UserNotification` (`user_error.rs`) 経由で送る。
+アプリと更新プログラムは、ログオンセッション内の名前付きイベントで連絡する。
 
-統合テストは `flow/update.rs` と `test_helpers/update.rs` でローカル HTTP モック bridge を立て、`ApplyOptions::TEST` により `msiexec` / 差し替えヘルパー / エクスプローラーを起動しない。隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は利用者向けではなく、ポータブル差し替えヘルパー専用である (`--e2e-window` と同様に help では非表示)。
+| イベント | 通知する側 | 意味 |
+| :--- | :--- | :--- |
+| `update-exit.<PID>` | 更新プログラム | 起動元のアプリへの終了の依頼 (`UpdateEvent::ExitRequested`) |
+| `update-started` | 常駐アプリ | 常駐の完了 (`tray/runner.rs` の `notify_startup_complete`)。更新プログラムが待っていなければ何もしない |
+
+- **打ち切りの境界:** ダウンロードと検証まではアプリに影響しないため、画面を閉じればその場で終わる。終了の依頼より後は、結果を表示するまで閉じられない。どちらが先かは `app/dialog.rs` の `Gate` が 1 度だけ決める
+- **成功の条件:** インストールの成功・実行ファイルの版の一致・`update-started` の受信がすべて揃ったとき。適用に失敗したら、終了したアプリを起動し直してから結果を表示する
+- **起動し直されたアプリ:** 更新の画面を開いたままアプリが起動し直されると、依頼先の PID が合わない。多重起動防止の mutex が残っている間は終了していないものとして扱い、更新せずに案内する
+- **画面を出せない場合:** `TaskDialogIndirect` は Common Controls v6 にしか無く、実行時に取得する。取得できなければ、アプリを終了する前に中止する
+- **MSI の引き継ぎ:** `APPLICATIONFOLDER` に現在のインストール先を渡し、自動起動 (`Run`) の値は適用の前後で控えて戻す。実行フォルダが MSI の導入先 (`ARPINSTALLLOCATION`) の `bin` でなければ更新しない
+
+署名の公開鍵は同クレートの `build.rs` が `keys/update-signing/*.pub` から埋め込む。検証の仕様 (digest・署名・アセット名) は利用者向けの [アプリ更新の検証](../user/security.md#アプリ更新の検証) を正とし、本書では繰り返さない。失敗の理由は `UpdateError` (`error.rs`) に集約する。
+
+統合テストは `clip-refiner-updater/tests/update.rs` と同クレートの `test_helpers` でローカル HTTP モックサーバを立て、確認から展開までを固定する。成否の判定は `app/flow.rs` のユニットテストで、副作用を差し替えて検証する。
+
+隠し CLI `--apply-portable-update` (および `--wait-pid` / `--install-dir` / `--cleanup-dir`) は、更新プログラムを持たない 4.0.1 以前のポータブル版が、展開した新しい `ClipRefiner.exe` を差し替えヘルパーとして起動するための入口で、現在の版からは使わない。
 
 ### デスクトップ通知
 
@@ -171,21 +200,20 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | **platform** | `platform/notify.rs` | Windows トーストの初期化と送信 (`init_notifications`, `show_notification`) |
 | **platform** | `platform/bundled_docs.rs` | 同梱文書 (`docs\index.html`・`THIRD_PARTY_NOTICES`) を実行ファイルのフォルダ (MSI は `bin` の親) から開く (`THIRD_PARTY_NOTICES` は拡張子が無いためメモ帳を明示起動)。設定ウィンドウの「情報」タブから呼ぶ |
 | **platform** | `platform/webview2.rs` | WebView2 Runtime のレジストリ検出、未導入時の起動通知、導入ページオープン |
-| **platform** | `platform/update/` | 更新確認・digest / 署名検証・MSI / ポータブル適用。失敗は `UpdateError`。通知文言は呼び出し元が `UserNotification` 経由で送る |
 | **tray** | `tray/notify/message.rs` | 加工完了・自動変換の切替など設定連動の本文組み立て (`show_process_notification`, `show_when_enabled` など) |
 | **app** | `user_error.rs` | 型付きエラー (`UpdateError` / core エラーなど) から `UserNotification` (タイトル・本文) を生成し、ログとデスクトップ通知を一元化 |
-| **features** | `tray/features/update.rs` | 更新確認 / 適用のバックグラウンド起動と UI / `UserNotification` への結果反映 |
+| **features** | `tray/features/update.rs` | 更新プログラムを起動できなかったときの `UserNotification` (確認以降の結果は更新の画面に表示する) |
 
 - エラー表示・設定読み込み失敗など固定メッセージは、呼び出し元から `platform::show_notification` を直接使うか、`UserNotification` 経由で送る (`NotificationSettings.enabled` を経由しない)
 - 監視モードの加工完了は `tray/notify` が `NotificationSettings` を反映して本文を組み立て、最終的に `platform::show_notification` へ渡す
-- アプリ更新の失敗・案内は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
+- 更新プログラムの起動失敗は `UpdateError::Display` → `UserNotification` → `platform::show_notification` の経路に揃える
 - 起動時は `bootstrap/` で `init_notifications` を呼び、AUMID とアイコンを登録してから各所でトーストを送る
 
 `NotificationSettings` (`clip-refiner-core/src/config/types/notification.rs`) はマスター (`enabled`) と種類別トグル (`notify_process` など) を保持する。旧 `notify_mode` / `notify_actions` は `migrate_legacy_fields` で読み込み時に移行し、保存時は出力しない。利用者向けの説明は [通知](../user/configuration.md#通知-notification_settings) を参照。
 
 ### スクリプト構成
 
-`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.mjs`)、markdownlint のカスタムルール、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。エントリポイントは本体を `Invoke-ScriptMain` (`wait-if-double-clicked.ps1`) で実行し、本体が変えたカレントディレクトリと環境変数を終了時に呼び出し前へ戻す。
+`scripts/windows/` は開発者が直接実行するエントリポイント。実処理は `scripts/common/` のヘルパーに集約する (PowerShell はドットソース、Node は `npm run` から呼ぶ)。`scripts/common/` には cargo / npm / cargo-fuzz / WiX のラッパー、UI バンドル (`build-ui.ts`)、UI のカバレッジの下限の検証 (`check-ui-coverage.ts`)、markdownlint のカスタムルール、ターゲット解決と MSI 検証、リリース補助 (バージョン更新・更新署名・`THIRD_PARTY_NOTICES` 生成・利用者向けドキュメントの mdBook ビルドと WiX 断片生成)、共通処理 (終了コード検証・ルートへの移動など) を置く。各ファイルの役割は先頭のコメントに書く。エントリポイントは本体を `Invoke-ScriptMain` (`wait-if-double-clicked.ps1`) で実行し、本体が変えたカレントディレクトリと環境変数を終了時に呼び出し前へ戻す。
 
 | `scripts/windows/` | 役割 |
 | :--- | :--- |
@@ -194,7 +222,7 @@ Rust 側 (`tray/selector/`) は CSS とバンドル JS をインライン展開�
 | `test.ps1` / `clippy.ps1` / `coverage.ps1` | 個別の Cargo コマンド (カバレッジは `cargo-llvm-cov`) |
 | `fuzz.ps1` | パーサ系変換のファジング (`cargo-fuzz`。`check.ps1` には含めない) |
 | `bench.ps1` | 変換の処理時間ベンチマーク (`criterion`。基準の保存と比較。`check.ps1` には含めない) |
-| `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check`) |
+| `check-pre-commit.ps1` | pre-commit 用 (`cargo fmt --check` + Prettier) |
 | `build.ps1` / `build-msi.ps1` / `build-portable.ps1` | ビルド・MSI / ポータブル ZIP 作成 |
 | `verify-msi.ps1` | MSI 検証の CLI ラッパー |
 | `release.ps1` | リリース手順一括実行 (MSI / ポータブル ZIP 含む) |
@@ -275,6 +303,7 @@ flowchart TB
 | **Config Watcher** (`tray/worker/config_watcher.rs`) | 専用 | 設定ディレクトリを `FindFirstChangeNotification` で監視し、`ConfigFileChanged` でワーカーを起床する。変更の有無は `config_sync` の本文指紋 (BLAKE3) で判定する。初期化失敗時は約 2 秒ごとの指紋確認にフォールバックする |
 | **Oneshot IPC Server** (`ipc/`) | 専用 (+ 接続ごとの一時スレッド) | 名前付きパイプでワンショット要求を受け、`ProcessOneshotPipeline` をワーカーへ委譲する。待受スレッドは接続を一時スレッドへ渡して次インスタンスの待受を続け、同時処理を `MAX_ACTIVE_CONNECTIONS` (4) に制限する (上限中は枠が空くまで次の接続を保留)。要求 1 行の読み取りは `REQUEST_READ_TIMEOUT` (5 秒) で打ち切り、`PeekNamedPipe` で到着済みの分だけを読むため、要求を送らない接続が枠を占有し続けない。手持ちインスタンスが無いときだけ `FILE_FLAG_FIRST_PIPE_INSTANCE` で作成し、名前の先取りを避ける。パイプ名は `ONESHOT_IPC_PIPE_NAME` + `.<セッション ID>` で、CLI は `GetNamedPipeServerSessionId` で作成元が同じセッションか確かめる。待受スレッドの起動に失敗しても常駐は監視を続けたまま通知する。DACL などの保護は [ワンショット IPC](../user/security.md#ワンショット-ipc) を参照 |
 | **Clipboard Worker** (`tray/worker/`) | 専用 | すべてのクリップボード読み書き (`OwnedClipboard`)、監視ループ、設定ファイルの外部変更検知。`recv_timeout` でコマンド受信と監視チックを交互に処理。Event / 連続記録かつリスナ稼働時は `ClipboardChanged` / `ConfigFileChanged` で起床する。再起動・破棄時は `Shutdown` 後にリスナ・設定監視とワーカーを join してから戻る |
+| **Image File Host** (`clip-refiner-core` の `native/clipboard_file`) | 専用 (STA) | 画像を仮想ファイルとして載せ、貼り付け先からの要求に応じる。ワーカーの `OwnedClipboard` が最初の書き込みで起動し、破棄時に join する |
 | **AppState** (`tray/state/`) | 共有 (`Arc`) | 設定 (`RwLock`)、監視世代、イベントプロキシ。履歴・Undo・二重加工防止は `clipboard_session()`、ワーカー稼働は `worker()`、設定ディスク同期は `config_sync()`、設定 UI 適用待ちは `settings_pending()` 経由 |
 
 ### UI の遅延生成
@@ -299,7 +328,7 @@ flowchart TB
   - `clipboard_seq` / `AddClipboardFormatListener`: `OpenClipboard` なし (または本文非読) の変更通知
   - `OwnedClipboard` (`arboard`): テキスト / 通常画像 / HTML 形式 (`CF_HTML`) の `OpenClipboard` I/O。HTML 形式の有無は `IsClipboardFormatAvailable` で開かずに判定する
   - `native/clipboard_image` (`CF_DIB` / `CF_DIBV5`): Excel 向け短命 Open。同一呼び出しで `arboard` と重ねて開かない
-  - `native/clipboard_file` (`CF_HDROP`): 画像のビットマップを書いた直後に、PNG を一時フォルダへ書き出してそのパスを追加する。既存の形式は消さない。`arboard` の書き込みが終わってから開く
+  - `native/clipboard_file` (OLE の仮想ファイル): 画像と PNG の仮想ファイル (`FileGroupDescriptorW` / `FileContents`) を `OleSetClipboard` で載せる。OLE は `FileContents` を静的なデータとして受け付けず、`OleFlushClipboard` でも残せないため、`OwnedClipboard` が持つ専用の STA スレッドがメッセージを処理し続けて貼り付けに応じる。画像の形式は実データで置き換え、スレッドの終了後も残す。書き込み中はワーカーが完了を待つため、`arboard` と同時には開かない
 
 加工ロジック自体 (`refiner/`) は基本的にスレッドを持たず、ワーカーまたはワンショット実行 (`bootstrap/`) から同期的に呼ばれる。例外として正規表現マッチは実行時間上限のために一時スレッドを使うが、同時実行は最大 2 本 (`REGEX_MATCH_MAX_IN_FLIGHT`) に制限する。タイムアウト時はキャンセルを要求し、実行側はマッチ境界で中断してスロットを返す。`regex` クレートは単一の `find` 実行中を打ち切れないため、その探索が終わるまでスレッドが残る場合がある。画面 OCR も範囲確定後に一時スレッドでキャプチャ・認識するが、`OcrJobGate` により同時実行は 1 本に限り、新しい要求で旧ジョブの結果適用を破棄する。
 

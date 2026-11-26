@@ -44,6 +44,7 @@ Invoke-ScriptMain {
     . (Join-Path $PSScriptRoot '..\common\windows-target.ps1')
 
     $ExeName = 'ClipRefiner.exe'
+    $UpdaterName = 'ClipRefinerUpdater.exe'
     $MarkerName = 'portable'
     $LicenseName = 'LICENSE'
     $NoticesName = 'THIRD_PARTY_NOTICES'
@@ -159,13 +160,13 @@ $($_.Exception.Message)
 
         if (-not $SkipBuild) {
             Write-Host "リリースビルドを実行中 ($triple)..."
-            cargo build --locked -p clip-refiner --bins --release @targetArgs
+            cargo build --locked -p clip-refiner -p clip-refiner-updater --bins --release @targetArgs
             if ((Test-Path variable:LASTEXITCODE) -and $LASTEXITCODE -ne 0) {
                 $hint = Get-WindowsCrossCompileHint -TargetTriple $triple
                 if ($hint) {
-                    throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました`n$hint"
+                    throw "エラー: cargo build --locked -p clip-refiner -p clip-refiner-updater --bins --release が終了コード $LASTEXITCODE で失敗しました`n$hint"
                 }
-                throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました"
+                throw "エラー: cargo build --locked -p clip-refiner -p clip-refiner-updater --bins --release が終了コード $LASTEXITCODE で失敗しました"
             }
             Write-Host ''
         } else {
@@ -180,6 +181,14 @@ $($_.Exception.Message)
             -FileName $ExeName
         Assert-PeMachineType -Path $exeSource -TargetTriple $triple
         Write-Host "使用する実行ファイル: $exeSource"
+
+        $updaterSource = Resolve-ReleaseExecutable `
+            -ProjectRoot $ProjectRoot `
+            -TargetTriple $triple `
+            -ImplicitHost:$implicitHost `
+            -FileName $UpdaterName
+        Assert-PeMachineType -Path $updaterSource -TargetTriple $triple
+        Write-Host "使用する更新プログラム: $updaterSource"
         Write-Host ''
 
         $packageName = "clip-refiner-$version-$triple-portable"
@@ -191,6 +200,7 @@ $($_.Exception.Message)
         New-Item -ItemType Directory -Path $stagingWorkDir -Force | Out-Null
 
         Copy-Item -LiteralPath $exeSource -Destination (Join-Path $stagingWorkDir $ExeName) -Force
+        Copy-Item -LiteralPath $updaterSource -Destination (Join-Path $stagingWorkDir $UpdaterName) -Force
         Copy-Item -LiteralPath $licenseSource -Destination (Join-Path $stagingWorkDir $LicenseName) -Force
         if ($noticesSource) {
             Copy-Item -LiteralPath $noticesSource -Destination (Join-Path $stagingWorkDir $NoticesName) -Force
@@ -216,6 +226,10 @@ ClipRefiner ポータブル版
 2. ClipRefiner.exe を起動する (初回起動で data\ が作成される)
 3. 通知領域のアイコンから操作する
 
+更新:
+- 設定ウィンドウ「一般」タブの「更新を確認」から行う
+- ClipRefinerUpdater.exe は更新に使うため、ClipRefiner.exe と同じフォルダに置いたままにする (直接は起動しない)
+
 注意:
 - ログイン時の自動起動はレジストリに絶対パスを書くため、USB 用途には向きません
 - 登録クリップの鍵は Windows DPAPI で保護されるため、別ユーザー / 別 PC では復号できない場合があります
@@ -224,7 +238,7 @@ ClipRefiner ポータブル版
         Set-Content -LiteralPath (Join-Path $stagingWorkDir $ReadmeName) -Value $portableReadme.TrimEnd() -Encoding utf8
 
         $requiredNames = [System.Collections.Generic.List[string]]::new()
-        $requiredNames.AddRange([string[]]@($ExeName, $MarkerName, $LicenseName, $ReadmeName, "$DocsDirName\index.html"))
+        $requiredNames.AddRange([string[]]@($ExeName, $UpdaterName, $MarkerName, $LicenseName, $ReadmeName, "$DocsDirName\index.html"))
         if ($noticesSource) {
             $requiredNames.Add($NoticesName)
         }

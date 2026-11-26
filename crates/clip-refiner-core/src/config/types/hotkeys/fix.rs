@@ -189,6 +189,6 @@ mod tests {
             format_hotkey_fixes_message(std::slice::from_ref(slot_fix)).expect("メッセージ");
         assert!(message.contains("お気に入り 2"));
         assert!(message.contains("無効化"));
-        assert!(hotkeys.favorite_mode_slots[1].is_empty());
+        assert_eq!(hotkeys.favorite_mode_slots[1].len(), 0);
     }
 }

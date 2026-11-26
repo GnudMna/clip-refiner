@@ -81,6 +81,14 @@
                             <RemoveFolder Id='RemoveApplicationFolder' Directory='APPLICATIONFOLDER' On='uninstall'/>
                             <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='main' Type='integer' Value='1' KeyPath='yes'/>
                         </Component>
+                        <Component Id='binary1' Guid='69D3D54B-EBFB-4DF8-800D-B08D5D430C7C'>
+                            <File
+                                Id='exe1'
+                                Name='ClipRefinerUpdater.exe'
+                                DiskId='1'
+                                Source='$(var.CargoTargetBinDir)\ClipRefinerUpdater.exe'/>
+                            <RegistryValue Root='HKCU' Key='Software\Yuto Hirata\ClipRefiner' Name='updater' Type='integer' Value='1' KeyPath='yes'/>
+                        </Component>
                     </Directory>
                 </Directory>
             </Directory>
@@ -135,6 +143,7 @@
             Absent='disallow'>
 
             <ComponentRef Id='binary0'/>
+            <ComponentRef Id='binary1'/>
             <ComponentRef Id='License'/>
             <ComponentRef Id='ThirdPartyNotices'/>
             <ComponentRef Id='StartMenuShortcut'/>

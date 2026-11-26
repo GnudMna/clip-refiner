@@ -52,7 +52,7 @@ fn ipc_log_preview(msg: &str) -> String {
 
 /// 設定ウィンドウ用 JavaScript バンドルを返す
 ///
-/// ソースは `src/ui/settings/*.js`。`npm run build:ui` (esbuild) で
+/// ソースは `src/ui/settings/**/*.ts`。`npm run build:ui` (esbuild) で
 /// `settings.bundle.js` を生成し、ここへ埋め込む。`cargo build` 単体では Node を要求しない
 pub(super) fn assemble_settings_js() -> String {
     include_str!("../../../ui/settings/settings.bundle.js").to_string()
@@ -72,7 +72,7 @@ fn embed_settings_assets(html: &str) -> String {
 
 /// 設定ウィンドウ用 HTML を組み立てる
 pub(super) fn assemble_settings_html() -> String {
-    embed_settings_assets(include_str!("../../../ui/settings.html"))
+    embed_settings_assets(include_str!("../../../ui/settings/settings.html"))
 }
 
 // ======================================================================
@@ -126,8 +126,6 @@ mod tests {
         assert!(js.contains("function handleRegexPreview"));
         assert!(js.contains("function updateMonitorPipelineUi"));
         assert!(js.contains("function panelWrap"));
-        assert!(js.contains("onUpdateCheck"));
-        assert!(js.contains("onUpdateApply"));
         assert!(js.contains("更新を確認"));
         assert!(js.contains("セレクター WebView"));
         assert!(js.contains("selectorWebviewRetention"));

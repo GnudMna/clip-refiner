@@ -141,7 +141,7 @@ mod tests {
 
         let resolved = resolve_favorite_slot_hotkeys(&hotkeys, 1, &reserved);
 
-        assert!(resolved.is_empty());
+        assert_eq!(resolved.len(), 0);
     }
 
     /// 先に割り当てたスロットと重複するお気に入りスロットは除外されるようにすること
@@ -168,7 +168,7 @@ mod tests {
 
         let resolved = resolve_favorite_slot_hotkeys(&hotkeys, 1, &[]);
 
-        assert!(resolved.is_empty());
+        assert_eq!(resolved.len(), 0);
     }
 
     /// 重複するお気に入りホットキーは除外されるようにすること

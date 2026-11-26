@@ -157,8 +157,9 @@ function Assert-UiBundlesSynced {
     Invoke-NpmScript -Name 'build:ui:check'
 }
 
-# ESLint・Prettier 整形チェック・TypeScript 型チェック (UI の checkJs と E2E) を実行する
-function Invoke-JavaScriptLintCheck {
+# ESLint・Prettier 整形チェック・TypeScript 型チェック・未使用 export の検出 (knip)・
+# UI ロジックテストのカバレッジの下限の検証を実行する
+function Invoke-TypeScriptLintCheck {
     [CmdletBinding()]
     param()
 
@@ -166,6 +167,19 @@ function Invoke-JavaScriptLintCheck {
     Invoke-NpmScript -Name 'lint'
     Invoke-NpmScript -Name 'format:check'
     Invoke-NpmScript -Name 'typecheck'
+    Invoke-NpmScript -Name 'knip'
+    Invoke-NpmScript -Name 'test:ui:coverage'
+}
+
+# npm 依存の既知の脆弱性を監査する (high 以上で失敗する)
+#
+# low / moderate は失敗にしない。現状の low は markdownlint-cli2 経由の katex (開発専用)。
+# `npm audit fix --force` は markdownlint-cli2 を旧版へ戻すため使わない
+function Invoke-NpmAudit {
+    [CmdletBinding()]
+    param()
+
+    Invoke-NpmScript -Name 'audit:deps'
 }
 
 # markdownlint で Markdown の書式 (表の書き方など) を検証する
@@ -184,8 +198,8 @@ function Invoke-MarkdownLintFix {
     Invoke-NpmScript -Name 'lint:md:fix'
 }
 
-# Prettier で JavaScript を整形する
-function Invoke-JavaScriptFormat {
+# Prettier で TypeScript などを整形する
+function Invoke-TypeScriptFormat {
     [CmdletBinding()]
     param()
 

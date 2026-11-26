@@ -40,6 +40,16 @@ pub trait TextClipboard {
     /// クリップボードへの書き込みに失敗した場合
     fn set_text(&mut self, text: String) -> Result<(), ClipboardIoError>;
 
+    /// クリップボードへテキストを、履歴・クラウド同期・監視から除外する形式付きで書き込む
+    ///
+    /// 本文と除外形式を 1 回の書き込みで載せる。既定実装は除外形式を付けず `set_text` と同じ
+    ///
+    /// # Errors
+    /// クリップボードへの書き込みに失敗した場合
+    fn set_excluded_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
+        self.set_text(text)
+    }
+
     /// 現在の内容がパスワードマネージャー等により監視除外を指定されているか判定する
     ///
     /// 本文を読む前に呼ぶ。既定実装は常に `false`
@@ -85,12 +95,11 @@ pub trait ImageClipboard {
 
     /// クリップボードへ RGBA 画像を書き込み、エクスプローラへもファイルとして貼り付けられるようにする
     ///
-    /// ビットマップに加えて、PNG ファイルのパス (`CF_HDROP`) を同時に載せる実装向け
+    /// ビットマップに加えて、PNG の仮想ファイルを同時に載せる実装向け。ディスクへは書き出さない
     /// ファイルを載せられない実装 (既定) はビットマップのみを書き込む
-    /// 登録クリップのように、平文のファイルを残したくない画像には使わない
     ///
     /// # Errors
-    /// ビットマップの書き込みに失敗した場合。ファイルの書き出しに失敗してもビットマップは残し、エラーにしない
+    /// ビットマップの書き込みに失敗した場合。仮想ファイルを載せられなくてもビットマップは書き込み、エラーにしない
     fn set_image_as_file(
         &mut self,
         width: u32,
@@ -122,6 +131,20 @@ pub trait HtmlClipboard {
     /// # Errors
     /// クリップボードへの書き込みに失敗した場合
     fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError>;
+
+    /// `set_html` と同じ内容を、履歴・クラウド同期・監視から除外する形式付きで書き込む
+    ///
+    /// 既定実装は除外形式を付けず `set_html` と同じ
+    ///
+    /// # Errors
+    /// クリップボードへの書き込みに失敗した場合
+    fn set_excluded_html(
+        &mut self,
+        html: String,
+        alt_text: String,
+    ) -> Result<(), ClipboardIoError> {
+        self.set_html(html, alt_text)
+    }
 }
 
 #[cfg(feature = "clipboard")]
@@ -137,27 +160,21 @@ impl TextClipboard for arboard::Clipboard {
         arboard::Clipboard::set_text(self, text)
             .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
     }
+
+    fn set_excluded_text(&mut self, text: String) -> Result<(), ClipboardIoError> {
+        use arboard::SetExtWindows;
+
+        self.set()
+            .exclude_from_monitoring()
+            .exclude_from_history()
+            .exclude_from_cloud()
+            .text(text)
+            .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
+    }
 }
 
 #[cfg(feature = "clipboard")]
 impl ImageClipboard for arboard::Clipboard {
-    fn set_image_as_file(
-        &mut self,
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    ) -> Result<(), ClipboardIoError> {
-        let png = crate::native::clipboard_file::encode_png(width, height, &rgba);
-        ImageClipboard::set_image(self, width, height, rgba)?;
-
-        // ビットマップは書き込み済み。ファイルを添えられなくても処理は成功とする
-        match png.and_then(|png| crate::native::clipboard_file::attach_png_file(&png)) {
-            Ok(path) => tracing::debug!("画像ファイルをクリップボードへ添付: {}", path.display()),
-            Err(e) => tracing::warn!("画像ファイルをクリップボードへ添付できませんでした: {e}"),
-        }
-        Ok(())
-    }
-
     fn get_image(&mut self) -> Result<(u32, u32, Vec<u8>), ClipboardIoError> {
         read_rgba_image(self)
     }
@@ -204,6 +221,21 @@ impl HtmlClipboard for arboard::Clipboard {
 
     fn set_html(&mut self, html: String, alt_text: String) -> Result<(), ClipboardIoError> {
         arboard::Clipboard::set_html(self, html, Some(alt_text))
+            .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
+    }
+
+    fn set_excluded_html(
+        &mut self,
+        html: String,
+        alt_text: String,
+    ) -> Result<(), ClipboardIoError> {
+        use arboard::SetExtWindows;
+
+        self.set()
+            .exclude_from_monitoring()
+            .exclude_from_history()
+            .exclude_from_cloud()
+            .html(html, Some(alt_text))
             .map_err(|e| ClipboardIoError::WriteFailed(e.to_string()))
     }
 }

@@ -51,7 +51,7 @@ pub(crate) fn register_overlay_class() -> Result<()> {
             cbClsExtra: 0,
             cbWndExtra: 0,
             // SAFETY: `None` は自プロセスのモジュールハンドルを返すだけで、ポインタを受け取らない
-            hInstance: unsafe { GetModuleHandleW(None).map(Into::into).unwrap_or_default() },
+            hInstance: unsafe { GetModuleHandleW(None).map_or_default(Into::into) },
             hIcon: HICON::default(),
             // SAFETY: システム定義カーソルの読み込みで、インスタンスハンドルを渡さない
             hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },

@@ -9,7 +9,7 @@ use super::super::ipc::SettingsPatch;
 use super::super::regex_preview::RegexPreviewResponse;
 use super::SettingsWindow;
 use super::open_settings_window;
-use crate::tray::features::{start_update_apply, start_update_check};
+use crate::tray::features::start_updater;
 use crate::tray::menu::TrayMenu;
 use crate::tray::selector::QuickSelectorWindow;
 use crate::tray::settings::refresh_settings_window;
@@ -100,12 +100,7 @@ impl SettingsWindow {
                     self.notify_regex_preview(&response);
                 }
             }
-            SettingsEvent::CheckUpdate => {
-                let _ = start_update_check(state, self);
-            }
-            SettingsEvent::ApplyUpdate => {
-                let _ = start_update_apply(state, self);
-            }
+            SettingsEvent::CheckUpdate => start_updater(state),
             SettingsEvent::Refresh => refresh_settings_window(state, self),
         }
     }

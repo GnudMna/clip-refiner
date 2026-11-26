@@ -2,7 +2,7 @@
 
 `config.toml` の場所・設定項目と既定値・処理の制限など、設定ファイルの仕様をまとめる。日常的な変更は [設定ウィンドウ](usage.md#設定ウィンドウ) から行える。操作方法は [使い方](usage.md)、変換モードは [変換モード](modes.md) を参照。
 
-現行の設定スキーマは `version = 5` 。スキーマの変更と移行内容は [変更履歴](changelog.md) の該当バージョンにある **Settings** / **Breaking changes** 節に記載する。
+現行の設定スキーマは `version = 5`。スキーマの変更と移行内容は [変更履歴](changelog.md) の該当バージョンにある **Settings** / **Breaking changes** 節に記載する。
 
 **目次:** [設定ファイルの場所](#設定ファイルの場所) · [最小構成例](#最小構成例) · [処理の制限](#処理の制限) · [設定項目](#設定項目) · [ホットキー形式](#ホットキー形式) · [通知](#通知-notification_settings) · [加工パイプライン](#加工パイプライン-pipeline) · [監視方式](#監視方式-monitor_mode) · [セレクター WebView の保持](#セレクター-webview-の保持-selector_webview_retention) · [ログ](#ログ) · [旧設定からの移行](#旧設定からの移行)
 
@@ -32,7 +32,7 @@
 | `registered-clips.key` | 登録クリップ用鍵 (Windows DPAPI で保護) |
 | `registered-images/` | 登録クリップ画像 (暗号化) |
 | `settings-window.json` | 設定ウィンドウのサイズ・位置 |
-| `logs/` | 日次ログ (`clip-refiner.log.YYYY-MM-DD`) |
+| `logs/` | 日次ログ (`clip-refiner.log.YYYY-MM-DD`)、更新プログラムのログ (`updater.log`・`updater-msi.log`) |
 
 ### 読み込みの異常時の挙動
 
@@ -123,6 +123,7 @@ notify_result = false
 | クリップボード本文 | 2 MiB |
 | JSON / YAML / Markdown パーサー入力 | 1 MiB |
 | HTML→Markdown の要素の入れ子 | 256 階層 |
+| Excel ⇔ Markdown 表のセル数 (行数×最大列数) | 2000000 個 |
 | 正規表現パターン | 8 KiB (ステップ単位) |
 | 正規表現プリセット | 20 件 |
 | 正規表現ステップ / プリセット | 10 件 |
@@ -132,7 +133,6 @@ notify_result = false
 | 登録クリップ | 100 件 (ラベル 64 文字、テキスト 2 MiB、画像 PNG 16 MiB / 辺長 8192 px / 16777216 ピクセル (4096×4096)) |
 | 登録クリップ暗号化ファイル | 256 MiB |
 | Base64 と相互変換する画像 | 辺長 8192 px、16777216 ピクセル (4096×4096) まで |
-| 貼り付け用に書き出す画像ファイル | 1 時間保持 |
 | お気に入り変換モード | 20 件 |
 | 加工パイプライン | 10 段 |
 | ポーリング間隔 (`interval_ms`) | 100〜60000 ms |
@@ -176,7 +176,7 @@ notify_result = false
 | `selector_webview_retention` | string | `"Keep"` | セレクター WebView の保持方針。`"Keep"` (非表示後も保持) / `"DisposeOnHide"` (非表示時に破棄) / `"DisposeAfterIdle"` (アイドル後に破棄) |
 | `selector_webview_idle_minutes` | number | `5` | `DisposeAfterIdle` 時に非表示から破棄するまでの分数 (1〜1440)。設定ウィンドウ「一般」タブの詳細設定でも変更可 |
 
-### 履歴・連続記録モード
+### 履歴・連続記録モード・除外形式
 
 | キー | 型 | デフォルト | 説明 |
 | :--- | :--- | :--- | :--- |
@@ -184,6 +184,7 @@ notify_result = false
 | `history_limit` | number | `10` | 履歴の最大保持件数 (1〜100) |
 | `continuous_record_enabled` | bool | `false` | 連続記録モード (監視時は加工せず元テキストを記録)。`auto_refine_enabled` とは同時に有効にならない |
 | `continuous_record_limit` | number | `10` | 連続記録モードの最大保持件数 (1〜100) |
+| `keep_clipboard_exclusion` | bool | `true` | 書き込む内容に除外形式を付けて、Win+V 履歴・クラウド同期・監視へ載せないかどうか。手動加工では元がパスワードマネージャー等の除外形式付きのときだけ付け、登録クリップのコピーには常に付ける。設定ウィンドウ「クリップボード」タブでも切り替えられる ([パスワードマネージャーの監視除外](security.md#パスワードマネージャーの監視除外)) |
 
 ### 通知
 
@@ -358,6 +359,8 @@ selector_webview_retention = "Keep"
 | **ポータブル** | `<実行ファイルのフォルダ>\data\logs\` |
 
 アプリが異常終了 (パニック) した場合も、発生スレッド・メッセージ・発生位置をログファイルへ記録する。
+
+[アプリの更新](usage.md#アプリの更新) の進行は、同じフォルダの `updater.log` (1 MiB を超えると次の更新時に作り直す) と、インストール版ではインストーラーの詳細ログ `updater-msi.log` (更新のたびに上書き) へ記録する。
 
 ## 旧設定からの移行
 

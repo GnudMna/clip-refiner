@@ -1,6 +1,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -93,19 +94,23 @@ impl ClipboardWorkerHandle {
         }
 
         let (reply_tx, reply_rx) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
         {
             let tx = self.tx.lock_ignore_poison();
             tx.send(ClipboardCommand::ProcessOneshotPipeline {
                 pipeline,
                 refine_ctx,
                 reply: reply_tx,
+                cancelled: Arc::clone(&cancelled),
             })
             .map_err(|_| OneshotDispatchError::WorkerStopped)?;
         }
 
-        reply_rx
-            .recv_timeout(timeout)
-            .map_err(|_| OneshotDispatchError::Timeout)
+        reply_rx.recv_timeout(timeout).map_err(|_| {
+            // 呼び出し側へエラーを返した後にキュー内の加工が走らないよう取り消す
+            cancelled.store(true, Ordering::SeqCst);
+            OneshotDispatchError::Timeout
+        })
     }
 
     /// 停止したワーカーを再起動する
@@ -254,6 +259,28 @@ mod tests {
         worker.send(ClipboardCommand::ProcessMode(RefineMode::Trim));
 
         assert!(rx.try_recv().is_err());
+    }
+
+    /// 応答待ちがタイムアウトしたワンショット要求は取り消し済みになること
+    #[test]
+    fn process_oneshot_marks_command_cancelled_on_timeout() {
+        let state = test_app_state_arc();
+        let (worker, rx) = stub_worker(&state);
+
+        let result = worker.process_oneshot(
+            vec![RefineMode::Trim],
+            RefineContext::default(),
+            Duration::from_millis(20),
+        );
+
+        assert_eq!(result, Err(OneshotDispatchError::Timeout));
+        // 応答しないスタブに残ったコマンドは、ワーカーが破棄できる状態であること
+        let ClipboardCommand::ProcessOneshotPipeline { cancelled, .. } =
+            rx.try_recv().expect("コマンドが残っている")
+        else {
+            panic!("ProcessOneshotPipeline ではない");
+        };
+        assert!(cancelled.load(Ordering::SeqCst));
     }
 
     /// ワーカー停止時は再開メニューを有効化すること

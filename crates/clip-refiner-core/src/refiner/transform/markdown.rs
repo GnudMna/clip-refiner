@@ -3,6 +3,7 @@ use std::fmt::Write;
 
 use pulldown_cmark::{Options, Parser, html};
 
+use crate::consts::MAX_TABLE_CELLS;
 use crate::security::is_within_parser_limit;
 
 // ======================================================================
@@ -64,19 +65,29 @@ pub(crate) fn markdown_to_rich_text_html(text: &str) -> String {
 // ======================================================================
 /// 表のセルを Markdown 用にエスケープする
 ///
-/// 改行は `<br>` に置換する。`|` は `\|` にし、直前に連続するバックスラッシュは
+/// 改行は `<br>` に置換する。文字としての `<br>` は `&lt;br>` にし、`&lt;br>` のような文字列は `&` を重ねる。`|` は `\|` にし、直前に連続するバックスラッシュは
 /// GFM で `\\` が先に読まれるため重ねてエスケープする (`a\|b` → `a\\\|b`)
 fn escape_table_cell(cell: &str) -> String {
     let mut result = String::with_capacity(cell.len());
     // 直前に連続するバックスラッシュの数
     let mut backslashes = 0;
-    let mut chars = cell.chars().peekable();
+    let mut chars = cell.char_indices().peekable();
 
-    while let Some(ch) = chars.next() {
+    while let Some((idx, ch)) = chars.next() {
         match ch {
+            // 文字としての `<br>` は改行に化けないよう `<` をエスケープする
+            '<' if br_tag_len(&cell[idx..]).is_some() => {
+                result.push_str("&lt;");
+                backslashes = 0;
+            }
+            // `&lt;br>` などの文字列は、エスケープ済みと区別できるよう `&` を重ねる
+            '&' if br_entity_amps(&cell[idx..]).is_some() => {
+                result.push_str("&amp;");
+                backslashes = 0;
+            }
             '\r' => {
                 // `\r\n` は 1 つの改行として扱う
-                if chars.peek() == Some(&'\n') {
+                if chars.peek().map(|&(_, c)| c) == Some('\n') {
                     chars.next();
                 }
                 result.push_str("<br>");
@@ -125,6 +136,10 @@ pub fn excel_to_markdown_table(text: &str) -> Cow<'_, str> {
 
     let max_cols = records.iter().map(Vec::len).max().unwrap_or(0);
     if max_cols == 0 {
+        return Cow::Borrowed(text);
+    }
+    if !is_within_table_cell_limit(records.len(), max_cols) {
+        tracing::debug!("表のセル数が上限を超えているためスキップ (excel_to_markdown_table)");
         return Cow::Borrowed(text);
     }
 
@@ -261,7 +276,7 @@ fn read_quoted_field(text: &str, start: usize) -> Option<(String, usize)> {
 /// 見出し行の直後に区切り行 (`|---|`) が続く塊だけを表とみなし、タブ区切り(TSV)に変換する (GFM と同じ)
 /// 表は `|` を含まない行で終わる。表以外の行はそのまま残す
 /// セル内の `<br>` (`<br/>`・`<br />` を含む) は改行に戻し、エスケープされたパイプ (`\|`) は復元する
-/// インラインコード内の `|` はセルの区切りとみなさない
+/// インラインコード内の `|` も列の区切りとする (GFM と同じ)。コードフェンス内の行は表として読まない
 ///
 /// # Arguments
 /// * `text` - 変換対象のMarkdownテーブル文字列
@@ -273,8 +288,27 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
     let mut output = String::with_capacity(text.len());
     let mut found_table = false;
     let mut i = 0;
+    // 開いているコードフェンス (フェンス文字, 長さ)。中の行は表とみなさない
+    let mut fence: Option<(char, usize)> = None;
 
     while let Some(&(line, ending)) = lines.get(i) {
+        if let Some(open) = fence {
+            if is_closing_fence(line, open) {
+                fence = None;
+            }
+            output.push_str(line);
+            output.push_str(ending);
+            i += 1;
+            continue;
+        }
+        if let Some(open) = opening_fence(line) {
+            fence = Some(open);
+            output.push_str(line);
+            output.push_str(ending);
+            i += 1;
+            continue;
+        }
+
         let Some(header) = table_header(line, lines.get(i + 1).map(|&(next, _)| next)) else {
             output.push_str(line);
             output.push_str(ending);
@@ -286,7 +320,10 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
         let mut rows = vec![header];
         let mut last_ending = lines.get(i + 1).map_or("", |&(_, e)| e);
         i += 2;
-        while let Some(&(row, row_ending)) = lines.get(i).filter(|(row, _)| row.contains('|')) {
+        while let Some(&(row, row_ending)) = lines
+            .get(i)
+            .filter(|(row, _)| row.contains('|') && opening_fence(row).is_none())
+        {
             rows.push(split_table_row(row));
             last_ending = row_ending;
             i += 1;
@@ -306,6 +343,35 @@ pub fn markdown_table_to_excel(text: &str) -> Cow<'_, str> {
     } else {
         Cow::Borrowed(text)
     }
+}
+
+/// コードフェンスの開始行なら (フェンス文字, 長さ) を返す
+///
+/// 先頭に 3 つまでの空白を許し、`` ` `` または `~` が 3 つ以上続く行を開始とみなす。
+/// `` ` `` のフェンスは info string に `` ` `` を含めない (GFM と同じ)
+fn opening_fence(line: &str) -> Option<(char, usize)> {
+    let (ch, len, rest) = fence_run(line)?;
+    (ch != '`' || !rest.contains('`')).then_some((ch, len))
+}
+
+/// `open` で開いたコードフェンスを閉じる行か判定する
+///
+/// 同じフェンス文字が開始以上の長さで続き、後ろが空白だけの行を終了とみなす
+fn is_closing_fence(line: &str, open: (char, usize)) -> bool {
+    fence_run(line)
+        .is_some_and(|(ch, len, rest)| ch == open.0 && len >= open.1 && rest.trim().is_empty())
+}
+
+/// 行頭 (3 つまでの空白の後) のフェンス文字の連なりを (文字, 長さ, 残り) に分ける
+fn fence_run(line: &str) -> Option<(char, usize, &str)> {
+    let indent = line.bytes().take_while(|&b| b == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let body = &line[indent..];
+    let ch = body.chars().next().filter(|&c| c == '`' || c == '~')?;
+    let len = body.chars().take_while(|&c| c == ch).count();
+    (len >= 3).then(|| (ch, len, &body[len..]))
 }
 
 /// 1 行を本文と末尾の改行 (`\n` / `\r\n` / なし) に分ける
@@ -330,12 +396,22 @@ fn table_header(line: &str, next: Option<&str>) -> Option<Vec<String>> {
     (header.len() == separator.len() && is_separator_row(&separator)).then_some(header)
 }
 
+/// 出力する表のセル数 (行数×列数) が上限以内か判定する
+fn is_within_table_cell_limit(rows: usize, cols: usize) -> bool {
+    rows.checked_mul(cols)
+        .is_some_and(|cells| cells <= MAX_TABLE_CELLS)
+}
+
 /// 表の行 (区切り行を除く) を TSV に組み立てる
 ///
 /// 列数は表の中で最も多い行に合わせ、足りないセルは空にする。行の区切りには `eol` を使い、末尾には付けない
-/// 書き込みに失敗した場合は `None` を返す
+/// 書き込みに失敗した場合・セル数が上限を超える場合は `None` を返す
 fn table_rows_to_tsv(rows: &[Vec<String>], eol: &str) -> Option<String> {
     let max_cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+    if !is_within_table_cell_limit(rows.len(), max_cols) {
+        tracing::debug!("表のセル数が上限を超えているためスキップ (markdown_table_to_excel)");
+        return None;
+    }
     let mut records = Vec::with_capacity(rows.len());
 
     for row in rows {
@@ -375,7 +451,7 @@ fn table_rows_to_tsv(rows: &[Vec<String>], eol: &str) -> Option<String> {
 
 /// パイプ区切りのテーブル行をセルに分割する
 ///
-/// `\|` はエスケープとして `|` に戻す。インラインコード (`` `a|b` ``) 内の `|` は区切りとみなさない
+/// `\|` はエスケープとして `|` に戻す。GFM と同じく、インラインコード内の `|` も区切りとみなす
 fn split_table_row(line: &str) -> Vec<String> {
     let line = line.trim();
     let line = line.strip_prefix('|').unwrap_or(line);
@@ -384,12 +460,9 @@ fn split_table_row(line: &str) -> Vec<String> {
     let chars: Vec<char> = line.chars().collect();
     let mut cells = Vec::new();
     let mut current = String::new();
-    // 開いているインラインコードのバッククォート数 (0 はインラインコード外)
-    let mut code_ticks = 0;
     let mut i = 0;
 
     while let Some(&ch) = chars.get(i) {
-        let next = chars.get(i + 1).copied();
         if ch == '\\' && backslash_run_before_pipe(&chars[i..]).is_some() {
             // `|` 直前のバックスラッシュ列: 奇数個なら `|` はエスケープ済み、偶数個なら区切り
             let run = backslash_run_before_pipe(&chars[i..]).unwrap_or(0);
@@ -400,23 +473,7 @@ fn split_table_row(line: &str) -> Vec<String> {
             } else {
                 i += run;
             }
-        } else if ch == '\\' && next == Some('`') && code_ticks == 0 {
-            // エスケープしたバッククォートはインラインコードを開かない
-            current.push_str("\\`");
-            i += 2;
-        } else if ch == '`' {
-            let run = backtick_run_len(&chars[i..]);
-            if code_ticks == 0 {
-                // 閉じる側が無いバッククォートは通常の文字として扱う
-                if has_closing_backticks(&chars[i + run..], run) {
-                    code_ticks = run;
-                }
-            } else if run == code_ticks {
-                code_ticks = 0;
-            }
-            current.extend(&chars[i..i + run]);
-            i += run;
-        } else if ch == '|' && code_ticks == 0 {
+        } else if ch == '|' {
             cells.push(std::mem::take(&mut current));
             i += 1;
         } else {
@@ -435,24 +492,6 @@ fn backslash_run_before_pipe(chars: &[char]) -> Option<usize> {
     (chars.get(run) == Some(&'|')).then_some(run)
 }
 
-/// 先頭から連続するバッククォートの数を返す
-fn backtick_run_len(chars: &[char]) -> usize {
-    chars.iter().take_while(|&&ch| ch == '`').count()
-}
-
-/// 同じ数のバッククォートの連なりが後続にあるかどうかを判定する
-fn has_closing_backticks(chars: &[char], run: usize) -> bool {
-    let mut i = 0;
-    while i < chars.len() {
-        let len = backtick_run_len(&chars[i..]);
-        if len == run {
-            return true;
-        }
-        i += len.max(1);
-    }
-    false
-}
-
 /// 区切り行 (`|---|`, `|:---:|` など) かどうかを判定する
 ///
 /// 全セルが `-` を含む必要がある。空セルだけの行 (`|  |  |`) はデータ行として残す
@@ -466,23 +505,35 @@ fn is_separator_row(cells: &[String]) -> bool {
     })
 }
 
-/// セル内の `<br>` を改行に戻す (`\|` は `split_table_row` で復元済み)
+/// セル内の `<br>` を改行に戻し、文字としての `<br>` のエスケープを外す (`\|` は `split_table_row` で復元済み)
 ///
-/// `<br/>`・`<br />`・`<BR>` のような表記揺れも改行とみなす
+/// `<br/>`・`<br />`・`<BR>` のような表記揺れも改行とみなす。
+/// `&lt;br>` は文字の `<br>` に、`&amp;lt;br>` は `&lt;br>` に戻す (`escape_table_cell` の逆)
 fn unescape_table_cell(cell: &str) -> String {
     let cell = cell.trim();
     let mut result = String::with_capacity(cell.len());
     let mut rest = cell;
 
-    while let Some(pos) = rest.find('<') {
+    while let Some(pos) = rest.find(['<', '&']) {
         result.push_str(&rest[..pos]);
-        let tag = &rest[pos..];
-        if let Some(len) = br_tag_len(tag) {
+        let tail = &rest[pos..];
+        if let Some(len) = br_tag_len(tail) {
             result.push('\n');
-            rest = &tag[len..];
+            rest = &tail[len..];
+        } else if let Some(amps) = br_entity_amps(tail) {
+            if amps == 0 {
+                // `&lt;` → `<`
+                result.push('<');
+                rest = &tail["&lt;".len()..];
+            } else {
+                // `&amp;` を 1 つ外す
+                result.push('&');
+                rest = &tail["&amp;".len()..];
+            }
         } else {
-            result.push('<');
-            rest = &tag[1..];
+            let ch_len = tail.chars().next().map_or(1, char::len_utf8);
+            result.push_str(&tail[..ch_len]);
+            rest = &tail[ch_len..];
         }
     }
     result.push_str(rest);
@@ -490,16 +541,35 @@ fn unescape_table_cell(cell: &str) -> String {
     result
 }
 
+/// `&` で始まる文字列が `&` + `amp;` の繰り返し + `lt;` + `br>` の形なら、`amp;` の繰り返し数を返す
+///
+/// 文字の `<br>` を `&lt;br>` とエスケープした表記と、その `&` を重ねたものを見分けるために使う
+fn br_entity_amps(text: &str) -> Option<usize> {
+    let mut rest = text.strip_prefix('&')?;
+    let mut amps = 0;
+    while let Some(next) = rest.strip_prefix("amp;") {
+        rest = next;
+        amps += 1;
+    }
+    br_name_len(rest.strip_prefix("lt;")?)?;
+    Some(amps)
+}
+
 /// 先頭が `<br>` タグ (`<br/>`・`<br />` を含み、大文字小文字を区別しない) ならその長さを返す
 fn br_tag_len(text: &str) -> Option<usize> {
+    br_name_len(text.strip_prefix('<')?).map(|len| len + 1)
+}
+
+/// `<` の直後が `br>` (`br/>`・`br />` を含み、大文字小文字を区別しない) ならその長さを返す
+fn br_name_len(text: &str) -> Option<usize> {
     let bytes = text.as_bytes();
     if !bytes
-        .get(1..3)
+        .get(..2)
         .is_some_and(|name| name.eq_ignore_ascii_case(b"br"))
     {
         return None;
     }
-    let mut i = 3;
+    let mut i = 2;
     while bytes.get(i).is_some_and(u8::is_ascii_whitespace) {
         i += 1;
     }
@@ -562,6 +632,28 @@ mod tests {
             "{output}"
         );
         assert!(!output.contains("<table>"));
+    }
+
+    /// セル数が上限を超える表は加工せず元の文字列を返すこと
+    #[test]
+    fn test_table_conversion_cell_limit() {
+        // 1 行だけ列が極端に多く、行数×列数が上限を超える入力は加工しないこと
+        let wide = "\t".repeat(MAX_TABLE_CELLS / 2);
+        let tsv = format!("{wide}\n{wide}\n{wide}\n");
+        assert!(matches!(excel_to_markdown_table(&tsv), Cow::Borrowed(_)));
+
+        let cells = "|".repeat(MAX_TABLE_CELLS / 2);
+        let md = format!("{cells}\n{cells}\n|a|\n|b|\n|c|\n");
+        assert!(matches!(markdown_table_to_excel(&md), Cow::Borrowed(_)));
+    }
+
+    /// 上限以内の表は変換すること
+    #[test]
+    fn test_table_conversion_within_cell_limit() {
+        assert_eq!(
+            excel_to_markdown_table("a\tb\n1\t2"),
+            "| a | b |\n|---|---|\n| 1 | 2 |"
+        );
     }
 
     /// `excel_to_markdown_table`: 基本的な TSV 変換できるようにすること
@@ -683,18 +775,54 @@ mod tests {
         assert_eq!(markdown_table_to_excel(input), "Col\n<bra> <br <b>x");
     }
 
-    /// `markdown_table_to_excel`: インラインコード内の `|` をセルの区切りとみなさないようにすること
+    /// `markdown_table_to_excel`: インラインコード内の `|` も GFM と同じく列の区切りとみなすこと
     #[test]
-    fn test_markdown_table_to_excel_keeps_pipe_in_code_span() {
-        let input = "| Cmd | Note |\n|---|---|\n| `a | b` | x |\n| ``c ` | d`` | y |";
+    fn test_markdown_table_to_excel_splits_pipe_in_code_span() {
+        // バッククォートが片側だけのセルがあっても列数がずれない
+        let input = "| A | B |\n|---|---|\n| `a | b` |";
+        assert_eq!(markdown_table_to_excel(input), "A\tB\n`a\tb`");
+
+        // 列数は最も多い行に合わせる
+        let input = "| Cmd | Note |\n|---|---|\n| `a | b` | x |";
+        assert_eq!(markdown_table_to_excel(input), "Cmd\tNote\t\n`a\tb`\tx");
+    }
+
+    /// `markdown_table_to_excel`: コードフェンス内の表を変換せずそのまま残すこと
+    #[test]
+    fn test_markdown_table_to_excel_skips_fenced_code() {
+        let fenced = "```\n| a | b |\n|---|---|\n| 1 | 2 |\n```";
+        assert_eq!(markdown_table_to_excel(fenced), fenced);
+
+        // フェンスの前後の表は変換し、`~~~` や長いフェンスも扱う
+        let input =
+            "| x |\n|---|\n| 1 |\n~~~~\n| a |\n|---|\n~~~\n| b |\n|---|\n~~~~\n| y |\n|---|\n| 2 |";
         assert_eq!(
             markdown_table_to_excel(input),
-            "Cmd\tNote\n`a | b`\tx\n``c ` | d``\ty"
+            "x\n1\n~~~~\n| a |\n|---|\n~~~\n| b |\n|---|\n~~~~\ny\n2"
         );
+    }
 
-        // 閉じていないバッククォートやエスケープしたバッククォートはインラインコードを開かない
-        let input = "| A | B |\n|---|---|\n| `x | y |\n| \\`p | q` |";
-        assert_eq!(markdown_table_to_excel(input), "A\tB\n`x\ty\n\\`p\tq`");
+    /// 文字としての `<br>` が往復で改行に化けないこと
+    #[test]
+    fn test_markdown_excel_roundtrip_literal_br() {
+        for cell in [
+            "a<br>b",
+            "<BR/>",
+            "&lt;br&gt;",
+            "&lt;br>",
+            "&amp;lt;br>",
+            "x &lt;br /> y",
+            "<b>",
+        ] {
+            let tsv = format!("H\n{cell}");
+            let markdown = excel_to_markdown_table(&tsv);
+            assert_eq!(markdown_table_to_excel(&markdown), tsv, "{markdown}");
+        }
+        // 文字の `<br>` は Markdown 上で `<br>` タグにならない
+        assert_eq!(
+            excel_to_markdown_table("H\na<br>b"),
+            "| H |\n|---|\n| a&lt;br>b |"
+        );
     }
 
     /// `markdown_table_to_excel`: インラインコード内の `\|` も `|` に戻すようにすること
@@ -702,6 +830,14 @@ mod tests {
     fn test_markdown_table_to_excel_unescapes_pipe_in_code_span() {
         let input = "| Cmd |\n|---|\n| `a \\| b` |";
         assert_eq!(markdown_table_to_excel(input), "Cmd\n`a | b`");
+    }
+
+    /// `excel_to_markdown_table`: バッククォートと `|` を含むセルが往復で元に戻ること
+    #[test]
+    fn test_markdown_excel_roundtrip_backtick_pipe() {
+        let tsv = "A\tB\n`a | b\tc` | d";
+        let markdown = excel_to_markdown_table(tsv);
+        assert_eq!(markdown_table_to_excel(&markdown), tsv);
     }
 
     /// `markdown_table_to_excel`: 中身が空の行を区切り行とみなさず残すようにすること

@@ -9,6 +9,12 @@ const FULLWIDTH_ASCII_OFFSET: u32 = 0xFEE0;
 /// 全角スペース
 const IDEOGRAPHIC_SPACE: char = '\u{3000}';
 
+/// 全角円記号 (`￥`)
+const FULLWIDTH_YEN: char = '\u{FFE5}';
+
+/// 半角円記号 (`¥`)
+const HALFWIDTH_YEN: char = '\u{00A5}';
+
 /// 半角カナ領域の先頭 (`｡`)
 const HALFWIDTH_KANA_START: u32 = 0xFF61;
 
@@ -119,6 +125,7 @@ fn has_fullwidth(c: char) -> bool {
 fn fullwidth_ascii_to_halfwidth(c: char) -> Option<char> {
     match c {
         IDEOGRAPHIC_SPACE => Some(' '),
+        FULLWIDTH_YEN => Some(HALFWIDTH_YEN),
         '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - FULLWIDTH_ASCII_OFFSET),
         _ => None,
     }
@@ -128,6 +135,7 @@ fn fullwidth_ascii_to_halfwidth(c: char) -> Option<char> {
 fn halfwidth_ascii_to_fullwidth(c: char) -> Option<char> {
     match c {
         ' ' => Some(IDEOGRAPHIC_SPACE),
+        HALFWIDTH_YEN => Some(FULLWIDTH_YEN),
         '!'..='~' => char::from_u32(c as u32 + FULLWIDTH_ASCII_OFFSET),
         _ => None,
     }
@@ -205,6 +213,18 @@ mod tests {
     fn test_to_halfwidth_ascii() {
         assert_eq!(to_halfwidth("ＡＢＣ　ａｂｃ　０１２"), "ABC abc 012");
         assert_eq!(to_halfwidth("！＂＃＄％＆（）～＼"), "!\"#$%&()~\\");
+    }
+
+    /// 全角円記号を半角円記号へ変換すること
+    #[test]
+    fn test_to_halfwidth_yen() {
+        assert_eq!(to_halfwidth("￥１００"), "¥100");
+    }
+
+    /// 半角円記号を全角円記号へ変換すること
+    #[test]
+    fn test_to_fullwidth_yen() {
+        assert_eq!(to_fullwidth("¥100"), "￥１００");
     }
 
     /// 全角カタカナと約物を半角へ変換し、濁音・半濁音を分解すること

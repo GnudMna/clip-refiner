@@ -3,7 +3,7 @@
 mod common;
 
 use clip_refiner_core::consts::MAX_CLIPBOARD_TEXT_BYTES;
-use clip_refiner_core::refiner::process_clipboard_pipeline_io;
+use clip_refiner_core::refiner::{TextClipboard, process_clipboard_pipeline_io};
 use clip_refiner_core::test_helpers::InMemoryTextClipboard;
 use clip_refiner_core::{
     ClipboardProcessError, ClipboardProcessOutcome, RefineContext, RefineMode,
@@ -121,6 +121,8 @@ fn process_clipboard_io_rejects_empty_pipeline() {
 }
 
 /// テキスト加工と Excel 画像書き込みを連鎖できるようにすること
+///
+/// 前段のテキストを書き戻すと Excel のビットマップが消えるため、テキストは書き戻さない
 #[test]
 fn process_clipboard_io_chains_text_then_image() {
     let rgba = vec![255_u8; 4 * 2 * 2];
@@ -138,7 +140,8 @@ fn process_clipboard_io_chains_text_then_image() {
             height: 2
         })
     );
-    assert_eq!(cb.text(), "あ");
+    // 書き込みは画像の 1 回だけで、前段のテキストは書き戻していない
+    assert_eq!(cb.change_token(), Some(1));
     assert_eq!(cb.written_image_size(), Some((2, 2)));
 }
 

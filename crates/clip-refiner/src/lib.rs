@@ -25,7 +25,7 @@
 //!
 //! アプリの起動 API ([`run`]) と `test_helpers` の変更は `Cargo.toml` の semver に従う
 //! 加工・設定の公開 API は `clip-refiner-core` 側の semver に従う
-//! 破壊的変更は CHANGELOG の **Breaking changes** 節に記載する
+//! アプリケーションとして提供しているため、公開 API の変更は CHANGELOG に記載しない
 
 // doctest は Clippy の対象外で警告も表示されないため、警告をエラーにして検出する
 #![doc(test(attr(deny(warnings))))]

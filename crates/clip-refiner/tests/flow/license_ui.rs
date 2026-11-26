@@ -1,6 +1,6 @@
 //! 設定ウィンドウの情報タブに載せた著作権表記とライセンス形態が `LICENSE` と一致することのテスト
 //!
-//! `LICENSE` だけ更新して `panels.js` の表記を直し忘れた状態を `cargo test` で検出する
+//! `LICENSE` だけ更新して `panels.ts` の表記を直し忘れた状態を `cargo test` で検出する
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 // ======================================================================
 
 /// ライセンスカードを組み立てる UI ソース (リポジトリルート相対)
-const PANELS_JS: &str = "crates/clip-refiner/src/ui/settings/panels.js";
+const PANELS_TS: &str = "crates/clip-refiner/src/ui/settings/panels.ts";
 
 /// 情報タブに載せる `LICENSE` 冒頭の行数 (著作権表記とライセンス形態)
 const NOTICE_LINES: usize = 2;
@@ -32,7 +32,7 @@ fn repo_root() -> PathBuf {
 fn about_panel_shows_copyright_and_license_type() {
     let root = repo_root();
     let license = fs::read_to_string(root.join("LICENSE")).expect("LICENSE を読めない");
-    let panels = fs::read_to_string(root.join(PANELS_JS)).expect("panels.js を読めない");
+    let panels = fs::read_to_string(root.join(PANELS_TS)).expect("panels.ts を読めない");
 
     let lines: Vec<&str> = license
         .lines()

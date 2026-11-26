@@ -42,7 +42,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--bg-color);
-    font-family: Consolas, 'Courier New', monospace;
+    font-family: Consolas, "Courier New", monospace;
     font-size: 13px;
     line-height: 1.45;
     white-space: pre-wrap;

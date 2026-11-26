@@ -113,9 +113,7 @@ pub fn load_registered_image(relative_filename: &str) -> Result<(u32, u32, Vec<u
 /// # Returns
 /// * `bool` - ファイルが存在する場合は `true`
 pub fn registered_image_exists(relative_filename: &str) -> bool {
-    resolve_registered_image_path(relative_filename)
-        .ok()
-        .is_some_and(|path| path.is_file())
+    resolve_registered_image_path(relative_filename).is_ok_and(|path| path.is_file())
 }
 
 /// 登録画像ファイルを削除する

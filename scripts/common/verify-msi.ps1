@@ -18,6 +18,7 @@ $script:MsiExpectedManufacturer = 'Yuto Hirata'
 $script:MsiExpectedLanguageId = '1041'
 $script:MsiRequiredFileNames = @(
     'ClipRefiner.exe',
+    'ClipRefinerUpdater.exe',
     'LICENSE',
     'THIRD_PARTY_NOTICES',
     'index.html'
@@ -37,6 +38,10 @@ $script:MsiRequiredFeatureIds = @(
     'Binaries',
     'Environment',
     'Autostart'
+)
+$script:MsiExecutableNames = @(
+    'ClipRefiner.exe',
+    'ClipRefinerUpdater.exe'
 )
 $script:MsiThirdPartyNoticesHeader = '第三者ソフトウェアに関する表示'
 $script:MsiMinExecutableBytes = 512 * 1024
@@ -479,13 +484,15 @@ function Assert-ExtractedMsiContents {
         }
     }
 
-    $executable = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter 'ClipRefiner.exe')[0]
-    if ($executable.Length -lt $script:MsiMinExecutableBytes) {
-        throw "エラー: ClipRefiner.exe のサイズが小さすぎます ($($executable.Length) bytes, 最低 $($script:MsiMinExecutableBytes) bytes)"
-    }
+    foreach ($executableName in $script:MsiExecutableNames) {
+        $executable = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter $executableName)[0]
+        if ($executable.Length -lt $script:MsiMinExecutableBytes) {
+            throw "エラー: $executableName のサイズが小さすぎます ($($executable.Length) bytes, 最低 $($script:MsiMinExecutableBytes) bytes)"
+        }
 
-    if ($TargetTriple) {
-        Assert-PeMachineType -Path $executable.FullName -TargetTriple $TargetTriple
+        if ($TargetTriple) {
+            Assert-PeMachineType -Path $executable.FullName -TargetTriple $TargetTriple
+        }
     }
 
     $noticesFile = @(Get-ChildItem -LiteralPath $ExtractDir -Recurse -File -Filter 'THIRD_PARTY_NOTICES')[0]
@@ -574,7 +581,7 @@ function Invoke-MsiPackageVerification {
         -ExpectedUpgradeCode $expectedUpgradeCode `
         -TargetTriple $TargetTriple
     Write-Host '  ProductName / ProductVersion / UpgradeCode / Manufacturer'
-    Write-Host '  必須ファイル (ClipRefiner.exe, LICENSE, THIRD_PARTY_NOTICES, docs\index.html)'
+    Write-Host '  必須ファイル (ClipRefiner.exe, ClipRefinerUpdater.exe, LICENSE, THIRD_PARTY_NOTICES, docs\index.html)'
     Write-Host '  必須 Feature (Binaries, Environment, Autostart)'
     Write-Host '  ライセンス同意画面が無いこと'
     Write-Host '  per-user インストール (ALLUSERS)'
@@ -606,7 +613,7 @@ function Invoke-MsiPackageVerification {
         Write-Host '  THIRD_PARTY_NOTICES ヘッダーと生成物サイズの一致'
         Write-Host '  利用者向けドキュメント (docs\) の各ページ'
         if ($TargetTriple) {
-            Write-Host "  ClipRefiner.exe の PE アーキテクチャ ($TargetTriple)"
+            Write-Host "  実行ファイルの PE アーキテクチャ ($TargetTriple)"
         }
         Write-Host ''
     } finally {

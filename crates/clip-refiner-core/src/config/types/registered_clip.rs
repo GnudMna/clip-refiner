@@ -1,5 +1,6 @@
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -22,8 +23,10 @@ pub struct RegisteredClip {
     #[serde(default)]
     pub preview: String,
     /// 本文の AEAD 暗号文 (`nonce || ciphertext`)。画像登録時は空
+    ///
+    /// `Arc` で共有するため、設定の複製で本文のコピーは発生しない
     #[serde(default, with = "text_ciphertext_serde")]
-    pub text_ciphertext: Vec<u8>,
+    pub text_ciphertext: Arc<[u8]>,
     /// 登録画像ファイル名 (`registered-images` ディレクトリ内の相対パス)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_file: Option<String>,
@@ -116,17 +119,18 @@ mod text_ciphertext_serde {
     /// * `deserializer` - `Deserializer`
     ///
     /// # Returns
-    /// * `Result<Vec<u8>, D::Error>` - 成功時は `Ok`、失敗時は `Err`
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    /// * `Result<Arc<[u8]>, D::Error>` - 成功時は `Ok`、失敗時は `Err`
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<[u8]>, D::Error>
     where
         D: Deserializer<'de>,
     {
         let encoded = String::deserialize(deserializer)?;
         if encoded.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Arc::default());
         }
         STANDARD
             .decode(encoded.as_bytes())
+            .map(Arc::from)
             .map_err(serde::de::Error::custom)
     }
 }

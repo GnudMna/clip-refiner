@@ -26,9 +26,11 @@ description: 品質チェック一式 (scripts/windows/check.ps1) を実行し�
 | Rust の整形 | `cargo fmt` | `cargo fmt --check` |
 | Clippy | 警告の原因をコードで直す | `./scripts/windows/clippy.ps1` |
 | `cargo deny` | 直さずにユーザーへ報告する (依存・`deny.toml` の変更は判断が要る) | `cargo deny check` |
+| `npm audit` | 直さずにユーザーへ報告する (`npm audit fix --force` は `markdownlint-cli2` を旧版へ戻すため使わない) | `npm run audit:deps` |
 | UI バンドルの最新性 | `npm run build:ui` | `npm run build:ui:check` |
 | ESLint | 指摘をコードで直す | `npm run lint` |
 | Prettier | `./scripts/windows/format.ps1` | `npm run format:check` |
+| UI のカバレッジ | 足りないテストを書く。下限を下げたり、DOM に依存しないファイルを `unmeasuredFiles` に足したりしない | `npm run test:ui:coverage` |
 | markdownlint | `npm run lint:md:fix` で直し、差分を確認する。残りは手で直す | `npm run lint:md` |
 | テスト | 失敗の原因を直す | `cargo test --test flow <モジュール名>::` などで絞る |
 | WebView E2E | 失敗の原因を直す | `npm run test:e2e` (`CLIP_REFINER_E2E_EXE` は `check.ps1` と同じに設定する) |

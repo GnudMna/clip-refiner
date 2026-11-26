@@ -8,15 +8,15 @@
 
 | 用途 | 必要なもの |
 | :--- | :--- |
-| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.96、rustfmt、Clippy、rust-analyzer 用の rust-src を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード |
+| Rust のビルド・テスト | [Rustup](https://www.rust-lang.org/tools/install) (`rust-toolchain.toml` により Rust 1.100、rustfmt、Clippy、rust-analyzer 用の rust-src を使用)、Visual Studio 2022 以降の **Desktop development with C++** ワークロード |
 | `scripts/windows/*.ps1` | [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
-| UI の静的解析・JS ロジックテスト | [Node.js](https://nodejs.org/) と npm |
+| UI の静的解析・UI ロジックテスト | [Node.js](https://nodejs.org/) 26 以上 (`.node-version` と `engines` で揃えている。`engines` を満たさないと `npm install` が失敗する) と npm |
 | WebView E2E | 対話可能なデスクトップセッション、[WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | サプライチェーン監査 | [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) |
 | Rust カバレッジ | [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) と `rustup component add llvm-tools-preview` (`coverage.ps1` / `check.ps1 -Coverage`) |
 | MSI / ポータブル ZIP 作成 | `cargo-about`、[mdBook](https://rust-lang.github.io/mdBook/) ([利用者向けドキュメントの同梱](#利用者向けドキュメントの同梱) の固定版)。MSI はさらに `cargo-wix` と WiX Toolset v3.14.1 以上 |
 
-`cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する (カバレッジは任意)。通常の `cargo test` は Node.js が無い場合に JS ロジックテストを `note:` 付きでスキップする。
+`cargo build` だけなら Node.js・`cargo-deny`・MSI 用ツールは不要。`check.ps1` は Node.js、`cargo-deny`、WebView2 Runtime を含む品質チェック一式の前提を要求する (カバレッジは任意)。通常の `cargo test` は Node.js が無い場合に UI ロジックテストを `note:` 付きでスキップする。
 
 ## 初回セットアップ
 
@@ -66,7 +66,7 @@ PowerShell スクリプトでターゲットを明示する場合:
 ./scripts/windows/build.ps1 -Release -Target x64
 ```
 
-ホスト向けバイナリは `target/release/ClipRefiner.exe` に生成される。`-Target x64` を明示した場合は `target/{triple}/release/ClipRefiner.exe` になり、`vcvarsall.bat x64` で MSVC 環境を読み込む。配布対象は x64 のみで、それ以外のホスト・ターゲットはエラーになる。
+ホスト向けバイナリは `target/release/` に `ClipRefiner.exe` と `ClipRefinerUpdater.exe` が生成される。`-Target x64` を明示した場合は `target/{triple}/release/ClipRefiner.exe` などになり、`vcvarsall.bat x64` で MSVC 環境を読み込む。配布対象は x64 のみで、それ以外のホスト・ターゲットはエラーになる。
 
 ### 開発版 (debug ビルド) と製品版の分離
 
@@ -111,7 +111,7 @@ winget install WiXToolset.WiXToolset
 | :--- | :--- |
 | メタデータ | `Cargo.toml` の `upgrade-guid` と `wix/main.wxs` の `UpgradeCode` の一致 |
 | MSI Property | `ProductName`, `ProductVersion`, `UpgradeCode`, `Manufacturer`, per-user (`ALLUSERS`) |
-| MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`, `index.html`)、Feature (`Binaries`, `Environment`, `Autostart`) |
+| MSI テーブル | 必須ファイル (`ClipRefiner.exe`, `ClipRefinerUpdater.exe`, `LICENSE`, `THIRD_PARTY_NOTICES`, `index.html`)、Feature (`Binaries`, `Environment`, `Autostart`) |
 | 展開内容 | 管理インストール (`msiexec /a`) で展開し、実行ファイルサイズ・`THIRD_PARTY_NOTICES` ヘッダー・生成物サイズ一致・PE アーキテクチャ (x64)・利用者向けドキュメント (`docs\`) の各ページを確認 |
 
 `-SkipExtract` でデータベース検証のみに省略できる。`build-msi.ps1 -SkipVerify` でビルド後検証をスキップできる。
@@ -134,12 +134,12 @@ cargo install cargo-about --locked --features cli
 | 配布フォルダ | `target/portable/clip-refiner-{version}-{target-triple}-portable/` |
 | ZIP | `target/portable/clip-refiner-{version}-{target-triple}-portable.zip` |
 
-同梱内容: `ClipRefiner.exe` / `portable` / `LICENSE` / `THIRD_PARTY_NOTICES` / `PORTABLE.txt` / `docs\` (利用者向けドキュメント)
+同梱内容: `ClipRefiner.exe` / `ClipRefinerUpdater.exe` / `portable` / `LICENSE` / `THIRD_PARTY_NOTICES` / `PORTABLE.txt` / `docs\` (利用者向けドキュメント)
 
 | オプション | 効果 |
 | :--- | :--- |
 | `-Target` | 配布 CPU。`Host` (既定) / `x64` / 完全な triple |
-| `-SkipBuild` | 既存の `target/release/ClipRefiner.exe` (または `target/{triple}/release`) を使う |
+| `-SkipBuild` | 既存の `target/release/` (または `target/{triple}/release/`) の実行ファイルを使う |
 | `-SkipZip` | フォルダのみ作成し ZIP を作らない |
 | `-SkipNotices` | `THIRD_PARTY_NOTICES` を再生成しない (既存があれば同梱) |
 
@@ -155,7 +155,7 @@ cargo install cargo-about --locked --features cli
 | :--- | :--- |
 | 生成ツール | [cargo-about](https://github.com/EmbarkStudios/cargo-about) (`cargo install cargo-about --locked --features cli`) |
 | 設定 | [`about.toml`](../../about.toml)、テンプレート [`scripts/templates/third-party-notices.hbs`](../../scripts/templates/third-party-notices.hbs) |
-| 自クレート除外 | `about.toml` の `private.ignore` でワークスペース内クレート (`clip-refiner`, `clip-refiner-core`) を除外 (`deny.toml` と同方針) |
+| 自クレート除外 | `about.toml` の `private.ignore` でワークスペース内クレート (`clip-refiner`, `clip-refiner-core`, `clip-refiner-updater`) を除外 (`deny.toml` と同方針) |
 | 手動生成 | `scripts/common/generate-third-party-notices.ps1` |
 | 出力 | リポジトリルートの `THIRD_PARTY_NOTICES` (`.gitignore` 対象。パッケージ作成時に自動生成) |
 
@@ -205,11 +205,11 @@ mdBook の出力には mdBook 自身と他のプロジェクトの素材が含�
 | `RUST_BACKTRACE` | `1` のときパニック記録にバックトレースを含める ([ログ](architecture.md#ログ)) |
 | `CARGO_TARGET_DIR` | ビルド出力先。`build-portable.ps1` / `check.ps1` / E2E はこの配下の `ClipRefiner.exe` を探す |
 | `CLIP_REFINER_CONFIG_DIR` | 設定ディレクトリの上書き (テスト / E2E / 明示指定向け。未設定時はポータブルの `data` または `%APPDATA%\ClipRefiner`。debug ビルドは `%APPDATA%\ClipRefiner-Dev` ([開発版と製品版の分離](#開発版-debug-ビルド-と製品版の分離))) |
-| `CLIP_REFINER_KEY_FILE` | **ビルド時**に埋め込む gh-release-bridge ダウンロードキー (Worker Secret `CLIP_REFINER_KEY` と同値) を保存したファイルのパス。リポジトリ外に UTF-8 で置く (先頭の BOM と前後の空白・改行は除く。UTF-16 は不可)。`build.rs` が ChaCha20-Poly1305 で暗号化し XOR 難読化してからバイナリへ入れる (`option_env!` による平文埋め込みはしない)。未設定なら無認証 GET (開発向け)。`release.ps1` では必須。クライアント共有シークレットのため漏洩前提で運用する。以前の `CLIP_REFINER_KEY` (キーを直接渡す) は、Cargo が値を `target` の fingerprint へ平文で残すため廃止した。設定されていても埋め込まず、`release.ps1` は失敗する |
 | `CLIP_REFINER_SIGNING_KEY` | `release.ps1` が更新アセットへ署名するときの minisign 秘密鍵ファイルのパス。リポジトリ外に置く ([更新署名鍵](release.md#更新署名鍵)) |
-| `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで JS ロジックテストを失敗させる (`check.ps1` が設定) |
-| `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき JS ロジックテストをスキップ |
+| `CLIP_REFINER_REQUIRE_NODE` | `1` のとき Node.js 未インストールで UI ロジックテストを失敗させる (`check.ps1` が設定) |
+| `CLIP_REFINER_SKIP_NODE_TESTS` | `1` のとき UI ロジックテストをスキップ |
 | `CLIP_REFINER_SKIP_E2E` | `1` のとき Playwright E2E をスキップ (`check.ps1`。`-SkipE2E` と同じ) |
+| `CLIP_REFINER_REQUIRE_E2E` | `1` のとき対話 GUI セッションが無くても E2E を自動スキップせず失敗させる (`release.ps1` が設定) |
 | `CLIP_REFINER_COVERAGE` | `1` のとき `check.ps1` の通常テストを `cargo llvm-cov` に切り替える (`-Coverage` と同義) |
 | `CLIP_REFINER_SKIP_HOOK` | `1` のとき Git フック (pre-commit / pre-push) をスキップ |
 | `CLIP_REFINER_E2E_CDP_PORT` | E2E 用 WebView2 CDP ポート (`--e2e-window` 時) |

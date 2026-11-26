@@ -151,7 +151,7 @@ mod tests {
         assert!(snap.history_enabled);
         assert!(snap.continuous_record_enabled);
         assert_eq!(snap.regex_active_preset_id, "default");
-        assert!(!snap.regex_presets.is_empty());
+        assert_ne!(snap.regex_presets.len(), 0);
     }
 
     /// `auto_processing_enabled` が自動変換・連続記録の状態を反映すること

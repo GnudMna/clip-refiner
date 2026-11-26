@@ -167,6 +167,10 @@ fn spec_root_fields(config: &AppConfig) -> Vec<SpecField> {
             default_cell: config.history_enabled.to_string(),
         },
         SpecField {
+            key: "keep_clipboard_exclusion",
+            default_cell: config.keep_clipboard_exclusion.to_string(),
+        },
+        SpecField {
             key: "continuous_record_enabled",
             default_cell: config.continuous_record_enabled.to_string(),
         },
@@ -300,10 +304,6 @@ fn processing_limit_needles() -> Vec<String> {
         format_mib(consts::MAX_REGISTERED_CLIPS_FILE_BYTES),
         format!("{} px", consts::MAX_BASE64_IMAGE_DIMENSION),
         format!("{} ピクセル", consts::MAX_BASE64_IMAGE_PIXELS),
-        format!(
-            "{} 時間",
-            consts::CLIPBOARD_IMAGE_FILE_RETENTION_SECS / 3600
-        ),
         format!("{} 件", consts::MAX_FAVORITE_MODES),
         format!("{} 段", consts::MAX_PIPELINE_LENGTH),
         format!(

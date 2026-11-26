@@ -467,22 +467,19 @@ checksum = "e0921b3876b3a1df8a1c9f912e7f94342458022c2e84288015893d83c4d62a79"
 
 [[package]]
 name = "clip-refiner"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "anyhow",
  "base64",
- "chacha20poly1305",
  "clap",
  "clip-refiner-core",
+ "clip-refiner-updater",
  "clipboard-win",
  "getrandom",
  "global-hotkey",
  "image",
  "jiff",
- "minisign",
- "minisign-verify",
  "png",
- "semver",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -494,18 +491,15 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tray-icon",
- "ureq",
  "windows",
  "winreg",
  "winresource",
  "wry",
- "zeroize",
- "zip",
 ]
 
 [[package]]
 name = "clip-refiner-core"
-version = "4.0.1"
+version = "4.1.0"
 dependencies = [
  "arboard",
  "base64",
@@ -533,6 +527,27 @@ dependencies = [
  "tracing",
  "windows",
  "zeroize",
+]
+
+[[package]]
+name = "clip-refiner-updater"
+version = "4.1.0"
+dependencies = [
+ "clip-refiner-core",
+ "minisign",
+ "minisign-verify",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
+ "ureq",
+ "windows",
+ "winreg",
+ "winresource",
+ "zip",
 ]
 
 [[package]]
@@ -590,9 +605,9 @@ dependencies = [
 
 [[package]]
 name = "cookie"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a373e3602691c3cdea496d2f0ee5935151e6168fe87739483c463db1b2f2f87"
+checksum = "d55f2d6c30eeec7d5c6f98bd4395d4abb1895629eab97ee6522d340623615f8a"
 dependencies = [
  "percent-encoding",
  "time",
@@ -785,7 +800,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.10",
+ "syn 2.0.119",
 ]
 
 [[package]]

@@ -290,7 +290,7 @@ mod tests {
             clips: vec![RegisteredClip {
                 label: "表示名".to_string(),
                 preview: "プレビュー".to_string(),
-                text_ciphertext: vec![1, 2, 3],
+                text_ciphertext: vec![1, 2, 3].into(),
                 image_file: None,
                 template: false,
                 counter: 3,
@@ -316,7 +316,7 @@ mod tests {
             clips: vec![RegisteredClip {
                 label: "[画像] 2×2".to_string(),
                 preview: String::new(),
-                text_ciphertext: Vec::new(),
+                text_ciphertext: std::sync::Arc::default(),
                 image_file: Some("missing.enc".to_string()),
                 template: false,
                 counter: 0,

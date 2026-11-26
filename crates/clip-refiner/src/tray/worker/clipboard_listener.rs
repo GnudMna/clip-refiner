@@ -72,6 +72,22 @@ pub(crate) fn clear_clipboard_changed_pending(pending: &AtomicBool) {
 pub(super) struct ClipboardFormatListener {
     shutdown: Mutex<Option<Shutdown>>,
     join: Mutex<Option<JoinHandle<()>>>,
+    running: Arc<AtomicBool>,
+}
+
+/// スレッド終了時 (エラー・panic を含む) に稼働フラグを下げ、ワーカーを起こす
+struct ExitGuard {
+    running: Arc<AtomicBool>,
+    pending: Arc<AtomicBool>,
+    tx: Sender<ClipboardCommand>,
+}
+
+impl Drop for ExitGuard {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Release);
+        // 周期監視への切り替えを待たせないため、ワーカーを即座に起床させる
+        let _ = try_notify_clipboard_changed(&self.pending, &self.tx);
+    }
 }
 
 impl ClipboardFormatListener {
@@ -88,9 +104,15 @@ impl ClipboardFormatListener {
         pending: Arc<AtomicBool>,
     ) -> Result<Self, ClipboardListenerError> {
         let (ready_tx, ready_rx) = mpsc::channel();
+        let running = Arc::new(AtomicBool::new(true));
+        let guard = ExitGuard {
+            running: Arc::clone(&running),
+            pending,
+            tx,
+        };
         let join = thread::Builder::new()
             .name("clip-refiner-clipboard-listener".into())
-            .spawn(move || run_listener_loop(&tx, &pending, &ready_tx))
+            .spawn(move || run_listener_loop(&guard, &ready_tx))
             .map_err(|err| ClipboardListenerError::Spawn(err.to_string()))?;
 
         let shutdown = match ready_rx.recv() {
@@ -102,7 +124,16 @@ impl ClipboardFormatListener {
         Ok(Self {
             shutdown: Mutex::new(Some(shutdown)),
             join: Mutex::new(Some(join)),
+            running,
         })
+    }
+
+    /// リスナスレッドが稼働中か
+    ///
+    /// # Returns
+    /// * `bool` - エラー等で終了済みなら `false`
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::Acquire)
     }
 
     /// リスナを停止し、スレッド終了を待つ
@@ -129,8 +160,7 @@ impl Drop for ClipboardFormatListener {
 
 /// メッセージ専用ウィンドウでクリップボード変更を待ち、ワーカーへ通知する
 fn run_listener_loop(
-    tx: &Sender<ClipboardCommand>,
-    pending: &Arc<AtomicBool>,
+    guard: &ExitGuard,
     ready_tx: &Sender<Result<Shutdown, ClipboardListenerError>>,
 ) {
     let mut monitor = match Monitor::new() {
@@ -149,11 +179,13 @@ fn run_listener_loop(
     loop {
         match monitor.recv() {
             Ok(true) => {
-                let _ = try_notify_clipboard_changed(pending, tx);
+                let _ = try_notify_clipboard_changed(&guard.pending, &guard.tx);
             }
             Ok(false) => break,
             Err(err) => {
-                crate::log_warn!("クリップボードリスナがエラーで終了: {err}");
+                crate::log_warn!(
+                    "クリップボードリスナがエラーで終了したため、シーケンストークンの周期監視にフォールバックします: {err}"
+                );
                 break;
             }
         }

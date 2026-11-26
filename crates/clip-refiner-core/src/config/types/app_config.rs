@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::favorites::{FavoriteMoveDirection, FavoriteToggleResult};
@@ -23,6 +25,14 @@ fn default_config_version() -> u32 {
 /// * `usize` - 履歴の最大保持数
 fn default_history_limit() -> usize {
     consts::DEFAULT_HISTORY_LIMIT
+}
+
+/// 除外形式の維持の既定値 (有効) を返す
+///
+/// # Returns
+/// * `bool` - 常に `true`
+fn default_keep_clipboard_exclusion() -> bool {
+    true
 }
 
 /// 連続記録の最大保持数を返す
@@ -74,6 +84,12 @@ pub struct AppConfig {
     /// 履歴機能が有効かどうか
     #[serde(default)]
     pub history_enabled: bool,
+    /// 手動加工・登録クリップのコピーで除外形式を付けるかどうか
+    ///
+    /// 元がパスワードマネージャー等の除外形式付きの手動加工と、登録クリップのコピーに、
+    /// Win+V 履歴・クラウド同期・監視から除外する形式を付けて書き込む
+    #[serde(default = "default_keep_clipboard_exclusion")]
+    pub keep_clipboard_exclusion: bool,
     /// 連続記録モード (監視時は加工せず元テキストを記録)
     ///
     /// `auto_refine_enabled` とは同時に有効にならない
@@ -126,6 +142,7 @@ impl Default for AppConfig {
             selector_webview_retention: SelectorWebviewRetention::default(),
             selector_webview_idle_minutes: consts::DEFAULT_SELECTOR_WEBVIEW_IDLE_MINUTES,
             history_enabled: false,
+            keep_clipboard_exclusion: true,
             continuous_record_enabled: false,
             continuous_record_limit: consts::DEFAULT_CONTINUOUS_RECORD_LIMIT,
             history_limit: consts::DEFAULT_HISTORY_LIMIT,
@@ -315,7 +332,7 @@ impl AppConfig {
         self.clips.push(RegisteredClip {
             label: String::new(),
             preview,
-            text_ciphertext,
+            text_ciphertext: text_ciphertext.into(),
             image_file: None,
             template: false,
             counter: 0,
@@ -362,7 +379,7 @@ impl AppConfig {
         self.clips.push(RegisteredClip {
             label: String::new(),
             preview: String::new(),
-            text_ciphertext: Vec::new(),
+            text_ciphertext: Arc::default(),
             image_file: Some(image_file),
             template: false,
             counter: 0,
@@ -439,7 +456,7 @@ impl AppConfig {
         let clip = &mut self.clips[index];
         clip.label = label.trim().to_string();
         clip.preview = preview;
-        clip.text_ciphertext = text_ciphertext;
+        clip.text_ciphertext = text_ciphertext.into();
         self.normalize_clips();
         Ok(())
     }

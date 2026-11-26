@@ -3,11 +3,12 @@
 //! core の型付きエラーおよび更新の `UpdateError` から通知タイトル・本文を生成し、
 //! ログとデスクトップ通知を一元化する
 
+use clip_refiner_updater::UpdateError;
+
 use crate::clip_template::ClipTemplateError;
 use crate::config::AddRegisteredClipError;
 use crate::consts;
 use crate::platform;
-use crate::platform::update::UpdateError;
 use crate::refiner::ClipboardProcessError;
 use crate::security::format_mib;
 

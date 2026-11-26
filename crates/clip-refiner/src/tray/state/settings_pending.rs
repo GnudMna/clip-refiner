@@ -1,14 +1,10 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::app_event::ClipRef;
 use super::lock_ext::LockExt;
 use crate::config::RegexSettings;
-use crate::platform::update::{
-    AvailableUpdate, UpdateApplyOutcome, UpdateCheckOutcome, UpdateCheckUiResponse,
-};
 use crate::security::SecretString;
 
 // ======================================================================
@@ -58,10 +54,6 @@ pub(crate) struct SettingsPendingState {
     patch: Mutex<Option<String>>,
     regex_preview: Mutex<Option<RegexPreviewRequest>>,
     clip_edits: Mutex<VecDeque<ClipEditRequest>>,
-    update_busy: AtomicBool,
-    update_check_result: Mutex<Option<UpdateCheckOutcome>>,
-    available_update: Mutex<Option<AvailableUpdate>>,
-    update_apply_result: Mutex<Option<UpdateApplyOutcome>>,
 }
 
 impl SettingsPendingState {
@@ -74,10 +66,6 @@ impl SettingsPendingState {
             patch: Mutex::new(None),
             regex_preview: Mutex::new(None),
             clip_edits: Mutex::new(VecDeque::new()),
-            update_busy: AtomicBool::new(false),
-            update_check_result: Mutex::new(None),
-            available_update: Mutex::new(None),
-            update_apply_result: Mutex::new(None),
         }
     }
 
@@ -142,89 +130,6 @@ impl SettingsPendingState {
     pub fn take_clip_edit(&self) -> Option<ClipEditRequest> {
         self.clip_edits.lock_ignore_poison().pop_front()
     }
-
-    /// 更新操作を開始できるとき `true` を返しビジーにする
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    ///
-    /// # Returns
-    /// * `bool` - ビジーにできた場合は `true`、既に更新操作中の場合は `false`
-    pub fn try_begin_update_op(&self) -> bool {
-        self.update_busy
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-    }
-
-    /// 更新操作のビジー状態を解除する
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    pub fn end_update_op(&self) {
-        self.update_busy.store(false, Ordering::SeqCst);
-    }
-
-    /// 更新確認結果を格納する
-    ///
-    /// Available の場合は適用用スロットにも控え、それ以外では適用用スロットをクリアする
-    ///
-    /// # Arguments
-    /// * `outcome` - 確認結果
-    pub fn set_update_check_result(&self, outcome: UpdateCheckOutcome) {
-        match &outcome {
-            UpdateCheckOutcome::Available(update) => {
-                *self.available_update.lock_ignore_poison() = Some(update.clone());
-            }
-            UpdateCheckOutcome::UpToDate { .. } | UpdateCheckOutcome::Error { .. } => {
-                *self.available_update.lock_ignore_poison() = None;
-            }
-        }
-        *self.update_check_result.lock_ignore_poison() = Some(outcome);
-    }
-
-    /// 更新確認結果を取り出し、UI レスポンスへ変換する
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    ///
-    /// # Returns
-    /// * `Option<UpdateCheckUiResponse>` - 値がある場合は `Some`、ない場合は `None`
-    pub fn take_update_check_ui_response(&self) -> Option<UpdateCheckUiResponse> {
-        self.update_check_result
-            .lock_ignore_poison()
-            .take()
-            .map(|outcome| UpdateCheckUiResponse::from(&outcome))
-    }
-
-    /// 適用待ちの更新アセットを取り出す
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    ///
-    /// # Returns
-    /// * `Option<AvailableUpdate>` - 値がある場合は `Some`、ない場合は `None`
-    pub fn take_available_update(&self) -> Option<AvailableUpdate> {
-        self.available_update.lock_ignore_poison().take()
-    }
-
-    /// 更新適用結果を格納する
-    ///
-    /// # Arguments
-    /// * `outcome` - 適用結果
-    pub fn set_update_apply_result(&self, outcome: UpdateApplyOutcome) {
-        *self.update_apply_result.lock_ignore_poison() = Some(outcome);
-    }
-
-    /// 更新適用結果を取り出す
-    ///
-    /// # Arguments
-    /// * `self` - 自身
-    ///
-    /// # Returns
-    /// * `Option<UpdateApplyOutcome>` - 値がある場合は `Some`、ない場合は `None`
-    pub fn take_update_apply_result(&self) -> Option<UpdateApplyOutcome> {
-        self.update_apply_result.lock_ignore_poison().take()
-    }
 }
 
 impl Default for SettingsPendingState {
@@ -239,17 +144,6 @@ impl Default for SettingsPendingState {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn sample_update() -> AvailableUpdate {
-        AvailableUpdate {
-            current_version: "0.13.0".to_string(),
-            latest_version: "0.13.1".to_string(),
-            tag: "v0.13.1".to_string(),
-            asset_name: "clip-refiner-0.13.1-x86_64.msi".to_string(),
-            size: 100,
-            sha256: "a".repeat(64),
-        }
-    }
 
     /// 登録クリップの編集要求を送信順に取り出せ、`Debug` が本文を出力しないこと
     #[test]
@@ -274,58 +168,5 @@ mod tests {
         assert!(!debug.contains("secret-one"));
         assert_eq!(pending.take_clip_edit().expect("second").target.index, 2);
         assert!(pending.take_clip_edit().is_none());
-    }
-
-    /// 更新操作のビジーフラグを排他的に立てられるようにすること
-    #[test]
-    fn try_begin_update_op_is_exclusive() {
-        let pending = SettingsPendingState::new();
-        assert!(pending.try_begin_update_op());
-        assert!(!pending.try_begin_update_op());
-        pending.end_update_op();
-        assert!(pending.try_begin_update_op());
-    }
-
-    /// Available 結果が適用用スロットへ控えられるようにすること
-    #[test]
-    fn available_check_result_stores_apply_target() {
-        let pending = SettingsPendingState::new();
-        pending.set_update_check_result(UpdateCheckOutcome::Available(sample_update()));
-
-        let ui = pending.take_update_check_ui_response().expect("ui");
-        assert!(matches!(ui, UpdateCheckUiResponse::Available { .. }));
-        let update = pending.take_available_update().expect("available");
-        assert_eq!(update.tag, "v0.13.1");
-        assert!(pending.take_available_update().is_none());
-    }
-
-    /// `UpToDate` / `Error` では適用用スロットがクリアされるようにすること
-    #[test]
-    fn non_available_check_result_clears_apply_target() {
-        let pending = SettingsPendingState::new();
-        pending.set_update_check_result(UpdateCheckOutcome::Available(sample_update()));
-        pending.set_update_check_result(UpdateCheckOutcome::UpToDate {
-            current_version: "0.13.1".to_string(),
-            latest_version: "0.13.1".to_string(),
-        });
-        assert!(pending.take_available_update().is_none());
-
-        pending.set_update_check_result(UpdateCheckOutcome::Available(sample_update()));
-        pending.set_update_check_result(UpdateCheckOutcome::Error {
-            message: "失敗".to_string(),
-        });
-        assert!(pending.take_available_update().is_none());
-    }
-
-    /// 更新適用結果を取り出して消費できるようにすること
-    #[test]
-    fn update_apply_result_round_trip() {
-        let pending = SettingsPendingState::new();
-        pending.set_update_apply_result(UpdateApplyOutcome::MsiStarted);
-        assert!(matches!(
-            pending.take_update_apply_result(),
-            Some(UpdateApplyOutcome::MsiStarted)
-        ));
-        assert!(pending.take_update_apply_result().is_none());
     }
 }

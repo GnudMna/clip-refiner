@@ -63,7 +63,7 @@ fn oneshot_ipc_pipe_returns_processed() {
                 .expect("IPC 往復");
 
         assert_eq!(response.status, OneshotIpcStatus::Processed);
-        assert!(!response.request_id.is_empty());
+        assert_ne!(response.request_id.len(), 0);
         assert!(response.is_success());
     });
 }
@@ -228,9 +228,9 @@ fn oneshot_ipc_pipe_drops_oversized_request_without_response() {
         drop(rx);
         let (_server, pipe_name) = start_oneshot_ipc_for_test(worker);
 
-        // メッセージ上限 (64 KiB) をわずかに超える行
+        // メッセージ上限 (256 KiB) をわずかに超える行
         // (改行はクライアントの writeln が付与する)
-        let oversized = "x".repeat(64 * 1024 + 64);
+        let oversized = "x".repeat(256 * 1024 + 64);
         let err = send_raw_oneshot_line(&pipe_name, &oversized).expect_err("応答なし切断を期待");
         let message = err.to_string();
 

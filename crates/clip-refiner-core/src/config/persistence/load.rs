@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::Deserialize;
 
@@ -46,12 +47,14 @@ impl AppConfig {
         };
 
         if !config_path.exists() {
+            let (config, registered_clips_key_unavailable) =
+                Self::create_initial_config(&config_path);
             return ConfigLoadOutcome {
-                config: Self::create_initial_config(&config_path),
+                config,
                 fallback: None,
                 unknown_keys: Vec::new(),
                 unsupported_version_kept: false,
-                registered_clips_key_unavailable: false,
+                registered_clips_key_unavailable,
             };
         }
 
@@ -63,12 +66,13 @@ impl AppConfig {
                     backup_created: false,
                 };
                 tracing::error!("{}", fallback.user_message());
+                let (config, registered_clips_key_unavailable) = Self::default_with_stored_clips();
                 return ConfigLoadOutcome {
-                    config: Self::default(),
+                    config,
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
                     unsupported_version_kept: false,
-                    registered_clips_key_unavailable: false,
+                    registered_clips_key_unavailable,
                 };
             }
         };
@@ -99,12 +103,13 @@ impl AppConfig {
                     backup_created,
                 };
                 tracing::error!("{}", fallback.user_message());
+                let (config, registered_clips_key_unavailable) = Self::default_with_stored_clips();
                 ConfigLoadOutcome {
-                    config: Self::default(),
+                    config,
                     fallback: Some(fallback),
                     unknown_keys: Vec::new(),
                     unsupported_version_kept: false,
-                    registered_clips_key_unavailable: false,
+                    registered_clips_key_unavailable,
                 }
             }
         }
@@ -154,9 +159,16 @@ impl AppConfig {
 
     /// 初回起動用のデフォルト設定を生成し、説明コメント付きで保存する
     ///
+    /// 登録クリップファイルが残っている場合は、その内容を引き継いでから保存する
     /// 保存に失敗してもデフォルト設定は返す
-    fn create_initial_config(config_path: &Path) -> Self {
-        let config = Self::default();
+    ///
+    /// # Arguments
+    /// * `config_path` - 作成する設定ファイルのパス
+    ///
+    /// # Returns
+    /// * `(Self, bool)` - 設定と、登録クリップの鍵を使えなかったか
+    fn create_initial_config(config_path: &Path) -> (Self, bool) {
+        let (config, key_unavailable) = Self::default_with_stored_clips();
         match config.save() {
             Ok(()) => {
                 tracing::info!("初回設定ファイルを作成しました: {}", config_path.display());
@@ -165,7 +177,18 @@ impl AppConfig {
                 tracing::warn!("初回設定ファイルの作成に失敗: {:?}", e);
             }
         }
-        config
+        (config, key_unavailable)
+    }
+
+    /// デフォルト設定に `registered-clips.dat` の登録クリップを載せて返す
+    ///
+    /// `config.toml` が無い・読めない場合も、空の一覧で保存して登録クリップを失わないようにする
+    ///
+    /// # Returns
+    /// * `(Self, bool)` - 設定と、登録クリップの鍵を使えなかったか
+    fn default_with_stored_clips() -> (Self, bool) {
+        let finished = finish_loading(Self::default(), Vec::new());
+        (finished.config, finished.registered_clips_key_unavailable)
     }
 }
 
@@ -244,7 +267,7 @@ fn encrypt_legacy_toml_clips(legacy_clips: Vec<LegacyTomlRegisteredClip>) -> Vec
             clips.push(RegisteredClip {
                 label: legacy.label,
                 preview: String::new(),
-                text_ciphertext: Vec::new(),
+                text_ciphertext: Arc::default(),
                 image_file: Some(image_file),
                 template: false,
                 counter: 0,
@@ -380,7 +403,7 @@ mod tests {
             assert!(fallback.backup_created);
             assert!(path.with_file_name("config.toml.bak").exists());
             assert_eq!(outcome.config.mode, AppConfig::default().mode);
-            assert!(outcome.unknown_keys.is_empty());
+            assert_eq!(outcome.unknown_keys.len(), 0);
         });
     }
 
@@ -421,7 +444,7 @@ continuous_record_paste = "Ctrl+Alt+X"
         assert_eq!(parsed.config.hotkeys.continuous_record_paste, "Ctrl+Alt+X");
         assert!(!parsed.config.notification_settings.notify_auto_refine);
         // 旧キー名は既知キーのため未知キーとして報告しない
-        assert!(parsed.unknown_keys.is_empty());
+        assert_eq!(parsed.unknown_keys.len(), 0);
     }
 
     /// 旧キー名だけの場合は従来どおり現行キーとして読み込むこと
@@ -452,7 +475,7 @@ pause = "Ctrl+Alt+P"
             fs::write(&dat, b"broken").expect("write");
 
             let outcome = AppConfig::load();
-            assert!(outcome.config.clips.is_empty());
+            assert_eq!(outcome.config.clips.len(), 0);
             assert!(outcome.fallback.is_none());
             assert_eq!(
                 fs::read(dir.join("registered-clips.dat.bak")).expect("backup"),
@@ -461,6 +484,55 @@ pause = "Ctrl+Alt+P"
 
             outcome.config.save().expect("save");
             assert_eq!(fs::read(&dat).expect("kept"), b"broken");
+        });
+    }
+
+    /// `config.toml` が無い・壊れている・読めない場合も、登録クリップを引き継いで削除しないこと
+    #[test]
+    fn fallback_keeps_registered_clips() {
+        use crate::config::registered_clips::save_registered_clips;
+
+        let prepare = || {
+            let clip = registered_clip_from_plain_text("l".into(), "body").expect("enc");
+            save_registered_clips(&[clip]).expect("clips save");
+            let dir = crate::config::paths::get_config_dir().expect("dir");
+            (
+                dir.join("registered-clips.dat"),
+                get_config_file_path().expect("path"),
+            )
+        };
+
+        // config.toml が無い場合 (初回作成)
+        crate::test_helpers::with_temp_config_dir(|| {
+            let (dat, _) = prepare();
+            let outcome = AppConfig::load();
+            assert_eq!(outcome.config.clips.len(), 1);
+            assert!(dat.exists());
+        });
+
+        // TOML 構文エラー: 復旧前の保存でも削除しない
+        crate::test_helpers::with_temp_config_dir(|| {
+            let (dat, path) = prepare();
+            fs::write(&path, "mode = [[invalid").expect("write");
+            let outcome = AppConfig::load();
+            assert!(outcome.fallback.is_some());
+            assert_eq!(outcome.config.clips.len(), 1);
+            outcome.config.save().expect("save");
+            assert!(dat.exists());
+        });
+
+        // UTF-8 でない config.toml (読み取り失敗)
+        crate::test_helpers::with_temp_config_dir(|| {
+            let (dat, path) = prepare();
+            fs::write(&path, [0xff, 0xfe, 0xfd]).expect("write");
+            let outcome = AppConfig::load();
+            assert!(matches!(
+                outcome.fallback.map(|f| f.error),
+                Some(ConfigReloadError::Read(_))
+            ));
+            assert_eq!(outcome.config.clips.len(), 1);
+            outcome.config.save().expect("save");
+            assert!(dat.exists());
         });
     }
 
@@ -516,8 +588,8 @@ text = "secret-body"
 "#;
             let parsed = parse_config_toml(toml_str).expect("parse");
             assert_eq!(parsed.legacy_clips.len(), 1);
-            assert!(parsed.config.clips.is_empty());
-            assert!(parsed.unknown_keys.is_empty());
+            assert_eq!(parsed.config.clips.len(), 0);
+            assert_eq!(parsed.unknown_keys.len(), 0);
 
             let finished = finish_loading(parsed.config, parsed.legacy_clips);
             assert!(finished.migrated);
@@ -525,7 +597,7 @@ text = "secret-body"
             assert!(!finished.unsupported_version_kept);
             let config = finished.config;
             assert_eq!(config.clips.len(), 1);
-            assert!(!config.clips[0].text_ciphertext.is_empty());
+            assert_ne!(config.clips[0].text_ciphertext.len(), 0);
             let plain = super::super::super::registered_clips::decrypt_registered_clip_text(
                 &config.clips[0].text_ciphertext,
             )

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 
 use super::super::clipboard_monitor::ObservedClipboard;
@@ -98,7 +99,13 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
             pipeline,
             refine_ctx: oneshot_ctx,
             reply,
+            cancelled,
         } => {
+            // 応答待ちがタイムアウト済みなら、呼び出し側は失敗として扱っているため加工しない
+            if cancelled.load(Ordering::SeqCst) {
+                crate::log_warn!("ワンショット IPC の要求は応答待ち終了後に届いたため破棄");
+                return;
+            }
             handle_process_oneshot_command(clipboard, state, &pipeline, &oneshot_ctx, &reply);
         }
         ClipboardCommand::Undo => {
@@ -114,6 +121,14 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     }
 }
 
+/// 加工結果の書き戻しへ除外形式を付けるか判定する
+///
+/// 設定が有効で、書き込み前のクリップボードが除外形式付きの場合のみ付ける
+/// パスワードマネージャーのコピーが、加工で Win+V 履歴やクラウド同期へ漏れるのを防ぐ
+fn should_keep_exclusion<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) -> bool {
+    state.with_config(|c| c.keep_clipboard_exclusion) && clipboard.is_excluded_from_monitoring()
+}
+
 /// 手動加工コマンドを処理する
 fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
     clipboard: &mut C,
@@ -123,10 +138,12 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard
 ) {
     // 取り消し用テキストと加工対象を同じ読み取りにそろえ、書き戻し前に別のコピーが入れば上書きしない
     let token = clipboard.change_token();
+    let keep_exclusion = should_keep_exclusion(clipboard, state);
     let pre_text = clipboard.get_text().ok();
     refine_ctx.regex = state.with_config(|c| c.regex.clone());
     let pipeline = [mode];
-    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token);
+    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token)
+        .keeping_exclusion(keep_exclusion);
     let outcome = process_clipboard_pipeline_io(&mut observed, &pipeline, refine_ctx);
     if observed.is_superseded() {
         crate::log_debug!("加工中にクリップボードが更新されたため書き戻しを見送り");
@@ -138,6 +155,7 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard
         );
         return;
     }
+    let written_token = observed.token();
     match outcome {
         Ok(ClipboardProcessOutcome::Processed(processed)) => {
             if let Some(ref pre) = pre_text {
@@ -151,12 +169,10 @@ fn handle_process_mode_command<C: TextClipboard + ImageClipboard + HtmlClipboard
             show_process_notification(state, &pipeline, &processed);
         }
         Ok(ClipboardProcessOutcome::ImageProcessed { width, height }) => {
-            if let Some(ref pre) = pre_text {
-                state.clipboard_session().record_image_undo_source(pre);
-                state
-                    .clipboard_session()
-                    .record_image_processing_success(pre);
-            }
+            state.clipboard_session().record_image_set(written_token);
+            state
+                .clipboard_session()
+                .record_image_undo_source(pre_text.as_deref().unwrap_or(""), written_token);
             show_image_process_notification(state, mode, width, height);
         }
         Ok(ClipboardProcessOutcome::Unchanged) => {
@@ -186,9 +202,13 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
 ) {
     // 取り消し用テキストと加工対象を同じ読み取りにそろえ、書き戻し前に別のコピーが入れば上書きしない
     let token = clipboard.change_token();
+    let keep_exclusion = should_keep_exclusion(clipboard, state);
     let pre_text = clipboard.get_text().ok();
-    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token);
-    let result = match process_clipboard_pipeline_io(&mut observed, pipeline, refine_ctx) {
+    let mut observed = ObservedClipboard::with_observed(clipboard, pre_text.as_deref(), token)
+        .keeping_exclusion(keep_exclusion);
+    let processed = process_clipboard_pipeline_io(&mut observed, pipeline, refine_ctx);
+    let written_token = observed.token();
+    let result = match processed {
         Ok(outcome) => {
             match &outcome {
                 ClipboardProcessOutcome::Processed(processed) => {
@@ -200,12 +220,10 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
                         .record_processing_success(processed);
                 }
                 ClipboardProcessOutcome::ImageProcessed { .. } => {
-                    if let Some(ref pre) = pre_text {
-                        state.clipboard_session().record_image_undo_source(pre);
-                        state
-                            .clipboard_session()
-                            .record_image_processing_success(pre);
-                    }
+                    state.clipboard_session().record_image_set(written_token);
+                    state
+                        .clipboard_session()
+                        .record_image_undo_source(pre_text.as_deref().unwrap_or(""), written_token);
                 }
                 ClipboardProcessOutcome::Unchanged => {}
             }
@@ -221,13 +239,21 @@ fn handle_process_oneshot_command<C: TextClipboard + ImageClipboard + HtmlClipbo
 
 /// 加工の取り消しコマンドを処理する
 fn handle_undo_command<C: TextClipboard>(clipboard: &mut C, state: &Arc<AppState>) {
+    let keep_exclusion = should_keep_exclusion(clipboard, state);
     let current = clipboard.get_text().ok();
+    let current_token = clipboard.change_token();
     match state
         .clipboard_session()
-        .take_undo_entry_if_current(current.as_deref())
+        .take_undo_entry_if_current(current.as_deref(), current_token)
     {
         UndoLookup::Ready(entry) => {
-            if let Err(e) = clipboard.set_text(entry.source.to_string()) {
+            let source = entry.source.to_string();
+            let written = if keep_exclusion {
+                clipboard.set_excluded_text(source)
+            } else {
+                clipboard.set_text(source)
+            };
+            if let Err(e) = written {
                 ClipboardWriteContext::Undo
                     .notification()
                     .notify_with_debug(&e);
@@ -338,7 +364,12 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
             } else {
                 (source, None)
             };
-            if let Err(e) = clipboard.set_text(text.to_string()) {
+            let written = if state.with_config(|c| c.keep_clipboard_exclusion) {
+                clipboard.set_excluded_text(text.to_string())
+            } else {
+                clipboard.set_text(text.to_string())
+            };
+            if let Err(e) = written {
                 ClipboardWriteContext::RegisteredClip
                     .notification()
                     .notify_with_debug(&e);
@@ -367,6 +398,9 @@ fn copy_registered_clip_to_clipboard<C: ImageClipboard + TextClipboard>(
                     .notification()
                     .notify_with_debug(&e);
             } else {
+                state
+                    .clipboard_session()
+                    .record_image_set(clipboard.change_token());
                 show_category_notification(
                     state,
                     NotificationCategory::RegisteredClip,

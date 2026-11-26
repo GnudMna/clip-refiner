@@ -16,6 +16,8 @@ pub(crate) struct UndoEntry {
     written: ContentFingerprint,
     /// 本文を読めない状態を変更済みとみなす場合は `true`
     text_required: bool,
+    /// 画像加工の書き込み直後の変更トークン。記録していれば本文ではなくこれで照合する
+    image_token: Option<u64>,
 }
 
 /// 取り消し用エントリの取り出し結果
@@ -36,6 +38,8 @@ pub(crate) enum UndoLookup {
 /// プロセス再起動で破棄される揮発データのみを保持する
 pub(crate) struct ClipboardSessionState {
     processed_state: Mutex<ProcessedState>,
+    /// アプリが設定した画像の、書き込み直後の変更トークン (自身の変更イベントを無視)
+    image_set_token: Mutex<Option<u64>>,
     undo_text: Mutex<Option<UndoEntry>>,
     history_store: Mutex<EncryptedHistoryStore>,
     continuous_record_store: Mutex<EncryptedRecordStore>,
@@ -49,6 +53,7 @@ impl ClipboardSessionState {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
             processed_state: Mutex::new(ProcessedState::default()),
+            image_set_token: Mutex::new(None),
             undo_text: Mutex::new(None),
             history_store: Mutex::new(EncryptedHistoryStore::new()?),
             continuous_record_store: Mutex::new(EncryptedRecordStore::new()?),
@@ -78,18 +83,32 @@ impl ClipboardSessionState {
         });
     }
 
-    /// 画像加工成功後に元テキストの指紋を記録する
+    /// クリップボードへ画像を書き込んだことを記録し、それまでの本文の指紋を消す
     ///
-    /// クリップボード上に TSV が残る場合の再加工ループを防ぐ
+    /// 画像の書き込みで本文は消えている。指紋を残すと、同じ本文を次にコピーしたとき、
+    /// 観測済みの本文や書き戻しのエコーと誤認して加工されない
+    pub fn record_image_written(&self) {
+        self.with_processed_state(|ps| *ps = ProcessedState::default());
+    }
+
+    /// 登録クリップのコピーや手動加工で、監視の外から画像を書き込んだことを記録する
     ///
     /// # Arguments
-    /// * `source_text` - 加工前の元テキスト
-    pub fn record_image_processing_success(&self, source_text: &str) {
-        self.with_processed_state(|ps| {
-            let fp = crate::security::ContentFingerprint::from_text(source_text);
-            ps.last_written = Some(fp);
-            ps.last_seen = fp;
-        });
+    /// * `token` - 書き込み直後の変更トークン。取得できない環境では `None`
+    pub fn record_image_set(&self, token: Option<u64>) {
+        *self.image_set_token.lock_ignore_poison() = token;
+        self.record_image_written();
+    }
+
+    /// 変更トークンが、`record_image_set` で記録した書き込み直後のままか判定する
+    ///
+    /// # Arguments
+    /// * `token` - 現在の変更トークン
+    ///
+    /// # Returns
+    /// * `bool` - 記録した書き込みから変わっていない場合は `true`。取得できない場合は `false`
+    pub fn is_image_set(&self, token: Option<u64>) -> bool {
+        token.is_some() && *self.image_set_token.lock_ignore_poison() == token
     }
 
     /// 加工せずに観測したクリップボード本文を記録する
@@ -124,21 +143,30 @@ impl ClipboardSessionState {
             source: secret_from(source),
             written: ContentFingerprint::from_text(written),
             text_required: true,
+            image_token: None,
         });
     }
 
     /// 画像加工成功時に取り消し用の元テキストを記録する
     ///
-    /// 画像書き込みでテキストが消える場合があるため、クリップボードからテキストを
-    /// 読めない状態は加工直後のままとみなす
+    /// 画像書き込みでテキストが消える場合があるため、加工前テキストが空なら
+    /// 戻せる内容がないとして記録を破棄する (取り消しで画像を消さない)
+    /// 書き込み直後の変更トークンがあれば、取り消し時はトークンの一致で加工直後か判定する
+    /// トークンを取得できない環境では、テキストを読めない状態を加工直後のままとみなす
     ///
     /// # Arguments
     /// * `source` - 取り消し用に保持する加工前テキスト
-    pub fn record_image_undo_source(&self, source: &str) {
+    /// * `written_token` - 画像書き込み直後の変更トークン。取得できない環境では `None`
+    pub fn record_image_undo_source(&self, source: &str, written_token: Option<u64>) {
+        if source.is_empty() {
+            *self.undo_text.lock_ignore_poison() = None;
+            return;
+        }
         self.store_undo_entry(UndoEntry {
             source: secret_from(source),
             written: ContentFingerprint::from_text(source),
             text_required: false,
+            image_token: written_token,
         });
     }
 
@@ -171,17 +199,24 @@ impl ClipboardSessionState {
     ///
     /// # Arguments
     /// * `current` - 現在のクリップボード本文。テキストを読めない場合は `None`
+    /// * `current_token` - 現在の変更トークン。取得できない環境では `None`
     ///
     /// # Returns
     /// * `UndoLookup` - 取り消せる場合は `Ready`、記録がなければ `Empty`、
     ///   クリップボードが変更済みなら `Stale`
-    pub fn take_undo_entry_if_current(&self, current: Option<&str>) -> UndoLookup {
+    pub fn take_undo_entry_if_current(
+        &self,
+        current: Option<&str>,
+        current_token: Option<u64>,
+    ) -> UndoLookup {
         let Some(entry) = self.undo_text.lock_ignore_poison().take() else {
             return UndoLookup::Empty;
         };
-        let is_current = match current {
-            Some(text) => entry.written.matches(text),
-            None => !entry.text_required,
+        let is_current = match (entry.image_token, current) {
+            // 画像加工は書き込み直後のトークンのままかで判定する
+            (Some(token), _) => current_token == Some(token),
+            (None, Some(text)) => entry.written.matches(text),
+            (None, None) => !entry.text_required,
         };
         if is_current {
             UndoLookup::Ready(entry)
@@ -462,7 +497,8 @@ mod tests {
         let session = session();
         session.record_undo_source("original", "processed");
 
-        let UndoLookup::Ready(entry) = session.take_undo_entry_if_current(Some("processed")) else {
+        let UndoLookup::Ready(entry) = session.take_undo_entry_if_current(Some("processed"), None)
+        else {
             panic!("取り消せる状態であること");
         };
         assert_eq!(entry.source.as_str(), "original");
@@ -475,11 +511,11 @@ mod tests {
         session.record_undo_source("original", "processed");
 
         assert!(matches!(
-            session.take_undo_entry_if_current(Some("copied-later")),
+            session.take_undo_entry_if_current(Some("copied-later"), None),
             UndoLookup::Stale
         ));
         assert!(matches!(
-            session.take_undo_entry_if_current(Some("processed")),
+            session.take_undo_entry_if_current(Some("processed"), None),
             UndoLookup::Empty
         ));
     }
@@ -491,28 +527,65 @@ mod tests {
         session.record_undo_source("original", "processed");
 
         assert!(matches!(
-            session.take_undo_entry_if_current(None),
+            session.take_undo_entry_if_current(None, None),
             UndoLookup::Stale
         ));
     }
 
-    /// 画像加工の取り消しはテキストを読めない状態を加工直後とみなすこと
+    /// トークンを取得できない環境の画像加工は、テキストを読めない状態を加工直後とみなすこと
     ///
     /// テキストを読める場合は加工前テキストとの一致を要求する
     #[test]
-    fn image_undo_entry_accepts_unreadable_text_only_when_unchanged() {
+    fn image_undo_entry_without_token_accepts_unreadable_text() {
         let session = session();
 
-        session.record_image_undo_source("original");
+        session.record_image_undo_source("original", None);
         assert!(matches!(
-            session.take_undo_entry_if_current(None),
+            session.take_undo_entry_if_current(None, None),
             UndoLookup::Ready(_)
         ));
 
-        session.record_image_undo_source("original");
+        session.record_image_undo_source("original", None);
         assert!(matches!(
-            session.take_undo_entry_if_current(Some("copied-later")),
+            session.take_undo_entry_if_current(Some("copied-later"), None),
             UndoLookup::Stale
+        ));
+    }
+
+    /// 画像加工の取り消しは書き込み直後の変更トークンの一致で判定すること
+    ///
+    /// 加工後に別のスクリーンショットがコピーされた場合は上書きしない
+    #[test]
+    fn image_undo_entry_is_checked_by_change_token() {
+        let session = session();
+
+        session.record_image_undo_source("original", Some(10));
+        assert!(matches!(
+            session.take_undo_entry_if_current(None, Some(10)),
+            UndoLookup::Ready(_)
+        ));
+
+        // 別の画像がコピーされてトークンが進んだ場合
+        session.record_image_undo_source("original", Some(10));
+        assert!(matches!(
+            session.take_undo_entry_if_current(None, Some(11)),
+            UndoLookup::Stale
+        ));
+    }
+
+    /// 加工前テキストが空の画像加工は取り消し用エントリを残さないこと
+    ///
+    /// 空文字を書き戻して画像を消すことを避ける。以前の記録も破棄する
+    #[test]
+    fn image_undo_source_empty_discards_entry() {
+        let session = session();
+        session.record_undo_source("old", "processed");
+
+        session.record_image_undo_source("", Some(10));
+
+        assert!(matches!(
+            session.take_undo_entry_if_current(None, Some(10)),
+            UndoLookup::Empty
         ));
     }
 

@@ -6,7 +6,8 @@
 
 - `crates/clip-refiner-core` — 加工ロジック・設定型 (GUI 非依存)。ライブラリとして公開する API はこちら。feature `clipboard` / `config` を外したテキスト変換のみの構成でもビルド・テストが通ること
 - `crates/clip-refiner` — デスクトップアプリ (トレイ常駐・WebView UI・IPC・OS 連携)。core API は re-export しない
-- `crates/clip-refiner/src/ui/` — WebView UI の JavaScript。`*.bundle.js` は esbuild 生成物のため直接編集せず、`npm run build:ui` で再生成してソースと同じコミットに含める
+- `crates/clip-refiner-updater` — アプリ更新の確認・検証・適用と、更新プログラム (`ClipRefinerUpdater.exe`。進行と成否の画面)。署名の公開鍵は同クレートの `build.rs` が埋め込む
+- `crates/clip-refiner/src/ui/` — WebView UI の TypeScript。`*.bundle.js` は esbuild 生成物のため直接編集せず、`npm run build:ui` で再生成してソースと同じコミットに含める
 - `e2e/` — Playwright + WebView2 による UI E2E
 - `crates/clip-refiner-core/benches/` — 変換の処理時間ベンチ (criterion)。`cargo test --all-targets` でも 1 回ずつ実行され、入力が素通りしていないことを検証する
 - `fuzz/` — パーサ系変換の cargo-fuzz ターゲット (nightly が必要なためワークスペース外。`check.ps1` に含めない)
@@ -26,11 +27,15 @@ cargo test -p clip-refiner-core --no-default-features --all-targets
 npm run build:ui                    # UI バンドル再生成
 npm run lint                        # ESLint
 npm run lint:md                     # markdownlint (Markdown の表などの書式)
-npm run typecheck                   # TypeScript 型チェック (UI の checkJs と E2E)
+npm run typecheck                   # TypeScript 型チェック (UI・UI ロジックテスト・scripts・E2E。`tsc -b` で差分のみ再検査)
+npm run knip                        # 未使用の export の検出
+npm run audit:deps                  # npm 依存の脆弱性監査 (high 以上で失敗)
+npm run test:ui                     # UI ロジックテストだけを Node で実行 (node:test。--test-name-pattern / --watch が使える)
+npm run test:ui:coverage            # 同上 + UI のカバレッジの下限をファイルごとに検証
 ./scripts/windows/fuzz.ps1          # ファジング (nightly + cargo-fuzz。不定期にローカルで実行)
 ./scripts/windows/bench.ps1         # 処理時間ベンチ (criterion。-Save / -Compare で基準と比較)
 
-# 完了前の品質チェック一式 (fmt / clippy / rustdoc / deny / eslint / prettier / tsc / markdownlint / test / e2e)
+# 完了前の品質チェック一式 (fmt / clippy / rustdoc / deny / npm audit / eslint / prettier / tsc / knip / UI カバレッジ / markdownlint / test / e2e)
 ./scripts/windows/check.ps1
 # GUI セッションが無い場合は WebView E2E をスキップする
 $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
@@ -38,7 +43,7 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 ## ドキュメント同期
 
-設定 (キー・既定値・上限・ホットキー・`CONFIG_VERSION`)・UI の JavaScript・ディレクトリ構成・利用者に見える挙動を変えたら、同じ変更で対応するドキュメントも更新する。更新先は [docs/dev/contributing.md のドキュメント同期](docs/dev/contributing.md#ドキュメント同期) の表に従う。ずれは `cargo test` が検出する。
+設定 (キー・既定値・上限・ホットキー・`CONFIG_VERSION`)・UI の TypeScript・ディレクトリ構成・利用者に見える挙動を変えたら、同じ変更で対応するドキュメントも更新する。更新先は [docs/dev/contributing.md のドキュメント同期](docs/dev/contributing.md#ドキュメント同期) の表に従う。ずれは `cargo test` が検出する。
 
 ## Git
 
@@ -50,7 +55,7 @@ $env:CLIP_REFINER_SKIP_E2E = '1'; ./scripts/windows/check.ps1
 
 ## コーディング規約
 
-規約は `.claude/rules/` (`comments.md` / `imports.md` / `javascript.md` / `docs.md`) に置き、対象ファイルを扱うときに自動で読み込まれる。品質チェックと CHANGELOG 追記はスキル `/check`・`/changelog` (`.claude/skills/`) で行う。共有の権限設定とフックは `.claude/settings.json`、個人用の上書きは `.claude/settings.local.json` (Git 管理外) に置く。
+規約は `.claude/rules/` (`comments.md` / `imports.md` / `typescript.md` / `docs.md`) に置き、対象ファイルを扱うときに自動で読み込まれる。品質チェックと CHANGELOG 追記はスキル `/check`・`/changelog` (`.claude/skills/`) で行う。共有の権限設定とフックは `.claude/settings.json`、個人用の上書きは `.claude/settings.local.json` (Git 管理外) に置く。
 
 ## 注意点
 

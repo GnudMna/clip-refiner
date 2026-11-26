@@ -1,6 +1,6 @@
 //! コミット済み UI バンドル (`*.bundle.js`) がソースと同期していることのテスト
 //!
-//! `scripts/common/build-ui.mjs` が先頭に刻んだ入力一覧と SHA-256 を Node なしで再計算し、
+//! `scripts/common/build-ui.ts` が先頭に刻んだ入力一覧と SHA-256 を Node なしで再計算し、
 //! ソースだけ更新してバンドルの再生成を忘れた状態を `cargo test` で検出する
 
 use std::fmt::Write as _;
@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 /// 検証対象のバンドル (リポジトリルート相対)
 const BUNDLES: [&str; 3] = [
     "crates/clip-refiner/src/ui/settings/settings.bundle.js",
-    "crates/clip-refiner/src/ui/quick_selector.bundle.js",
-    "crates/clip-refiner/src/ui/clip_selector.bundle.js",
+    "crates/clip-refiner/src/ui/selector/quick_selector.bundle.js",
+    "crates/clip-refiner/src/ui/selector/clip_selector.bundle.js",
 ];
 
 const HASH_PREFIX: &str = "/* inputs-sha256: ";
@@ -56,7 +56,7 @@ fn parse_header(bundle: &str) -> Option<(String, Vec<String>)> {
     Some((hash, inputs))
 }
 
-/// 入力ファイル群の SHA-256 を `build-ui.mjs` と同じ手順で求める
+/// 入力ファイル群の SHA-256 を `build-ui.ts` と同じ手順で求める
 ///
 /// パス昇順に `パス \0 内容 \0` を連結してハッシュする
 ///
@@ -106,8 +106,8 @@ fn committed_ui_bundles_match_sources() {
         assert!(
             inputs
                 .iter()
-                .any(|input| input == "scripts/common/build-ui.mjs"),
-            "{bundle} の入力一覧に build-ui.mjs が無い"
+                .any(|input| input == "scripts/common/build-ui.ts"),
+            "{bundle} の入力一覧に build-ui.ts が無い"
         );
 
         match hash_inputs(&inputs) {
@@ -127,11 +127,11 @@ fn committed_ui_bundles_match_sources() {
 /// ヘッダーから記録ハッシュと入力一覧を取り出せること
 #[test]
 fn parse_header_reads_hash_and_inputs() {
-    let bundle = "/* Generated */\n/* inputs-sha256: abc */\n/* input: a.js */\n/* input: b.js */\n(() => {\n";
+    let bundle = "/* Generated */\n/* inputs-sha256: abc */\n/* input: a.ts */\n/* input: b.ts */\n(() => {\n";
     let (hash, inputs) = parse_header(bundle).expect("ヘッダーを解析できる");
 
     assert_eq!(hash, "abc");
-    assert_eq!(inputs, ["a.js", "b.js"]);
+    assert_eq!(inputs, ["a.ts", "b.ts"]);
 
     // ヘッダーが無い旧形式は `None`
     assert!(parse_header("/* Generated */\n(() => {\n").is_none());

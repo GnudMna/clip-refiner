@@ -1,7 +1,9 @@
 //! 監視ループ経路の統合テスト
 
-use clip_refiner::test_helpers::{ClipboardHarness, MAX_CLIPBOARD_TEXT_BYTES, MonitorMode};
-use clip_refiner_core::RefineMode;
+use clip_refiner::test_helpers::{
+    ClipboardHarness, MAX_CLIPBOARD_TEXT_BYTES, MonitorMode, with_temp_config_dir,
+};
+use clip_refiner_core::{RefineContext, RefineMode};
 
 // ======================================================================
 // 監視加工
@@ -291,4 +293,88 @@ fn monitor_converts_copied_html_to_markdown() {
     // Undo では加工前のテキストへ戻す
     harness.undo();
     assert_eq!(harness.clipboard_text(), "Docs");
+}
+
+/// 自動変換が画像モードでも、手動で書き込んだ画像は再加工せず Undo で元へ戻せること
+#[test]
+fn manual_image_is_not_reprocessed_and_can_be_undone() {
+    let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::ExcelToImage);
+    harness.copy_excel("a	b");
+    harness.process_mode(RefineMode::ExcelToImage);
+
+    // 監視方式によらず加工しない
+    assert!(!harness.run_monitor_update(true));
+    assert!(!harness.run_monitor_update(false));
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "a	b");
+}
+
+/// 自動変換が画像モードでも、CLI から書き込んだ画像は再加工せず Undo で元へ戻せること
+#[test]
+fn oneshot_image_is_not_reprocessed_and_can_be_undone() {
+    let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::ExcelToImage);
+    harness.copy_excel("a	b");
+    let _ =
+        harness.process_oneshot_pipeline(vec![RefineMode::ExcelToImage], RefineContext::default());
+
+    assert!(!harness.run_monitor_update(true));
+
+    harness.undo();
+    assert_eq!(harness.clipboard_text(), "a	b");
+}
+
+/// 手動で画像を書き込んだ後でも、同じ内容のコピーを監視方式によらず自動変換すること
+#[test]
+fn same_copy_after_manual_image_is_processed() {
+    for event_driven in [true, false] {
+        // 自動変換が画像モードの場合
+        let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::ExcelToImage);
+        harness.copy_excel("a	b");
+        harness.process_mode(RefineMode::ExcelToImage);
+        assert!(!harness.run_monitor_update(event_driven));
+        harness.copy_excel("a	b");
+        assert!(harness.run_monitor_update(event_driven));
+
+        // 自動変換がテキストのモードの場合
+        let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::Trim);
+        harness.copy_excel(" a	b ");
+        harness.process_mode(RefineMode::ExcelToImage);
+        assert!(!harness.run_monitor_update(event_driven));
+        harness.copy_excel(" a	b ");
+        assert!(harness.run_monitor_update(event_driven));
+        assert_eq!(harness.clipboard_text(), "a	b");
+    }
+}
+
+/// 自動変換で画像にした後でも、同じ内容のコピーを監視方式によらずもう一度変換すること
+#[test]
+fn same_copy_after_auto_image_is_processed() {
+    for event_driven in [true, false] {
+        let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::ExcelToImage);
+        for _ in 0..3 {
+            harness.copy_excel("a	b");
+            assert!(harness.run_monitor_update(event_driven));
+        }
+
+        harness.undo();
+        assert_eq!(harness.clipboard_text(), "a	b");
+    }
+}
+
+/// 登録クリップの画像をコピーした後は、以前に書き戻した本文と同じコピーも加工すること
+#[test]
+fn same_copy_after_registered_image_is_processed() {
+    with_temp_config_dir(|| {
+        let mut harness = ClipboardHarness::with_text("").with_mode(RefineMode::Trim);
+        harness.copy_excel("");
+        harness.register_clip_from_clipboard();
+
+        // 履歴復元などの書き戻しを監視が観測する前に、登録クリップの画像で置き換える
+        harness.set_text(" text ");
+        harness.copy_registered_clip(0);
+        harness.replace_clipboard(" text ");
+        assert!(harness.run_monitor_update(true));
+        assert_eq!(harness.clipboard_text(), "text");
+    });
 }

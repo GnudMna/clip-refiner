@@ -67,7 +67,9 @@
     color: var(--text-color);
     font-size: 13px;
     outline: none;
-    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    transition:
+        border-color 0.12s ease,
+        box-shadow 0.12s ease;
 }
 
 .field input:focus,
@@ -80,7 +82,7 @@
 .field textarea {
     min-height: 88px;
     resize: vertical;
-    font-family: Consolas, 'Courier New', monospace;
+    font-family: Consolas, "Courier New", monospace;
     line-height: 1.45;
 }
 

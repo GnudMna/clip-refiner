@@ -130,13 +130,19 @@ pub fn convert_to_backslash(text: &str) -> Cow<'_, str> {
 fn convert_separators<'a>(text: &'a str, from: char, to: &str) -> Cow<'a, str> {
     super::utils::process_lines(text, |line| {
         let body = line.trim();
-        if body.is_empty() || !is_path_like_raw(body) {
+        // 引用符で囲まれている場合は囲みを除いた内容で判定し、囲みは維持する
+        let (quote, inner) = match body.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+            Some(inner) => ("\"", inner),
+            None => ("", body),
+        };
+        if inner.is_empty() || !is_path_like_raw(inner) {
             return None;
         }
-        let converted = body.replace(from, to);
-        if converted == body {
+        let converted = inner.replace(from, to);
+        if converted == inner {
             return None;
         }
+        let converted = format!("{quote}{converted}{quote}");
         Some(Cow::Owned(with_surrounding_whitespace(line, &converted)))
     })
 }
@@ -333,6 +339,25 @@ mod tests {
         let result = convert_to_backslash(input);
         assert!(matches!(result, Cow::Borrowed(_)));
         assert_eq!(result, input);
+    }
+
+    /// 引用符付きパスも囲みを維持して区切り文字を変換すること
+    #[test]
+    fn test_convert_quoted_paths() {
+        assert_eq!(
+            convert_to_forward_slash("\"C:\\Users\\x.txt\""),
+            "\"C:/Users/x.txt\""
+        );
+        assert_eq!(
+            convert_to_backslash("  \"/usr/bin\"\t\n\"C:/a b/c\""),
+            "  \"\\usr\\bin\"\t\n\"C:\\a b\\c\""
+        );
+        // 囲みの中身がパスでなければ変更しない
+        assert!(matches!(
+            convert_to_backslash("\"and/or\""),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(convert_to_backslash("\"\""), Cow::Borrowed(_)));
     }
 
     /// 異なる種類のパスが混在する場合の変換できるようにすること

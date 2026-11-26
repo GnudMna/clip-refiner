@@ -77,7 +77,6 @@ fn run_worker_loop(
             None
         }
     };
-    let listener_active = listener.is_some();
 
     let pending_config_change = Arc::new(AtomicBool::new(false));
     let config_watcher = match ConfigFileWatcher::start(
@@ -111,6 +110,11 @@ fn run_worker_loop(
             last_config_poll = Instant::now();
             try_reload_if_config_changed(state);
         }
+
+        // リスナが途中で終了した場合は周期監視へ切り替える
+        let listener_active = listener
+            .as_ref()
+            .is_some_and(ClipboardFormatListener::is_running);
 
         let timeout = monitor.recv_timeout(state, listener_active, config_poll_interval);
         let should_exit = match rx.recv_timeout(timeout) {

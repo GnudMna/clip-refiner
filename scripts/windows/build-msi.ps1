@@ -81,11 +81,11 @@ Invoke-ScriptMain {
         # cargo wix は --locked を渡せないため、ビルドは自前で行い cargo wix には --no-build を渡す
         if (-not $SkipBuild) {
             $targetArgs = Get-CargoTargetArguments -TargetTriple $triple -ImplicitHost:$implicitHost
-            cargo build --locked -p clip-refiner --bins --release @targetArgs
+            cargo build --locked -p clip-refiner -p clip-refiner-updater --bins --release @targetArgs
             if ($LASTEXITCODE -ne 0) {
                 $hint = Get-WindowsCrossCompileHint -TargetTriple $triple
                 $hintBlock = if ($hint) { "`n$hint" } else { '' }
-                throw "エラー: cargo build --locked -p clip-refiner --bins --release が終了コード $LASTEXITCODE で失敗しました ($triple)$hintBlock"
+                throw "エラー: cargo build --locked -p clip-refiner -p clip-refiner-updater --bins --release が終了コード $LASTEXITCODE で失敗しました ($triple)$hintBlock"
             }
             Write-Host ''
         }
@@ -109,9 +109,9 @@ Invoke-ScriptMain {
 上記のメッセージを確認するか、リリースビルドを手動で実行して原因を調べてください:
 
   rustc --version
-  cargo build --locked --release -p clip-refiner --bins$(if (-not $implicitHost) { " --target $triple" })
+  cargo build --locked --release -p clip-refiner -p clip-refiner-updater --bins$(if (-not $implicitHost) { " --target $triple" })
 
-Rust 1.96 以上 (rust-toolchain.toml) と Visual Studio Build Tools (C++ ワークロード) が必要です。$hintBlock
+Rust 1.100 以上 (rust-toolchain.toml) と Visual Studio Build Tools (C++ ワークロード) が必要です。$hintBlock
 "@
         }
 

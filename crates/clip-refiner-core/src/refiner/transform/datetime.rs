@@ -202,13 +202,111 @@ fn convert_timestamps(input: &str, style: OutputStyle) -> Cow<'_, str> {
 /// # Returns
 /// * `Option<Moment>` - 変換成功時は日時、どの形式でもない場合は `None`
 fn parse_moment(input: &str) -> Option<Moment> {
+    let input = normalize_input(input.trim());
     let input = input.trim();
-    parse_number(input)
+    parse_compact(input)
+        .or_else(|| parse_number(input))
         .or_else(|| parse_datetime(input))
         .or_else(|| parse_rfc2822(input))
         .or_else(|| parse_japanese(input))
         .or_else(|| parse_japanese_era(input))
         .or_else(|| parse_western(input))
+}
+
+/// 入力を解析しやすい形へ正規化する
+///
+/// 全角の英数字・記号 (`２０２３／１１／１５`・`：` など) と全角スペースを半角にし、
+/// 日付に続く曜日 (`(水)`・`(水曜)`・`(水曜日)`) を取り除く
+///
+/// # Arguments
+/// * `input` - 前後の空白を除いた入力
+///
+/// # Returns
+/// * `Cow<'_, str>` - 正規化後の文字列。変更がない場合は入力をそのまま借用する
+fn normalize_input(input: &str) -> Cow<'_, str> {
+    if input.is_ascii() && !input.contains('(') {
+        return Cow::Borrowed(input);
+    }
+    let half: String = input
+        .chars()
+        .map(|c| match c {
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(u32::from(c) - 0xFEE0).unwrap_or(c),
+            '\u{3000}' => ' ',
+            '\u{2212}' => '-',
+            _ => c,
+        })
+        .collect();
+    let mut out = String::with_capacity(half.len());
+    let mut rest = half.as_str();
+    while let Some(start) = rest.find('(') {
+        let after = &rest[start + 1..];
+        let weekday_end = after.find(')').filter(|end| is_weekday(&after[..*end]));
+        if let Some(end) = weekday_end {
+            out.push_str(&rest[..start]);
+            rest = &after[end + 1..];
+            // 曜日の前後の空白が重なる場合は 1 つにする
+            if out.ends_with(' ') {
+                rest = rest.trim_start();
+            }
+        } else {
+            out.push_str(&rest[..=start]);
+            rest = after;
+        }
+    }
+    out.push_str(rest);
+    Cow::Owned(out)
+}
+
+/// 曜日の表記 (`水`・`水曜`・`水曜日`) かどうかを判定する
+///
+/// # Arguments
+/// * `text` - 括弧の内側の文字列
+///
+/// # Returns
+/// * `bool` - 曜日の表記の場合は `true`
+fn is_weekday(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars.next().is_some_and(|c| "日月火水木金土".contains(c))
+        && ["", "曜", "曜日"].contains(&chars.as_str())
+}
+
+/// 区切りのない日付 (`20231115`) と日時 (`20231115073000`) を日時へ変換する
+///
+/// 8 桁は `YYYYMMDD`、14 桁は `YYYYMMDDHHMMSS` として、実在する日時で年が 1000〜9999 の場合だけ扱う
+/// それ以外の桁数や範囲外の値は Unixタイムスタンプの判定に任せる
+///
+/// # Arguments
+/// * `input` - 前後の空白を除いた入力
+///
+/// # Returns
+/// * `Option<Moment>` - 変換成功時は日時、該当しない場合は `None`
+fn parse_compact(input: &str) -> Option<Moment> {
+    if !matches!(input.len(), 8 | 14) || !input.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let field = |range: std::ops::Range<usize>| input.get(range)?.parse::<i16>().ok();
+    let year = field(0..4)?;
+    if !(1000..=9999).contains(&year) {
+        return None;
+    }
+    let date = Date::new(
+        year,
+        i8::try_from(field(4..6)?).ok()?,
+        i8::try_from(field(6..8)?).ok()?,
+    )
+    .ok()?;
+    let time = if input.len() == 14 {
+        Time::new(
+            i8::try_from(field(8..10)?).ok()?,
+            i8::try_from(field(10..12)?).ok()?,
+            i8::try_from(field(12..14)?).ok()?,
+            0,
+        )
+        .ok()?
+    } else {
+        Time::midnight()
+    };
+    local_moment(date.to_datetime(time), false)
 }
 
 /// ローカルタイムゾーンの日時を `Moment` へ変換する
@@ -550,7 +648,7 @@ fn parse_western(input: &str) -> Option<Moment> {
     local_moment(naive, has_millis)
 }
 
-/// `YYYY-MM-DD` または `YYYY/MM/DD` 形式の日付を解析する
+/// `YYYY-MM-DD`・`YYYY/MM/DD`・`YYYY.MM.DD` 形式の日付を解析する
 ///
 /// # Arguments
 /// * `input` - 日付文字列
@@ -559,11 +657,12 @@ fn parse_western(input: &str) -> Option<Moment> {
 /// * `Option<Date>` - 解析成功時は日付、失敗時は `None`
 fn parse_date(input: &str) -> Option<Date> {
     // 年は 4 桁に限る (`24-1-5` のような曖昧な入力を日付として扱わない)
-    if input.find(['-', '/'])? != 4 {
+    if input.find(['-', '/', '.'])? != 4 {
         return None;
     }
     Date::strptime("%Y-%m-%d", input)
         .or_else(|_| Date::strptime("%Y/%m/%d", input))
+        .or_else(|_| Date::strptime("%Y.%m.%d", input))
         .ok()
 }
 
@@ -1050,6 +1149,45 @@ mod tests {
         assert_eq!(to_datetime_string_utc("2958465"), "1970-02-04 05:47:45");
         // 範囲外の小数は Unix タイムスタンプのまま扱う
         assert_eq!(to_datetime_string_utc("60.0"), "1970-01-01 00:01:00.000");
+    }
+
+    /// 曜日付き・全角文字・ドット区切り・区切りなしの日時を変換すること
+    #[test]
+    fn test_normalized_and_compact_formats() {
+        let date = parse_timestamp("2023-11-15").expect("日時パースに失敗");
+        for input in [
+            "2023年11月15日(水)",
+            "2023年11月15日（水曜日）",
+            "2023年11月15日 (水曜)",
+            "２０２３年１１月１５日",
+            "２０２３／１１／１５",
+            "２０２３－１１－１５",
+            "2023.11.15",
+            "２０２３．１１．１５",
+            "20231115",
+            "２０２３１１１５",
+            "令和5年11月15日(水)",
+        ] {
+            assert_eq!(to_unix_timestamp(input), date.to_string(), "input={input}");
+        }
+        let datetime = parse_timestamp("2023-11-15 07:13:20").expect("日時パースに失敗");
+        for input in [
+            "2023年11月15日(水) 07時13分20秒",
+            "2023/11/15(水) 07:13:20",
+            "２０２３年１１月１５日　０７：１３：２０",
+            "2023.11.15 07:13:20",
+            "20231115071320",
+        ] {
+            assert_eq!(
+                to_unix_timestamp(input),
+                datetime.to_string(),
+                "input={input}"
+            );
+        }
+        // 実在しない日付や曜日でない括弧は変換しない
+        for input in ["20231315", "20230230", "2023年11月15日(あ)"] {
+            assert_eq!(to_unix_timestamp(input), input, "input={input}");
+        }
     }
 
     /// 和暦を元号名・略号・元年の表記から日時へ変換すること

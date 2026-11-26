@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +39,12 @@ const MAX_BACKUP_GENERATIONS: usize = 5;
 /// 該当パスへの保存は、退避コピーを作るまで削除・上書きしない
 static UNLOADED_CLIPS_FILES: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
 
+/// 最後にディスクと一致したことが分かっている登録クリップ一覧 (パスごと)
+///
+/// 同じ一覧の保存では、再暗号化と書き直しを省略するために使う
+/// 本文は `Arc` を共有するため、保持しても暗号文は複製されない
+static SYNCED_CLIPS: Mutex<Option<HashMap<PathBuf, Vec<RegisteredClip>>>> = Mutex::new(None);
+
 // ======================================================================
 // 保存結果
 // ======================================================================
@@ -54,9 +60,10 @@ pub enum RegisteredClipsSaveOutcome {
 // ======================================================================
 // ファイルペイロード
 // ======================================================================
-#[derive(Debug, Serialize, Deserialize)]
-struct RegisteredClipsPayload {
-    clips: Vec<RegisteredClip>,
+/// 保存用ペイロード (一覧を複製せず参照のままシリアライズする)
+#[derive(Debug, Serialize)]
+struct RegisteredClipsPayload<'a> {
+    clips: &'a [RegisteredClip],
 }
 
 /// 外側 blob 内のワイヤ形式 (新形式 / 平文 `text` レガシーを両対応)
@@ -106,8 +113,19 @@ struct RegisteredClipsPayloadWire {
 pub fn load_registered_clips() -> Result<(Vec<RegisteredClip>, bool)> {
     let result = read_registered_clips();
     let path = registered_clips_path();
+    if let Ok(path) = &path
+        && !matches!(result, Ok((_, false, false)))
+    {
+        // 移行・スキップ・失敗ではディスクと一覧が異なるため、同期済みとして扱わない
+        forget_synced_clips(path);
+    }
     match (&result, path) {
-        (Ok((_, _, false)), Ok(path)) => mark_clips_file_loaded(&path),
+        (Ok((clips, migrated, false)), Ok(path)) => {
+            mark_clips_file_loaded(&path);
+            if !*migrated && !clips.is_empty() {
+                record_synced_clips(&path, clips);
+            }
+        }
         (Ok((_, _, true)), Ok(path)) => quarantine_unloaded_clips_file(&path),
         (Err(_), Ok(path)) if path.is_file() => quarantine_unloaded_clips_file(&path),
         _ => {}
@@ -186,8 +204,14 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<RegisteredClips
         if unloaded {
             tracing::warn!("登録クリップファイルを読み込めていないため、削除せず残す");
         } else if path.is_file() {
-            let _ = fs::remove_file(path);
+            let _ = fs::remove_file(&path);
+            forget_synced_clips(&path);
         }
+        return Ok(RegisteredClipsSaveOutcome::Saved);
+    }
+
+    // ディスクと同じ一覧は再暗号化も書き直しもしない (ファイルが外部で消された場合は書き直す)
+    if !unloaded && path.is_file() && is_synced_clips(&path, clips) {
         return Ok(RegisteredClipsSaveOutcome::Saved);
     }
 
@@ -201,10 +225,8 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<RegisteredClips
         }
     };
 
-    let json = serde_json::to_vec(&RegisteredClipsPayload {
-        clips: clips.to_vec(),
-    })
-    .map_err(|e| clips_err(format!("登録クリップの JSON シリアライズに失敗: {e}")))?;
+    let json = serde_json::to_vec(&RegisteredClipsPayload { clips })
+        .map_err(|e| clips_err(format!("登録クリップの JSON シリアライズに失敗: {e}")))?;
     if json.len() > consts::MAX_REGISTERED_CLIPS_FILE_BYTES {
         return Err(clips_err(
             "登録クリップのシリアライズサイズが上限を超えています",
@@ -231,6 +253,7 @@ pub fn save_registered_clips(clips: &[RegisteredClip]) -> Result<RegisteredClips
         ))
     })?;
     mark_clips_file_loaded(&path);
+    record_synced_clips(&path, clips);
     if let Err(e) = restrict_private_file_permissions(&path) {
         tracing::warn!("登録クリップファイルのパーミッション設定に失敗: {:?}", e);
     }
@@ -337,7 +360,7 @@ pub(crate) fn registered_clip_from_plain_text(label: String, text: &str) -> Resu
     Ok(RegisteredClip {
         label,
         preview,
-        text_ciphertext,
+        text_ciphertext: text_ciphertext.into(),
         image_file: None,
         template: false,
         counter: 0,
@@ -484,6 +507,43 @@ fn is_clips_file_unloaded(path: &Path) -> bool {
         .is_some_and(|paths| paths.contains(path))
 }
 
+fn synced_clips() -> MutexGuard<'static, Option<HashMap<PathBuf, Vec<RegisteredClip>>>> {
+    SYNCED_CLIPS.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// 一覧がディスクと一致したことを記録する (本文は `Arc` 共有で複製しない)
+fn record_synced_clips(path: &Path, clips: &[RegisteredClip]) {
+    synced_clips()
+        .get_or_insert_with(HashMap::new)
+        .insert(path.to_path_buf(), clips.to_vec());
+}
+
+fn forget_synced_clips(path: &Path) {
+    if let Some(map) = synced_clips().as_mut() {
+        map.remove(path);
+    }
+}
+
+/// 一覧が最後にディスクと一致した内容と同じかを返す
+///
+/// 同じ `Arc` を共有する本文はポインタ比較で済ませ、巨大な暗号文を比較しない
+fn is_synced_clips(path: &Path, clips: &[RegisteredClip]) -> bool {
+    let guard = synced_clips();
+    let Some(synced) = guard.as_ref().and_then(|map| map.get(path)) else {
+        return false;
+    };
+    synced.len() == clips.len()
+        && synced.iter().zip(clips).all(|(a, b)| {
+            a.label == b.label
+                && a.preview == b.preview
+                && a.image_file == b.image_file
+                && a.template == b.template
+                && a.counter == b.counter
+                && (Arc::ptr_eq(&a.text_ciphertext, &b.text_ciphertext)
+                    || a.text_ciphertext == b.text_ciphertext)
+        })
+}
+
 fn is_encrypted_image_filename(filename: &str) -> bool {
     Path::new(filename)
         .extension()
@@ -497,7 +557,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
             RegisteredClip {
                 label: wire.label,
                 preview: wire.preview,
-                text_ciphertext: Vec::new(),
+                text_ciphertext: Arc::default(),
                 image_file: wire.image_file,
                 template: false,
                 counter: 0,
@@ -516,7 +576,7 @@ fn registered_clip_from_wire(wire: RegisteredClipWire) -> Result<(RegisteredClip
         let mut clip = RegisteredClip {
             label: wire.label,
             preview: wire.preview,
-            text_ciphertext,
+            text_ciphertext: text_ciphertext.into(),
             image_file: None,
             template: wire.template,
             counter: wire.counter,
@@ -560,7 +620,7 @@ mod tests {
             assert!(!migrated);
             assert_eq!(loaded.len(), 1);
             assert_eq!(loaded[0].label, "secret-label");
-            assert!(!loaded[0].text_ciphertext.is_empty());
+            assert_ne!(loaded[0].text_ciphertext.len(), 0);
             let plain = decrypt_registered_clip_text(&loaded[0].text_ciphertext).expect("dec");
             assert_eq!(plain.as_str(), "secret-body");
 
@@ -617,6 +677,34 @@ mod tests {
         });
     }
 
+    /// 同じ一覧の再保存ではファイルを書き直さず、変更や外部削除では書き直すこと
+    #[test]
+    fn unchanged_clips_are_not_rewritten() {
+        crate::test_helpers::with_temp_config_dir(|| {
+            let path = registered_clips_path().expect("path");
+            let mut clips = vec![registered_clip_from_plain_text("a".into(), "body").expect("enc")];
+
+            save_registered_clips(&clips).expect("save");
+            let first = fs::read(&path).expect("read");
+
+            // 暗号化はノンスが毎回変わるため、書き直されればバイト列が変わる
+            save_registered_clips(&clips).expect("resave");
+            assert_eq!(fs::read(&path).expect("read"), first, "書き直されないこと");
+
+            clips[0].counter = 1;
+            save_registered_clips(&clips).expect("changed save");
+            assert_ne!(
+                fs::read(&path).expect("read"),
+                first,
+                "変更時は書き直すこと"
+            );
+
+            fs::remove_file(&path).expect("remove");
+            save_registered_clips(&clips).expect("restore save");
+            assert!(path.is_file(), "外部削除後は書き直すこと");
+        });
+    }
+
     /// 平文 `text` を持つ旧形式を暗号文形式へ移行すること
     #[test]
     fn load_migrates_legacy_plaintext_text_field() {
@@ -631,10 +719,10 @@ mod tests {
             let (loaded, migrated) = load_registered_clips().expect("load");
             assert!(migrated);
             assert_eq!(loaded.len(), 1);
-            assert!(!loaded[0].text_ciphertext.is_empty());
+            assert_ne!(loaded[0].text_ciphertext.len(), 0);
             let plain = decrypt_registered_clip_text(&loaded[0].text_ciphertext).expect("dec");
             assert_eq!(plain.as_str(), "plain-secret");
-            assert!(!loaded[0].preview.is_empty());
+            assert_ne!(loaded[0].preview.len(), 0);
 
             // 再保存後の内側 JSON に平文本文キーが無いこと
             save_registered_clips(&loaded).expect("resave");

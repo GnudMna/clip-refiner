@@ -1,10 +1,12 @@
 # ========================================================================
 # Script Name : check.ps1
-# Description : Windows 用の品質チェック (fmt / clippy / rustdoc / deny / eslint / markdownlint / test / e2e)
+# Description : Windows 用の品質チェック (fmt / clippy / rustdoc / deny / npm audit / eslint / markdownlint / test / e2e)
 # Usage       : ./check.ps1 [-Coverage] [-SkipE2E]
 # Requires    : PowerShell 7.0+, Node.js (npm), WebView2 Runtime (E2E)
 #               -Coverage 時は cargo-llvm-cov と llvm-tools-preview も必要
 #               -SkipE2E は WebView E2E だけを省く (pre-push フックが指定する)
+#               対話 GUI セッションが無い場合は E2E を自動でスキップする
+#               (CLIP_REFINER_REQUIRE_E2E=1 のときはスキップせず失敗させる。release.ps1 が指定する)
 # ========================================================================
 
 #requires -Version 7.0
@@ -50,8 +52,12 @@ Invoke-ScriptMain {
     $env:CLIP_REFINER_REQUIRE_NODE = '1'
     Write-Host ''
 
-    Write-Host 'JavaScript リンターを実行中...'
-    Invoke-JavaScriptLintCheck
+    Write-Host 'npm 依存の脆弱性監査を実行中...'
+    Invoke-NpmAudit
+    Write-Host ''
+
+    Write-Host 'TypeScript リンターを実行中...'
+    Invoke-TypeScriptLintCheck
     Write-Host ''
 
     Write-Host 'Markdown リンターを実行中...'
@@ -79,6 +85,10 @@ Invoke-ScriptMain {
     }
     elseif ($env:CLIP_REFINER_SKIP_E2E -eq '1') {
         Write-Host 'note: WebView E2E をスキップしました (CLIP_REFINER_SKIP_E2E=1)'
+        Write-Host ''
+    }
+    elseif (($env:CLIP_REFINER_REQUIRE_E2E -ne '1') -and -not [Environment]::UserInteractive) {
+        Write-Host 'note: 対話 GUI セッションが無いため WebView E2E をスキップしました'
         Write-Host ''
     }
     else {

@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 const DOC: &str = "docs/dev/architecture.md";
 
 /// パスとして扱うバッククォート内トークンの拡張子
-const PATH_EXTENSIONS: [&str; 10] = [
-    ".rs", ".js", ".mjs", ".ts", ".css", ".html", ".ps1", ".toml", ".md", ".pub",
+const PATH_EXTENSIONS: [&str; 9] = [
+    ".rs", ".js", ".ts", ".css", ".html", ".ps1", ".toml", ".md", ".pub",
 ];
 
 /// リポジトリ外 (実行時に作られる) のため検証しないパス
@@ -367,7 +367,7 @@ fn find_missing_paths_reports_each_source() {
         "crates/app/src/tray/menu/",
         "crates/app/src/tray/model.rs",
         "crates/app/src/ui/",
-        "crates/app/src/ui/a_logic.js",
+        "crates/app/src/ui/a_logic.ts",
     ]
     .map(String::from)
     .to_vec();
@@ -392,7 +392,7 @@ root/
 | :--- | :--- |
 | `untracked` | 基準なしの表は 1 列目を基準付きで検証しない |
 
-`ui/*_logic.js` と `tray/{menu/,model.rs}` は実在し、`ui/*.css` は欠落、`logs/` は実行時のパスのため対象外
+`ui/*_logic.ts` と `tray/{menu/,model.rs}` は実在し、`ui/*.css` は欠落、`logs/` は実行時のパスのため対象外
 ";
 
     let missing = find_missing_paths(doc, &paths);

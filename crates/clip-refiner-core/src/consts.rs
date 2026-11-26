@@ -113,6 +113,12 @@ pub const REGEX_MATCH_MAX_IN_FLIGHT: usize = 2;
 /// JSON / YAML / Markdown パーサー入力の最大バイト数 (1 MiB)
 pub const MAX_PARSER_INPUT_BYTES: usize = 1024 * 1024;
 
+/// Excel ⇔ Markdown 表変換で出力する表のセル数の上限 (行数×最大列数)
+///
+/// 1 行だけ極端に列が多い入力で、他の行が空セルで埋まりメモリを使い切るのを防ぐ
+/// 超過時は加工せず元のテキストを維持する
+pub const MAX_TABLE_CELLS: usize = 2_000_000;
+
 /// HTML→Markdown 変換で許容する要素の入れ子の最大深さ
 ///
 /// 変換器は DOM を再帰でたどるため、深い入れ子によるスタック枯渇を防ぐ
@@ -185,11 +191,6 @@ pub const MAX_BASE64_IMAGE_DIMENSION: u32 = 8192;
 
 /// Base64 と相互変換する画像の最大ピクセル数 (`4096×4096`)
 pub const MAX_BASE64_IMAGE_PIXELS: u64 = 16_777_216;
-
-/// エクスプローラへ貼り付けるために書き出した画像ファイルの保持時間 (秒)
-///
-/// 次の書き出し時に、これより古いファイルを削除する
-pub const CLIPBOARD_IMAGE_FILE_RETENTION_SECS: u64 = 60 * 60;
 
 /// セレクター用画像プレビューの最大辺長 (ピクセル)
 pub const SELECTOR_IMAGE_PREVIEW_MAX_DIMENSION: u32 = 64;

@@ -1,10 +1,24 @@
 {
     "compilerOptions": {
-        "target": "es2022",
+        "target": "es2024",
         "module": "esnext",
         "moduleResolution": "bundler",
+        // Node がそのまま実行できるように `.ts` の拡張子で import する
+        "allowImportingTsExtensions": true,
+        // Node の型除去で実行できる構文だけを許し、型だけの import を `import type` に限る
+        "erasableSyntaxOnly": true,
+        "verbatimModuleSyntax": true,
         "strict": true,
-        "noEmit": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noImplicitOverride": true,
+        "noUncheckedSideEffectImports": true,
+        "composite": true,
+        "emitDeclarationOnly": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     }

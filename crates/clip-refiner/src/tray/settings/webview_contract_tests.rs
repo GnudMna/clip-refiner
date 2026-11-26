@@ -1,4 +1,4 @@
-//! Rust と `WebView` UI の間で受け渡す JSON が `ui/ipc.d.ts` の型宣言と一致することのテスト
+//! Rust と `WebView` UI の間で受け渡す JSON が `ui/ipc.ts` の型宣言と一致することのテスト
 //!
 //! Rust の実際の型から JSON を作り、TypeScript のソースへ埋め込んで `tsc` で型検査する
 //! Rust → JS は `window.*` の呼び出し引数として、JS → Rust は `satisfies` と Rust 側のパースの両方で検証する
@@ -16,7 +16,6 @@ use super::regex_preview::RegexPreviewResponse;
 use super::snapshot::SettingsSnapshot;
 use super::window::{clip_edit_result_payload, clip_editor_payload};
 use crate::config::{AppConfig, MonitorMode, RegexSettings, SelectorWebviewRetention};
-use crate::platform::update::{UpdateApplyUiResponse, UpdateCheckUiResponse};
 use crate::refiner::RefineMode;
 use crate::test_helpers::run_typescript_check;
 use crate::tray::selector::{
@@ -52,65 +51,6 @@ fn ts_literal(value: &impl Serialize) -> String {
 fn ts_literal_str(json: &str) -> String {
     let value: serde_json::Value = serde_json::from_str(json).expect("サンプル JSON のパース");
     ts_literal(&value)
-}
-
-/// 更新確認の応答 (全バリアント)
-fn update_check_samples() -> Vec<UpdateCheckUiResponse> {
-    let samples = vec![
-        UpdateCheckUiResponse::UpToDate {
-            current_version: "1.0.0".to_string(),
-            latest_version: "1.0.0".to_string(),
-        },
-        UpdateCheckUiResponse::Available {
-            current_version: "1.0.0".to_string(),
-            latest_version: "1.1.0".to_string(),
-            tag: "v1.1.0".to_string(),
-            asset_name: "ClipRefiner.msi".to_string(),
-            size: 1024,
-        },
-        UpdateCheckUiResponse::Error {
-            message: "失敗".to_string(),
-        },
-        UpdateCheckUiResponse::Busy,
-    ];
-    // バリアントを足したらサンプルにも足す (網羅漏れをコンパイルエラーにする)
-    for sample in &samples {
-        match sample {
-            UpdateCheckUiResponse::UpToDate { .. }
-            | UpdateCheckUiResponse::Available { .. }
-            | UpdateCheckUiResponse::Error { .. }
-            | UpdateCheckUiResponse::Busy => {}
-        }
-    }
-    samples
-}
-
-/// 更新適用の応答 (全バリアント)
-fn update_apply_samples() -> Vec<UpdateApplyUiResponse> {
-    let samples = vec![
-        UpdateApplyUiResponse::MsiStarted {
-            message: "起動".to_string(),
-        },
-        UpdateApplyUiResponse::PortableExtracted {
-            path: "C:/ClipRefiner".to_string(),
-            message: "展開".to_string(),
-        },
-        UpdateApplyUiResponse::Error {
-            message: "失敗".to_string(),
-        },
-        UpdateApplyUiResponse::Busy {
-            message: "進行中".to_string(),
-        },
-    ];
-    for sample in &samples {
-        match sample {
-            UpdateApplyUiResponse::MsiStarted { .. }
-            | UpdateApplyUiResponse::PortableExtracted { .. }
-            | UpdateApplyUiResponse::Error { .. }
-            | UpdateApplyUiResponse::Busy { .. } => {}
-        }
-    }
-    samples
 }
 
 /// 監視方式 (全バリアント)
@@ -196,12 +136,11 @@ fn settings_message_samples() -> Vec<serde_json::Value> {
             "sample": "abc",
         }),
         serde_json::json!({ "type": "check-update" }),
-        serde_json::json!({ "type": "apply-update" }),
     ]
 }
 
 /// IPC メッセージの種類の数 (`settings_message_variant_index` の範囲)
-const SETTINGS_MESSAGE_VARIANTS: usize = 19;
+const SETTINGS_MESSAGE_VARIANTS: usize = 18;
 
 /// IPC メッセージの種類を番号にする
 ///
@@ -226,7 +165,6 @@ fn settings_message_variant_index(action: &SettingsIpcAction) -> usize {
         SettingsIpcAction::FavoriteMove(..) => 15,
         SettingsIpcAction::RegexPreview(..) => 16,
         SettingsIpcAction::CheckUpdate => 17,
-        SettingsIpcAction::ApplyUpdate => 18,
     }
 }
 
@@ -298,12 +236,6 @@ fn rust_to_js_calls(config: &AppConfig) -> Vec<String> {
     for response in [&regex_ok, &regex_invalid] {
         calls.push(format!("window.onRegexPreview({});", ts_literal(response)));
     }
-    for response in update_check_samples() {
-        calls.push(format!("window.onUpdateCheck({});", ts_literal(&response)));
-    }
-    for response in update_apply_samples() {
-        calls.push(format!("window.onUpdateApply({});", ts_literal(&response)));
-    }
     // セレクター (Rust が生成するスクリプトは JSON をそのまま埋め込むため、そのまま型検査できる)
     calls.push(format!(
         "window.{}",
@@ -337,8 +269,6 @@ fn build_contract_source() -> String {
     let monitor_modes = ts_literal(&monitor_mode_samples());
     let retentions = ts_literal(&selector_webview_retention_samples());
     let messages = ts_literal(&settings_message_samples());
-    let check_statuses = ts_literal(&update_check_samples());
-    let apply_statuses = ts_literal(&update_apply_samples());
     let ui = ui_dir();
 
     format!(
@@ -347,10 +277,8 @@ import type {{
     MonitorMode,
     SelectorWebviewRetention,
     SettingsIpcMessage,
-    UpdateApplyResponse,
-    UpdateCheckResponse,
-}} from '{ui}/ipc';
-import type {{ QuickSelectorMode }} from '{ui}/quick_selector_logic';
+}} from '{ui}/ipc.ts';
+import type {{ QuickSelectorMode }} from '{ui}/selector/quick_selector_logic.ts';
 
 /** `T` が `never` (網羅済み) であること */
 type AssertNever<T extends never> = T;
@@ -369,16 +297,6 @@ export type MonitorModesCovered = AssertNever<Exclude<MonitorMode, (typeof monit
 const retentions = {retentions} satisfies SelectorWebviewRetention[];
 export type RetentionsCovered = AssertNever<
     Exclude<SelectorWebviewRetention, (typeof retentions)[number]>
->;
-
-const checkResponses = {check_statuses} satisfies UpdateCheckResponse[];
-export type CheckCovered = AssertNever<
-    Exclude<UpdateCheckResponse['status'], (typeof checkResponses)[number]['status']>
->;
-
-const applyResponses = {apply_statuses} satisfies UpdateApplyResponse[];
-export type ApplyCovered = AssertNever<
-    Exclude<UpdateApplyResponse['status'], (typeof applyResponses)[number]['status']>
 >;
 
 // ======================================================================
@@ -406,6 +324,14 @@ fn typecheck_contract_source(source: &str) {
     let tsconfig = serde_json::json!({
         "extends": format!("{}/tsconfig.json", ui_dir()),
         "include": ["contract.ts"],
+        // 継承元は `tsc -b` 用の増分設定。ここで使うと UI 本体のビルド情報を上書きするため無効にする
+        "compilerOptions": {
+            "composite": false,
+            "incremental": false,
+            "emitDeclarationOnly": false,
+            // 出力先があると rootDir (一時ディレクトリ) の外にある `ui/*.ts` がエラーになる
+            "outDir": null,
+        },
     });
     fs::write(dir.join("contract.ts"), source).expect("検証用ソースの書き込み");
     fs::write(
@@ -417,7 +343,7 @@ fn typecheck_contract_source(source: &str) {
     let project = dir.join("tsconfig.json");
     if let Err(panic) = std::panic::catch_unwind(|| run_typescript_check(&project)) {
         eprintln!(
-            "note: 検証用ソースを {} に残した。Rust の型に合わせて `ui/ipc.d.ts` を直す",
+            "note: 検証用ソースを {} に残した。Rust の型に合わせて `ui/ipc.ts` を直す",
             dir.join("contract.ts").display()
         );
         std::panic::resume_unwind(panic);
@@ -429,7 +355,7 @@ fn typecheck_contract_source(source: &str) {
 // テスト
 // ======================================================================
 
-/// Rust が渡す JSON と設定ウィンドウが送るメッセージが `ui/ipc.d.ts` の型を満たすこと
+/// Rust が渡す JSON と設定ウィンドウが送るメッセージが `ui/ipc.ts` の型を満たすこと
 #[test]
 fn webview_payloads_match_ipc_type_declarations() {
     typecheck_contract_source(&build_contract_source());

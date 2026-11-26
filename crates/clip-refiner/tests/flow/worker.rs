@@ -7,6 +7,39 @@ use clip_refiner_core::RefineMode;
 // テスト
 // ======================================================================
 
+/// 除外形式付きのコピーを手動加工しても、除外形式を維持すること
+#[test]
+fn worker_process_mode_keeps_exclusion() {
+    let mut harness = ClipboardHarness::with_text("  secret  ").with_excluded_clipboard();
+
+    harness.process_mode(RefineMode::Trim);
+    assert_eq!(harness.clipboard_text(), "secret");
+    assert!(harness.clipboard_is_excluded());
+
+    // 取り消しでも維持する
+    harness.undo();
+    assert!(harness.clipboard_is_excluded());
+}
+
+/// 除外形式の維持を無効にすると、手動加工で除外形式が消えること
+#[test]
+fn worker_process_mode_drops_exclusion_when_disabled() {
+    let mut harness = ClipboardHarness::with_text("  secret  ").with_excluded_clipboard();
+    harness.with_config_mut(|c| c.keep_clipboard_exclusion = false);
+
+    harness.process_mode(RefineMode::Trim);
+    assert!(!harness.clipboard_is_excluded());
+}
+
+/// 除外形式の無いコピーの手動加工では、除外形式を付けないこと
+#[test]
+fn worker_process_mode_does_not_add_exclusion() {
+    let mut harness = ClipboardHarness::with_text("  plain  ");
+
+    harness.process_mode(RefineMode::Trim);
+    assert!(!harness.clipboard_is_excluded());
+}
+
 /// `ProcessMode` → `Undo` でクリップボードと取り消し状態が往復すること
 #[test]
 fn worker_process_mode_then_undo_round_trip() {

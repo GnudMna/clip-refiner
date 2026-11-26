@@ -263,6 +263,11 @@ const YAML11_BOOL_WORDS: [&str; 16] = [
     "OFF",
 ];
 
+/// YAML 1.1 で特別な意味を持つ文字列
+///
+/// `<<` はマージキー、`=` は value タグとして解釈される
+const YAML11_SPECIAL_WORDS: [&str; 2] = ["<<", "="];
+
 /// 先頭から `min` 〜 `max` 桁の ASCII 数字を読み、残りを返す
 fn skip_digits(s: &str, min: usize, max: usize) -> Option<&str> {
     let len = s.bytes().take_while(u8::is_ascii_digit).count().min(max);
@@ -320,7 +325,9 @@ fn is_yaml11_timestamp(s: &str) -> bool {
         })
 }
 
-/// YAML 1.1 の `_` 区切り数値 (`1_000` / `0x_FF` / `0b1_0` / `1_0.5`) として解釈される文字列か
+/// YAML 1.1 の `_` 区切り数値 (`1_000` / `0x_FF` / `0b1_0` / `1_0.5` / `1_0.5e+3`) として解釈される文字列か
+///
+/// 浮動小数点の指数部は符号が必須 (`e+3` / `E-3`)
 fn is_yaml11_underscore_number(s: &str) -> bool {
     let body = s.strip_prefix(['+', '-']).unwrap_or(s);
     if !body.contains('_') {
@@ -332,11 +339,27 @@ fn is_yaml11_underscore_number(s: &str) -> bool {
     if let Some(bin) = body.strip_prefix("0b") {
         return bin.bytes().all(|b| matches!(b, b'0' | b'1' | b'_'));
     }
+    // 指数部は小数点を含む浮動小数点にだけ付く
+    let body = match body.split_once(['e', 'E']) {
+        Some((mantissa, exp)) => {
+            let digits = exp.strip_prefix(['+', '-']);
+            if !mantissa.contains('.') || !digits.is_some_and(is_ascii_digits) {
+                return false;
+            }
+            mantissa
+        }
+        None => body,
+    };
     body.starts_with(|c: char| c.is_ascii_digit())
         && body
             .bytes()
             .all(|b| b.is_ascii_digit() || matches!(b, b'_' | b'.'))
         && body.bytes().filter(|&b| b == b'.').count() <= 1
+}
+
+/// 1 文字以上の ASCII 数字だけで構成されているか
+fn is_ascii_digits(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// YAML 1.1 の 60 進数 (`1:30` / `190:20:30.15`) として解釈される文字列か
@@ -381,6 +404,7 @@ fn is_yaml11_sexagesimal(s: &str) -> bool {
 /// 真偽値語・日付・timestamp・`_` 区切り数値・60 進数が対象
 fn is_yaml11_non_string(s: &str) -> bool {
     YAML11_BOOL_WORDS.contains(&s)
+        || YAML11_SPECIAL_WORDS.contains(&s)
         || is_yaml11_date(s)
         || is_yaml11_timestamp(s)
         || is_yaml11_underscore_number(s)
@@ -397,9 +421,9 @@ fn is_yaml11_non_string(s: &str) -> bool {
 struct QuoteGuard {
     prefix: String,
     /// 置き換えた元の文字列 (重複なし)
-    masked: RefCell<Vec<String>>,
+    masked: RefCell<HashSet<String>>,
     /// 置き換えた数値の YAML 表記 (重複なし)
-    masked_numbers: RefCell<Vec<String>>,
+    masked_numbers: RefCell<HashSet<String>>,
     /// 入力の文字列が接頭辞を含んでいたか
     collided: Cell<bool>,
 }
@@ -408,8 +432,8 @@ impl QuoteGuard {
     fn new(prefix: String) -> Self {
         Self {
             prefix,
-            masked: RefCell::new(Vec::new()),
-            masked_numbers: RefCell::new(Vec::new()),
+            masked: RefCell::new(HashSet::new()),
+            masked_numbers: RefCell::new(HashSet::new()),
             collided: Cell::new(false),
         }
     }
@@ -425,8 +449,8 @@ impl QuoteGuard {
     /// * `String` - 直列化する文字列
     fn mask_number(&self, yaml_number: &str) -> String {
         let mut masked = self.masked_numbers.borrow_mut();
-        if !masked.iter().any(|m| m == yaml_number) {
-            masked.push(yaml_number.to_owned());
+        if !masked.contains(yaml_number) {
+            masked.insert(yaml_number.to_owned());
         }
         format!("{}num_{yaml_number}__", self.prefix)
     }
@@ -444,8 +468,8 @@ impl QuoteGuard {
         }
         if is_yaml11_non_string(s) {
             let mut masked = self.masked.borrow_mut();
-            if !masked.iter().any(|m| m == s) {
-                masked.push(s.to_owned());
+            if !masked.contains(s) {
+                masked.insert(s.to_owned());
             }
             Cow::Owned(format!("{}{s}__", self.prefix))
         } else {
@@ -460,15 +484,74 @@ impl QuoteGuard {
     ///
     /// # Returns
     /// * `String` - 引用符を付けた YAML
-    fn restore(&self, mut yaml: String) -> String {
-        for word in self.masked.borrow().iter() {
-            yaml = yaml.replace(&format!("{}{word}__", self.prefix), &format!("'{word}'"));
+    fn restore(&self, yaml: String) -> String {
+        let masked = self.masked.borrow();
+        let masked_numbers = self.masked_numbers.borrow();
+        if masked.is_empty() && masked_numbers.is_empty() {
+            return yaml;
         }
-        for number in self.masked_numbers.borrow().iter() {
-            yaml = yaml.replace(&format!("{}num_{number}__", self.prefix), number);
+        // 接頭辞の出現位置ごとに、末尾の `__` までの語が置き換え済みの語かを引く (1 回の走査)
+        let mut out = String::with_capacity(yaml.len());
+        let mut rest = yaml.as_str();
+        while let Some(pos) = rest.find(&self.prefix) {
+            out.push_str(&rest[..pos]);
+            let after = &rest[pos + self.prefix.len()..];
+            if let Some((replacement, consumed)) = match_token(after, &masked, &masked_numbers) {
+                out.push_str(&replacement);
+                rest = &after[consumed..];
+            } else {
+                out.push_str(&self.prefix);
+                rest = after;
+            }
         }
-        yaml
+        out.push_str(rest);
+        out
     }
+}
+
+/// 接頭辞の直後から、置き換えた語・数値に一致する先頭のトークンを探す
+///
+/// # Arguments
+/// * `after` - 接頭辞の直後の文字列
+/// * `masked` - 置き換えた語の集合
+/// * `masked_numbers` - 置き換えた数値表記の集合
+///
+/// # Returns
+/// * `Option<(String, usize)>` - 戻し後の文字列と、`after` から消費するバイト数
+fn match_token(
+    after: &str,
+    masked: &HashSet<String>,
+    masked_numbers: &HashSet<String>,
+) -> Option<(String, usize)> {
+    let num_part = after.strip_prefix("num_");
+    let bytes = after.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'_' {
+            i += 1;
+            continue;
+        }
+        // 終端の `__` は連続する `_` の末尾 2 文字 (語自体が `_` で終わる場合を区別する)
+        let start = i;
+        while i < bytes.len() && bytes[i] == b'_' {
+            i += 1;
+        }
+        if i - start < 2 {
+            continue;
+        }
+        let idx = i - 2;
+        if let Some(body) = num_part
+            && idx >= 4
+            && let Some(number) = body.get(..idx - 4)
+            && masked_numbers.contains(number)
+        {
+            return Some((number.to_owned(), idx + 2));
+        }
+        if masked.contains(&after[..idx]) {
+            return Some((format!("'{}'", &after[..idx]), idx + 2));
+        }
+    }
+    None
 }
 
 /// YAML 文字列への直列化を、YAML 1.1 で文字列以外に読まれる語を引用符で囲って行う
@@ -641,6 +724,52 @@ mod tests {
 
     fn json_to_yaml_preserve_order(text: &str) -> Cow<'_, str> {
         super::json_to_yaml_preserve_order(text).unwrap_or(Cow::Borrowed(text))
+    }
+
+    /// 引用符を付ける語が大量にあっても YAML 化が線形時間で終わり、全てに引用符が付くこと
+    #[test]
+    fn json_to_yaml_quotes_many_dates_quickly() {
+        let items: Vec<String> = (0..32_000)
+            .map(|i| format!("\"2024-01-{:02}-{i}\"", i % 28 + 1))
+            .chain((0..32_000).map(|i| format!("\"2024-{:02}-{:02}\"", i % 12 + 1, i % 28 + 1)))
+            .collect();
+        let input = format!("[{}]", items.join(","));
+        let start = std::time::Instant::now();
+        let output = json_to_yaml(&input);
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+        assert!(output.contains("- '2024-01-01'"));
+        assert!(!output.contains("__clip_refiner_yaml11_"));
+    }
+
+    /// マージキー `<<` と value タグ `=` は、キーでも値でも引用符を付けること
+    #[test]
+    fn json_to_yaml_quotes_merge_key_and_value_tag() {
+        let input = r#"{"<<":{"a":1},"b":"=","=":"<<"}"#;
+        let expected = "'<<':\n  a: 1\n'=': '<<'\nb: '='\n";
+        assert_eq!(json_to_yaml(input), expected);
+        let expected = "'<<':\n  a: 1\nb: '='\n'=': '<<'\n";
+        assert_eq!(json_to_yaml_preserve_order(input), expected);
+    }
+
+    /// `_` で終わる語が他の置き換え語と衝突しても、それぞれ元の語に戻ること
+    #[test]
+    fn json_to_yaml_restores_words_ending_with_underscore() {
+        let input = r#"["1_","1__","1___","1_0"]"#;
+        let expected = "- '1_'\n- '1__'\n- '1___'\n- '1_0'\n";
+        assert_eq!(json_to_yaml(input), expected);
+        assert_eq!(json_to_yaml_preserve_order(input), expected);
+    }
+
+    /// 指数部を持つ `_` 区切りの浮動小数点にも引用符を付けること
+    #[test]
+    fn json_to_yaml_quotes_underscore_floats_with_exponent() {
+        let input = r#"["685_230.15e+03","1_0.5E-2","1_0e3","1_0.5e3"]"#;
+        // 指数に符号が無い、または小数点が無いものは YAML 1.1 でも数値ではない
+        let output = json_to_yaml(input);
+        assert!(output.contains("- '685_230.15e+03'\n"), "{output}");
+        assert!(output.contains("- '1_0.5E-2'\n"), "{output}");
+        assert!(output.contains("- 1_0e3\n"), "{output}");
+        assert!(output.contains("- 1_0.5e3\n"), "{output}");
     }
 
     /// 有効な JSON を整形できるようにすること

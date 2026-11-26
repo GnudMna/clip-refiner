@@ -50,6 +50,7 @@ pub fn spawn_oneshot_stub_responder(
                 pipeline,
                 refine_ctx,
                 reply,
+                ..
             } = cmd
             {
                 let _ = reply.send(handler(pipeline, refine_ctx));
