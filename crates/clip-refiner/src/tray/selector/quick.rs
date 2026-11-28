@@ -171,12 +171,10 @@ impl QuickSelectorWindow {
         let modes_json = RefineMode::to_json_list(&[]);
         let html = assemble_quick_selector_html(&modes_json);
         let proxy_clone = proxy.clone();
-        let data_dir = format!("{}-QuickSelector-WebView2", consts::APP_NAME);
-
         WebSelectorWindow::build(
             window,
-            &data_dir,
             &html,
+            proxy,
             move |req| {
                 let msg = req.body();
                 if let Some(categories) = parse_expanded_categories_message(msg) {
@@ -281,6 +279,17 @@ impl QuickSelectorWindow {
     /// * `Option<WindowId>` - 生成済みならウィンドウ ID、未生成なら `None`
     pub fn id(&self) -> Option<WindowId> {
         self.lazy.id()
+    }
+
+    /// プロセスの異常終了で使えなくなった `WebView` を破棄する (次の表示で作り直す)
+    ///
+    /// # Arguments
+    /// * `window_id` - 異常終了を通知したウィンドウ ID
+    ///
+    /// # Returns
+    /// * `Option<bool>` - 破棄した場合は破棄前に表示中だったか。別のウィンドウなら `None`
+    pub(crate) fn dispose_failed_webview(&self, window_id: WindowId) -> Option<bool> {
+        self.lazy.dispose_failed(window_id)
     }
 
     /// テスト用に表示中として扱う (実 `WebView` は作らない)

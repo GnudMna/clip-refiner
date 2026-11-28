@@ -367,6 +367,21 @@ pub fn webview_window_generic_failure(ui_label: &'static str) -> UserNotificatio
     UserNotification::static_message(ui_label, "ウィンドウの初期化に失敗しました")
 }
 
+/// 表示中の `WebView` がプロセスの異常終了で閉じたことの案内を組み立てる
+///
+/// # Arguments
+/// * `ui_label` - 閉じた UI の表示名
+///
+/// # Returns
+/// * `UserNotification` - もう一度開けば表示し直せる旨の案内
+#[must_use]
+pub fn webview_process_failure(ui_label: &'static str) -> UserNotification {
+    UserNotification::static_message(
+        ui_label,
+        "表示のプロセスが異常終了したため閉じました。もう一度開くと表示し直します",
+    )
+}
+
 /// 通知本文の最大文字数に合わせて切り詰める
 ///
 /// # Arguments
@@ -542,6 +557,14 @@ mod tests {
         let notification = webview_window_generic_failure("クイックセレクター");
         assert_eq!(notification.title(), "クイックセレクター");
         assert!(notification.body().contains("初期化に失敗"));
+    }
+
+    /// プロセスの異常終了の案内は UI 名をタイトルにし、開き直せることを伝えること
+    #[test]
+    fn webview_process_failure_uses_ui_label_as_title() {
+        let notification = webview_process_failure("設定");
+        assert_eq!(notification.title(), "設定");
+        assert!(notification.body().contains("もう一度開く"));
     }
 
     /// Runtime 未導入時は導入ページを開き、一般失敗では開かないようにすること

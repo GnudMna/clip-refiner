@@ -128,11 +128,12 @@ fn run_worker_loop(
                 try_reload_if_config_changed(state);
                 false
             }
+            // 次のループで世代の同期と待ち時間の計算をやり直す
+            Ok(ClipboardCommand::Wake) | Err(RecvTimeoutError::Timeout) => false,
             Ok(cmd) => {
                 handle_command(&mut clipboard, state, &mut monitor.refine_ctx, cmd);
                 false
             }
-            Err(RecvTimeoutError::Timeout) => false,
         };
         if should_exit {
             break;
@@ -259,7 +260,7 @@ mod tests {
     /// Event 監視でリスナ未使用時は短周期 peek 間隔となるようにすること
     #[test]
     fn recv_timeout_is_short_when_event_listener_inactive() {
-        use crate::tray::clipboard_monitor::{EVENT_POLL_MS, POLL_TICK_MS};
+        use crate::tray::clipboard_monitor::EVENT_POLL_MS;
 
         let Some((state, monitor)) = event_mode_monitor() else {
             return;
@@ -267,7 +268,7 @@ mod tests {
 
         assert_eq!(
             monitor.recv_timeout(&state, false, CONFIG_POLL_INTERVAL),
-            Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS))
+            Duration::from_millis(EVENT_POLL_MS)
         );
     }
 
@@ -286,6 +287,33 @@ mod tests {
         assert_eq!(
             monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
             CONFIG_POLL_INTERVAL
+        );
+    }
+
+    /// Polling は 50ms 刻みで起きず、次の監視周期まで待つこと
+    #[test]
+    fn recv_timeout_waits_until_next_poll_in_polling_mode() {
+        let state = Arc::new(test_app_state());
+        state.with_config_mut(|c| {
+            c.monitor_mode = MonitorMode::Polling;
+            c.interval_ms = 5000;
+        });
+        state.monitor_generation.store(1, Ordering::SeqCst);
+
+        let mut monitor = active_monitor(1);
+        monitor.last_poll_at = Instant::now();
+        let timeout = monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL);
+        assert!(timeout > Duration::from_millis(4000), "{timeout:?}");
+        assert!(timeout <= Duration::from_millis(5000), "{timeout:?}");
+
+        // 周期を過ぎていれば直ちに起きる
+        let Some(past) = Instant::now().checked_sub(Duration::from_millis(6000)) else {
+            return;
+        };
+        monitor.last_poll_at = past;
+        assert_eq!(
+            monitor.recv_timeout(&state, true, CONFIG_POLL_INTERVAL),
+            Duration::from_millis(1)
         );
     }
 

@@ -1,6 +1,6 @@
 //! 一時フォルダ (`%TEMP%`) に残った、このアプリの作業ディレクトリの掃除
 //!
-//! 更新の作業ディレクトリと、`WebView2` の退避用データディレクトリのうち、
+//! 更新の作業ディレクトリと、`WebView2` の退避用データディレクトリ・旧版のウィンドウ別データディレクトリのうち、
 //! 保持時間を過ぎたものを常駐の起動時に削除する
 
 use std::fs;
@@ -25,13 +25,18 @@ const WEBVIEW_DIR_MARKER: &str = "-WebView2";
 /// `WebView2` の初期化失敗時に使う退避用データディレクトリ名の接頭辞
 const FALLBACK_DIR_PREFIX: &str = "pid-";
 
+/// 旧版がウィンドウごとに分けていた `WebView2` データディレクトリ名の識別部分
+///
+/// 現在は全ウィンドウで 1 つのディレクトリを共有するため、使われずに残る
+const LEGACY_WEBVIEW_DIR_LABELS: [&str; 3] = ["QuickSelector", "ClipSelector", "Settings"];
+
 // ======================================================================
 // パブリック関数
 // ======================================================================
 /// 保持時間を過ぎた作業ディレクトリを一時フォルダから削除する
 ///
-/// 対象は `clip-refiner-update` 直下のフォルダ (版ごとのダウンロードと、更新プログラムの複製) と、
-/// `ClipRefiner-*-WebView2*` 直下の `pid-*` フォルダ
+/// 対象は `clip-refiner-update` 直下のフォルダ (版ごとのダウンロードと、更新プログラムの複製)、
+/// `ClipRefiner-*WebView2*` 直下の `pid-*` フォルダ、旧版のウィンドウ別データディレクトリ
 /// 削除できないものは残し、次回の起動時に再試行する
 pub(super) fn remove_stale_temp_dirs() {
     remove_stale_temp_dirs_in(
@@ -52,9 +57,17 @@ fn remove_stale_temp_dirs_in(temp: &Path, retention: Duration, now: SystemTime) 
         return;
     };
     for entry in entries.flatten() {
-        let is_webview_dir = entry.file_name().to_str().is_some_and(|name| {
-            name.starts_with(&format!("{}-", consts::APP_NAME)) && name.contains(WEBVIEW_DIR_MARKER)
-        });
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if is_legacy_webview_dir(&name) {
+            if is_stale_real_dir(&entry, retention, now) {
+                let _ = fs::remove_dir_all(entry.path());
+            }
+            continue;
+        }
+        let is_webview_dir = name.starts_with(&format!("{}-", consts::APP_NAME))
+            && name.contains(WEBVIEW_DIR_MARKER);
         if is_webview_dir {
             remove_stale_children(
                 &entry.path(),
@@ -80,22 +93,33 @@ fn remove_stale_children(
     };
     for entry in entries.flatten() {
         let targeted = entry.file_name().to_str().is_some_and(&is_target);
-        let is_real_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
-        if !targeted || !is_real_dir {
-            continue;
-        }
-
-        let age = entry
-            .metadata()
-            .and_then(|meta| meta.modified())
-            .ok()
-            .and_then(|modified| now.duration_since(modified).ok());
-        if age.is_some_and(|age| age >= retention) {
+        if targeted && is_stale_real_dir(&entry, retention, now) {
             let _ = fs::remove_dir_all(entry.path());
         }
     }
     // 空でなければ失敗して残る
     let _ = fs::remove_dir(dir);
+}
+
+/// 旧版のウィンドウ別 `WebView2` データディレクトリか (E2E 用の `-e2e-<ポート>` 付きを含む)
+fn is_legacy_webview_dir(name: &str) -> bool {
+    LEGACY_WEBVIEW_DIR_LABELS.iter().any(|label| {
+        let base = format!("{}-{label}{WEBVIEW_DIR_MARKER}", consts::APP_NAME);
+        name == base || name.starts_with(&format!("{base}-e2e-"))
+    })
+}
+
+/// シンボリックリンクでないフォルダで、最終更新から保持時間を過ぎているか
+fn is_stale_real_dir(entry: &fs::DirEntry, retention: Duration, now: SystemTime) -> bool {
+    if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+        return false;
+    }
+    entry
+        .metadata()
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| now.duration_since(modified).ok())
+        .is_some_and(|age| age >= retention)
 }
 
 // ======================================================================
@@ -140,11 +164,8 @@ mod tests {
     #[test]
     fn removes_only_fallback_webview_dirs() {
         let temp = unique_temp("temp-cleanup-webview");
-        let base = temp.join(format!("{}-Settings-WebView2", consts::APP_NAME));
-        let e2e_base = temp.join(format!(
-            "{}-QuickSelector-WebView2-e2e-9222",
-            consts::APP_NAME
-        ));
+        let base = temp.join(format!("{}-WebView2", consts::APP_NAME));
+        let e2e_base = temp.join(format!("{}-WebView2-e2e-9222", consts::APP_NAME));
         let fallback = base.join("pid-1234");
         let e2e_fallback = e2e_base.join("pid-5678");
         let profile = base.join("EBWebView");
@@ -160,6 +181,32 @@ mod tests {
         // 通常のデータディレクトリと、このアプリのものではないフォルダは対象外
         assert!(profile.exists());
         assert!(unrelated.exists());
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    /// 旧版のウィンドウ別データディレクトリは保持時間を過ぎたら丸ごと削除し、共有ディレクトリは残すこと
+    #[test]
+    fn removes_expired_legacy_webview_dirs() {
+        let temp = unique_temp("temp-cleanup-legacy-webview");
+        let legacy = ["QuickSelector", "ClipSelector", "Settings"]
+            .map(|label| temp.join(format!("{}-{label}-WebView2", consts::APP_NAME)));
+        let legacy_e2e = temp.join(format!("{}-Settings-WebView2-e2e-9222", consts::APP_NAME));
+        let shared = temp.join(format!("{}-WebView2", consts::APP_NAME));
+        for dir in legacy.iter().chain([&legacy_e2e, &shared]) {
+            fs::create_dir_all(dir.join("EBWebView")).expect("フォルダの作成に失敗");
+        }
+
+        // 保持時間内の時刻では残る
+        remove_stale_temp_dirs_in(&temp, DAY, SystemTime::now());
+        assert!(legacy.iter().all(|dir| dir.exists()));
+
+        remove_stale_temp_dirs_in(&temp, DAY, SystemTime::now() + DAY * 2);
+
+        assert!(legacy.iter().all(|dir| !dir.exists()));
+        assert!(!legacy_e2e.exists());
+        // 現在の共有ディレクトリのプロファイルは対象外
+        assert!(shared.join("EBWebView").exists());
 
         let _ = fs::remove_dir_all(&temp);
     }

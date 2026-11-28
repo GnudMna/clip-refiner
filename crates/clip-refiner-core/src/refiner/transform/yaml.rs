@@ -4,8 +4,8 @@ use std::fmt;
 use indexmap::IndexMap;
 use indexmap::map::Entry;
 use serde::de::{
-    Deserialize, DeserializeSeed, Deserializer, EnumAccess, Error as _, IgnoredAny, MapAccess,
-    SeqAccess, VariantAccess, Visitor,
+    DeserializeSeed, Deserializer, EnumAccess, Error as _, IgnoredAny, MapAccess, SeqAccess,
+    VariantAccess, Visitor,
 };
 use serde_json::Number;
 
@@ -22,13 +22,18 @@ use crate::security::is_within_parser_limit;
 /// 15 桁以下の 10 進数は `f64` で往復できる
 const MIN_LOSSY_DIGITS: usize = 16;
 
+/// 整数の `-0` の表記
+///
+/// 整数として読むと符号が落ちるため、元の表記から読み直す
+const NEGATIVE_ZERO: &str = "-0";
+
 /// YAML 1.1 のマージキー
 const MERGE_KEY: &str = "<<";
 
-/// `.inf` / `.nan` を読み取ったときのエラーメッセージ
+/// `.inf` / `.nan` や `1e400` のような `f64` に収まらない数値を読み取ったときのエラーメッセージ
 ///
 /// `serde_norway` のエラーは種類を判別できないため、メッセージで `NonFiniteNumber` と見分ける
-const NON_FINITE_MESSAGE: &str = "JSON で表現できない数値 (.inf / .nan)";
+const NON_FINITE_MESSAGE: &str = "JSON で表現できない数値 (.inf / .nan / 範囲外)";
 
 // ======================================================================
 // YAML → JSON 変換
@@ -124,7 +129,7 @@ fn convert_to_json<'a>(text: &'a str, name: &str) -> Result<Cow<'a, str>, ParseF
 fn read_yaml(text: &str) -> Result<Option<OrderedValue>, ParseFailure> {
     let mut documents = Vec::new();
     for document in serde_norway::Deserializer::from_str(text) {
-        let node = YamlNode::deserialize(document).map_err(|e| {
+        let node = YamlNodeSeed(text).deserialize(document).map_err(|e| {
             if e.to_string().contains(NON_FINITE_MESSAGE) {
                 ParseFailure::NonFiniteNumber
             } else {
@@ -139,7 +144,7 @@ fn read_yaml(text: &str) -> Result<Option<OrderedValue>, ParseFailure> {
     {
         return Ok(None);
     }
-    if has_long_digit_run(text) {
+    if has_long_digit_run(text) || text.contains(NEGATIVE_ZERO) {
         // 読み直せない形の場合は、`f64` に丸めた値のまま変換する
         let _ = keep_digits(text, &mut documents);
     }
@@ -171,16 +176,24 @@ enum YamlNode {
     Map(Vec<(String, YamlNode)>),
 }
 
-impl<'de> Deserialize<'de> for YamlNode {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(YamlNodeVisitor)
+/// `YamlNode` を読み取るシード
+///
+/// 引用符なしの数値が `f64` に収まらない (`1e400` など) ことを、元の YAML の位置から見分けるために原文を持つ
+#[derive(Clone, Copy)]
+struct YamlNodeSeed<'s>(&'s str);
+
+impl<'de> DeserializeSeed<'de> for YamlNodeSeed<'_> {
+    type Value = YamlNode;
+
+    fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<YamlNode, D::Error> {
+        deserializer.deserialize_any(YamlNodeVisitor(self.0))
     }
 }
 
 /// `YamlNode` の読み取り処理
-struct YamlNodeVisitor;
+struct YamlNodeVisitor<'s>(&'s str);
 
-impl<'de> Visitor<'de> for YamlNodeVisitor {
+impl<'de> Visitor<'de> for YamlNodeVisitor<'_> {
     type Value = YamlNode;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -218,6 +231,15 @@ impl<'de> Visitor<'de> for YamlNodeVisitor {
         Ok(YamlNode::String(v.to_string()))
     }
 
+    fn visit_borrowed_str<E: serde::de::Error>(self, v: &'de str) -> Result<Self::Value, E> {
+        // `serde_norway` は `f64` に収まらない数値を文字列として渡すため、
+        // 型が黙って変わらないよう `.inf` と同じく変換しない
+        if is_overflowing_plain_float(self.0, v) {
+            return Err(E::custom(NON_FINITE_MESSAGE));
+        }
+        Ok(YamlNode::String(v.to_string()))
+    }
+
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
         Ok(YamlNode::String(v))
     }
@@ -231,18 +253,18 @@ impl<'de> Visitor<'de> for YamlNodeVisitor {
     }
 
     fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
-        YamlNode::deserialize(deserializer)
+        YamlNodeSeed(self.0).deserialize(deserializer)
     }
 
     fn visit_enum<A: EnumAccess<'de>>(self, data: A) -> Result<Self::Value, A::Error> {
         // タグ付きの値 (`!Ref b`)。タグは読み捨てる
         let (IgnoredAny, variant) = data.variant()?;
-        variant.newtype_variant()
+        variant.newtype_variant_seed(YamlNodeSeed(self.0))
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
         let mut items = Vec::new();
-        while let Some(item) = seq.next_element()? {
+        while let Some(item) = seq.next_element_seed(YamlNodeSeed(self.0))? {
             items.push(item);
         }
         Ok(YamlNode::Array(items))
@@ -250,11 +272,44 @@ impl<'de> Visitor<'de> for YamlNodeVisitor {
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         let mut entries = Vec::new();
-        while let Some(entry) = map.next_entry::<String, YamlNode>()? {
-            entries.push(entry);
+        while let Some(key) = map.next_key::<String>()? {
+            entries.push((key, map.next_value_seed(YamlNodeSeed(self.0))?));
         }
         Ok(YamlNode::Map(entries))
     }
+}
+
+/// 引用符なしで書かれた、`f64` に収まらない数値 (`1e400` など) か判定する
+///
+/// # Arguments
+/// * `source` - 読み取り中の YAML 原文
+/// * `value` - 文字列として渡された値。`source` から借用したものだけが対象
+///
+/// # Returns
+/// * `bool` - 該当する場合は `true`。引用符付き・ブロックスカラー・`!!str` タグ付きの文字列は `false`
+fn is_overflowing_plain_float(source: &str, value: &str) -> bool {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    // `inf` / `nan` などの語は数値として扱わない
+    if !unsigned.starts_with(|c: char| c.is_ascii_digit() || c == '.')
+        || !value.parse::<f64>().is_ok_and(f64::is_infinite)
+    {
+        return false;
+    }
+    let Some(start) = (value.as_ptr() as usize).checked_sub(source.as_ptr() as usize) else {
+        return false;
+    };
+    if start + value.len() > source.len() {
+        return false;
+    }
+    let before = source.as_bytes()[..start].trim_ascii_end();
+    if matches!(before.last(), Some(b'\'' | b'"')) && before.len() == start {
+        return false;
+    }
+    let tag_start = before
+        .iter()
+        .rposition(u8::is_ascii_whitespace)
+        .map_or(0, |i| i + 1);
+    &before[tag_start..] != b"!!str"
 }
 
 impl YamlNode {
@@ -431,8 +486,9 @@ impl Visitor<'_> for DigitsNumberVisitor<'_> {
 
     fn visit_str<E>(self, v: &str) -> Result<(), E> {
         // JSON の数値として書けない表記 (`0x1F`・`+1`・`.5` など) は丸めた値のまま残す
+        // 整数として読まれた `-0` は符号が落ちているため、元の表記に戻す
         if let (Some(rounded), Ok(exact)) = (self.0.as_f64(), v.parse::<Number>())
-            && loses_digits_as_f64(v, rounded)
+            && (loses_digits_as_f64(v, rounded) || v == NEGATIVE_ZERO)
         {
             *self.0 = exact;
         }
@@ -516,6 +572,10 @@ mod tests {
             ("a: .inf\n", ParseFailure::NonFiniteNumber),
             ("- 1\n- [.NaN]\n", ParseFailure::NonFiniteNumber),
             ("a: !Tag -.INF\n", ParseFailure::NonFiniteNumber),
+            ("i: 1e400\n", ParseFailure::NonFiniteNumber),
+            ("- -1.5E999\n", ParseFailure::NonFiniteNumber),
+            ("a: !Tag 1e400\n", ParseFailure::NonFiniteNumber),
+            ("a: {b: [+1e400]}\n", ParseFailure::NonFiniteNumber),
         ] {
             assert_eq!(super::yaml_to_json(input), Err(expected), "{input:?}");
             assert_eq!(
@@ -526,6 +586,18 @@ mod tests {
         }
         // 変換の対象外 (マッピングも配列も含まない) は失敗ではない
         assert!(super::yaml_to_json("plain text").is_ok());
+    }
+
+    /// 引用符付き・`!!str` タグ付き・ブロックスカラーの `1e400` は文字列のまま変換すること
+    #[test]
+    fn keeps_overflowing_float_like_strings() {
+        let input = "a: '1e400'\nb: \"1e400\"\nc: !!str 1e400\nd: |\n  1e400\ne: inf\n";
+        let output = yaml_to_json(input);
+        assert!(output.contains("\"a\": \"1e400\""), "{output}");
+        assert!(output.contains("\"b\": \"1e400\""), "{output}");
+        assert!(output.contains("\"c\": \"1e400\""), "{output}");
+        assert!(output.contains("\"d\": \"1e400\\n\""), "{output}");
+        assert!(output.contains("\"e\": \"inf\""), "{output}");
     }
 
     /// 有効な YAML を JSON に変換できるようにすること
@@ -795,6 +867,17 @@ c: .infinity
 }";
         assert_eq!(yaml_to_json(input), expected);
         assert_eq!(yaml_to_json_preserve_order(input), expected);
+    }
+
+    /// 整数の `-0` と `-0.0` の符号を保つこと
+    #[test]
+    fn test_yaml_to_json_keeps_negative_zero() {
+        let input = "a: -0\nb: -0.0\nc: [-0, 0]\n";
+        for output in [yaml_to_json(input), yaml_to_json_preserve_order(input)] {
+            assert!(output.contains("\"a\": -0,"), "{output}");
+            assert!(output.contains("\"b\": -0.0,"), "{output}");
+            assert!(output.contains("-0,\n    0\n"), "{output}");
+        }
     }
 
     /// パーサ上限超過の入力は JSON 変換をスキップすること

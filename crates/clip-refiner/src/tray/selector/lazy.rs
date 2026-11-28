@@ -130,6 +130,24 @@ impl LazySelector {
         *self.inner.borrow_mut() = None;
     }
 
+    /// プロセスの異常終了で使えなくなった `WebView` を破棄する
+    ///
+    /// 次の表示で作り直す
+    ///
+    /// # Arguments
+    /// * `window_id` - 異常終了を通知したウィンドウ ID
+    ///
+    /// # Returns
+    /// * `Option<bool>` - 破棄した場合は破棄前に表示中だったか。別のウィンドウなら `None`
+    pub(crate) fn dispose_failed(&self, window_id: WindowId) -> Option<bool> {
+        if self.id() != Some(window_id) {
+            return None;
+        }
+        let was_visible = self.is_visible();
+        self.dispose();
+        Some(was_visible)
+    }
+
     /// `WebView` が生成済みかどうか
     ///
     /// # Returns

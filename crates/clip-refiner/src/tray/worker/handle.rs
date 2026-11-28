@@ -154,6 +154,11 @@ impl ClipboardWorkerHandle {
         // `OwnedClipboard` がスレッドに残留し、並列テストでヒープ破壊を起こす
         let state = Arc::clone(&handle.state);
         let listener_tx = handle.tx.lock_ignore_poison().clone();
+        let wake_tx = listener_tx.clone();
+        state.worker().set_waker(Box::new(move || {
+            // 停止済みのワーカーには届かなくてよい (再起動時に送信先を差し替える)
+            let _ = wake_tx.send(ClipboardCommand::Wake);
+        }));
         let join_handle = thread::spawn(move || {
             let result = catch_unwind(AssertUnwindSafe(|| {
                 run_worker_loop(&state, &rx, listener_tx);

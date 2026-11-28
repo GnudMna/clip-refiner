@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use super::super::clipboard_monitor::{
-    self, ClipboardObserveResult, ClipboardTrigger, EVENT_POLL_MS, POLL_TICK_MS,
+    self, ClipboardObserveResult, ClipboardTrigger, EVENT_POLL_MS,
 };
 use super::super::state::AppState;
 use super::clipboard_seq;
@@ -114,7 +114,8 @@ impl MonitorLoopState {
     ///
     /// 監視世代が未開始または追跡中の世代と不一致の場合は短い間隔で再確認する。Event / 連続記録でリスナが稼働中のときは
     /// 設定外部変更の安全網ポーリング間隔まで待ち、`ClipboardChanged` / `ConfigFileChanged` で起床する
-    /// リスナ未使用時はシーケンストークンの短周期 peek にフォールバックする
+    /// リスナ未使用時はシーケンストークンの短周期 peek にフォールバックする。
+    /// Polling は次の周期まで待つ (監視世代と監視周期の変更は `Wake` で起床する)
     ///
     /// # Arguments
     /// * `state` - アプリケーションの共有状態
@@ -147,12 +148,12 @@ impl MonitorLoopState {
                     None => idle_timeout,
                 };
             }
-            return Duration::from_millis(POLL_TICK_MS.min(EVENT_POLL_MS));
+            return Duration::from_millis(EVENT_POLL_MS);
         }
 
         let elapsed = u64::try_from(self.last_poll_at.elapsed().as_millis()).unwrap_or(u64::MAX);
         let remaining = snap.interval_ms.saturating_sub(elapsed);
-        Duration::from_millis(POLL_TICK_MS.min(remaining.max(1)))
+        Duration::from_millis(remaining.max(1))
     }
 
     /// 監視ループの1ティックを実行する

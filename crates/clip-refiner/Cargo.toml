@@ -44,6 +44,7 @@ app = [
     "dep:tracing-appender",
     "dep:tracing-subscriber",
     "dep:tray-icon",
+    "dep:webview2-com",
     "dep:wry",
     "dep:serde_json",
     "dep:sha2",
@@ -75,6 +76,7 @@ tracing.workspace = true
 tracing-appender = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 tray-icon = { workspace = true, optional = true }
+webview2-com = { workspace = true, optional = true }
 wry = { workspace = true, optional = true }
 clipboard-win = { workspace = true, optional = true, features = ["monitor"] }
 windows = { workspace = true, optional = true, features = [

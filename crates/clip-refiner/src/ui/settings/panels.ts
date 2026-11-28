@@ -503,7 +503,7 @@ function renderShortcutsPanel(): string {
     const body =
         '<div class="info-banner" role="note">' +
         '<div>形式は <code>Alt+Shift+S</code>。修飾キーは Alt / Shift / Ctrl / Win。' +
-        'キーは A-Z / 0-9 / F1-F24 / Space / Enter / Tab / Esc / 矢印キー / Home / End / PageUp / PageDown / Insert / Delete / Numpad0-9 / - , . / など。' +
+        "キーは A-Z / 0-9 / F1-F24 / Space / Enter / Tab / Esc / 矢印キー / Home / End / PageUp / PageDown / Insert / Delete / Numpad0-9 / 記号キー (- , . / ; = ` [ \\ ] ') など。" +
         '不正・重複は保存時に自動補正する。</div></div>' +
         card(
             '固定ホットキー',

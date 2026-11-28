@@ -135,11 +135,24 @@ pub enum HotkeyKey {
     NumpadMultiply,
     NumpadDivide,
     NumpadDecimal,
-    /// 記号キー `-` / `,` / `.` / `/` (US / JIS 配列で同じ仮想キー)
+    /// 記号キー `-` / `,` / `.` / `/`
     Minus,
     Comma,
     Period,
     Slash,
+    /// OEM キー (Windows の `VK_OEM_1` / `VK_OEM_PLUS` / `VK_OEM_3`〜`VK_OEM_7` / `VK_OEM_102`)
+    ///
+    /// 刻印は配列で変わる。US 配列は `;` `=` `` ` `` `[` `\` `]` `'`、
+    /// JIS 配列は `:` `;` `@` `[` `\` `]` `^` に当たる
+    Semicolon,
+    Equal,
+    Backquote,
+    BracketLeft,
+    Backslash,
+    BracketRight,
+    Quote,
+    /// `VK_OEM_102` (JIS 配列の `ろ` / ISO 配列の `<>`)
+    IntlBackslash,
 }
 
 /// `Alt+Shift+S` 形式から解析したホットキー
@@ -200,21 +213,32 @@ const LAST_RESORT_HOTKEY: ParsedHotkey = ParsedHotkey {
 /// # Errors
 /// 空文字列、未対応の修飾キー、未対応のキーのいずれか
 pub fn parse_hotkey_binding(binding: &str) -> Result<ParsedHotkey, HotkeyParseError> {
-    let parts: Vec<&str> = binding
+    // 末尾の `+` が区切りでなくキー自体の場合 (`Ctrl++` / `+`) は `Plus` として扱う
+    let trimmed = binding.trim();
+    let (rest, plus_key) = match trimmed.strip_suffix('+') {
+        Some(head) if head.is_empty() || head.ends_with('+') => (head, true),
+        _ => (trimmed, false),
+    };
+    let parts: Vec<&str> = rest
         .split('+')
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .collect();
-    if parts.is_empty() {
+    if parts.is_empty() && !plus_key {
         return Err(HotkeyParseError::Empty);
     }
 
-    let key_name = parts.last().ok_or(HotkeyParseError::MissingKey)?;
-    let key = parse_key_name(key_name)
-        .ok_or_else(|| HotkeyParseError::UnsupportedKey(key_name.to_string()))?;
+    let (key, modifier_parts) = if plus_key {
+        (HotkeyKey::Equal, &parts[..])
+    } else {
+        let key_name = parts.last().ok_or(HotkeyParseError::MissingKey)?;
+        let key = parse_key_name(key_name)
+            .ok_or_else(|| HotkeyParseError::UnsupportedKey(key_name.to_string()))?;
+        (key, &parts[..parts.len() - 1])
+    };
 
     let mut modifiers = HotkeyModifiers::default();
-    for part in &parts[..parts.len() - 1] {
+    for part in modifier_parts {
         apply_modifier(part, &mut modifiers)?;
     }
 
@@ -371,23 +395,38 @@ fn parse_key_name(name: &str) -> Option<HotkeyKey> {
         "PRINTSCREEN" => HotkeyKey::PrintScreen,
         "PAUSE" => HotkeyKey::Pause,
         "SCROLLLOCK" => HotkeyKey::ScrollLock,
-        "MINUS" => HotkeyKey::Minus,
-        "COMMA" => HotkeyKey::Comma,
-        "PERIOD" => HotkeyKey::Period,
-        "SLASH" => HotkeyKey::Slash,
+        "MINUS" | "OEMMINUS" => HotkeyKey::Minus,
+        "COMMA" | "OEMCOMMA" => HotkeyKey::Comma,
+        "PERIOD" | "OEMPERIOD" => HotkeyKey::Period,
+        "SLASH" | "OEM2" => HotkeyKey::Slash,
+        "SEMICOLON" | "OEM1" => HotkeyKey::Semicolon,
+        "EQUAL" | "PLUS" | "OEMPLUS" => HotkeyKey::Equal,
+        "BACKQUOTE" | "OEM3" => HotkeyKey::Backquote,
+        "BRACKETLEFT" | "OEM4" => HotkeyKey::BracketLeft,
+        "BACKSLASH" | "OEM5" => HotkeyKey::Backslash,
+        "BRACKETRIGHT" | "OEM6" => HotkeyKey::BracketRight,
+        "QUOTE" | "OEM7" => HotkeyKey::Quote,
+        "INTLBACKSLASH" | "OEM102" => HotkeyKey::IntlBackslash,
         _ => return None,
     })
 }
 
 /// 記号 1 文字を `HotkeyKey` に変換する
 ///
-/// `+` は区切り文字のため扱わない
+/// `+` は区切り文字のため扱わない (末尾の `+` は `parse_hotkey_binding` が扱う)
 fn symbol_to_key(ch: char) -> Option<HotkeyKey> {
     Some(match ch {
         '-' => HotkeyKey::Minus,
         ',' => HotkeyKey::Comma,
         '.' => HotkeyKey::Period,
         '/' => HotkeyKey::Slash,
+        ';' => HotkeyKey::Semicolon,
+        '=' => HotkeyKey::Equal,
+        '`' => HotkeyKey::Backquote,
+        '[' => HotkeyKey::BracketLeft,
+        '\\' => HotkeyKey::Backslash,
+        ']' => HotkeyKey::BracketRight,
+        '\'' => HotkeyKey::Quote,
         _ => return None,
     })
 }
@@ -536,6 +575,26 @@ mod tests {
             ("Alt+Shift+,", HotkeyKey::Comma),
             ("Alt+Shift+.", HotkeyKey::Period),
             ("Alt+Shift+/", HotkeyKey::Slash),
+            ("Alt+Shift+;", HotkeyKey::Semicolon),
+            ("Alt+Shift+=", HotkeyKey::Equal),
+            ("Alt+Shift+`", HotkeyKey::Backquote),
+            ("Alt+Shift+[", HotkeyKey::BracketLeft),
+            ("Alt+Shift+\\", HotkeyKey::Backslash),
+            ("Alt+Shift+]", HotkeyKey::BracketRight),
+            ("Alt+Shift+'", HotkeyKey::Quote),
+            ("Alt+Shift+Oem1", HotkeyKey::Semicolon),
+            ("Alt+Shift+OemPlus", HotkeyKey::Equal),
+            ("Alt+Shift+Plus", HotkeyKey::Equal),
+            ("Ctrl++", HotkeyKey::Equal),
+            ("Ctrl+Shift++", HotkeyKey::Equal),
+            ("+", HotkeyKey::Equal),
+            ("Alt+Shift+Oem3", HotkeyKey::Backquote),
+            ("Alt+Shift+Oem4", HotkeyKey::BracketLeft),
+            ("Alt+Shift+Oem5", HotkeyKey::Backslash),
+            ("Alt+Shift+Oem6", HotkeyKey::BracketRight),
+            ("Alt+Shift+Oem7", HotkeyKey::Quote),
+            ("Alt+Shift+Oem2", HotkeyKey::Slash),
+            ("Alt+Shift+Oem102", HotkeyKey::IntlBackslash),
         ] {
             let parsed = parse_hotkey_binding(binding).unwrap_or_else(|e| panic!("{binding}: {e}"));
             assert_eq!(parsed.key, key, "{binding}");
@@ -557,7 +616,7 @@ mod tests {
             parse_hotkey_binding("Alt+Shift+F99"),
             Err(HotkeyParseError::UnsupportedKey(_))
         ));
-        for binding in ["Alt+Shift+F25", "Alt+;", "Alt+Numpad10", "Alt+CapsLock"] {
+        for binding in ["Alt+Shift+F25", "Alt+@", "Alt+Numpad10", "Alt+CapsLock"] {
             assert!(
                 matches!(
                     parse_hotkey_binding(binding),

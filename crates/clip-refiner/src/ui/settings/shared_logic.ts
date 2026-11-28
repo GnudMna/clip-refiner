@@ -160,10 +160,16 @@ const SettingsSharedLogic = (function () {
             return { valid: false, message: 'ホットキーを入力してください' };
         }
 
-        const parts = trimmed
+        // 末尾の `+` が区切りでなくキー自体の場合 (`Ctrl++` / `+`) は `Plus` として扱う
+        const head = trimmed.endsWith('+') ? trimmed.slice(0, -1) : null;
+        const plusKey = head !== null && (head === '' || head.endsWith('+'));
+        const parts = (plusKey ? head : trimmed)
             .split('+')
             .map((part) => part.trim())
             .filter(Boolean);
+        if (plusKey) {
+            parts.push('Plus');
+        }
         if (parts.length === 0) {
             return { valid: false, message: 'ホットキーを入力してください' };
         }
@@ -228,6 +234,27 @@ const SettingsSharedLogic = (function () {
         'COMMA',
         'PERIOD',
         'SLASH',
+        'SEMICOLON',
+        'EQUAL',
+        'PLUS',
+        'BACKQUOTE',
+        'BRACKETLEFT',
+        'BACKSLASH',
+        'BRACKETRIGHT',
+        'QUOTE',
+        'INTLBACKSLASH',
+        'OEM1',
+        'OEM2',
+        'OEM3',
+        'OEM4',
+        'OEM5',
+        'OEM6',
+        'OEM7',
+        'OEM102',
+        'OEMPLUS',
+        'OEMMINUS',
+        'OEMCOMMA',
+        'OEMPERIOD',
         'NUMPADADD',
         'NUMPADSUBTRACT',
         'NUMPADMULTIPLY',
@@ -242,7 +269,7 @@ const SettingsSharedLogic = (function () {
         const upper = keyPart.toUpperCase();
         return (
             /^[A-Z0-9]$/.test(upper) ||
-            /^[-,./]$/.test(upper) ||
+            /^[-,./;=`[\\\]']$/.test(upper) ||
             /^F([1-9]|1[0-9]|2[0-4])$/.test(upper) ||
             /^NUMPAD[0-9]$/.test(upper) ||
             NAMED_HOTKEY_KEYS.has(upper)

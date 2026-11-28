@@ -90,11 +90,22 @@ test('validate_hotkey_binding', () => {
         'Ctrl+Numpad5',
         'Ctrl+NumpadAdd',
         'Alt+Shift+-',
+        'Alt+Shift+;',
+        'Alt+Shift+[',
+        'Alt+Shift+\\',
+        'Alt+Shift+]',
+        "Alt+Shift+'",
+        'Alt+Shift+`',
+        'Alt+Shift+=',
+        'Alt+Shift+Oem1',
+        'Alt+Shift+Plus',
+        'Ctrl++',
+        'Ctrl+Shift++',
         'Alt+Shift+Esc',
     ]) {
         assert.equal(SettingsSharedLogic.validateHotkeyBinding(binding).valid, true, binding);
     }
-    for (const binding of ['Alt+F25', 'Alt+;', 'Alt+CapsLock', 'Alt+Numpad10']) {
+    for (const binding of ['Alt+F25', 'Alt+@', 'Alt+CapsLock', 'Alt+Numpad10']) {
         assert.equal(SettingsSharedLogic.validateHotkeyBinding(binding).valid, false, binding);
     }
 });

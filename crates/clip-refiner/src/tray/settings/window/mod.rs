@@ -79,12 +79,10 @@ impl SettingsWindow {
         let html = assemble_settings_html();
         let proxy_clone = proxy.clone();
         let state_clone = Arc::clone(state);
-        let data_dir = format!("{}-Settings-WebView2", consts::APP_NAME);
-
         WebSelectorWindow::build(
             window,
-            &data_dir,
             &html,
+            proxy,
             move |req| {
                 let msg = req.body();
                 if let Some(action) = parse_settings_ipc_message(msg) {
@@ -289,6 +287,26 @@ impl SettingsWindow {
         *self.inner.borrow_mut() = None;
     }
 
+    /// プロセスの異常終了で使えなくなった `WebView` を破棄する (次の表示で作り直す)
+    ///
+    /// 応答しない `WebView` へ未送信の変更を求めず、ウィンドウの位置だけを保存する
+    ///
+    /// # Arguments
+    /// * `window_id` - 異常終了を通知したウィンドウ ID
+    ///
+    /// # Returns
+    /// * `Option<bool>` - 破棄した場合は破棄前に表示中だったか。別のウィンドウなら `None`
+    pub(crate) fn dispose_failed_webview(&self, window_id: WindowId) -> Option<bool> {
+        let was_visible = {
+            let guard = self.inner.borrow();
+            let inner = guard.as_ref().filter(|inner| inner.id() == window_id)?;
+            save_settings_window_geometry(inner.window());
+            inner.is_visible()
+        };
+        *self.inner.borrow_mut() = None;
+        Some(was_visible)
+    }
+
     /// OS の閉じる操作向けに JS の `closeWindow` を実行する
     ///
     /// デバウンス中パッチを IPC 経由で先に送ってから非表示にする
@@ -483,5 +501,16 @@ mod tests {
         settings.hide();
         assert!(!settings.is_visible());
         assert!(settings.id().is_none());
+    }
+
+    /// 未生成の設定ウィンドウは異常終了の通知を自分宛てとして扱わないこと
+    #[test]
+    fn dispose_failed_webview_ignores_empty_shell() {
+        let state = Arc::new(test_app_state());
+        let settings = SettingsWindow::new_shell(state.proxy.clone(), Arc::clone(&state));
+
+        // SAFETY: テスト用の識別子として比較にのみ使う
+        let window_id = unsafe { tao::window::WindowId::dummy() };
+        assert_eq!(settings.dispose_failed_webview(window_id), None);
     }
 }

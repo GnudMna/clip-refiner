@@ -14,9 +14,6 @@ use crate::user_error::{UserNotification, continuous_record_text_too_large};
 // ======================================================================
 // 定数
 // ======================================================================
-/// ポーリングスリープを分割するチック間隔(ミリ秒)
-pub(crate) const POLL_TICK_MS: u64 = 50;
-
 /// リスナ未使用時にシーケンストークンを peek する間隔 (ミリ秒)
 pub(crate) const EVENT_POLL_MS: u64 = 100;
 

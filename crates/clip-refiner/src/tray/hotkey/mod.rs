@@ -24,8 +24,11 @@ pub(crate) use register::{format_registration_failures, notify_registration_fail
 // ======================================================================
 // 定数
 // ======================================================================
-/// ホットキー受信の最大待ち時間 (応答性と CPU 使用のバランス)
-pub(crate) const HOTKEY_RECV_TIMEOUT: Duration = Duration::from_millis(10);
+/// ホットキー受信の最大待ち時間
+///
+/// イベントは届いた時点で受け取るため、応答性には影響しない。停止フラグを確認する間隔で、
+/// アイドル時の起床回数と終了時の待ち時間 (最大でこの値) を決める
+pub(crate) const HOTKEY_RECV_TIMEOUT: Duration = Duration::from_millis(500);
 
 // ======================================================================
 // リスナー停止制御

@@ -146,6 +146,14 @@ define_hotkey_key_to_code! {
     Comma => Comma,
     Period => Period,
     Slash => Slash,
+    Semicolon => Semicolon,
+    Equal => Equal,
+    Backquote => Backquote,
+    BracketLeft => BracketLeft,
+    Backslash => Backslash,
+    BracketRight => BracketRight,
+    Quote => Quote,
+    IntlBackslash => IntlBackslash,
 }
 
 // ======================================================================

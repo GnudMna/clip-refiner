@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use global_hotkey::{GlobalHotKeyManager, HotKeyState};
 use tao::event_loop::ControlFlow;
@@ -468,10 +468,23 @@ fn hotkey_ui_overlay_mutual_exclusion() {
     assert!(!ctx.clip_selector.as_ref().unwrap().is_visible());
 }
 
-/// ホットキー受信タイムアウトが短い応答性向けの値となるようにすること
+/// リスナーの停止が受信の最大待ち時間ほどで終わること
+///
+/// 停止フラグは受信待ちの合間にしか確認しないため、終了の遅れは最大でこの待ち時間になる
 #[test]
-fn hotkey_recv_timeout_is_responsive() {
-    assert_eq!(HOTKEY_RECV_TIMEOUT.as_millis(), 10);
+fn hotkey_listener_stops_within_recv_timeout() {
+    let state = test_app_state_arc();
+    let listener = HotkeyHandler::start_event_listener(state.proxy.clone());
+
+    let started = Instant::now();
+    drop(listener);
+    let elapsed = started.elapsed();
+
+    // スレッドの起床の揺らぎを見込んで余裕を持たせる
+    assert!(
+        elapsed < HOTKEY_RECV_TIMEOUT + Duration::from_millis(500),
+        "停止に {elapsed:?} かかった"
+    );
 }
 
 /// 他アプリと衝突したホットキーがあっても、`reload` で残りのホットキーを再登録できること

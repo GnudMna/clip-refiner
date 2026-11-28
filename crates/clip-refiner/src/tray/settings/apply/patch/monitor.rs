@@ -32,11 +32,17 @@ pub(super) fn apply_monitor_patch(
     if let Some(interval_ms) = patch.interval_ms
         && !switching_to_event
     {
-        state.with_config_mut(|c| {
+        let changed = state.with_config_mut(|c| {
+            let before = c.interval_ms;
             c.interval_ms = interval_ms;
             c.normalize();
+            c.interval_ms != before
         });
         *config_dirty = true;
+        // Polling のワーカーは次の周期まで眠るため、新しい周期で待ち直させる
+        if changed {
+            state.worker().wake();
+        }
     }
 }
 
@@ -95,6 +101,37 @@ mod tests {
             consts::MAX_INTERVAL_MS
         );
         assert!(config_dirty);
+    }
+
+    /// 監視周期が変わったときだけワーカーを起こすこと
+    #[test]
+    fn interval_ms_patch_wakes_worker_only_when_changed() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let ctx = TrayTestContext::with_config(|c| c.interval_ms = 1_000);
+        let wakes = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&wakes);
+        ctx.state().worker().set_waker(Box::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }));
+        let mut outcome = PatchApplyOutcome::default();
+        let mut config_dirty = false;
+
+        // 同じ値では起こさない
+        let same = SettingsPatch {
+            interval_ms: Some(1_000),
+            ..SettingsPatch::default()
+        };
+        apply_monitor_patch(&same, ctx.state(), &mut outcome, &mut config_dirty);
+        assert_eq!(wakes.load(Ordering::SeqCst), 0);
+
+        // 値が変わったら新しい周期で待ち直させる
+        let changed = SettingsPatch {
+            interval_ms: Some(2_000),
+            ..SettingsPatch::default()
+        };
+        apply_monitor_patch(&changed, ctx.state(), &mut outcome, &mut config_dirty);
+        assert_eq!(wakes.load(Ordering::SeqCst), 1);
     }
 
     /// イベント監視への切替と同時の周期パッチでは周期をスキップすること

@@ -25,6 +25,7 @@ pub(crate) fn handle_user_event(ctx: &mut AppEventContext<'_>, event: AppEvent) 
         AppEvent::Update(e) => settings::handle_update(ctx, e),
         AppEvent::Ocr(e) => misc::handle_ocr(ctx, e),
         AppEvent::Record(e) => misc::handle_record(ctx, e),
+        AppEvent::WebView(e) => misc::handle_webview(ctx, e),
     }
 }
 
@@ -46,9 +47,9 @@ mod tests {
     use crate::tray::hotkey::HotkeyHandler;
     use crate::tray::selector::SelectorUi;
     use crate::tray::settings::SettingsWindow;
-    use crate::tray::state::{AppEvent, OcrEvent, SelectorEvent};
+    use crate::tray::state::{AppEvent, OcrEvent, SelectorEvent, WebViewEvent};
 
-    /// セレクター / OCR の非表示系 `AppEvent` を検証すること
+    /// セレクター / OCR の非表示系と `WebView` の異常終了の `AppEvent` を扱えること
     ///
     /// ホットキー登録は OS グローバルのため、衝突回避で 1 テストにまとめる
     #[test]
@@ -107,5 +108,12 @@ mod tests {
         handle_user_event(&mut ctx, SelectorEvent::HideClip.into());
         assert!(!selectors.quick.is_visible());
         assert!(!selectors.clip.is_visible());
+
+        // どのウィンドウにも一致しない異常終了の通知は何も破棄しない
+        // SAFETY: テスト用の識別子として比較にのみ使う
+        let unknown = unsafe { tao::window::WindowId::dummy() };
+        handle_user_event(&mut ctx, WebViewEvent::ProcessFailed(unknown).into());
+        assert!(selectors.quick.id().is_none());
+        assert!(settings.id().is_none());
     }
 }

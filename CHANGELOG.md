@@ -30,6 +30,28 @@
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-11-28
+
+### Added
+
+- ホットキーに `;` `=` `` ` `` `[` `\` `]` `'` と `Oem1`〜`Oem7` / `Oem102` の名前で指定できる記号キーを追加し、`Ctrl++` や `Plus` で `+` キーも指定可能に
+
+### Changed
+
+- クイックセレクター・登録クリップセレクター・設定ウィンドウで WebView2 のプロセスを共有し、複数を開いた後のメモリ使用量を削減
+  - 旧版が `%TEMP%` に作ったウィンドウ別の WebView2 フォルダは、使われなくなってから 1 日後に削除
+- 非表示にしたセレクターの WebView を保持している間、WebView2 のメモリ使用を抑えるよう変更
+- 常駐中のホットキー監視の起床を毎秒 100 回から 2 回に減らし、アイドル時の CPU 使用を削減
+- Polling 監視で `interval_ms` によらず毎秒 20 回起きていた待機をやめ、監視周期まで待つように変更してアイドル時の CPU 使用を削減
+
+### Fixed
+
+- WebView2 のプロセスが異常終了すると、セレクターが空の表示のまま戻らなくなる問題を修正し、次に開いたときに表示し直す
+  - 開いていたウィンドウは閉じて通知する
+- YAML → JSON: 引用符なしの `1e400` のように倍精度に収まらない数値が、黙って文字列になる問題を修正し、`.inf` / `.nan` と同じく変換しない
+- JSON 整形: `1E2` や `1e5` のような指数表記が `1e+2` / `1e+5` に書き換わる問題を修正し、元の書き方のまま整形する
+- JSON ↔ YAML: 整数の `-0` が `0` になり符号が消える問題を修正し、`-0` のまま変換する
+
 ## [4.1.0] - 2026-11-27
 
 ### Added
@@ -1253,7 +1275,8 @@
 - 多重起動防止
 - エラー時のデスクトップ通知
 
-[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.1.0...develop
+[Unreleased]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.1.1...develop
+[4.1.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.1.0...v4.1.1
 [4.1.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.1...v4.1.0
 [4.0.1]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v4.0.0...v4.0.1
 [4.0.0]: https://gitea.b-gnud.duckdns.org/GnudMna/clip-refiner/compare/v3.1.1...v4.0.0

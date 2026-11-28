@@ -117,6 +117,7 @@ pub(crate) fn handle_command<C: TextClipboard + ImageClipboard + HtmlClipboard>(
         // 監視ティック / 設定再読込はワーカーループ側で実行する
         ClipboardCommand::ClipboardChanged
         | ClipboardCommand::ConfigFileChanged
+        | ClipboardCommand::Wake
         | ClipboardCommand::Shutdown => {}
     }
 }

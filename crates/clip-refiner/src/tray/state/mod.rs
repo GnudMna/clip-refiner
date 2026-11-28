@@ -12,7 +12,7 @@ mod worker_state;
 
 pub use app_event::{
     AppEvent, ClipRef, ClipsEvent, ConfigEvent, FavoritesEvent, HotkeyEvent, MenuRefreshEvent,
-    OcrEvent, RecordEvent, SelectorEvent, SettingsEvent, UpdateEvent, WorkerEvent,
+    OcrEvent, RecordEvent, SelectorEvent, SettingsEvent, UpdateEvent, WebViewEvent, WorkerEvent,
 };
 pub use app_state::AppState;
 #[cfg(any(test, feature = "test-helpers", debug_assertions))]

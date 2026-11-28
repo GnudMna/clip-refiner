@@ -50,7 +50,6 @@ UI ロジックテストと Rust ↔ JS の型テスト (`webview_contract_tests
 | `settings` | 設定ウィンドウ IPC のマージ・パッチ適用・監視/正規表現/連続記録/自動変換と連続記録の排他・`config.toml` 永続化往復 |
 | `notification` | 通知設定の旧項目移行・IPC パッチ・トレイメニュー連携 |
 | `platform` | ホットキー解釈・OS 登録・自動起動状態照会 |
-| `update` | ローカル HTTP モックサーバによる更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・回数制限 (403 / 429) 含む。アセットはリダイレクト経由で返す。`msiexec` は起動せず、インストール先も変更しない) |
 | `regex_preview_logic` | 設定 UI の正規表現プレビューのロジック (Node.js 実行) |
 | `settings_ui_logic` | 設定 UI のパッチマージのロジック (`settings_patch.ts` / Node.js 実行) |
 | `settings_shared_logic` | 設定 UI 共有純粋ロジック (`shared_logic.ts` / Node.js 実行) |
@@ -86,6 +85,14 @@ core クレートの公開加工 API は `crates/clip-refiner-core/tests/` で�
 | `refine_modes.rs` | 全 `RefineMode` の代表入力・出力とモード追加時のカバレッジ |
 | `pipeline_api.rs` | テキスト / クリップボードのパイプライン API |
 | `property_transforms.rs` | `proptest` による任意入力で成り立つ性質 ([プロパティテスト](#プロパティテスト-proptest)) |
+
+### アプリ更新 (`clip-refiner-updater/tests/`)
+
+アプリ更新の統合テストは `crates/clip-refiner-updater/tests/update.rs` にある (`flow` ではないため `cargo test -p clip-refiner-updater --test update --features test-helpers` で絞る)。
+
+| ファイル | 検証内容 |
+| :--- | :--- |
+| `update.rs` | ローカル HTTP モックサーバによる更新確認 → ダウンロード検証 → ポータブル ZIP 展開 / MSI 検証 (digest 欠落・ハッシュ / サイズ不一致・署名の欠落 / 信頼しない鍵 / 内容差し替え / 別バージョン向け署名 / 公開鍵なし・応答本文の宣言サイズ超過による途中打ち切り・API 404・回数制限 (403 / 429) 含む。アセットはリダイレクト経由で返す。`msiexec` は起動せず、インストール先も変更しない) |
 
 ### WebView の回帰検知
 
@@ -252,7 +259,7 @@ npm run test:e2e
 
 ハーネスは `ClipRefiner.exe --e2e-window settings|quick|clip` を一時設定ディレクトリ (`CLIP_REFINER_CONFIG_DIR`) で起動し、stdout の `E2E_READY` のあと Playwright が CDP 接続する。実行ファイルパスは `CLIP_REFINER_E2E_EXE` で上書きできる (未設定時は `target/debug/ClipRefiner.exe`)。失敗したテストは `fixtures.ts` が手動で記録した Playwright トレースを `test-results/**/trace.zip` に残す (`npx playwright show-trace`)。
 
-ハーネスは終了時に、一時設定ディレクトリと `%TEMP%` の `ClipRefiner-*-WebView2-e2e-<ポート>` (WebView2 のデータ) を削除する。強制終了で残った分は、次の実行の開始時 (`e2e/support/global_setup.ts`) に、作成から 10 分以上たったものだけ削除する。
+ハーネスは終了時に、一時設定ディレクトリと `%TEMP%` の `ClipRefiner-WebView2-e2e-<ポート>` (全 `WebView` で共有する WebView2 のデータ) を削除する。強制終了で残った分は、次の実行の開始時 (`e2e/support/global_setup.ts`) に、作成から 10 分以上たったものだけ削除する。
 
 ## プロパティテスト (`proptest`)
 

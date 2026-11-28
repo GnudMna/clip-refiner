@@ -1,3 +1,5 @@
+use tao::window::WindowId;
+
 use crate::config::{AppConfig, FavoriteMoveDirection};
 use crate::platform::bundled_docs::BundledDocument;
 use crate::refiner::RefineMode;
@@ -32,6 +34,8 @@ pub enum AppEvent {
     Ocr(OcrEvent),
     /// 連続記録
     Record(RecordEvent),
+    /// `WebView2` のプロセス
+    WebView(WebViewEvent),
 }
 
 // ======================================================================
@@ -286,6 +290,18 @@ pub enum RecordEvent {
 }
 
 // ======================================================================
+// WebView
+// ======================================================================
+/// `WebView2` のプロセス関連イベント
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebViewEvent {
+    /// ブラウザ / 描画プロセスが異常終了した。該当ウィンドウの `WebView` を破棄し、次の表示で作り直す
+    ///
+    /// 破棄・作り直し後の古いウィンドウ ID は一致しないため無視される
+    ProcessFailed(WindowId),
+}
+
+// ======================================================================
 // From 実装
 // ======================================================================
 impl From<SelectorEvent> for AppEvent {
@@ -351,5 +367,11 @@ impl From<OcrEvent> for AppEvent {
 impl From<RecordEvent> for AppEvent {
     fn from(event: RecordEvent) -> Self {
         Self::Record(event)
+    }
+}
+
+impl From<WebViewEvent> for AppEvent {
+    fn from(event: WebViewEvent) -> Self {
+        Self::WebView(event)
     }
 }

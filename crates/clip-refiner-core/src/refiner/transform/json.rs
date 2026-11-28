@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Range;
 
 use serde::de::{DeserializeOwned, Deserializer, Error as _, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Error as _, Serialize, Serializer};
@@ -28,28 +29,7 @@ use crate::security::is_within_parser_limit;
 /// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
 pub fn format_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
-    if !is_within_parser_limit(text) {
-        tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json)");
-        return Ok(Cow::Borrowed(text));
-    }
-
-    let v: Value = parse_json(text).inspect_err(|f| {
-        tracing::debug!("JSON パースに失敗 (format_json): {f:?}");
-    })?;
-
-    match serde_json::to_string_pretty(&v) {
-        Ok(pretty) => {
-            if pretty == text {
-                Ok(Cow::Borrowed(text))
-            } else {
-                Ok(Cow::Owned(pretty))
-            }
-        }
-        Err(e) => {
-            tracing::debug!("JSON シリアライズに失敗 (format_json): {}", e);
-            Err(ParseFailure::UnrepresentableValue)
-        }
-    }
+    pretty_print::<Value>(text, "format_json")
 }
 
 /// JSON文字列を整形(Pretty Print)する(キー順序保持)
@@ -64,17 +44,41 @@ pub fn format_json(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
 /// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みのJSON文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列を返す
 ///   パースに失敗した場合 (キーが重複している場合を含む) はその理由を返す
 pub fn format_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailure> {
+    pretty_print::<OrderedValue>(text, "format_json_preserve_order")
+}
+
+/// JSON を読み取って整形し直す
+///
+/// 数値の表記は元のまま保つ。`serde_json` は指数部を `1E2` → `1e+2` のように正規化するため、
+/// 正規化で変わる数値は読み取りの間だけ別の数値へ置き換え、整形後に元の表記へ戻す
+///
+/// # Arguments
+/// * `text` - 整形対象の JSON 文字列
+/// * `label` - ログに出す呼び出し元の関数名
+///
+/// # Returns
+/// * `Result<Cow<'_, str>, ParseFailure>` - 整形済みの JSON 文字列。すでに整形済みの場合や入力がパーサの上限を超える場合は元の文字列
+fn pretty_print<'a, T: DeserializeOwned + Serialize>(
+    text: &'a str,
+    label: &str,
+) -> Result<Cow<'a, str>, ParseFailure> {
     if !is_within_parser_limit(text) {
-        tracing::debug!("JSON 入力が上限を超えているためスキップ (format_json_preserve_order)");
+        tracing::debug!("JSON 入力が上限を超えているためスキップ ({label})");
         return Ok(Cow::Borrowed(text));
     }
 
-    let v: OrderedValue = parse_json(text).inspect_err(|f| {
-        tracing::debug!("JSON パースに失敗 (format_json_preserve_order): {f:?}");
+    let mask = ExponentMask::new(text);
+    let source = mask.as_ref().map_or(text, |m| m.masked.as_str());
+    let v: T = parse_json(source).inspect_err(|f| {
+        tracing::debug!("JSON パースに失敗 ({label}): {f:?}");
     })?;
 
     match serde_json::to_string_pretty(&v) {
         Ok(pretty) => {
+            let pretty = match &mask {
+                Some(m) => m.restore(&pretty),
+                None => pretty,
+            };
             if pretty == text {
                 Ok(Cow::Borrowed(text))
             } else {
@@ -82,12 +86,146 @@ pub fn format_json_preserve_order(text: &str) -> Result<Cow<'_, str>, ParseFailu
             }
         }
         Err(e) => {
-            tracing::debug!(
-                "JSON シリアライズに失敗 (format_json_preserve_order): {}",
-                e
-            );
+            tracing::debug!("JSON シリアライズに失敗 ({label}): {e}");
             Err(ParseFailure::UnrepresentableValue)
         }
+    }
+}
+
+// ======================================================================
+// 数値の指数表記の保持
+// ======================================================================
+/// 文字列リテラルの外にある数値トークンの範囲を、出現順に返す
+///
+/// # Arguments
+/// * `text` - JSON 文字列
+///
+/// # Returns
+/// * `Vec<Range<usize>>` - 数値トークンのバイト範囲
+fn number_spans(text: &str) -> Vec<Range<usize>> {
+    let bytes = text.as_bytes();
+    let mut spans = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    // 直後の 1 文字 (`\"` など) を読み飛ばす
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'-' | b'0'..=b'9' => {
+                let start = i;
+                while i < bytes.len()
+                    && matches!(bytes[i], b'0'..=b'9' | b'+' | b'-' | b'.' | b'e' | b'E')
+                {
+                    i += 1;
+                }
+                spans.push(start..i);
+            }
+            _ => i += 1,
+        }
+    }
+    spans
+}
+
+/// `serde_json` が指数部を書き換える数値か
+///
+/// `E` は `e` に、符号のない指数は `+` 付きに変わる
+fn exponent_is_rewritten(token: &str) -> bool {
+    let Some(i) = token.find(['e', 'E']) else {
+        return false;
+    };
+    token.as_bytes()[i] == b'E' || !token[i + 1..].starts_with(['+', '-'])
+}
+
+/// 指数部が書き換わる数値を、読み取りの間だけ別の数値へ置き換える状態
+struct ExponentMask {
+    /// 置き換え後の JSON
+    masked: String,
+    /// 置き換えた数値の元の表記 (置き換え番号の順)
+    originals: Vec<String>,
+    /// 置き換え後の数値の仮数部を構成する `9` の個数
+    nines: usize,
+}
+
+impl ExponentMask {
+    /// 指数部が書き換わる数値があれば、置き換えた状態を作る
+    ///
+    /// 置き換え後の数値は、入力のどの数字の連なりよりも長い `9` の連続で始め、
+    /// 元から入力にある数値と区別できるようにする
+    ///
+    /// # Arguments
+    /// * `text` - JSON 文字列
+    ///
+    /// # Returns
+    /// * `Option<Self>` - 置き換える数値がなければ `None`
+    fn new(text: &str) -> Option<Self> {
+        let spans = number_spans(text);
+        if !spans
+            .iter()
+            .any(|s| exponent_is_rewritten(&text[s.clone()]))
+        {
+            return None;
+        }
+        let longest_run = text
+            .as_bytes()
+            .split(|b| !b.is_ascii_digit())
+            .map(<[u8]>::len)
+            .max()
+            .unwrap_or(0);
+        let nines = longest_run + 1;
+        let mut masked = String::with_capacity(text.len());
+        let mut originals = Vec::new();
+        let mut last = 0;
+        for span in spans {
+            let token = &text[span.clone()];
+            if !exponent_is_rewritten(token) {
+                continue;
+            }
+            masked.push_str(&text[last..span.start]);
+            masked.push_str(&"9".repeat(nines));
+            masked.push_str("e+");
+            masked.push_str(&originals.len().to_string());
+            originals.push(token.to_owned());
+            last = span.end;
+        }
+        masked.push_str(&text[last..]);
+        Some(Self {
+            masked,
+            originals,
+            nines,
+        })
+    }
+
+    /// 置き換えた数値を元の表記へ戻す
+    ///
+    /// # Arguments
+    /// * `pretty` - 整形後の JSON
+    ///
+    /// # Returns
+    /// * `String` - 元の数値表記へ戻した JSON
+    fn restore(&self, pretty: &str) -> String {
+        let marker = "9".repeat(self.nines);
+        let mut out = String::with_capacity(pretty.len());
+        let mut last = 0;
+        for span in number_spans(pretty) {
+            let token = &pretty[span.clone()];
+            let original = token
+                .strip_prefix(&marker)
+                .and_then(|rest| rest.strip_prefix("e+"))
+                .and_then(|index| index.parse::<usize>().ok())
+                .and_then(|index| self.originals.get(index));
+            if let Some(original) = original {
+                out.push_str(&pretty[last..span.start]);
+                out.push_str(original);
+                last = span.end;
+            }
+        }
+        out.push_str(&pretty[last..]);
+        out
     }
 }
 
@@ -663,6 +801,10 @@ fn serialize_yaml_number<S: Serializer>(
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     let text = n.as_str();
+    // 整数として解析すると符号が落ちるため、元の表記のまま出力する
+    if text == "-0" {
+        return serializer.serialize_str(&guard.mask_number(text));
+    }
     if let Ok(v) = text.parse::<u128>() {
         return serializer.serialize_u128(v);
     }
@@ -994,8 +1136,31 @@ mod tests {
             output.contains("0.1000000000000000055511151231257827"),
             "{output}"
         );
-        // 指数表記は符号付きに正規化される
-        assert!(output.contains("1e+400"), "{output}");
+        assert!(output.contains("1e400"), "{output}");
+    }
+
+    /// 指数表記を元の書き方のまま整形すること
+    ///
+    /// 文字列の中身と、`9` が並ぶ数値は書き換えないこと
+    #[test]
+    fn test_format_json_keeps_exponent_text() {
+        let input = r#"{"b":[1E2,1e5,1E-3,1.5E+3,-2e07],"a":"1E2 \" 2E3","c":99999e5}"#;
+        for output in [format_json(input), format_json_preserve_order(input)] {
+            for expected in ["1E2", "1e5", "1E-3", "1.5E+3", "-2e07", "99999e5"] {
+                assert!(output.contains(expected), "{expected}: {output}");
+            }
+            assert!(output.contains(r#""1E2 \" 2E3""#), "{output}");
+            assert!(!output.contains("e+"), "{output}");
+        }
+    }
+
+    /// 指数表記を含む整形済みの JSON は元の文字列をそのまま返すこと
+    #[test]
+    fn test_format_json_exponent_already_formatted() {
+        let input = "[
+  1E2
+]";
+        assert!(matches!(format_json(input), Cow::Borrowed(_)));
     }
 
     /// YAML 変換で倍精度を超える整数を丸めずに数値として出力すること
@@ -1092,6 +1257,17 @@ f:
             "{json}"
         );
         assert!(json.contains("\"b\": 3.141592653589793238462643"), "{json}");
+    }
+
+    /// 整数の `-0` と `-0.0` の符号を保つこと
+    #[test]
+    fn test_json_to_yaml_keeps_negative_zero() {
+        for output in [
+            json_to_yaml(r#"{"a":-0,"b":-0.0,"c":0}"#),
+            json_to_yaml_preserve_order(r#"{"a":-0,"b":-0.0,"c":0}"#),
+        ] {
+            assert_eq!(output, "a: -0\nb: -0.0\nc: 0\n");
+        }
     }
 
     /// 数値と同じ形の文字列は桁を保った数値と取り違えず文字列のまま出力すること

@@ -3,6 +3,7 @@
 //! パイプは現在ユーザー専用 DACL で作成し、他ユーザーからの接続を拒否する
 //! 接続ごとに処理スレッドへ渡し、応答待ちの接続があっても次の接続を受け付ける
 //! 要求の読み取りには期限を設け、要求を送らない接続が処理枠を占有し続けないようにする
+//! パイプは overlapped I/O で作成し、到着や接続をイベント待ちで検知する (ポーリングしない)
 
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
@@ -13,12 +14,19 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_CONNECTED, HANDLE};
-use windows::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_BROKEN_PIPE, ERROR_HANDLE_EOF, ERROR_IO_PENDING, ERROR_OPERATION_ABORTED,
+    ERROR_PIPE_CONNECTED, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
+use windows::Win32::Storage::FileSystem::{
+    FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, PIPE_ACCESS_DUPLEX, ReadFile, WriteFile,
+};
+use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
-    PIPE_TYPE_BYTE, PIPE_WAIT, PeekNamedPipe,
+    PIPE_TYPE_BYTE, PIPE_WAIT,
 };
+use windows::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 use windows::core::PCWSTR;
 
 use super::protocol::{
@@ -35,8 +43,6 @@ use crate::tray::worker::ClipboardWorkerHandle;
 const WORKER_REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 /// 接続から要求 1 行を受け取り終えるまでの上限
 pub(crate) const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
-/// 要求の到着を確認する間隔
-const READ_POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// パイプ入出力バッファサイズ
 const PIPE_BUFFER_SIZE: u32 = 64 * 1024;
 /// 同時に処理する接続数の上限
@@ -203,14 +209,124 @@ impl Drop for ActiveSlot {
         self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
+// ======================================================================
+// overlapped I/O
+// ======================================================================
+/// 完了通知用の手動リセットイベント
+struct EventHandle(HANDLE);
+
+impl EventHandle {
+    /// 非シグナル状態のイベントを作る
+    ///
+    /// # Returns
+    /// * `io::Result<Self>` - 破棄時に閉じるイベント
+    fn new() -> io::Result<Self> {
+        // SAFETY: セキュリティ属性と名前を渡さない単純なイベント作成
+        let handle = unsafe { CreateEventW(None, true, false, PCWSTR::null()) }
+            .map_err(|err| win32_io_error(&err))?;
+        Ok(Self(handle))
+    }
+}
+
+impl Drop for EventHandle {
+    fn drop(&mut self) {
+        // SAFETY: `new` で作成した有効なハンドルを、ここで 1 度だけ閉じる
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
+/// Win32 エラーを `io::Error` へ変換する
+///
+/// # Arguments
+/// * `err` - `windows` クレートのエラー
+///
+/// # Returns
+/// * `io::Error` - Win32 エラーコードを保持するエラー
+fn win32_io_error(err: &windows::core::Error) -> io::Error {
+    io::Error::from_raw_os_error(err.code().0 & 0xFFFF)
+}
+
+/// `io::Error` が指定の Win32 エラーコードか判定する
+fn is_win32_error(err: &io::Error, code: u32) -> bool {
+    err.raw_os_error() == Some(code.cast_signed())
+}
+
+/// overlapped I/O を 1 回発行して完了まで待つ
+///
+/// 完了はイベントのシグナルで検知する。期限を過ぎたら `CancelIoEx` で取り消し、
+/// 完了を確認してから `TimedOut` を返す (バッファと `OVERLAPPED` は完了まで生存させる)
+///
+/// # Arguments
+/// * `pipe` - `FILE_FLAG_OVERLAPPED` 付きのパイプ
+/// * `deadline` - 待機を打ち切る時刻。`None` は無期限
+/// * `start` - `OVERLAPPED` を受け取って I/O を発行する処理
+///
+/// # Returns
+/// * `io::Result<u32>` - 転送したバイト数
+fn overlapped_io(
+    pipe: &File,
+    deadline: Option<Instant>,
+    start: impl FnOnce(*mut OVERLAPPED) -> windows::core::Result<()>,
+) -> io::Result<u32> {
+    let event = EventHandle::new()?;
+    let mut overlapped = OVERLAPPED {
+        hEvent: event.0,
+        ..Default::default()
+    };
+    let handle = HANDLE(pipe.as_raw_handle());
+    let mut timed_out = false;
+
+    match start(&raw mut overlapped) {
+        Ok(()) => {}
+        Err(err) if err.code() == ERROR_IO_PENDING.into() => {
+            let timeout_ms = deadline.map_or(INFINITE, |limit| {
+                let remaining = limit.saturating_duration_since(Instant::now());
+                // INFINITE (u32::MAX) と取り違えない範囲に収める
+                u32::try_from(remaining.as_millis()).map_or(u32::MAX - 1, |ms| ms.min(u32::MAX - 1))
+            });
+            // SAFETY: `event` は有効なイベントハンドルで、呼び出し中は生存する
+            let waited = unsafe { WaitForSingleObject(event.0, timeout_ms) };
+            if waited != WAIT_OBJECT_0 {
+                timed_out = waited == WAIT_TIMEOUT;
+                // SAFETY: `handle` は有効なパイプで、`overlapped` は発行した I/O のもの
+                unsafe {
+                    let _ = CancelIoEx(handle, Some(&raw const overlapped));
+                }
+            }
+        }
+        Err(err) => return Err(win32_io_error(&err)),
+    }
+
+    // 取り消した I/O も完了するまで待ち、バッファが I/O から解放されてから戻る
+    let mut transferred = 0u32;
+    // SAFETY: `overlapped` と `transferred` は呼び出し中に生存し、`handle` は有効なパイプ
+    let result =
+        unsafe { GetOverlappedResult(handle, &raw const overlapped, &raw mut transferred, true) };
+    match result {
+        Ok(()) => Ok(transferred),
+        Err(err) => {
+            let err = win32_io_error(&err);
+            if timed_out && is_win32_error(&err, ERROR_OPERATION_ABORTED.0) {
+                Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "要求の受信が期限を超えた",
+                ))
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
 
 // ======================================================================
 // 期限付き読み取り
 // ======================================================================
 /// 期限までに届いた分だけを読み取るパイプリーダー
 ///
-/// 同期パイプの `ReadFile` は届くまで戻らないため、`PeekNamedPipe` で到着済みの
-/// バイト数を確かめ、その範囲だけを読む。期限を過ぎると `TimedOut` を返す
+/// overlapped な `ReadFile` の完了をイベントで待つ。データが届いた時点で即座に戻り、
+/// 期限を過ぎると `TimedOut` を返す
 struct DeadlineReader<'a> {
     /// 接続済みのパイプ
     pipe: &'a File,
@@ -240,51 +356,43 @@ impl Read for DeadlineReader<'_> {
         if buf.is_empty() {
             return Ok(0);
         }
-        loop {
-            // クライアント切断後も未読データは読めるため、到着済みの分を先に返す
-            let Some(available) = pipe_available_bytes(self.pipe)? else {
-                return Ok(0);
-            };
-            if available > 0 {
-                let len = buf.len().min(available as usize);
-                let mut pipe = self.pipe;
-                return pipe.read(&mut buf[..len]);
+        let handle = HANDLE(self.pipe.as_raw_handle());
+        // SAFETY: `buf` は完了まで `overlapped_io` 内で生存し、`handle` は有効なパイプ
+        let read = overlapped_io(self.pipe, Some(self.deadline), |overlapped| unsafe {
+            ReadFile(handle, Some(buf), None, Some(overlapped))
+        });
+        match read {
+            Ok(len) => Ok(len as usize),
+            // クライアント切断後は EOF。切断前に書かれた分は先に読み取れる
+            Err(err)
+                if is_win32_error(&err, ERROR_BROKEN_PIPE.0)
+                    || is_win32_error(&err, ERROR_HANDLE_EOF.0) =>
+            {
+                Ok(0)
             }
-            if Instant::now() >= self.deadline {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "要求の受信が期限を超えた",
-                ));
-            }
-            thread::sleep(READ_POLL_INTERVAL);
+            Err(err) => Err(err),
         }
     }
 }
 
-/// パイプに到着済みで未読のバイト数を返す
-///
-/// # Arguments
-/// * `pipe` - 接続済みのパイプ
-///
-/// # Returns
-/// * `io::Result<Option<u32>>` - 未読バイト数。クライアントが切断し未読データも無い場合は `None`
-fn pipe_available_bytes(pipe: &File) -> io::Result<Option<u32>> {
-    let mut available = 0u32;
-    // SAFETY: `pipe` が所有する有効なパイプハンドルを借用し、`available` は呼び出し中に生存する
-    let peeked = unsafe {
-        PeekNamedPipe(
-            HANDLE(pipe.as_raw_handle()),
-            None,
-            0,
-            None,
-            Some(&raw mut available),
-            None,
-        )
-    };
-    match peeked {
-        Ok(()) => Ok(Some(available)),
-        Err(err) if err.code() == ERROR_BROKEN_PIPE.into() => Ok(None),
-        Err(err) => Err(io::Error::other(err)),
+/// overlapped パイプへ書き込むライター
+struct PipeWriter<'a>(&'a File);
+
+impl Write for PipeWriter<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let handle = HANDLE(self.0.as_raw_handle());
+        // SAFETY: `buf` は完了まで `overlapped_io` 内で生存し、`handle` は有効なパイプ
+        let written = overlapped_io(self.0, None, |overlapped| unsafe {
+            WriteFile(handle, Some(buf), None, Some(overlapped))
+        })?;
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -425,7 +533,7 @@ pub(super) fn create_pipe_instance_named(
     let mut name: Vec<u16> = pipe_name.encode_utf16().collect();
     name.push(0);
 
-    let mut open_mode = PIPE_ACCESS_DUPLEX;
+    let mut open_mode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED;
     if first_instance_only {
         open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
     }
@@ -454,16 +562,17 @@ pub(super) fn create_pipe_instance_named(
     Ok(unsafe { File::from_raw_handle(handle.0 as RawHandle) })
 }
 
-fn connect_pipe(pipe: &File) -> windows::core::Result<()> {
+fn connect_pipe(pipe: &File) -> io::Result<()> {
     let handle = HANDLE(pipe.as_raw_handle());
-    // SAFETY: `pipe` が所有する有効なハンドルを借用する
-    // パイプは `FILE_FLAG_OVERLAPPED` なしで作成しているため、`OVERLAPPED` なしの同期呼び出しでよい
-    unsafe {
-        match ConnectNamedPipe(handle, None) {
-            Ok(()) => Ok(()),
-            Err(err) if err.code() == ERROR_PIPE_CONNECTED.into() => Ok(()),
-            Err(err) => Err(err),
-        }
+    // SAFETY: `pipe` が所有する有効なハンドルを借用し、`OVERLAPPED` は完了まで `overlapped_io` 内で生存する
+    let connected = overlapped_io(pipe, None, |overlapped| unsafe {
+        ConnectNamedPipe(handle, Some(overlapped))
+    });
+    match connected {
+        Ok(_) => Ok(()),
+        // 接続待ちに入る前にクライアントが接続済み
+        Err(err) if is_win32_error(&err, ERROR_PIPE_CONNECTED.0) => Ok(()),
+        Err(err) => Err(err),
     }
 }
 
@@ -526,11 +635,12 @@ fn dispatch_request(
     }
 }
 
-fn write_response(mut stream: &File, response: &OneshotIpcResponse) -> std::io::Result<()> {
+fn write_response(stream: &File, response: &OneshotIpcResponse) -> std::io::Result<()> {
     let body = serde_json::to_string(response)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    writeln!(stream, "{body}")?;
-    stream.flush()
+    let mut writer = PipeWriter(stream);
+    writeln!(writer, "{body}")?;
+    writer.flush()
 }
 
 // ======================================================================
@@ -547,7 +657,7 @@ mod tests {
 
     use super::super::protocol::{BoundedLine, read_bounded_line};
     use super::{
-        DeadlineReader, MAX_ACTIVE_CONNECTIONS, OneshotIpcServer, REQUEST_READ_TIMEOUT,
+        DeadlineReader, MAX_ACTIVE_CONNECTIONS, OneshotIpcServer, PipeWriter, REQUEST_READ_TIMEOUT,
         connect_pipe, create_pipe_instance_named, should_claim_name, wait_for_free_slot,
     };
     use crate::test_helpers::{stub_worker, test_app_state_arc, wait_for_oneshot_pipe};
@@ -609,13 +719,13 @@ mod tests {
             let pipe = create_pipe_instance_named(&server_name, true).expect("create pipe");
             server_barrier.wait();
             connect_pipe(&pipe).expect("connect pipe");
-            let mut reader = BufReader::new(pipe);
+            let mut reader = BufReader::new(DeadlineReader::new(&pipe, REQUEST_READ_TIMEOUT));
             let mut line = String::new();
             reader.read_line(&mut line).expect("read");
             assert_eq!(line.trim(), "ping");
-            let mut pipe = reader.into_inner();
-            writeln!(pipe, "pong").expect("write");
-            pipe.flush().expect("flush");
+            let mut writer = PipeWriter(&pipe);
+            writeln!(writer, "pong").expect("write");
+            writer.flush().expect("flush");
         });
 
         barrier.wait();
